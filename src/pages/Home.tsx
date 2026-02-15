@@ -26,8 +26,8 @@ export default function Home(props: {
         return collection
           .filter(l => 
             l.name.toLowerCase().includes(query) || 
-            (l.landUse?.toLowerCase().includes(query) ?? false) ||
-            (l.landownerName?.toLowerCase().includes(query) ?? false)
+            (l.landownerName?.toLowerCase().includes(query) ?? false) ||
+            (l.notes?.toLowerCase().includes(query) ?? false)
           )
           .reverse()
           .sortBy("createdAt");
@@ -137,7 +137,7 @@ export default function Home(props: {
                      <span className="text-xs opacity-60">{new Date(l.createdAt).toLocaleDateString()}</span>
                   </div>
                   {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-1">👤 {l.landownerName}</div>}
-                  {l.landType && <div className="text-xs font-medium opacity-80 mt-1 truncate capitalize">{l.landType} - {l.landUse}</div>}
+                  {l.landType && <div className="text-xs font-medium opacity-80 mt-1 truncate capitalize">{l.landType}</div>}
                   {l.permissionGranted ? (
                     <span className="text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded text-xs font-bold inline-block mt-1">✓ Permission</span>
                   ) : (

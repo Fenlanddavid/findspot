@@ -15,7 +15,6 @@ export default function AllPermissions(props: { projectId: string }) {
         return collection
           .filter(p => 
             p.name.toLowerCase().includes(q) || 
-            (p.landUse?.toLowerCase().includes(q) ?? false) ||
             (p.notes?.toLowerCase().includes(q) ?? false) ||
             (p.landownerName?.toLowerCase().includes(q) ?? false)
           )
@@ -82,7 +81,7 @@ export default function AllPermissions(props: { projectId: string }) {
                         <span className="opacity-50">👤</span> {p.landownerName}
                     </div>
                 )}
-                {p.landType && <div className="text-xs font-medium capitalize">{p.landType} - {p.landUse}</div>}
+                {p.landType && <div className="text-xs font-medium capitalize">{p.landType}</div>}
               </div>
 
               <div className="mt-auto pt-3 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">

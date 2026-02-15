@@ -3,6 +3,7 @@ import { db, Media } from "../db";
 export async function exportData(): Promise<string> {
   const projects = await db.projects.toArray();
   const permissions = await db.permissions.toArray();
+  const sessions = await db.sessions.toArray();
   const finds = await db.finds.toArray();
   
   const media = await db.media.toArray();
@@ -14,10 +15,11 @@ export async function exportData(): Promise<string> {
   }));
 
   const data = {
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     projects,
     permissions,
+    sessions,
     finds,
     media: mediaExport
   };
@@ -27,9 +29,11 @@ export async function exportData(): Promise<string> {
 
 export async function exportToCSV(): Promise<string> {
   const permissions = await db.permissions.toArray();
+  const sessions = await db.sessions.toArray();
   const finds = await db.finds.toArray();
   
   const locMap = new Map(permissions.map(l => [l.id, l]));
+  const sessMap = new Map(sessions.map(s => [s.id, s]));
   
   const headers = [
     "Find Code", "Object Type", "Coin Type", "Coin Denomination", "Period", "Material", "Completeness", 
@@ -42,6 +46,8 @@ export async function exportToCSV(): Promise<string> {
 
   const rows = finds.map(s => {
     const l = locMap.get(s.permissionId);
+    const sess = s.sessionId ? sessMap.get(s.sessionId) : null;
+
     // Sanitize notes by removing newlines and escaping quotes
     const sNotes = (s.notes || "").replace(/\r?\n|\r/g, " ");
     const lNotes = (l?.notes || "").replace(/\r?\n|\r/g, " ");
@@ -50,9 +56,9 @@ export async function exportToCSV(): Promise<string> {
       s.findCode, s.objectType, s.coinType ?? "", s.coinDenomination ?? "", s.period, s.material, s.completeness,
       s.weightG ?? "", s.widthMm ?? "", s.decoration ?? "",
       l?.name ?? "", l?.type ?? "individual", l?.landownerName ?? "", l?.landownerPhone ?? "", l?.landownerEmail ?? "", l?.landownerAddress ?? "",
-      l?.lat ?? "", l?.lon ?? "", l?.gpsAccuracyM ?? "",
-      l?.landType ?? "", l?.landUse ?? "", l?.cropType ?? "", l?.isStubble ? "Yes" : "No",
-      l?.observedAt ? new Date(l.observedAt).toLocaleString() : "",
+      s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
+      l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
+      sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
       l?.collector ?? "", sNotes, lNotes
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
   });
@@ -65,9 +71,10 @@ export async function importData(json: string) {
   
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
 
-  await db.transaction("rw", db.projects, db.permissions, db.finds, db.media, async () => {
+  await db.transaction("rw", db.projects, db.permissions, db.sessions, db.finds, db.media, async () => {
     await db.projects.bulkPut(data.projects);
     if(data.permissions) await db.permissions.bulkPut(data.permissions);
+    if(data.sessions) await db.sessions.bulkPut(data.sessions);
     if(data.finds) await db.finds.bulkPut(data.finds);
     
     if (data.media) {

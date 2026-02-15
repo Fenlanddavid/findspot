@@ -19,7 +19,6 @@ type SelectedPermission = {
   lat: number;
   lon: number;
   landType: string;
-  landUse: string;
   permissionGranted: boolean;
   findCount: number;
 };
@@ -145,7 +144,6 @@ export default function MapPage({ projectId }: { projectId: string }) {
           name: l.name || "(Unnamed permission)",
           permissionGranted: l.permissionGranted ? 1 : 0,
           landType: l.landType || "",
-          landUse: l.landUse || "",
           findCount: findCountByPermission.get(l.id) ?? 0,
         },
       })),
@@ -400,20 +398,17 @@ export default function MapPage({ projectId }: { projectId: string }) {
       id: uuid(),
       projectId,
       name: name.trim() || "New permission",
+      type: "individual",
       lat,
       lon,
       gpsAccuracyM: null,
-      observedAt: now,
       collector: "",
       landType: "other",
       permissionGranted: false,
-      landUse: "",
-      cropType: "",
-      isStubble: false,
       notes: "",
       createdAt: now,
       updatedAt: now,
-    } as any);
+    });
     setAddingPermissionAt(null);
   }
 
