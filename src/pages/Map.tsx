@@ -317,7 +317,6 @@ export default function MapPage({ projectId }: { projectId: string }) {
           lat: coords[1],
           permissionGranted: props.permissionGranted === 1 || props.permissionGranted === "1",
           landType: props.landType || "",
-          landUse: props.landUse || "",
           findCount: Number(props.findCount ?? 0),
         });
 

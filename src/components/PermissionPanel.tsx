@@ -8,7 +8,6 @@ type SelectedPermission = {
   lat: number;
   lon: number;
   landType: string;
-  landUse: string;
   permissionGranted: boolean;
   findCount: number;
 };
@@ -54,7 +53,6 @@ export function PermissionPanel(props: {
                 <span className="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full border border-amber-200 font-medium">⚠️ No Permission Logged</span>
             )}
             {selected.landType && <span className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600 font-medium capitalize">{selected.landType}</span>}
-            {selected.landUse && <span className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-600 font-medium">{selected.landUse}</span>}
         </div>
       </div>
 

@@ -71,7 +71,7 @@ export async function importData(json: string) {
   
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
 
-  await db.transaction("rw", db.projects, db.permissions, db.sessions, db.finds, db.media, async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.sessions, db.finds, db.media], async () => {
     await db.projects.bulkPut(data.projects);
     if(data.permissions) await db.permissions.bulkPut(data.permissions);
     if(data.sessions) await db.sessions.bulkPut(data.sessions);
