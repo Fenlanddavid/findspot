@@ -100,3 +100,40 @@ async function base64ToBlob(base64: string): Promise<Blob> {
   const res = await fetch(base64);
   return res.blob();
 }
+
+/**
+ * Checks if storage is already persistent
+ */
+export async function isStoragePersistent() {
+  if (navigator.storage && navigator.storage.persisted) {
+    return await navigator.storage.persisted();
+  }
+  return false;
+}
+
+/**
+ * Requests persistent storage from the browser
+ */
+export async function requestPersistentStorage() {
+  if (navigator.storage && navigator.storage.persist) {
+    const isPersisted = await navigator.storage.persist();
+    console.log(`Persisted storage granted: ${isPersisted}`);
+    return isPersisted;
+  }
+  return false;
+}
+
+/**
+ * Gets a setting value
+ */
+export async function getSetting<T>(key: string, defaultValue: T): Promise<T> {
+  const setting = await db.settings.get(key);
+  return setting ? (setting.value as T) : defaultValue;
+}
+
+/**
+ * Sets a setting value
+ */
+export async function setSetting(key: string, value: any) {
+  await db.settings.put({ key, value });
+}

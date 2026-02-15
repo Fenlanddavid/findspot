@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { db, Permission, Find, Media } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
+import { getSetting } from "../services/data";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
@@ -100,6 +101,8 @@ export default function PermissionPage(props: {
         }
         setLoading(false);
       });
+    } else {
+      getSetting("detectorist", "").then(setCollector);
     }
   }, [id]);
 

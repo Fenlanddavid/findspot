@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchPara
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "./db";
 import { ensureDefaultProject } from "./app/seed";
-import { exportData, importData, exportToCSV } from "./services/data";
+import { exportData, importData, exportToCSV, requestPersistentStorage, setSetting, getSetting } from "./services/data";
 
 import Home from "./pages/Home";
 import PermissionPage from "./pages/Permission";
@@ -12,6 +12,7 @@ import FindPage from "./pages/Find";
 import MapPage from "./pages/Map";
 import AllFinds from "./pages/AllFinds";
 import AllPermissions from "./pages/AllPermissions";
+import Settings from "./pages/Settings";
 
 export function Logo() {
   return (
@@ -44,11 +45,31 @@ export function Logo() {
 
 function Shell() {
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
     ensureDefaultProject().then(setProjectId);
+    requestPersistentStorage();
+    
+    // Check backup status
+    checkBackupStatus();
   }, []);
+
+  async function checkBackupStatus() {
+    const lastBackup = await getSetting<string | null>("lastBackupDate", null);
+    if (!lastBackup) {
+      // Never backed up? Wait a bit before showing reminder for new users
+      setShowBackupReminder(true);
+      return;
+    }
+
+    const lastDate = new Date(lastBackup).getTime();
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - lastDate > thirtyDays) {
+      setShowBackupReminder(true);
+    }
+  }
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
 
@@ -62,6 +83,9 @@ function Shell() {
       a.download = `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      
+      // Update last backup date
+      await setSetting("lastBackupDate", new Date().toISOString());
     } catch (e) {
       alert("Export failed: " + e);
     }
@@ -112,6 +136,7 @@ function Shell() {
           <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
           <NavLink to="/permission" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>New Permission</NavLink>
           <NavLink to="/find" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Club/Rally Dig</NavLink>
+          <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
         </nav>
 
         <div className="ml-auto flex items-center gap-4">
@@ -133,6 +158,34 @@ function Shell() {
       </header>
 
       <main>
+        {showBackupReminder && (
+          <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🛡️</span>
+              <div>
+                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">Backup Recommended</h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300 opacity-80">It's been a while since your last backup. Since FindSpot is local-only, a backup protects your finds if your device is lost or broken.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button 
+                onClick={() => {
+                  handleExport();
+                  setShowBackupReminder(false);
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
+              >
+                Backup Now
+              </button>
+              <button 
+                onClick={() => setShowBackupReminder(false)}
+                className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
+              >
+                Later
+              </button>
+            </div>
+          </div>
+        )}
         <Routes>
             <Route path="/" element={<HomeRouter projectId={projectId} />} />
             <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/find?permissionId=${encodeURIComponent(id)}`)} />} />
@@ -143,6 +196,7 @@ function Shell() {
             <Route path="/find" element={<FindRouter projectId={projectId} />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
             <Route path="/map" element={<MapPage projectId={projectId} />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/permission" element={<LinkToPermission />} />
             <Route path="/permission/:id" element={<LinkToPermission />} />
         </Routes>

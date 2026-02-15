@@ -5,6 +5,7 @@ import { db, Media, Find } from "../db";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
+import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 
 const periods: Find["period"][] = [
@@ -130,6 +131,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
       } else {
         targetPermissionId = uuid();
         const now = new Date().toISOString();
+        const defaultDetectorist = await getSetting("detectorist", "");
         await db.permissions.add({
           id: targetPermissionId,
           projectId: props.projectId,
@@ -138,7 +140,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
           lat: null,
           lon: null,
           gpsAccuracyM: null,
-          collector: "",
+          collector: defaultDetectorist,
           landType: "other",
           permissionGranted: false,
           notes: "Automatically created via Club/Rally Dig",

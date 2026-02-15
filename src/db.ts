@@ -142,12 +142,18 @@ export type Media = {
   createdAt: string;
 };
 
+export type Setting = {
+  key: string;
+  value: any;
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
   sessions!: Table<Session, string>;
   finds!: Table<Find, string>;
   media!: Table<Media, string>;
+  settings!: Table<Setting, string>;
 
   constructor() {
     super("findspot_uk");
@@ -165,6 +171,15 @@ export class FindSpotDB extends Dexie {
       sessions: "id, projectId, permissionId, date, createdAt",
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
       media: "id, projectId, findId, createdAt",
+    });
+
+    this.version(3).stores({
+      projects: "id, name, region, createdAt",
+      permissions: "id, projectId, name, type, permissionGranted, createdAt",
+      sessions: "id, projectId, permissionId, date, createdAt",
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
+      media: "id, projectId, findId, createdAt",
+      settings: "key",
     });
   }
 }
