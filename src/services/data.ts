@@ -5,6 +5,7 @@ export async function exportData(): Promise<string> {
   const permissions = await db.permissions.toArray();
   const sessions = await db.sessions.toArray();
   const finds = await db.finds.toArray();
+  const settings = await db.settings.toArray();
   
   const media = await db.media.toArray();
   const mediaExport = await Promise.all(media.map(async (m) => {
@@ -21,7 +22,8 @@ export async function exportData(): Promise<string> {
     permissions,
     sessions,
     finds,
-    media: mediaExport
+    media: mediaExport,
+    settings
   };
 
   return JSON.stringify(data, null, 2);
@@ -71,11 +73,12 @@ export async function importData(json: string) {
   
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
 
-  await db.transaction("rw", [db.projects, db.permissions, db.sessions, db.finds, db.media], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.sessions, db.finds, db.media, db.settings], async () => {
     await db.projects.bulkPut(data.projects);
     if(data.permissions) await db.permissions.bulkPut(data.permissions);
     if(data.sessions) await db.sessions.bulkPut(data.sessions);
     if(data.finds) await db.finds.bulkPut(data.finds);
+    if(data.settings) await db.settings.bulkPut(data.settings);
     
     if (data.media) {
       const mediaItems = await Promise.all(data.media.map(async (m: any) => ({
