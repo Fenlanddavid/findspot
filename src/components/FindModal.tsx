@@ -320,11 +320,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               
               <div className="grid grid-cols-2 gap-2">
                   <label className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-amber-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
-                  🕳️ In-Situ
+                  🕳️ Photo 1
                   <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} className="hidden" />
                   </label>
                   <label className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
-                  🧼 Cleaned
+                  🧼 Photo 2
                   <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} className="hidden" />
                   </label>
               </div>
@@ -356,7 +356,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                        <span className="truncate flex-1">{x.filename}</span>
                        {x.media.photoType && (
                          <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                           {x.media.photoType}
+                           {x.media.photoType === 'in-situ' ? 'Photo 1' : x.media.photoType === 'cleaned' ? 'Photo 2' : x.media.photoType}
                          </span>
                        )}
                     </div>

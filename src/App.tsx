@@ -124,35 +124,50 @@ function Shell() {
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen">
-      <header className="flex items-center gap-4 mb-6 flex-wrap border-b border-gray-200 dark:border-gray-700 pb-4">
-        <Link to="/" className="no-underline flex items-center gap-3 group">
-          <Logo />
-          <h1 className="m-0 text-3xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
-        </Link>
-
-        <nav className="flex gap-4 ml-2 flex-wrap items-center text-sm font-medium text-gray-600 dark:text-gray-300">
-          <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
-          <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
-          <NavLink to="/permission" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>New Permission</NavLink>
-          <NavLink to="/find" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Club/Rally Dig</NavLink>
-          <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
-        </nav>
-
-        <div className="ml-auto flex items-center gap-4">
-            <div className="opacity-60 text-xs hidden sm:block font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{project.name}</div>
+    <div className="max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
+      <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">
+        <div className="flex items-center justify-between gap-4">
+            <Link to="/" className="no-underline flex items-center gap-3 group">
+              <Logo />
+              <h1 className="m-0 text-2xl sm:text-3xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
+            </Link>
             
-            <div className="flex gap-3 items-center border-l pl-4 border-gray-300 dark:border-gray-600">
-                <button onClick={handleCSVExport} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline">
+            <div className="flex items-center gap-3 border-l pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
+                <button onClick={handleCSVExport} className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">
                     CSV
                 </button>
-                <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
-                    Backup
-                </button>
-                <label className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors cursor-pointer">
-                    Restore
-                    <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                </label>
+                <div className="hidden sm:flex gap-3 items-center">
+                    <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
+                        Backup
+                    </button>
+                    <label className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors cursor-pointer">
+                        Restore
+                        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+            <nav className="flex gap-x-4 gap-y-2 flex-wrap items-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+              <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
+              <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
+              <NavLink to="/permission" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>New Permission</NavLink>
+              <NavLink to="/find" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Club Dig</NavLink>
+              <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
+            </nav>
+
+            <div className="flex items-center gap-3">
+                <div className="opacity-60 text-[10px] font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded max-w-[100px] truncate">{project.name}</div>
+                <div className="flex sm:hidden gap-3 items-center">
+                    <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
+                        Backup
+                    </button>
+                    <label className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors cursor-pointer">
+                        Restore
+                        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                    </label>
+                </div>
             </div>
         </div>
       </header>

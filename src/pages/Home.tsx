@@ -56,29 +56,29 @@ export default function Home(props: {
   }, [findIds]);
 
   return (
-    <div className="grid gap-8 max-w-5xl mx-auto">
-      <div className="flex items-center gap-2 py-2">
-        <span className="text-sm">🔒</span>
-        <p className="text-sm font-normal text-black dark:text-white m-0 opacity-80">
+    <div className="grid gap-8 max-w-5xl mx-auto overflow-hidden">
+      <div className="flex items-start gap-2 py-2 px-1">
+        <span className="text-sm mt-0.5">🔒</span>
+        <p className="text-sm font-normal text-black dark:text-white m-0 opacity-80 flex-1">
             Your data is private. All find spots, GPS coordinates, and landowner details are stored locally on this device. Nothing is ever uploaded or shared.
         </p>
       </div>
 
-      <div className="flex gap-4 flex-wrap">
-        <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:translate-y-0">
-            <span>📍</span> New Permission
+      <div className="flex gap-3 flex-wrap">
+        <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-4 sm:px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base">
+            <span>📍</span> <span className="hidden xs:inline">New</span> Permission
         </button>
-        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:translate-y-0">
-            <span>🏟️</span> Club/Rally Dig
+        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base">
+            <span>🏟️</span> Rally<span className="hidden xs:inline"> Dig</span>
         </button>
-        <button onClick={props.goMap} className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 ml-auto transform hover:-translate-y-0.5 active:translate-y-0">
-            <span>🗺️</span> Open Map
+        <button onClick={props.goMap} className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-4 sm:px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 sm:ml-auto transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base">
+            <span>🗺️</span> Map
         </button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 overflow-hidden">
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Quick View Finds</h3>
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
             <QuickFilterBtn label="All Finds" onClick={props.goAllFinds} />
             <QuickFilterBtn label="Hammered" onClick={() => props.goFindsWithFilter("type=Hammered")} />
             <QuickFilterBtn label="Bronze Age" onClick={() => props.goFindsWithFilter("period=Bronze Age")} />
@@ -88,18 +88,18 @@ export default function Home(props: {
         </div>
       </div>
 
-      <section>
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+      <section className="overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Permissions & Rallies</h2>
-                <button onClick={props.goPermissions} className="text-sm text-emerald-600 font-bold hover:underline">View All →</button>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions & Rallies</h2>
+                <button onClick={props.goPermissions} className="text-sm text-emerald-600 font-bold hover:underline">View All</button>
             </div>
-            <div className="flex items-center gap-3 flex-1 max-w-md">
+            <div className="flex items-center gap-3 w-full md:max-w-md">
                 <div className="relative flex-1">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
                     <input 
                         type="text"
-                        placeholder="Search by name, use, or landowner..."
+                        placeholder="Search permissions..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"

@@ -248,7 +248,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
              <span>{props.filename}</span>
              {media.photoType && (
                <span className={`px-1 rounded uppercase text-[8px] font-bold ${media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                 {media.photoType}
+                 {media.photoType === 'in-situ' ? 'Photo 1' : media.photoType === 'cleaned' ? 'Photo 2' : media.photoType}
                </span>
              )}
            </div>
@@ -516,13 +516,13 @@ export default function FindPage(props: { projectId: string; permissionId: strin
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100"}`}>
                        <span className="text-xl">🕳️</span>
-                       <span>In-Situ Photo</span>
+                       <span>Photo 1</span>
                        <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} disabled={!savedId} className="hidden" />
                     </label>
                     
                     <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-100"}`}>
                        <span className="text-xl">🧼</span>
-                       <span>Cleaned Photo</span>
+                       <span>Photo 2</span>
                        <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} disabled={!savedId} className="hidden" />
                     </label>
                 </div>
