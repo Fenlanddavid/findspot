@@ -190,7 +190,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     }
   }
 
-  async function addPhotos(files: FileList | null) {
+  async function addPhotos(files: FileList | null, photoType?: Media["photoType"]) {
     setError(null);
     try {
       if (!savedId) throw new Error("Save the find first, then add photos.");
@@ -206,6 +206,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
           projectId: props.projectId,
           findId: savedId,
           type: "photo",
+          photoType: photoType || "other",
           filename: f.name,
           mime: f.type || "application/octet-stream",
           blob,
@@ -221,7 +222,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     }
   }
 
-  function PhotoThumb(props: { mediaId: string; filename: string }) {
+  function PhotoThumb(props: { mediaId: string; filename: string; photoType?: string }) {
      const [media, setMedia] = useState<Media | null>(null);
      
      useEffect(() => {
@@ -243,7 +244,14 @@ export default function FindPage(props: { projectId: string; permissionId: strin
               imgClassName="object-cover" 
               className="w-full h-full" 
            />
-           <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[10px] truncate absolute bottom-0 inset-x-0 z-10">{props.filename}</div>
+           <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[10px] truncate absolute bottom-0 inset-x-0 z-10 flex justify-between items-center">
+             <span>{props.filename}</span>
+             {media.photoType && (
+               <span className={`px-1 rounded uppercase text-[8px] font-bold ${media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                 {media.photoType}
+               </span>
+             )}
+           </div>
         </div>
      );
   }
@@ -502,15 +510,26 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         </div>
 
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col gap-4 h-fit sticky top-4">
-            <div className="flex justify-between items-center mb-2">
+            <div className="flex flex-col gap-4 mb-2">
                 <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Photos</h2>
-                <div className="flex gap-2">
-                    <label className={`px-3 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors cursor-pointer flex items-center gap-1 ${!savedId ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}>
-                       📸 Take Photo
-                       <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files)} disabled={!savedId} className="hidden" />
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100"}`}>
+                       <span className="text-xl">🕳️</span>
+                       <span>In-Situ Photo</span>
+                       <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} disabled={!savedId} className="hidden" />
                     </label>
-                    <label className={`px-3 py-2 rounded-lg font-bold text-sm shadow-sm transition-colors cursor-pointer flex items-center gap-1 ${!savedId ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}>
-                       📁 Upload
+                    
+                    <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-100"}`}>
+                       <span className="text-xl">🧼</span>
+                       <span>Cleaned Photo</span>
+                       <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} disabled={!savedId} className="hidden" />
+                    </label>
+                </div>
+                
+                <div className="flex gap-2">
+                    <label className={`flex-1 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1 ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200"}`}>
+                       📁 Upload Files
                        <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} disabled={!savedId} className="hidden" />
                     </label>
                 </div>

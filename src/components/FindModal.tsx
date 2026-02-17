@@ -76,7 +76,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     props.onClose();
   }
 
-  async function addPhotos(files: FileList | null) {
+  async function addPhotos(files: FileList | null, photoType?: Media["photoType"]) {
     if (!draft || !files || files.length === 0) return;
     setBusy(true);
     const now = new Date().toISOString();
@@ -89,6 +89,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         projectId: draft.projectId,
         findId: draft.id,
         type: "photo" as const,
+        photoType: photoType || "other",
         filename: f.name,
         mime: f.type || "application/octet-stream",
         blob,
@@ -307,7 +308,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
           </div>
 
           <div className="border-t border-gray-100 dark:border-gray-700 pt-3">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-col gap-3 mb-3">
               <div className="grid gap-0.5">
                 <h4 className="m-0 font-bold text-sm">Photos</h4>
                 {imageUrls.length > 0 && (
@@ -316,16 +317,22 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
-                  <label className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-700 transition-colors shadow-sm">
-                  📸 Take Photo
-                  <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files)} className="hidden" />
+              
+              <div className="grid grid-cols-2 gap-2">
+                  <label className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-amber-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
+                  🕳️ In-Situ
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} className="hidden" />
                   </label>
-                  <label className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-700 transition-colors shadow-sm">
-                  📁 Upload
-                  <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} className="hidden" />
+                  <label className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
+                  🧼 Cleaned
+                  <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} className="hidden" />
                   </label>
               </div>
+              
+              <label className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-gray-200 transition-colors shadow-sm text-center">
+                📁 Upload Files
+                <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} className="hidden" />
+              </label>
             </div>
 
             {imageUrls.length === 0 && <div className="text-sm opacity-60 italic text-center py-4 bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-dashed border-gray-100 dark:border-gray-800">No photos attached.</div>}
@@ -345,7 +352,14 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                       disabled={busy}
                       className="absolute top-1 right-1 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-110 active:scale-95 z-10"
                     >✕</button>
-                    <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10">{x.filename}</div>
+                    <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
+                       <span className="truncate flex-1">{x.filename}</span>
+                       {x.media.photoType && (
+                         <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                           {x.media.photoType}
+                         </span>
+                       )}
+                    </div>
                     
                     <div className={`absolute inset-0 bg-emerald-600/20 transition-opacity flex items-center justify-center z-10 ${x.media.pxPerMm ? 'opacity-0 group-hover:opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'}`}>
                         <span className={`bg-white dark:bg-gray-800 text-[10px] font-bold px-2 py-1 rounded-full shadow-sm ${!x.media.pxPerMm ? 'ring-2 ring-emerald-500 animate-bounce' : ''}`}>

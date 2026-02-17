@@ -132,6 +132,7 @@ export type Media = {
   findId: string;
 
   type: "photo";
+  photoType?: "in-situ" | "cleaned" | "other";
   filename: string;
   mime: string;
   blob: Blob;
@@ -140,6 +141,18 @@ export type Media = {
   pxPerMm?: number;
 
   createdAt: string;
+};
+
+export type Track = {
+  id: string;
+  projectId: string;
+  sessionId: string | null;
+  name: string;
+  points: Array<{ lat: number; lon: number; timestamp: number; accuracy?: number }>;
+  isActive: boolean;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Setting = {
@@ -153,6 +166,7 @@ export class FindSpotDB extends Dexie {
   sessions!: Table<Session, string>;
   finds!: Table<Find, string>;
   media!: Table<Media, string>;
+  tracks!: Table<Track, string>;
   settings!: Table<Setting, string>;
 
   constructor() {
@@ -179,6 +193,25 @@ export class FindSpotDB extends Dexie {
       sessions: "id, projectId, permissionId, date, createdAt",
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
       media: "id, projectId, findId, createdAt",
+      settings: "key",
+    });
+
+    this.version(4).stores({
+      projects: "id, name, region, createdAt",
+      permissions: "id, projectId, name, type, permissionGranted, createdAt",
+      sessions: "id, projectId, permissionId, date, createdAt",
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
+      media: "id, projectId, findId, createdAt",
+      settings: "key",
+    });
+
+    this.version(5).stores({
+      projects: "id, name, region, createdAt",
+      permissions: "id, projectId, name, type, permissionGranted, createdAt",
+      sessions: "id, projectId, permissionId, date, createdAt",
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
+      media: "id, projectId, findId, createdAt",
+      tracks: "id, projectId, sessionId, isActive, createdAt",
       settings: "key",
     });
   }

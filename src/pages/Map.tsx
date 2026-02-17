@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Find, Media } from "../db";
+import { db, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
 import { MapFilterBar } from "../components/MapFilterBar";
 import { PermissionPanel } from "../components/PermissionPanel";
 import { FindModal } from "../components/FindModal";
 import { PermissionQuickAddModal } from "../components/PermissionQuickAddModal";
 import { useNavigate } from "react-router-dom";
+import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
 
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 5;
@@ -42,13 +43,16 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const [customTo, setCustomTo] = useState<string>("");
   
   // Map Style
-  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
+  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite" | "nls" | "lidar">("streets");
 
   // Selection / modals
   const [selected, setSelected] = useState<SelectedPermission | null>(null);
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [addingPermissionAt, setAddingPermissionAt] = useState<{ lat: number; lon: number } | null>(null);
   const [highlightedPermissionId, setHighlightedPermissionId] = useState<string | null>(null);
+
+  // Tracking state
+  const [isTracking, setIsTracking] = useState(isTrackingActive());
 
   // Data
   const permissions = useLiveQuery(async () => {
@@ -59,6 +63,8 @@ export default function MapPage({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const finds = useLiveQuery(async () => db.finds.where("projectId").equals(projectId).toArray(), [projectId]);
+  
+  const tracks = useLiveQuery(async () => db.tracks.where("projectId").equals(projectId).toArray(), [projectId]);
 
   // Derived state
   const landTypeOptions = useMemo(() => {
@@ -149,6 +155,25 @@ export default function MapPage({ projectId }: { projectId: string }) {
       })),
     };
   }, [filteredPermissions, findCountByPermission]);
+  
+  const trackGeoJSON = useMemo(() => {
+    return {
+        type: "FeatureCollection" as const,
+        features: (tracks ?? []).map((t) => ({
+            type: "Feature" as const,
+            geometry: {
+                type: "LineString" as const,
+                coordinates: t.points.map(p => [p.lon, p.lat])
+            },
+            properties: {
+                id: t.id,
+                name: t.name,
+                color: t.color || "#059669",
+                isActive: t.isActive
+            }
+        }))
+    };
+  }, [tracks]);
 
   const selectedFinds = useLiveQuery(async () => {
     if (!selected) return [];
@@ -179,16 +204,36 @@ export default function MapPage({ projectId }: { projectId: string }) {
         mapRef.current = null;
     }
 
+    let tiles: string[] = [];
+    let attribution = "";
+    
+    switch (mapStyleMode) {
+        case "streets":
+            tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
+            attribution = "© OpenStreetMap";
+            break;
+        case "satellite":
+            tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
+            attribution = "© Esri World Imagery";
+            break;
+        case "nls":
+            tiles = ["https://nls-0.tileserver.com/nls/{z}/{x}/{y}.jpg"];
+            attribution = "© National Library of Scotland";
+            break;
+        case "lidar":
+            tiles = ["https://tiles.arcgis.com/tiles/mN9u9p9Ix0iW1E7M/arcgis/rest/services/Lidar_Composite_DTM_2022_1m/MapServer/tile/{z}/{y}/{x}"];
+            attribution = "© Environment Agency (LiDAR)";
+            break;
+    }
+
     const style: any = {
         version: 8,
         sources: {
             "raster-tiles": {
                 type: "raster",
-                tiles: mapStyleMode === "streets" 
-                    ? ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"]
-                    : ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+                tiles: tiles,
                 tileSize: 256,
-                attribution: mapStyleMode === "streets" ? "© OpenStreetMap" : "© Esri World Imagery"
+                attribution: attribution
             }
         },
         layers: [
@@ -207,6 +252,25 @@ export default function MapPage({ projectId }: { projectId: string }) {
     map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
 
     map.on("load", () => {
+      // Tracks Source
+      map.addSource("tracks", {
+        type: "geojson",
+        data: trackGeoJSON as any
+      });
+
+      // Track Layer (background/faint)
+      map.addLayer({
+        id: "tracks-line",
+        type: "line",
+        source: "tracks",
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 4,
+          "line-opacity": ["case", ["==", ["get", "isActive"], true], 0.8, 0.4]
+        }
+      });
+
       map.addSource("localities", {
         type: "geojson",
         data: featureCollection as any,
@@ -354,6 +418,13 @@ export default function MapPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
+    const src = map.getSource("tracks") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(trackGeoJSON as any);
+  }, [trackGeoJSON]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
 
     if (selected) {
       const stillThere = featureCollection.features.some((f) => String((f.properties as any).id) === String(selected.id));
@@ -418,6 +489,16 @@ export default function MapPage({ projectId }: { projectId: string }) {
     setMinFinds(1);
     setDateMode("all");
   }
+  
+  async function toggleTracking() {
+    if (isTracking) {
+        await stopTracking();
+        setIsTracking(false);
+    } else {
+        await startTracking(projectId);
+        setIsTracking(true);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-80px)]">
@@ -450,6 +531,22 @@ export default function MapPage({ projectId }: { projectId: string }) {
       <div className="flex-1 relative border-2 border-gray-100 dark:border-gray-800 rounded-3xl overflow-hidden shadow-inner bg-gray-50 dark:bg-black">
         <div ref={mapDivRef} className="absolute inset-0" />
         
+        {/* Tracking toggle */}
+        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+            <button 
+                onClick={toggleTracking}
+                className={`flex items-center gap-2 px-4 py-3 rounded-2xl font-bold shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900'}`}
+            >
+                <span className="text-xl">{isTracking ? '⏹️' : '👣'}</span>
+                <span>{isTracking ? 'Stop Hunt' : 'Start Hunt'}</span>
+            </button>
+            {isTracking && (
+                <div className="bg-black/50 backdrop-blur text-white text-[10px] px-2 py-1 rounded-full text-center font-mono">
+                    Recording Trail...
+                </div>
+            )}
+        </div>
+
         {/* Selection overlay */}
         {selected && (
           <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 z-10">

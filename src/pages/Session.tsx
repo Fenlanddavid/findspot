@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { db, Permission, Session, Find, Media } from "../db";
+import { db, Permission, Session, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
+import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
 
 export default function SessionPage(props: {
   projectId: string;
@@ -31,6 +32,8 @@ export default function SessionPage(props: {
   const [loading, setLoading] = useState(isEdit);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  
+  const [isTracking, setIsTracking] = useState(isTrackingActive());
 
   const permission = useLiveQuery(
     async () => (permissionId ? db.permissions.get(permissionId) : (id ? db.sessions.get(id).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
@@ -47,6 +50,11 @@ export default function SessionPage(props: {
     const ids = finds.map(s => s.id);
     return db.media.where("findId").anyOf(ids).toArray();
   }, [id, finds]);
+
+  const tracks = useLiveQuery(async () => {
+    if (!id) return [];
+    return db.tracks.where("sessionId").equals(id).toArray();
+  }, [id]);
 
   const findThumbMedia = useMemo(() => {
     const info = new Map<string, Media>();
@@ -131,6 +139,16 @@ export default function SessionPage(props: {
     }
   }
 
+  async function toggleTracking() {
+    if (isTracking) {
+        await stopTracking();
+        setIsTracking(false);
+    } else {
+        await startTracking(props.projectId, id || null, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
+        setIsTracking(true);
+    }
+  }
+
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
@@ -145,7 +163,17 @@ export default function SessionPage(props: {
                     <p className="text-emerald-600 font-bold text-sm">📍 {permission.name}</p>
                 )}
             </div>
-            <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back to Permission</button>
+            <div className="flex gap-2">
+                {isEdit && (
+                    <button 
+                        onClick={toggleTracking}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold shadow-md transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900'}`}
+                    >
+                        <span>{isTracking ? '⏹️ Stop Hunt' : '👣 Start Hunt'}</span>
+                    </button>
+                )}
+                <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back</button>
+            </div>
         </div>
 
         {error && (
@@ -156,6 +184,21 @@ export default function SessionPage(props: {
 
         <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
+                {tracks && tracks.length > 0 && (
+                    <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
+                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-2">Recorded Trail Tracks</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {tracks.map(t => (
+                                <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-bold">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
+                                    <span>{t.points.length} points</span>
+                                    {t.isActive && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <label className="block">
                     <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Date & Time</div>
                     <input 
