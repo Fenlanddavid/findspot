@@ -43,7 +43,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const [customTo, setCustomTo] = useState<string>("");
   
   // Map Style
-  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite" | "nls" | "lidar">("streets");
+  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
 
   // Selection / modals
   const [selected, setSelected] = useState<SelectedPermission | null>(null);
@@ -206,6 +206,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
 
     let tiles: string[] = [];
     let attribution = "";
+    let tileSize = 256;
     
     switch (mapStyleMode) {
         case "streets":
@@ -216,14 +217,6 @@ export default function MapPage({ projectId }: { projectId: string }) {
             tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
             attribution = "© Esri World Imagery";
             break;
-        case "nls":
-            tiles = ["https://nls-0.tileserver.com/nls/{z}/{x}/{y}.jpg"];
-            attribution = "© National Library of Scotland";
-            break;
-        case "lidar":
-            tiles = ["https://tiles.arcgis.com/tiles/mN9u9p9Ix0iW1E7M/arcgis/rest/services/Lidar_Composite_DTM_2022_1m/MapServer/tile/{z}/{y}/{x}"];
-            attribution = "© Environment Agency (LiDAR)";
-            break;
     }
 
     const style: any = {
@@ -232,7 +225,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
             "raster-tiles": {
                 type: "raster",
                 tiles: tiles,
-                tileSize: 256,
+                tileSize: tileSize,
                 attribution: attribution
             }
         },

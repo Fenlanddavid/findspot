@@ -24,8 +24,8 @@ export function MapFilterBar(props: {
   setCustomTo: (v: string) => void;
   onClear: () => void;
   needsKey: boolean;
-  mapStyleMode: "streets" | "satellite" | "nls" | "lidar";
-  setMapStyleMode: (v: "streets" | "satellite" | "nls" | "lidar") => void;
+  mapStyleMode: "streets" | "satellite";
+  setMapStyleMode: (v: "streets" | "satellite") => void;
 }) {
   return (
     <div className="grid gap-3">
@@ -53,14 +53,6 @@ export function MapFilterBar(props: {
                     onClick={() => props.setMapStyleMode("satellite")}
                     className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "satellite" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
                  >Satellite</button>
-                 <button 
-                    onClick={() => props.setMapStyleMode("nls")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "nls" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
-                 >1800s OS</button>
-                 <button 
-                    onClick={() => props.setMapStyleMode("lidar")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "lidar" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
-                 >LiDAR</button>
             </div>
             <div className="ml-auto opacity-80 text-sm font-medium bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
             {props.count} permissions
