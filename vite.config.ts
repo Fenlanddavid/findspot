@@ -13,22 +13,22 @@ export default defineConfig({
         name: 'FindSpot UK',
         short_name: 'FindSpot',
         description: 'Offline metal detecting find recording',
-        theme_color: '#10b981',
-        background_color: '#ffffff',
-        display: 'standalone',
-        start_url: '/findspot/',
+        theme_color: "#10b981",
+        background_color: "#ffffff",
+        display: "standalone",
+        start_url: "/findspot/",
         icons: [
           {
-            src: 'logo.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
+            src: "logo.svg",
+            sizes: "any",
+            type: "image/svg+xml",
+            purpose: "maskable"
           },
           {
-            src: 'logo.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
+            src: "logo.svg",
+            sizes: "512x512",
+            type: "image/svg+xml",
+            purpose: "any"
           }
         ]
       },

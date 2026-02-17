@@ -19,9 +19,9 @@ export function Logo() {
     <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="50%" stopColor="#14b8a6" />
-          <stop offset="100%" stopColor="#0ea5e9" />
+          <stop offset="0%" stop-color="#10b981" />
+          <stop offset="50%" stop-color="#14b8a6" />
+          <stop offset="100%" stop-color="#0ea5e9" />
         </linearGradient>
       </defs>
       
