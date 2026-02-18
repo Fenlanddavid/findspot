@@ -57,9 +57,22 @@ function Shell() {
   }, []);
 
   async function checkBackupStatus() {
+    // Check if there is any data worth backing up
+    const permCount = await db.permissions.count();
+    const findCount = await db.finds.count();
+    if (permCount === 0 && findCount === 0) {
+      setShowBackupReminder(false);
+      return;
+    }
+
+    const snoozedUntil = await getSetting<string | null>("backupSnoozedUntil", null);
+    if (snoozedUntil && new Date(snoozedUntil) > new Date()) {
+      setShowBackupReminder(false);
+      return;
+    }
+
     const lastBackup = await getSetting<string | null>("lastBackupDate", null);
     if (!lastBackup) {
-      // Never backed up? Wait a bit before showing reminder for new users
       setShowBackupReminder(true);
       return;
     }
@@ -69,6 +82,13 @@ function Shell() {
     if (Date.now() - lastDate > thirtyDays) {
       setShowBackupReminder(true);
     }
+  }
+
+  async function snoozeBackup() {
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+    await setSetting("backupSnoozedUntil", thirtyDaysFromNow.toISOString());
+    setShowBackupReminder(false);
   }
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
@@ -193,7 +213,7 @@ function Shell() {
                 Backup Now
               </button>
               <button 
-                onClick={() => setShowBackupReminder(false)}
+                onClick={snoozeBackup}
                 className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
               >
                 Later

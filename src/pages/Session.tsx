@@ -35,6 +35,7 @@ export default function SessionPage(props: {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
+  const [isEditing, setIsEditing] = useState(!isEdit);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   
@@ -209,10 +210,12 @@ export default function SessionPage(props: {
 
       if (isEdit) {
         await db.sessions.update(id, session);
+        setIsEditing(false);
         alert("Session updated!");
       } else {
         (session as any).createdAt = now;
         await db.sessions.add(session);
+        setIsEditing(false);
         nav(`/session/${finalId}`, { replace: true });
       }
     } catch (e: any) {
@@ -238,12 +241,17 @@ export default function SessionPage(props: {
     <div className="max-w-4xl mx-auto pb-20">
       <div className="grid gap-8">
         <div className="flex justify-between items-center px-1">
-            <div>
+            <div className="flex gap-4 items-center">
                 <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                     {isEdit ? "Session Details" : "New Session"}
                 </h2>
-                {permission && (
-                    <p className="text-emerald-600 font-bold text-sm">📍 {permission.name}</p>
+                {isEdit && !isEditing && (
+                    <button 
+                        onClick={() => setIsEditing(true)}
+                        className="text-xs font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
+                    >
+                        ✎ Edit Details
+                    </button>
                 )}
             </div>
             <div className="flex gap-2">
@@ -259,8 +267,143 @@ export default function SessionPage(props: {
 
         <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
+                {!isEditing && (
+                  <div className="flex flex-col gap-6">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1">📍 {permission?.name || "Unknown Location"}</p>
+                            <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                        </div>
+                        <button 
+                            onClick={toggleTracking}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
+                        >
+                            <span>{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Conditions</h4>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {isStubble && <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-1 rounded">🌾 Stubble</span>}
+                                {landUse && <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded">🚜 {landUse}</span>}
+                                {!isStubble && !landUse && <span className="text-xs opacity-40 italic">No conditions recorded</span>}
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">GPS Start Point</h4>
+                            {lat && lon ? (
+                                <p className="font-mono font-bold text-sm text-emerald-600 mt-2">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
+                            ) : (
+                                <button onClick={doGPS} className="text-xs font-bold text-emerald-600 hover:underline mt-2">📍 Capture GPS Now</button>
+                            )}
+                        </div>
+                    </div>
+
+                    {notes && (
+                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Notes</h4>
+                            <p className="text-sm opacity-80 whitespace-pre-wrap">{notes}</p>
+                        </div>
+                    )}
+                  </div>
+                )}
+
+                {isEditing && (
+                  <>
+                    <label className="block">
+                        <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Date & Time</div>
+                        <input 
+                            type="datetime-local" 
+                            value={date} 
+                            onChange={(e) => setDate(e.target.value)} 
+                            className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                        />
+                    </label>
+
+                    <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                        <div className="flex flex-col gap-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
+                            <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
+                                {lat && lon ? (
+                                <div className="flex items-center gap-2">
+                                    {lat.toFixed(6)}, {lon.toFixed(6)}
+                                    {acc ? <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full">±{Math.round(acc)}m</span> : ""}
+                                </div>
+                                ) : (
+                                <span className="opacity-40 italic">Coordinates not set</span>
+                                )}
+                            </div>
+                        </div>
+                        <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 whitespace-nowrap">
+                            📍 {lat ? "Update GPS" : "Get Current GPS"}
+                        </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                        <div className="flex flex-col gap-2">
+                            <div className="text-xs font-black uppercase tracking-widest opacity-50">Ground Condition</div>
+                            <div className="flex flex-wrap gap-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsStubble(!isStubble)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isStubble ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                                >
+                                    {isStubble ? '🌾 Stubble ✓' : '🌾 Stubble'}
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setLandUse(landUse === 'Ploughed' ? '' : 'Ploughed')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Ploughed' ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                                >
+                                    {landUse === 'Ploughed' ? '🚜 Ploughed ✓' : '🚜 Ploughed'}
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={() => setLandUse(landUse === 'Pasture' ? '' : 'Pasture')}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Pasture' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                                >
+                                    {landUse === 'Pasture' ? '🍃 Pasture ✓' : '🍃 Pasture'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2 ml-auto">
+                            <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
+                            <button 
+                                type="button"
+                                onClick={toggleTracking}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
+                            >
+                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <label className="block">
+                        <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Session Notes</div>
+                        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
+                    </label>
+
+                    <div className="flex gap-4">
+                        <button onClick={save} disabled={saving} className="mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50">
+                            {saving ? "Saving..." : isEdit ? "Save Details ✓" : "Start Session →"}
+                        </button>
+                        {isEdit && (
+                            <button 
+                                onClick={() => setIsEditing(false)}
+                                className="mt-4 bg-gray-100 dark:bg-gray-800 text-gray-500 px-6 py-4 rounded-2xl font-bold transition-all"
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                  </>
+                )}
+
                 {tracks && tracks.length > 0 && (
-                    <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
+                    <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30 mt-6">
                         <div className="flex justify-between items-center mb-2">
                             <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Recorded Trail Tracks</h4>
                             <div className="flex items-center gap-2">
@@ -275,7 +418,7 @@ export default function SessionPage(props: {
                         </div>
                         
                         {/* Map Preview */}
-                        <div className="relative h-64 w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900 mb-4">
+                        <div className="relative h-64 w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                             <div ref={mapDivRef} className="absolute inset-0" />
                             {isTracking && (
                                 <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full animate-pulse shadow-lg">
@@ -285,84 +428,6 @@ export default function SessionPage(props: {
                         </div>
                     </div>
                 )}
-
-                <label className="block">
-                    <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Date & Time</div>
-                    <input 
-                        type="datetime-local" 
-                        value={date} 
-                        onChange={(e) => setDate(e.target.value)} 
-                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                    />
-                </label>
-
-                <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                    <div className="flex flex-col gap-1">
-                        <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
-                        <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
-                            {lat && lon ? (
-                            <div className="flex items-center gap-2">
-                                {lat.toFixed(6)}, {lon.toFixed(6)}
-                                {acc ? <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full">±{Math.round(acc)}m</span> : ""}
-                            </div>
-                            ) : (
-                            <span className="opacity-40 italic">Coordinates not set</span>
-                            )}
-                        </div>
-                    </div>
-                    <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 whitespace-nowrap">
-                        📍 {lat ? "Update GPS" : "Get Current GPS"}
-                    </button>
-                </div>
-
-                <div className="flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                    <div className="flex flex-col gap-2">
-                        <div className="text-xs font-black uppercase tracking-widest opacity-50">Ground Condition</div>
-                        <div className="flex flex-wrap gap-2">
-                            <button 
-                                type="button"
-                                onClick={() => setIsStubble(!isStubble)}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isStubble ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
-                            >
-                                {isStubble ? '🌾 Stubble ✓' : '🌾 Stubble'}
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={() => setLandUse(landUse === 'Ploughed' ? '' : 'Ploughed')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Ploughed' ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
-                            >
-                                {landUse === 'Ploughed' ? '🚜 Ploughed ✓' : '🚜 Ploughed'}
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={() => setLandUse(landUse === 'Pasture' ? '' : 'Pasture')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Pasture' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
-                            >
-                                {landUse === 'Pasture' ? '🍃 Pasture ✓' : '🍃 Pasture'}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 ml-auto">
-                        <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
-                        <button 
-                            type="button"
-                            onClick={toggleTracking}
-                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
-                        >
-                            <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <label className="block">
-                    <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Session Notes</div>
-                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
-                </label>
-
-                <button onClick={save} disabled={saving} className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50">
-                    {saving ? "Saving..." : isEdit ? "Save Session Details ✓" : "Start Session →"}
-                </button>
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner h-fit">
