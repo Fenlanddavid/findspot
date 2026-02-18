@@ -148,7 +148,7 @@ export default function SessionPage(props: {
         if (allPoints.length > 0) {
           const bounds = new maplibregl.LngLatBounds();
           allPoints.forEach(p => bounds.extend([p.lon, p.lat]));
-          map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished });
+          map.fitBounds(bounds, { padding: 60, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
         }
       }
     }
