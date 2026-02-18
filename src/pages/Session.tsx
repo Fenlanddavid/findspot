@@ -7,6 +7,11 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
+const DEFAULT_ZOOM = 13;
 
 export default function SessionPage(props: {
   projectId: string;
@@ -65,6 +70,84 @@ export default function SessionPage(props: {
     }
     return info;
   }, [allMedia, finds]);
+
+  const mapDivRef = React.useRef<HTMLDivElement | null>(null);
+  const mapRef = React.useRef<maplibregl.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapDivRef.current || !tracks || tracks.length === 0) return;
+
+    if (!mapRef.current) {
+      const map = new maplibregl.Map({
+        container: mapDivRef.current,
+        style: {
+          version: 8,
+          sources: {
+            "raster-tiles": {
+              type: "raster",
+              tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: "© OpenStreetMap"
+            }
+          },
+          layers: [{ id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
+        },
+        center: DEFAULT_CENTER,
+        zoom: DEFAULT_ZOOM,
+      });
+
+      map.on("load", () => {
+        map.addSource("tracks", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] }
+        });
+
+        map.addLayer({
+          id: "tracks-line",
+          type: "line",
+          source: "tracks",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": ["get", "color"],
+            "line-width": 4,
+            "line-opacity": 0.8
+          }
+        });
+      });
+      mapRef.current = map;
+    }
+
+    const map = mapRef.current;
+    if (map.isStyleLoaded()) {
+      const source = map.getSource("tracks") as maplibregl.GeoJSONSource;
+      if (source) {
+        const geojson = {
+          type: "FeatureCollection",
+          features: tracks.map(t => ({
+            type: "Feature",
+            geometry: {
+              type: "LineString",
+              coordinates: t.points.map(p => [p.lon, p.lat])
+            },
+            properties: { color: t.color }
+          }))
+        };
+        source.setData(geojson as any);
+
+        // Fit bounds
+        const allPoints = tracks.flatMap(t => t.points);
+        if (allPoints.length > 0) {
+          const bounds = new maplibregl.LngLatBounds();
+          allPoints.forEach(p => bounds.extend([p.lon, p.lat]));
+          map.fitBounds(bounds, { padding: 40, duration: 1000 });
+        }
+      }
+    }
+
+    return () => {
+      // Don't remove map on every update, just let it exist
+    };
+  }, [tracks]);
 
   useEffect(() => {
     if (id) {
@@ -164,14 +247,6 @@ export default function SessionPage(props: {
                 )}
             </div>
             <div className="flex gap-2">
-                {isEdit && (
-                    <button 
-                        onClick={toggleTracking}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold shadow-md transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900'}`}
-                    >
-                        <span>{isTracking ? '⏹️ Stop Hunt' : '👣 Start Hunt'}</span>
-                    </button>
-                )}
                 <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back</button>
             </div>
         </div>
@@ -186,15 +261,27 @@ export default function SessionPage(props: {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {tracks && tracks.length > 0 && (
                     <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
-                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-2">Recorded Trail Tracks</h4>
-                        <div className="flex flex-wrap gap-2">
-                            {tracks.map(t => (
-                                <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-bold">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
-                                    <span>{t.points.length} points</span>
-                                    {t.isActive && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Recorded Trail Tracks</h4>
+                            <div className="flex items-center gap-2">
+                                {tracks.map(t => (
+                                    <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] font-bold">
+                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                                        <span>{t.points.length} pts</span>
+                                        {t.isActive && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        {/* Map Preview */}
+                        <div className="relative h-64 w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900 mb-4">
+                            <div ref={mapDivRef} className="absolute inset-0" />
+                            {isTracking && (
+                                <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full animate-pulse shadow-lg">
+                                    RECORDING LIVE TRAIL...
                                 </div>
-                            ))}
+                            )}
                         </div>
                     </div>
                 )}
@@ -228,21 +315,45 @@ export default function SessionPage(props: {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <label className="block">
-                        <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Land Use</div>
-                        <input value={landUse} onChange={(e) => setLandUse(e.target.value)} placeholder="e.g., Permanent Pasture" className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
-                    </label>
-                    <label className="block">
-                        <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Crop Type</div>
-                        <input value={cropType} onChange={(e) => setCropType(e.target.value)} placeholder="e.g., Winter Wheat" className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
-                    </label>
-                </div>
+                <div className="flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <div className="flex flex-col gap-2">
+                        <div className="text-xs font-black uppercase tracking-widest opacity-50">Ground Condition</div>
+                        <div className="flex flex-wrap gap-2">
+                            <button 
+                                type="button"
+                                onClick={() => setIsStubble(!isStubble)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isStubble ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                            >
+                                {isStubble ? '🌾 Stubble ✓' : '🌾 Stubble'}
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setLandUse(landUse === 'Ploughed' ? '' : 'Ploughed')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Ploughed' ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                            >
+                                {landUse === 'Ploughed' ? '🚜 Ploughed ✓' : '🚜 Ploughed'}
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setLandUse(landUse === 'Pasture' ? '' : 'Pasture')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Pasture' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
+                            >
+                                {landUse === 'Pasture' ? '🍃 Pasture ✓' : '🍃 Pasture'}
+                            </button>
+                        </div>
+                    </div>
 
-                <label className="flex items-center gap-2 cursor-pointer group w-fit">
-                    <input type="checkbox" checked={isStubble} onChange={(e) => setIsStubble(e.target.checked)} className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-emerald-600 transition-colors">Is Stubble?</span>
-                </label>
+                    <div className="flex flex-col gap-2 ml-auto">
+                        <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
+                        <button 
+                            type="button"
+                            onClick={toggleTracking}
+                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
+                        >
+                            <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                        </button>
+                    </div>
+                </div>
 
                 <label className="block">
                     <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Session Notes</div>

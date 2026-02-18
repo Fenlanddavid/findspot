@@ -57,8 +57,32 @@ export default function PermissionPage(props: {
 
   const sessions = useLiveQuery(async () => {
     if (!id) return [];
-    return db.sessions.where("permissionId").equals(id).reverse().sortBy("createdAt");
+    const rows = await db.sessions.where("permissionId").equals(id).reverse().sortBy("createdAt");
+    
+    // Fetch counts and tracks in parallel for all sessions
+    return Promise.all(rows.map(async (s) => {
+      const findCount = await db.finds.where("sessionId").equals(s.id).count();
+      const sessionTracks = await db.tracks.where("sessionId").equals(s.id).toArray();
+      
+      let durationMs = 0;
+      if (sessionTracks.length > 0) {
+        const allPoints = sessionTracks.flatMap(t => t.points).sort((a, b) => a.timestamp - b.timestamp);
+        if (allPoints.length > 1) {
+          durationMs = allPoints[allPoints.length - 1].timestamp - allPoints[0].timestamp;
+        }
+      }
+
+      return { ...s, findCount, hasTracking: sessionTracks.length > 0, durationMs };
+    }));
   }, [id]);
+
+  function formatDuration(ms: number) {
+    if (ms <= 0) return null;
+    const mins = Math.floor(ms / 60000);
+    const hrs = Math.floor(mins / 600);
+    if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+    return `${mins}m`;
+  }
 
   // Fetch all media for the report
   const allMedia = useLiveQuery(async () => {
@@ -337,7 +361,7 @@ export default function PermissionPage(props: {
                         </div>
                     </div>
                     <button type="button" onClick={doGPS} className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold transition-all text-sm">
-                        📍 Set Center
+                        📍 Save Coordinates
                     </button>
                 </div>
 
@@ -396,17 +420,32 @@ export default function PermissionPage(props: {
                         </button>
 
                         {sessions && sessions.length > 0 ? (
-                            sessions.map((s) => (
+                            sessions.map((s: any) => (
                                 <button 
                                     key={s.id} 
                                     onClick={() => nav(`/session/${s.id}`)}
                                     className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group"
                                 >
-                                    <div className="font-bold text-gray-800 dark:text-gray-100 group-hover:text-emerald-600">
-                                        {new Date(s.date).toLocaleDateString()}
+                                    <div className="flex justify-between items-start">
+                                        <div className="font-bold text-gray-800 dark:text-gray-100 group-hover:text-emerald-600">
+                                            {new Date(s.date).toLocaleDateString()}
+                                        </div>
+                                        <div className="flex gap-2 items-center">
+                                            {s.findCount > 0 && (
+                                                <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
+                                                    {s.findCount} {s.findCount === 1 ? 'Find' : 'Finds'}
+                                                </span>
+                                            )}
+                                            {s.hasTracking && (
+                                                <span title="Trail Map Recorded" className="text-[10px] bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 px-1.5 py-0.5 rounded flex items-center gap-1 font-bold">
+                                                    👣 Trail
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="text-xs opacity-60 mt-1">
-                                        {s.cropType || s.landUse || "General visit"}
+                                    <div className="text-xs opacity-60 mt-1 flex items-center justify-between">
+                                        <span>{s.cropType || s.landUse || "General visit"}</span>
+                                        {s.durationMs > 0 && <span className="font-mono opacity-80">{formatDuration(s.durationMs)}</span>}
                                     </div>
                                     <div className="mt-2 text-[10px] font-mono opacity-40 italic line-clamp-1">
                                         {s.notes}

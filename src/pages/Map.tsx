@@ -524,22 +524,6 @@ export default function MapPage({ projectId }: { projectId: string }) {
       <div className="flex-1 relative border-2 border-gray-100 dark:border-gray-800 rounded-3xl overflow-hidden shadow-inner bg-gray-50 dark:bg-black">
         <div ref={mapDivRef} className="absolute inset-0" />
         
-        {/* Tracking toggle */}
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
-            <button 
-                onClick={toggleTracking}
-                className={`flex items-center gap-2 px-4 py-3 rounded-2xl font-bold shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900'}`}
-            >
-                <span className="text-xl">{isTracking ? '⏹️' : '👣'}</span>
-                <span>{isTracking ? 'Stop Hunt' : 'Start Hunt'}</span>
-            </button>
-            {isTracking && (
-                <div className="bg-black/50 backdrop-blur text-white text-[10px] px-2 py-1 rounded-full text-center font-mono">
-                    Recording Trail...
-                </div>
-            )}
-        </div>
-
         {/* Selection overlay */}
         {selected && (
           <div className="absolute bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-96 z-10">
