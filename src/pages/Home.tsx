@@ -56,10 +56,10 @@ export default function Home(props: {
   }, [findIds]);
 
   return (
-    <div className="grid gap-8 max-w-5xl mx-auto overflow-hidden">
+    <div className="grid gap-8 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
       <div className="flex items-start gap-2 py-2 px-1">
         <span className="text-sm mt-0.5">🔒</span>
-        <p className="text-sm font-normal text-black dark:text-white m-0 opacity-80 flex-1">
+        <p className="text-xs sm:text-sm font-normal text-black dark:text-white m-0 opacity-80 flex-1">
             Your data is private. All find spots, GPS coordinates, and landowner details are stored locally on this device. Nothing is ever uploaded or shared.
         </p>
       </div>
@@ -83,6 +83,7 @@ export default function Home(props: {
             <QuickFilterBtn label="Celtic" onClick={() => props.goFindsWithFilter("period=Celtic")} />
             <QuickFilterBtn label="Anglo-Saxon" onClick={() => props.goFindsWithFilter("period=Anglo-Saxon")} />
         </div>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-1 -mt-1">Tip: Scroll for more filters</p>
       </div>
 
       <section className="overflow-hidden">

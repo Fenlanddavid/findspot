@@ -255,11 +255,11 @@ export default function SessionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto pb-20">
-      <div className="grid gap-8">
-        <div className="flex justify-between items-center px-1">
-            <div className="flex gap-4 items-center">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+    <div className="max-w-4xl mx-auto pb-20 px-4">
+      <div className="grid gap-8 mt-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-wrap gap-3 items-center">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                     {isEdit ? "Session Details" : "New Session"}
                 </h2>
                 {isEdit && !isEditing && (
@@ -271,8 +271,8 @@ export default function SessionPage(props: {
                     </button>
                 )}
             </div>
-            <div className="flex gap-2">
-                <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back</button>
+            <div className="flex gap-2 w-full sm:w-auto">
+                <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
             </div>
         </div>
 
@@ -286,22 +286,22 @@ export default function SessionPage(props: {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {!isEditing && (
                   <div className="flex flex-col gap-6">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1">📍 {permission?.name || "Unknown Location"}</p>
-                            <div className="flex items-center gap-3">
-                                <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
+                        <div className="min-w-0 flex-1">
+                            <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">📍 {permission?.name || "Unknown Location"}</p>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
                                 {isFinished && (
-                                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600">Finished</span>
+                                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
                                 )}
                             </div>
                         </div>
                         {!isFinished && (
                             <button 
                                 onClick={toggleTracking}
-                                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
+                                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 w-full sm:w-auto ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
                             >
-                                <span>{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
+                                <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
                             </button>
                         )}
                     </div>

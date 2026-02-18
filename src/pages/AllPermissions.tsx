@@ -27,14 +27,14 @@ export default function AllPermissions(props: { projectId: string }) {
   );
 
   return (
-    <div className="max-w-5xl mx-auto pb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="max-w-5xl mx-auto pb-10 px-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8 mt-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">All Permissions</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">All Permissions</h2>
           <p className="text-gray-500 text-sm">Browse and search every recorded permission or rally.</p>
         </div>
         
-        <div className="flex gap-3 flex-1 max-w-xl md:justify-end">
+        <div className="flex flex-col sm:flex-row gap-3 flex-1 max-w-xl lg:justify-end">
           <div className="relative flex-1 max-w-md">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
             <input 
@@ -42,12 +42,12 @@ export default function AllPermissions(props: { projectId: string }) {
               placeholder="Search by name, landowner, or notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
             />
           </div>
           <button 
             onClick={() => navigate("/permission")}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold shadow-md transition-all whitespace-nowrap"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 sm:py-3 rounded-xl font-bold shadow-md transition-all whitespace-nowrap text-sm"
           >
             + New Permission
           </button>

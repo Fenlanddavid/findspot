@@ -222,11 +222,11 @@ export default function PermissionPage(props: {
   } : null;
 
   return (
-    <div className="max-w-4xl mx-auto pb-20">
-      <div className="no-print grid gap-8">
-        <div className="flex justify-between items-center px-1">
-            <div className="flex gap-4 items-center">
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">{isEdit ? `Land/Permission Details` : "New Permission"}</h2>
+    <div className="max-w-4xl mx-auto pb-20 px-4">
+      <div className="no-print grid gap-8 mt-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-wrap gap-3 items-center">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">{isEdit ? `Land/Permission Details` : "New Permission"}</h2>
                 {isEdit && !isEditing && (
                     <button 
                         onClick={() => setIsEditing(true)}
@@ -236,25 +236,25 @@ export default function PermissionPage(props: {
                     </button>
                 )}
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 {isEdit && (
                     <>
                         <button 
                             onClick={handlePrint}
-                            className="text-sm font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
+                            className="text-xs sm:text-sm font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all flex-1 sm:flex-none"
                         >
-                            Export Report (PDF)
+                            Report
                         </button>
                         <button 
                             onClick={handleDelete}
                             disabled={saving}
-                            className="text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800 transition-all disabled:opacity-50"
+                            className="text-xs sm:text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
                         >
-                            Delete Everything
+                            Delete
                         </button>
                     </>
                 )}
-                <button onClick={() => nav("/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Home</button>
+                <button onClick={() => nav("/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Home</button>
             </div>
         </div>
 
@@ -269,16 +269,16 @@ export default function PermissionPage(props: {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {isEditing ? (
                   <>
-                    <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl w-fit">
+                    <div className="flex flex-col sm:flex-row gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit">
                         <button 
                             onClick={() => setType("individual")}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${type === "individual" ? "bg-white dark:bg-gray-800 shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
+                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${type === "individual" ? "bg-white dark:bg-gray-800 shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
                         >
                             Individual Permission
                         </button>
                         <button 
                             onClick={() => setType("rally")}
-                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${type === "rally" ? "bg-white dark:bg-gray-800 shadow-sm text-teal-600" : "text-gray-500 hover:text-gray-700"}`}
+                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${type === "rally" ? "bg-white dark:bg-gray-800 shadow-sm text-teal-600" : "text-gray-500 hover:text-gray-700"}`}
                         >
                             Club/Rally Dig
                         </button>
@@ -363,9 +363,9 @@ export default function PermissionPage(props: {
                     </div>
 
                     <div className="bg-gray-50/50 dark:bg-gray-900/20 p-5 rounded-2xl border-2 border-gray-100/50 dark:border-gray-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 w-full">
                             <div className="text-xs font-bold uppercase tracking-wider opacity-60">Base Coordinates (Center)</div>
-                            <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
+                            <div className="text-sm sm:text-lg font-mono font-bold text-gray-800 dark:text-gray-100 break-all">
                                 {lat && lon ? (
                                 <div className="flex items-center gap-2">
                                     {lat.toFixed(6)}, {lon.toFixed(6)}
@@ -375,7 +375,7 @@ export default function PermissionPage(props: {
                                 )}
                             </div>
                         </div>
-                        <button type="button" onClick={doGPS} className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold transition-all text-sm">
+                        <button type="button" onClick={doGPS} className="w-full sm:w-auto bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold transition-all text-sm whitespace-nowrap">
                             📍 Save Coordinates
                         </button>
                     </div>
@@ -423,14 +423,14 @@ export default function PermissionPage(props: {
                   </>
                 ) : (
                   <div className="grid gap-8">
-                    <div className="flex justify-between items-start">
-                        <div>
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                        <div className="min-w-0 flex-1">
                             <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${type === 'rally' ? 'bg-teal-100 text-teal-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                 {type === 'rally' ? 'Club/Rally Dig' : 'Individual Permission'}
                             </span>
-                            <h3 className="text-3xl font-black text-gray-800 dark:text-gray-100 mt-2">{name}</h3>
+                            <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 mt-2 break-words">{name}</h3>
                         </div>
-                        <div className={`px-4 py-2 rounded-xl border-2 flex items-center gap-2 font-black text-sm ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                        <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border-2 flex items-center gap-2 font-black text-[10px] sm:text-sm whitespace-nowrap h-fit ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
                             {permissionGranted ? '✓ PERMISSION GRANTED' : '⚠️ NO PERMISSION'}
                         </div>
                     </div>

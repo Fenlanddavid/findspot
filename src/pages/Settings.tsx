@@ -30,8 +30,8 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8">
-      <h1 className="text-3xl font-black mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
+    <div className="max-w-2xl mx-auto py-8 px-4 pb-20 mt-4">
+      <h1 className="text-2xl sm:text-3xl font-black mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
 
       <div className="space-y-8">
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
