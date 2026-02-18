@@ -59,6 +59,7 @@ export type Session = {
   isStubble: boolean;
 
   notes: string;
+  isFinished: boolean;
 
   createdAt: string;
   updatedAt: string;
@@ -209,6 +210,16 @@ export class FindSpotDB extends Dexie {
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, createdAt",
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
+      media: "id, projectId, findId, createdAt",
+      tracks: "id, projectId, sessionId, isActive, createdAt",
+      settings: "key",
+    });
+
+    this.version(6).stores({
+      projects: "id, name, region, createdAt",
+      permissions: "id, projectId, name, type, permissionGranted, createdAt",
+      sessions: "id, projectId, permissionId, date, isFinished, createdAt",
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
       media: "id, projectId, findId, createdAt",
       tracks: "id, projectId, sessionId, isActive, createdAt",

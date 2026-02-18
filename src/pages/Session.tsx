@@ -31,6 +31,7 @@ export default function SessionPage(props: {
   const [cropType, setCropType] = useState("");
   const [isStubble, setIsStubble] = useState(false);
   const [notes, setNotes] = useState("");
+  const [isFinished, setIsFinished] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -162,6 +163,7 @@ export default function SessionPage(props: {
           setCropType(s.cropType);
           setIsStubble(s.isStubble);
           setNotes(s.notes);
+          setIsFinished(!!s.isFinished);
         }
         setLoading(false);
       });
@@ -204,6 +206,7 @@ export default function SessionPage(props: {
         cropType,
         isStubble,
         notes,
+        isFinished,
         createdAt: isEdit ? undefined as any : now, 
         updatedAt: now,
       };
@@ -238,6 +241,10 @@ export default function SessionPage(props: {
   async function finishSession() {
     if (isTracking) {
         await stopTracking();
+    }
+    if (id) {
+        await db.sessions.update(id, { isFinished: true });
+        setIsFinished(true);
     }
     nav(permission ? `/permission/${permission.id}` : "/");
   }
@@ -279,24 +286,38 @@ export default function SessionPage(props: {
                     <div className="flex justify-between items-start">
                         <div>
                             <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1">📍 {permission?.name || "Unknown Location"}</p>
-                            <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                                {isFinished && (
+                                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600">Finished</span>
+                                )}
+                            </div>
                         </div>
-                        <button 
-                            onClick={toggleTracking}
-                            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
-                        >
-                            <span>{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
-                        </button>
+                        {!isFinished && (
+                            <button 
+                                onClick={toggleTracking}
+                                className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
+                            >
+                                <span>{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
+                            </button>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <button 
-                            onClick={finishSession}
-                            className="bg-emerald-50 dark:bg-emerald-950/20 border-2 border-emerald-100 dark:border-emerald-800 p-4 rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm"
-                        >
-                            <span className="text-xl group-hover:scale-110 transition-transform">✓</span>
-                            <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 group-hover:text-white">Finish Session</span>
-                        </button>
+                        {!isFinished ? (
+                            <button 
+                                onClick={finishSession}
+                                className="bg-emerald-50 dark:bg-emerald-950/20 border-2 border-emerald-100 dark:border-emerald-800 p-4 rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm"
+                            >
+                                <span className="text-xl group-hover:scale-110 transition-transform">✓</span>
+                                <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 group-hover:text-white">Finish Session</span>
+                            </button>
+                        ) : (
+                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-1 opacity-60">
+                                <span className="text-xl">🔒</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
+                            </div>
+                        )}
 
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
                             <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Session Data</h4>
@@ -457,12 +478,14 @@ export default function SessionPage(props: {
 
                 {isEdit && (
                     <div className="grid gap-3">
-                        <button 
-                            onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${id}`)}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2"
-                        >
-                            Add Find to Session
-                        </button>
+                        {!isFinished && (
+                            <button 
+                                onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${id}`)}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2"
+                            >
+                                Add Find to Session
+                            </button>
+                        )}
 
                         {finds && finds.length > 0 ? (
                             finds.map((s) => (
