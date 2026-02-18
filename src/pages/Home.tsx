@@ -69,10 +69,7 @@ export default function Home(props: {
             <span>📍</span> <span className="hidden xs:inline">New</span> Permission
         </button>
         <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base">
-            <span>🏟️</span> Rally<span className="hidden xs:inline"> Dig</span>
-        </button>
-        <button onClick={props.goMap} className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-4 sm:px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 sm:ml-auto transform hover:-translate-y-0.5 active:translate-y-0 text-sm sm:text-base">
-            <span>🗺️</span> Map
+            <span>🏟️</span> Club/Rally
         </button>
       </div>
 
