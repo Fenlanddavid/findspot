@@ -262,14 +262,6 @@ export default function SessionPage(props: {
                 )}
             </div>
             <div className="flex gap-2">
-                {isEdit && !isEditing && (
-                    <button 
-                        onClick={finishSession}
-                        className="text-sm font-bold text-gray-600 hover:text-white hover:bg-gray-800 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 px-4 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
-                    >
-                        ✓ Finish Session
-                    </button>
-                )}
                 <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back</button>
             </div>
         </div>
@@ -298,21 +290,27 @@ export default function SessionPage(props: {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
+                        <button 
+                            onClick={finishSession}
+                            className="bg-emerald-50 dark:bg-emerald-950/20 border-2 border-emerald-100 dark:border-emerald-800 p-4 rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm"
+                        >
+                            <span className="text-xl group-hover:scale-110 transition-transform">✓</span>
+                            <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 group-hover:text-white">Finish Session</span>
+                        </button>
+
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Conditions</h4>
-                            <div className="flex flex-wrap gap-2 mt-2">
-                                {isStubble && <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-1 rounded">🌾 Stubble</span>}
-                                {landUse && <span className="bg-orange-100 text-orange-800 text-[10px] font-bold px-2 py-1 rounded">🚜 {landUse}</span>}
-                                {!isStubble && !landUse && <span className="text-xs opacity-40 italic">No conditions recorded</span>}
+                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Session Data</h4>
+                            <div className="flex flex-col gap-2 mt-2">
+                                <div className="flex flex-wrap gap-1">
+                                    {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🌾 Stubble</span>}
+                                    {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🚜 {landUse}</span>}
+                                </div>
+                                {lat && lon ? (
+                                    <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
+                                ) : (
+                                    <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">📍 Get GPS</button>
+                                )}
                             </div>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">GPS Start Point</h4>
-                            {lat && lon ? (
-                                <p className="font-mono font-bold text-sm text-emerald-600 mt-2">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
-                            ) : (
-                                <button onClick={doGPS} className="text-xs font-bold text-emerald-600 hover:underline mt-2">📍 Capture GPS Now</button>
-                            )}
                         </div>
                     </div>
 
