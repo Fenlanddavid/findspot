@@ -235,6 +235,13 @@ export default function SessionPage(props: {
     }
   }
 
+  async function finishSession() {
+    if (isTracking) {
+        await stopTracking();
+    }
+    nav(permission ? `/permission/${permission.id}` : "/");
+  }
+
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
@@ -255,6 +262,14 @@ export default function SessionPage(props: {
                 )}
             </div>
             <div className="flex gap-2">
+                {isEdit && !isEditing && (
+                    <button 
+                        onClick={finishSession}
+                        className="text-sm font-bold text-gray-600 hover:text-white hover:bg-gray-800 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 px-4 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-all"
+                    >
+                        ✓ Finish Session
+                    </button>
+                )}
                 <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors">Back</button>
             </div>
         </div>
