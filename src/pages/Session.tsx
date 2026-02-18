@@ -115,17 +115,24 @@ export default function SessionPage(props: {
             "line-opacity": 0.8
           }
         });
+
+        // Initial fit when data arrives
+        updateMapData(map, tracks);
       });
       mapRef.current = map;
+    } else {
+      const map = mapRef.current;
+      if (map.isStyleLoaded()) {
+        updateMapData(map, tracks);
+      }
     }
 
-    const map = mapRef.current;
-    if (map.isStyleLoaded()) {
+    function updateMapData(map: maplibregl.Map, tracksData: Track[]) {
       const source = map.getSource("tracks") as maplibregl.GeoJSONSource;
       if (source) {
         const geojson = {
           type: "FeatureCollection",
-          features: tracks.map(t => ({
+          features: tracksData.map(t => ({
             type: "Feature",
             geometry: {
               type: "LineString",
@@ -137,19 +144,15 @@ export default function SessionPage(props: {
         source.setData(geojson as any);
 
         // Fit bounds
-        const allPoints = tracks.flatMap(t => t.points);
+        const allPoints = tracksData.flatMap(t => t.points);
         if (allPoints.length > 0) {
           const bounds = new maplibregl.LngLatBounds();
           allPoints.forEach(p => bounds.extend([p.lon, p.lat]));
-          map.fitBounds(bounds, { padding: 40, duration: 1000 });
+          map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished });
         }
       }
     }
-
-    return () => {
-      // Don't remove map on every update, just let it exist
-    };
-  }, [tracks]);
+  }, [tracks, isFinished]);
 
   useEffect(() => {
     if (id) {

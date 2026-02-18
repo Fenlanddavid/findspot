@@ -172,7 +172,7 @@ function Shell() {
             <nav className="flex gap-x-4 gap-y-2 flex-wrap items-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
-              <NavLink to="/permission" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>New Permission</NavLink>
+              <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
               <NavLink to="/find" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Club Dig</NavLink>
               <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </nav>

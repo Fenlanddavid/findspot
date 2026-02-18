@@ -34,15 +34,23 @@ export default function AllPermissions(props: { projectId: string }) {
           <p className="text-gray-500 text-sm">Browse and search every recorded permission or rally.</p>
         </div>
         
-        <div className="relative flex-1 max-w-md">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
-          <input 
-            type="text"
-            placeholder="Search by name, landowner, or notes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-          />
+        <div className="flex gap-3 flex-1 max-w-xl md:justify-end">
+          <div className="relative flex-1 max-w-md">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+            <input 
+              type="text"
+              placeholder="Search by name, landowner, or notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+          <button 
+            onClick={() => navigate("/permission")}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold shadow-md transition-all whitespace-nowrap"
+          >
+            + New Permission
+          </button>
         </div>
       </div>
 
