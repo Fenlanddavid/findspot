@@ -3,6 +3,38 @@ import { v4 as uuid } from "uuid";
 
 let watchId: number | null = null;
 let currentTrackId: string | null = null;
+let wakeLock: any = null;
+
+// Request wake lock to prevent screen from sleeping
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await (navigator as any).wakeLock.request('screen');
+      console.log('Wake Lock is active');
+      
+      wakeLock.addEventListener('release', () => {
+        console.log('Wake Lock was released');
+      });
+    }
+  } catch (err: any) {
+    console.error(`${err.name}, ${err.message}`);
+  }
+}
+
+// Release wake lock
+async function releaseWakeLock() {
+  if (wakeLock !== null) {
+    await wakeLock.release();
+    wakeLock = null;
+  }
+}
+
+// Re-acquire wake lock when app becomes visible again
+document.addEventListener('visibilitychange', async () => {
+  if (watchId !== null && document.visibilityState === 'visible') {
+    await requestWakeLock();
+  }
+});
 
 export async function startTracking(projectId: string, sessionId: string | null = null, name: string = "New Hunt"): Promise<string> {
     if (watchId !== null) {
@@ -29,6 +61,9 @@ export async function startTracking(projectId: string, sessionId: string | null 
 
     currentTrackId = trackId;
 
+    // Start Wake Lock
+    await requestWakeLock();
+
     watchId = navigator.geolocation.watchPosition(
         async (pos) => {
             if (!currentTrackId) return;
@@ -43,11 +78,8 @@ export async function startTracking(projectId: string, sessionId: string | null 
                 accuracy: pos.coords.accuracy
             };
 
-            // Only add if accuracy is decent (e.g. < 30m) OR it's the first point
+            // Only add if accuracy is decent (e.g. < 50m) OR it's the first point
             if (pos.coords.accuracy > 50 && track.points.length > 0) return;
-
-            // Simple distance check to avoid jitter? 
-            // For now, just add all.
 
             await db.tracks.update(currentTrackId, {
                 points: [...track.points, newPoint],
@@ -80,6 +112,9 @@ export async function stopTracking() {
         });
         currentTrackId = null;
     }
+
+    // Release Wake Lock
+    await releaseWakeLock();
 }
 
 export function isTrackingActive(): boolean {
