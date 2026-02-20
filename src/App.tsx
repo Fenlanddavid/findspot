@@ -175,7 +175,7 @@ function Shell() {
                 </h3>
                 <p className="text-xs opacity-90 leading-tight mt-1 text-emerald-50">
                     {isIOS 
-                        ? "Tap the Share icon or '...' and select 'Open in Safari' to install FindSpot on iPhone."
+                        ? "Tap the ⋯ menu and select 'Open in External Browser' or 'Open in Safari' to install."
                         : "To install FindSpot and save data properly, open it in Chrome then tap 'Add to Home Screen'."}
                 </p>
             </div>
@@ -188,7 +188,7 @@ function Shell() {
                 </a>
             ) : (
                 <div className="bg-emerald-700/50 p-2 rounded-lg text-[10px] font-mono border border-emerald-400">
-                    Step: Tap ⋯ or Share → Open in Safari
+                    Step: Tap ⋯ → Open in External Browser
                 </div>
             )}
             <button 
