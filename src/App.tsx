@@ -47,11 +47,16 @@ function Shell() {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(true);
   const nav = useNavigate();
 
   useEffect(() => {
     ensureDefaultProject().then(setProjectId);
     requestPersistentStorage();
+
+    // Detect Standalone mode
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    setIsStandalone(!!isPWA);
     
     // Detect In-App Browsers (Facebook, Instagram, etc.)
     const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
@@ -190,6 +195,14 @@ function Shell() {
             </Link>
             
             <div className="flex items-center gap-3 border-l pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
+                {!isStandalone && (
+                  <button 
+                    onClick={() => alert("To install FindSpot, tap your browser's menu (⋮ or share icon) and select 'Add to Home Screen'.")}
+                    className="text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
+                  >
+                    ⚠️ Not Installed
+                  </button>
+                )}
                 <button onClick={handleCSVExport} className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">
                     CSV
                 </button>
