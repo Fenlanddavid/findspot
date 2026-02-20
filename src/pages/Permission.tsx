@@ -37,6 +37,8 @@ export default function PermissionPage(props: {
 
   const [landType, setLandType] = useState<Permission["landType"]>("arable");
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [ncmdNumber, setNcmdNumber] = useState("");
+  const [ncmdExpiry, setNcmdExpiry] = useState("");
 
   const [landUse, setLandUse] = useState("");
   const [cropType, setCropType] = useState("");
@@ -107,6 +109,9 @@ export default function PermissionPage(props: {
   }, [allMedia, finds]);
 
   useEffect(() => {
+    getSetting("ncmdNumber", "").then(setNcmdNumber);
+    getSetting("ncmdExpiry", "").then(setNcmdExpiry);
+
     if (id) {
       db.permissions.get(id).then(l => {
         if (l) {
@@ -472,6 +477,12 @@ export default function PermissionPage(props: {
                             <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Default Detectorist</h4>
                                 <p className="font-bold text-gray-700 dark:text-gray-300">{collector || "Not set"}</p>
+                                {(ncmdNumber || ncmdExpiry) && (
+                                    <div className="mt-1 text-[10px] font-bold text-emerald-600 flex flex-wrap gap-x-3">
+                                        {ncmdNumber && <span>NCMD: {ncmdNumber}</span>}
+                                        {ncmdExpiry && <span>Exp: {new Date(ncmdExpiry).toLocaleDateString()}</span>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -554,7 +565,14 @@ export default function PermissionPage(props: {
 
       {isEdit && currentPermission && finds && allMedia && sessions && (
         <div className="hidden print:block">
-            <PermissionReport permission={currentPermission} sessions={sessions} finds={finds} media={allMedia} />
+            <PermissionReport 
+              permission={currentPermission} 
+              sessions={sessions} 
+              finds={finds} 
+              media={allMedia} 
+              ncmdNumber={ncmdNumber}
+              ncmdExpiry={ncmdExpiry}
+            />
         </div>
       )}
 

@@ -7,6 +7,8 @@ export function PermissionReport(props: {
   sessions: Session[];
   finds: Find[];
   media: Media[];
+  ncmdNumber?: string;
+  ncmdExpiry?: string;
 }) {
   const mediaMap = useMemo(() => {
     const m = new Map<string, Media[]>();
@@ -41,6 +43,8 @@ export function PermissionReport(props: {
         </div>
         <div className="text-right font-mono text-sm">
           <div>Report Generated: {new Date().toLocaleDateString()}</div>
+          {props.ncmdNumber && <div>NCMD No: {props.ncmdNumber}</div>}
+          {props.ncmdExpiry && <div>Insurance Exp: {new Date(props.ncmdExpiry).toLocaleDateString()}</div>}
           <div>FindSpot v0.1.0</div>
         </div>
       </header>

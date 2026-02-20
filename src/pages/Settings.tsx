@@ -4,12 +4,16 @@ import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting }
 export default function Settings() {
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
+  const [ncmdNumber, setNcmdNumber] = useState("");
+  const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
     getSetting("detectorist", "").then(setDetectorist);
+    getSetting("ncmdNumber", "").then(setNcmdNumber);
+    getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("lastBackupDate", null).then(setLastBackup);
   }, []);
 
@@ -25,6 +29,8 @@ export default function Settings() {
 
   async function saveSettings() {
     await setSetting("detectorist", detectorist);
+    await setSetting("ncmdNumber", ncmdNumber);
+    await setSetting("ncmdExpiry", ncmdExpiry);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
@@ -38,7 +44,7 @@ export default function Settings() {
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span>👤</span> User Preferences
           </h2>
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Default Detectorist Name</label>
               <input
@@ -50,6 +56,30 @@ export default function Settings() {
               />
               <p className="text-xs text-gray-500 mt-1 italic">This name will be automatically used for new permissions and session records.</p>
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">NCMD Membership No.</label>
+                <input
+                  type="text"
+                  value={ncmdNumber}
+                  onChange={(e) => setNcmdNumber(e.target.value)}
+                  placeholder="e.g. 123456"
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Insurance Expiry Date</label>
+                <input
+                  type="date"
+                  value={ncmdExpiry}
+                  onChange={(e) => setNcmdExpiry(e.target.value)}
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1 italic sm:col-span-2">Your National Council for Metal Detecting insurance details for landowner peace of mind.</p>
+            </div>
+
             <button
               onClick={saveSettings}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center gap-2"

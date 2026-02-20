@@ -43,8 +43,11 @@ export async function exportToCSV(): Promise<string> {
     "Permission Name", "Permission Type", "Landowner Name", "Landowner Phone", "Landowner Email", "Landowner Address",
     "Latitude", "Longitude", "GPS Accuracy (m)", 
     "Land Type", "Land Use", "Crop Type", "Is Stubble", 
-    "Date Observed", "Detectorist", "Find Notes", "Permission Notes"
+    "Date Observed", "Detectorist", "NCMD No", "NCMD Expiry", "Find Notes", "Permission Notes"
   ];
+
+  const ncmdNumber = await getSetting("ncmdNumber", "");
+  const ncmdExpiry = await getSetting("ncmdExpiry", "");
 
   const rows = finds.map(s => {
     const l = locMap.get(s.permissionId);
@@ -61,7 +64,7 @@ export async function exportToCSV(): Promise<string> {
       s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
       sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
-      l?.collector ?? "", sNotes, lNotes
+      l?.collector ?? "", ncmdNumber, ncmdExpiry, sNotes, lNotes
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
   });
 
