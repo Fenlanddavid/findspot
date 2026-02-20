@@ -75,6 +75,7 @@ export type Find = {
   objectType: string;
   coinType?: string;
   coinDenomination?: string;
+  pasId?: string;
 
   // Specific Findspot Location
   lat: number | null;

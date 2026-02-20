@@ -5,7 +5,7 @@ export function Modal(props: { title: string; onClose: () => void; children: Rea
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 bg-black/45 grid place-items-center p-4 z-50 backdrop-blur-sm"
+      className="fixed inset-0 bg-black/45 grid place-items-center p-4 z-50 backdrop-blur-sm no-print"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) props.onClose();
       }}

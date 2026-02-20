@@ -17,7 +17,13 @@ export function ScaledImage({ media, className, imgClassName, showScale = true }
   useEffect(() => {
     const u = URL.createObjectURL(media.blob);
     setUrl(u);
-    return () => URL.revokeObjectURL(u);
+    return () => {
+        // Only revoke if we're not currently printing
+        // (This is a heuristic, but helps with some browser print flows)
+        if (!window.matchMedia('print').matches) {
+            URL.revokeObjectURL(u);
+        }
+    };
   }, [media.blob]);
 
   const updateScale = () => {
