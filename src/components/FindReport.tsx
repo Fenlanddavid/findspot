@@ -78,15 +78,9 @@ export function FindReport(props: {
             <div key={m.id} className="break-inside-avoid">
               <ScaledImage 
                 media={m} 
-                className="rounded-lg border border-gray-200 bg-gray-50 aspect-square overflow-hidden mb-1" 
+                className="rounded-lg border border-gray-200 bg-gray-50 aspect-square overflow-hidden" 
                 imgClassName="object-contain w-full h-full"
               />
-              <div className="flex justify-between items-center px-1">
-                <span className="text-[10px] font-mono opacity-50">{m.filename}</span>
-                {m.photoType && (
-                    <span className="text-[8px] font-black uppercase bg-gray-100 px-1 rounded">{m.photoType}</span>
-                )}
-              </div>
             </div>
           ))}
         </div>
