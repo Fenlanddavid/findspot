@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Find, Media } from "../db";
+import { db, Find, Media, Permission, Session } from "../db";
 import { Modal } from "./Modal";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { ScaleCalibrationModal } from "./ScaleCalibrationModal";
 import { ScaledImage } from "./ScaledImage";
+import { FindReport } from "./FindReport";
+import { getSetting } from "../services/data";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
   const find = useLiveQuery(async () => db.finds.get(props.findId), [props.findId]);
@@ -17,9 +19,24 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   
   const [calibratingMedia, setCalibratingMedia] = useState<{ media: Media; url: string } | null>(null);
 
+  const [permission, setPermission] = useState<Permission | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [ncmdNumber, setNcmdNumber] = useState("");
+  const [ncmdExpiry, setNcmdExpiry] = useState("");
+
   useEffect(() => {
-    if (find) setDraft(find);
+    if (find) {
+      setDraft(find);
+      db.permissions.get(find.permissionId).then(p => setPermission(p || null));
+      if (find.sessionId) db.sessions.get(find.sessionId).then(s => setSession(s || null));
+      getSetting("ncmdNumber", "").then(setNcmdNumber);
+      getSetting("ncmdExpiry", "").then(setNcmdExpiry);
+    }
   }, [find?.id]);
+
+  function handlePrint() {
+    window.print();
+  }
 
   const imageUrls = useMemo(() => {
     const urls: { id: string; url: string; filename: string; media: Media }[] = [];
@@ -116,15 +133,23 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         onClose={props.onClose} 
         title={`Find: ${draft.findCode}`}
         headerActions={!isEditing ? (
-          <button 
-            onClick={() => setIsEditing(true)}
-            className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
-          >
-            Edit Details
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={handlePrint}
+              className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
+            >
+              Create PDF
+            </button>
+            <button 
+              onClick={() => setIsEditing(true)}
+              className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
+            >
+              Edit Details
+            </button>
+          </div>
         ) : undefined}
       >
-        <div className="grid gap-6 max-h-[80vh] overflow-y-auto pr-1">
+        <div className="no-print grid gap-6 max-h-[80vh] overflow-y-auto pr-1">
           {!isEditing ? (
             <div className="grid gap-6">
               {/* Photos at top for quick view */}
@@ -419,6 +444,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             </>
           )}
         </div>
+
+        {draft && media && (
+            <div className="hidden print:block">
+                <FindReport 
+                  find={draft} 
+                  media={media} 
+                  permission={permission || undefined} 
+                  session={session || undefined}
+                  ncmdNumber={ncmdNumber}
+                  ncmdExpiry={ncmdExpiry}
+                />
+            </div>
+        )}
       </Modal>
 
       {calibratingMedia && (
