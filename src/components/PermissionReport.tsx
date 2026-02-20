@@ -9,6 +9,8 @@ export function PermissionReport(props: {
   media: Media[];
   ncmdNumber?: string;
   ncmdExpiry?: string;
+  detectoristName?: string;
+  detectoristEmail?: string;
 }) {
   const mediaMap = useMemo(() => {
     const m = new Map<string, Media[]>();
@@ -42,6 +44,8 @@ export function PermissionReport(props: {
           <p className="text-xl font-bold opacity-70">{props.permission.name}</p>
         </div>
         <div className="text-right font-mono text-sm">
+          <div className="font-bold">{props.detectoristName || props.permission.collector}</div>
+          {props.detectoristEmail && <div>{props.detectoristEmail}</div>}
           <div>Report Generated: {new Date().toLocaleDateString()}</div>
           {props.ncmdNumber && <div>NCMD No: {props.ncmdNumber}</div>}
           {props.ncmdExpiry && <div>Insurance Exp: {new Date(props.ncmdExpiry).toLocaleDateString()}</div>}
@@ -126,6 +130,7 @@ function FindDetail({ find, media }: { find: Find, media: Media[] }) {
             <div className="flex justify-between items-baseline mb-3">
             <h3 className="text-lg font-bold flex gap-2 items-center">
                 <span className="bg-black text-white px-2 py-0.5 text-sm font-mono">{find.findCode}</span>
+                {find.pasId && <span className="bg-gray-100 text-black border border-black px-2 py-0.5 text-xs font-mono">{find.pasId}</span>}
                 {find.objectType || "Unidentified Find"}
             </h3>
             <span className="text-xs font-bold uppercase text-gray-400">Period: {find.period}</span>
@@ -139,7 +144,14 @@ function FindDetail({ find, media }: { find: Find, media: Media[] }) {
                     {find.w3w && <span className="block text-[10px] opacity-60">///{find.w3w.replace("///", "")}</span>}
                 </p>
                 <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Material</span> {find.material}</p>
-                <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Weight</span> {find.weightG ? `${find.weightG}g` : "N/A"}</p>
+                <div className="flex gap-4">
+                    <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Weight</span> {find.weightG ? `${find.weightG}g` : "N/A"}</p>
+                    <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Dims (mm)</span> 
+                        {find.widthMm || find.heightMm || find.depthMm ? (
+                            `${find.widthMm || '?' } x ${find.heightMm || '?'} x ${find.depthMm || '?'}`
+                        ) : "N/A"}
+                    </p>
+                </div>
                 <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Completeness</span> {find.completeness}</p>
                 {find.decoration && <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Description</span> {find.decoration}</p>}
                 {find.notes && <p><span className="font-bold uppercase text-[10px] text-gray-500 block">Notes</span> {find.notes}</p>}

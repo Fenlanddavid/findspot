@@ -4,6 +4,7 @@ import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting }
 export default function Settings() {
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
+  const [email, setEmail] = useState("");
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
@@ -12,6 +13,7 @@ export default function Settings() {
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
     getSetting("detectorist", "").then(setDetectorist);
+    getSetting("detectoristEmail", "").then(setEmail);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("lastBackupDate", null).then(setLastBackup);
@@ -29,6 +31,7 @@ export default function Settings() {
 
   async function saveSettings() {
     await setSetting("detectorist", detectorist);
+    await setSetting("detectoristEmail", email);
     await setSetting("ncmdNumber", ncmdNumber);
     await setSetting("ncmdExpiry", ncmdExpiry);
     setSaved(true);
@@ -45,17 +48,29 @@ export default function Settings() {
             <span>👤</span> User Preferences
           </h2>
           <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Default Detectorist Name</label>
-              <input
-                type="text"
-                value={detectorist}
-                onChange={(e) => setDetectorist(e.target.value)}
-                placeholder="e.g. John Doe"
-                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-              />
-              <p className="text-xs text-gray-500 mt-1 italic">This name will be automatically used for new permissions and session records.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Default Detectorist Name</label>
+                <input
+                  type="text"
+                  value={detectorist}
+                  onChange={(e) => setDetectorist(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@example.com"
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
             </div>
+            <p className="text-xs text-gray-500 mt-1 italic">These details will be used as the default for new records and included in your reports.</p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
               <div>

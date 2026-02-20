@@ -23,6 +23,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [session, setSession] = useState<Session | null>(null);
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
+  const [detectoristName, setDetectoristName] = useState("");
+  const [detectoristEmail, setDetectoristEmail] = useState("");
 
   useEffect(() => {
     if (find) {
@@ -31,6 +33,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
       if (find.sessionId) db.sessions.get(find.sessionId).then(s => setSession(s || null));
       getSetting("ncmdNumber", "").then(setNcmdNumber);
       getSetting("ncmdExpiry", "").then(setNcmdExpiry);
+      getSetting("detectorist", "").then(setDetectoristName);
+      getSetting("detectoristEmail", "").then(setDetectoristEmail);
     }
   }, [find?.id]);
 
@@ -190,7 +194,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
                 <DetailItem label="Period" value={draft.period} />
                 <DetailItem label="Material" value={draft.material} />
+                <DetailItem label="PAS ID" value={draft.pasId} />
                 <DetailItem label="Weight (g)" value={draft.weightG} />
+                <DetailItem label="Width (mm)" value={draft.widthMm} />
+                <DetailItem label="Height (mm)" value={draft.heightMm} />
+                <DetailItem label="Depth (mm)" value={draft.depthMm} />
                 <DetailItem label="Completeness" value={draft.completeness} />
                 <DetailItem label="Decoration" value={draft.decoration} />
               </div>
@@ -318,10 +326,15 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 </label>
               </div>
 
+              <label className="grid gap-1">
+                <span className="text-sm font-bold opacity-75">PAS ID (if recorded)</span>
+                <input className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.pasId || ""} onChange={(e) => setDraft({ ...draft, pasId: e.target.value })} placeholder="e.g. LON-123456" />
+              </label>
+
               <div className="grid grid-cols-2 gap-4">
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Weight (g)</span>
-                  <input type="number" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.weightG || ""} onChange={(e) => setDraft({ ...draft, weightG: e.target.value ? parseFloat(e.target.value) : null })} />
+                  <input type="number" step="0.01" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.weightG || ""} onChange={(e) => setDraft({ ...draft, weightG: e.target.value ? parseFloat(e.target.value) : null })} />
                 </label>
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Completeness</span>
@@ -332,6 +345,21 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   >
                     {["Complete", "Incomplete", "Fragment"].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <label className="grid gap-1">
+                  <span className="text-sm font-bold opacity-75">Width (mm)</span>
+                  <input type="number" step="0.1" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.widthMm || ""} onChange={(e) => setDraft({ ...draft, widthMm: e.target.value ? parseFloat(e.target.value) : null })} />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-bold opacity-75">Height (mm)</span>
+                  <input type="number" step="0.1" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.heightMm || ""} onChange={(e) => setDraft({ ...draft, heightMm: e.target.value ? parseFloat(e.target.value) : null })} />
+                </label>
+                <label className="grid gap-1">
+                  <span className="text-sm font-bold opacity-75">Depth (mm)</span>
+                  <input type="number" step="0.1" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.depthMm || ""} onChange={(e) => setDraft({ ...draft, depthMm: e.target.value ? parseFloat(e.target.value) : null })} />
                 </label>
               </div>
 
@@ -444,20 +472,22 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             </>
           )}
         </div>
-
-        {draft && media && (
-            <div className="hidden print:block">
-                <FindReport 
-                  find={draft} 
-                  media={media} 
-                  permission={permission || undefined} 
-                  session={session || undefined}
-                  ncmdNumber={ncmdNumber}
-                  ncmdExpiry={ncmdExpiry}
-                />
-            </div>
-        )}
       </Modal>
+
+      {draft && media && (
+        <div className="hidden print:block">
+            <FindReport 
+              find={draft} 
+              media={media} 
+              permission={permission || undefined} 
+              session={session || undefined}
+              ncmdNumber={ncmdNumber}
+              ncmdExpiry={ncmdExpiry}
+              detectoristName={detectoristName}
+              detectoristEmail={detectoristEmail}
+            />
+        </div>
+      )}
 
       {calibratingMedia && (
         <ScaleCalibrationModal 

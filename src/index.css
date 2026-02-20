@@ -16,18 +16,26 @@ label > div { margin-bottom: 6px; opacity: 0.85; }
 h2 { margin: 0 0 6px 0; }
 
 @media print {
+  body {
+    background: white !important;
+  }
+  
   body * {
     visibility: hidden;
   }
+
   .report-container, .report-container * {
-    visibility: visible;
+    visibility: visible !important;
   }
+
   .report-container {
+    display: block !important;
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
   }
+
   .no-print {
     display: none !important;
   }

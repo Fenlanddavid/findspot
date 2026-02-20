@@ -9,17 +9,21 @@ export function FindReport(props: {
   session?: Session;
   ncmdNumber?: string;
   ncmdExpiry?: string;
+  detectoristName?: string;
+  detectoristEmail?: string;
 }) {
-  const { find, media, permission, session, ncmdNumber, ncmdExpiry } = props;
+  const { find, media, permission, session, ncmdNumber, ncmdExpiry, detectoristName, detectoristEmail } = props;
 
   return (
     <div className="bg-white text-black p-8 max-w-4xl mx-auto print:p-0 print:max-w-none report-container">
       <header className="border-b-4 border-black pb-4 mb-8 flex justify-between items-end">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter">Find Documentation Report</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tighter">Find Report</h1>
           <p className="text-xl font-bold opacity-70">{find.findCode}: {find.objectType || "Unidentified Find"}</p>
         </div>
         <div className="text-right font-mono text-sm">
+          <div className="font-bold">{detectoristName || permission?.collector}</div>
+          {detectoristEmail && <div>{detectoristEmail}</div>}
           <div>Report Generated: {new Date().toLocaleDateString()}</div>
           {ncmdNumber && <div>NCMD No: {ncmdNumber}</div>}
           {ncmdExpiry && <div>Insurance Exp: {new Date(ncmdExpiry).toLocaleDateString()}</div>}
@@ -32,11 +36,15 @@ export function FindReport(props: {
           <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 border-b border-gray-200 pb-1">Object Details</h2>
           <div className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
             <span className="font-bold">Object Type:</span> <span>{find.objectType}</span>
+            {find.pasId && <><span className="font-bold">PAS ID:</span> <span className="font-mono">{find.pasId}</span></>}
             {find.coinType && <><span className="font-bold">Coin Type:</span> <span>{find.coinType}</span></>}
             {find.coinDenomination && <><span className="font-bold">Denomination:</span> <span>{find.coinDenomination}</span></>}
             <span className="font-bold">Period:</span> <span>{find.period}</span>
             <span className="font-bold">Material:</span> <span>{find.material}</span>
             <span className="font-bold">Weight:</span> <span>{find.weightG ? `${find.weightG}g` : "N/A"}</span>
+            <span className="font-bold">Width:</span> <span>{find.widthMm ? `${find.widthMm}mm` : "N/A"}</span>
+            <span className="font-bold">Height:</span> <span>{find.heightMm ? `${find.heightMm}mm` : "N/A"}</span>
+            <span className="font-bold">Depth:</span> <span>{find.depthMm ? `${find.depthMm}mm` : "N/A"}</span>
             <span className="font-bold">Completeness:</span> <span>{find.completeness}</span>
             <span className="font-bold">Decoration:</span> <span>{find.decoration || "None recorded"}</span>
           </div>

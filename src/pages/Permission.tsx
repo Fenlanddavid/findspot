@@ -39,6 +39,8 @@ export default function PermissionPage(props: {
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
+  const [detectoristName, setDetectoristName] = useState("");
+  const [detectoristEmail, setDetectoristEmail] = useState("");
 
   const [landUse, setLandUse] = useState("");
   const [cropType, setCropType] = useState("");
@@ -111,6 +113,8 @@ export default function PermissionPage(props: {
   useEffect(() => {
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
+    getSetting("detectorist", "").then(setDetectoristName);
+    getSetting("detectoristEmail", "").then(setDetectoristEmail);
 
     if (id) {
       db.permissions.get(id).then(l => {
@@ -572,6 +576,8 @@ export default function PermissionPage(props: {
               media={allMedia} 
               ncmdNumber={ncmdNumber}
               ncmdExpiry={ncmdExpiry}
+              detectoristName={detectoristName}
+              detectoristEmail={detectoristEmail}
             />
         </div>
       )}
