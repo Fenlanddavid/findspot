@@ -134,7 +134,7 @@ export type Media = {
   findId: string;
 
   type: "photo";
-  photoType?: "in-situ" | "cleaned" | "other";
+  photoType?: "in-situ" | "cleaned" | "photo1" | "photo2" | "photo3" | "photo4" | "other";
   filename: string;
   mime: string;
   blob: Blob;

@@ -104,6 +104,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     const now = new Date().toISOString();
 
     const items: Media[] = [];
+    
+    // If we're targeting a specific slot (photo1, photo2, etc.), 
+    // remove any existing photo in that slot first.
+    if (photoType && photoType !== "other") {
+        const existing = await db.media
+            .where("findId").equals(draft.id)
+            .and(m => m.photoType === photoType)
+            .toArray();
+        if (existing.length > 0) {
+            await db.media.bulkDelete(existing.map(m => m.id));
+        }
+    }
+
     for (const f of Array.from(files)) {
       const blob = await fileToBlob(f);
       items.push({
@@ -119,6 +132,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         scalePresent: false,
         createdAt: now,
       });
+      
+      // If we are in a specific slot, we only take the first file
+      if (photoType && photoType !== "other") break;
     }
     await db.media.bulkAdd(items);
     setBusy(false);
@@ -169,8 +185,14 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                       <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
                         <span className="truncate flex-1">{x.filename}</span>
                         {x.media.photoType && (
-                          <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {x.media.photoType === 'in-situ' ? 'Photo 1' : x.media.photoType === 'cleaned' ? 'Photo 2' : x.media.photoType}
+                          <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType?.startsWith('photo') ? 'bg-emerald-100 text-emerald-800' : x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {x.media.photoType === 'photo1' ? 'Photo 1' : 
+                             x.media.photoType === 'photo2' ? 'Photo 2' : 
+                             x.media.photoType === 'photo3' ? 'Photo 3' : 
+                             x.media.photoType === 'photo4' ? 'Photo 4' : 
+                             x.media.photoType === 'in-situ' ? 'Photo 1' : 
+                             x.media.photoType === 'cleaned' ? 'Photo 2' : 
+                             x.media.photoType}
                           </span>
                         )}
                       </div>
@@ -409,12 +431,20 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   
                   <div className="grid grid-cols-2 gap-2">
                       <label className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-amber-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
-                      🕳️ Photo 1
-                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} className="hidden" />
+                      📸 Photo 1
+                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "photo1")} className="hidden" />
                       </label>
                       <label className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
-                      🧼 Photo 2
-                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} className="hidden" />
+                      🔍 Photo 2
+                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "photo2")} className="hidden" />
+                      </label>
+                      <label className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
+                      ✨ Photo 3
+                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "photo3")} className="hidden" />
+                      </label>
+                      <label className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-purple-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
+                      🖼️ Photo 4
+                      <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "photo4")} className="hidden" />
                       </label>
                   </div>
                   
@@ -442,10 +472,15 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                         <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
                           <span className="truncate flex-1">{x.filename}</span>
                           {x.media.photoType && (
-                            <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                              {x.media.photoType === 'in-situ' ? 'Photo 1' : x.media.photoType === 'cleaned' ? 'Photo 2' : x.media.photoType}
-                            </span>
-                          )}
+                                                      <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType?.startsWith('photo') ? 'bg-emerald-100 text-emerald-800' : x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                        {x.media.photoType === 'photo1' ? 'Photo 1' : 
+                                                         x.media.photoType === 'photo2' ? 'Photo 2' : 
+                                                         x.media.photoType === 'photo3' ? 'Photo 3' : 
+                                                         x.media.photoType === 'photo4' ? 'Photo 4' : 
+                                                         x.media.photoType === 'in-situ' ? 'Photo 1' : 
+                                                         x.media.photoType === 'cleaned' ? 'Photo 2' : 
+                                                         x.media.photoType}
+                                                      </span>                          )}
                         </div>
                         
                         <div className={`absolute inset-0 bg-emerald-600/20 transition-opacity flex items-center justify-center z-10 ${x.media.pxPerMm ? 'opacity-0 group-hover:opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'}`}>
