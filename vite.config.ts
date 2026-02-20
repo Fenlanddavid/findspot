@@ -22,13 +22,13 @@ export default defineConfig({
             src: "logo.svg",
             sizes: "any",
             type: "image/svg+xml",
-            purpose: "maskable"
+            purpose: "any maskable"
           },
           {
             src: "logo.svg",
             sizes: "512x512",
             type: "image/svg+xml",
-            purpose: "any"
+            purpose: "any maskable"
           }
         ]
       },
