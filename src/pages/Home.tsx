@@ -13,6 +13,7 @@ export default function Home(props: {
   goFind: (permissionId?: string) => void;
   goAllFinds: () => void;
   goFindsWithFilter: (filter: string) => void;
+  goFindsBox: () => void;
   goMap: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");

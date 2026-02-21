@@ -11,6 +11,7 @@ import SessionPage from "./pages/Session";
 import FindPage from "./pages/Find";
 import MapPage from "./pages/Map";
 import AllFinds from "./pages/AllFinds";
+import FindsBox from "./pages/FindsBox";
 import AllPermissions from "./pages/AllPermissions";
 import Settings from "./pages/Settings";
 
@@ -237,6 +238,7 @@ function Shell() {
               <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
               <NavLink to="/find" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Club Dig</NavLink>
+              <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>The Finds Box</NavLink>
               <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </nav>
 
@@ -293,6 +295,7 @@ function Shell() {
             <Route path="/session/:id" element={<SessionPage projectId={projectId} />} />
             <Route path="/find" element={<FindRouter projectId={projectId} />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
+            <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/map" element={<MapPage projectId={projectId} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/permission" element={<LinkToPermission />} />
@@ -327,6 +330,7 @@ function HomeRouter({ projectId }: { projectId: string }) {
       }}
       goAllFinds={() => nav("/finds")}
       goFindsWithFilter={(filter: string) => nav(`/finds?${filter}`)}
+      goFindsBox={() => nav("/finds-box")}
       goMap={() => nav("/map")}
     />
   );

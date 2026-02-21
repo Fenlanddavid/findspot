@@ -76,6 +76,8 @@ export type Find = {
   coinType?: string;
   coinDenomination?: string;
   pasId?: string;
+  
+  isFavorite?: boolean;
 
   // Specific Findspot Location
   lat: number | null;
@@ -222,6 +224,16 @@ export class FindSpotDB extends Dexie {
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, isFinished, createdAt",
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, createdAt",
+      media: "id, projectId, findId, createdAt",
+      tracks: "id, projectId, sessionId, isActive, createdAt",
+      settings: "key",
+    });
+
+    this.version(7).stores({
+      projects: "id, name, region, createdAt",
+      permissions: "id, projectId, name, type, permissionGranted, createdAt",
+      sessions: "id, projectId, permissionId, date, isFinished, createdAt",
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, isFavorite, createdAt",
       media: "id, projectId, findId, createdAt",
       tracks: "id, projectId, sessionId, isActive, createdAt",
       settings: "key",

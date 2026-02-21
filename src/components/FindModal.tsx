@@ -147,13 +147,27 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     setBusy(false);
   }
 
+  async function toggleFavorite() {
+    if (!draft) return;
+    const newStatus = !draft.isFavorite;
+    setDraft({ ...draft, isFavorite: newStatus });
+    await db.finds.update(draft.id, { isFavorite: newStatus });
+  }
+
   return (
     <>
       <Modal 
         onClose={props.onClose} 
         title={`Find: ${draft.findCode}`}
         headerActions={!isEditing ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <button 
+              onClick={toggleFavorite}
+              className={`p-1.5 rounded-lg border transition-all ${draft.isFavorite ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-200'}`}
+              title={draft.isFavorite ? "Remove from Finds Box" : "Add to Finds Box"}
+            >
+              <span className="text-sm leading-none">{draft.isFavorite ? '⭐' : '☆'}</span>
+            </button>
             <button 
               onClick={handlePrint}
               className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
