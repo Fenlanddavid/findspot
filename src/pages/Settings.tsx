@@ -8,6 +8,7 @@ export default function Settings() {
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [theme, setTheme] = useState("dark");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ export default function Settings() {
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("lastBackupDate", null).then(setLastBackup);
+    getSetting("theme", "dark").then(setTheme);
   }, []);
 
   async function handleRequestPersistence() {
@@ -27,6 +29,12 @@ export default function Settings() {
     } else {
         alert("Persistence could not be granted. This usually depends on browser settings or disk space.");
     }
+  }
+
+  async function toggleTheme() {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    await setSetting("theme", newTheme);
+    setTheme(newTheme);
   }
 
   async function saveSettings() {
@@ -43,6 +51,26 @@ export default function Settings() {
       <h1 className="text-2xl sm:text-3xl font-black mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
 
       <div className="space-y-8">
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <span>🎨</span> Appearance
+          </h2>
+          <div className="flex justify-between items-center py-2">
+            <div>
+              <div className="font-medium text-gray-800 dark:text-gray-100">Interface Theme</div>
+              <div className="text-sm text-gray-500">
+                Default is Dark mode.
+              </div>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+            </button>
+          </div>
+        </section>
+
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             <span>👤</span> User Preferences

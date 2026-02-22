@@ -114,6 +114,16 @@ function Shell() {
   }
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
+  const settings = useLiveQuery(() => db.settings.toArray());
+  const theme = settings?.find(s => s.key === "theme")?.value ?? "dark";
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
   async function handleExport() {
     try {
