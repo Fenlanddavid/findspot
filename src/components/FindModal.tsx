@@ -25,6 +25,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [detectoristName, setDetectoristName] = useState("");
   const [detectoristEmail, setDetectoristEmail] = useState("");
+  const [detectorList, setDetectorList] = useState<string[]>([]);
 
   useEffect(() => {
     if (find) {
@@ -35,6 +36,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
       getSetting("ncmdExpiry", "").then(setNcmdExpiry);
       getSetting("detectorist", "").then(setDetectoristName);
       getSetting("detectoristEmail", "").then(setDetectoristEmail);
+      getSetting("detectors", []).then(setDetectorList);
     }
   }, [find?.id]);
 
@@ -237,6 +239,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 <DetailItem label="Depth (mm)" value={draft.depthMm} />
                 <DetailItem label="Completeness" value={draft.completeness} />
                 <DetailItem label="Decoration" value={draft.decoration} />
+                <DetailItem label="Detector" value={draft.detector} />
+                <DetailItem label="Target ID" value={draft.targetId} />
+                <DetailItem label="Depth (cm)" value={draft.depthCm} />
               </div>
 
               {draft.notes && (
@@ -403,6 +408,39 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 <span className="text-sm font-bold opacity-75">Decoration / Description</span>
                 <input className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.decoration} onChange={(e) => setDraft({ ...draft, decoration: e.target.value })} />
               </label>
+
+              <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 grid gap-4">
+                <span className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Signal Information</span>
+                
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-bold opacity-50 uppercase">Detector</span>
+                  <select 
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs"
+                    value={draft.detector || ""} 
+                    onChange={(e) => setDraft({ ...draft, detector: e.target.value })}
+                  >
+                    {detectorList.length === 0 ? (
+                      <option value="">(Set in Settings)</option>
+                    ) : (
+                      <>
+                        <option value="">(Select Detector)</option>
+                        {detectorList.map(d => <option key={d} value={d}>{d}</option>)}
+                      </>
+                    )}
+                  </select>
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="grid gap-0.5">
+                    <span className="text-[10px] font-bold opacity-50 uppercase">Target ID</span>
+                    <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" value={draft.targetId ?? ""} onChange={(e) => setDraft({ ...draft, targetId: e.target.value ? parseInt(e.target.value) : undefined })} />
+                  </label>
+                  <label className="grid gap-0.5">
+                    <span className="text-[10px] font-bold opacity-50 uppercase">Depth (cm)</span>
+                    <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs" value={draft.depthCm ?? ""} onChange={(e) => setDraft({ ...draft, depthCm: e.target.value ? parseFloat(e.target.value) : undefined })} />
+                  </label>
+                </div>
+              </div>
 
               <label className="grid gap-1">
                 <span className="text-sm font-bold opacity-75">Notes</span>

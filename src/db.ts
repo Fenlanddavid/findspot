@@ -123,6 +123,10 @@ export type Find = {
   completeness: "Complete" | "Incomplete" | "Fragment";
   findContext: string;
 
+  detector?: string;
+  targetId?: number;
+  depthCm?: number;
+
   storageLocation: string;
   notes: string;
 
@@ -237,6 +241,10 @@ export class FindSpotDB extends Dexie {
       media: "id, projectId, findId, createdAt",
       tracks: "id, projectId, sessionId, isActive, createdAt",
       settings: "key",
+    });
+
+    this.version(8).stores({
+      finds: "id, projectId, permissionId, sessionId, findCode, objectType, isFavorite, targetId, detector, createdAt",
     });
   }
 }

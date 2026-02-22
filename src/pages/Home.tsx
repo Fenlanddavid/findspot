@@ -77,7 +77,7 @@ export default function Home(props: {
       <div className="flex flex-col gap-3 overflow-hidden">
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Quick View Finds</h3>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-            <QuickFilterBtn label="All Finds" onClick={props.goAllFinds} />
+            <QuickFilterBtn label="Search" onClick={props.goAllFinds} />
             <QuickFilterBtn label="Hammered" onClick={() => props.goFindsWithFilter("type=Hammered")} />
             <QuickFilterBtn label="Bronze Age" onClick={() => props.goFindsWithFilter("period=Bronze Age")} />
             <QuickFilterBtn label="Roman" onClick={() => props.goFindsWithFilter("period=Roman")} />

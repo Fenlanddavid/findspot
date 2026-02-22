@@ -9,6 +9,7 @@ export default function AllFinds(props: { projectId: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const filterPeriod = searchParams.get("period");
   const filterType = searchParams.get("type");
+  const filterMonth = searchParams.get("month"); // 0-11
   
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
@@ -24,20 +25,38 @@ export default function AllFinds(props: { projectId: string }) {
         // Apply text search if present
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
+            
+            // Check for range search (e.g. "15-30")
+            const rangeMatch = q.match(/^(\d+)-(\d+)$/);
+            if (rangeMatch && s.targetId !== undefined) {
+              const min = parseInt(rangeMatch[1]);
+              const max = parseInt(rangeMatch[2]);
+              if (s.targetId < min || s.targetId > max) return false;
+              return true; // Match range
+            }
+
             const matchesSearch = s.objectType.toLowerCase().includes(q) || 
                                  s.findCode.toLowerCase().includes(q) ||
-                                 s.notes.toLowerCase().includes(q);
+                                 s.notes.toLowerCase().includes(q) ||
+                                 s.period.toLowerCase().includes(q) ||
+                                 (s.detector || "").toLowerCase().includes(q) ||
+                                 (s.targetId !== undefined && s.targetId.toString() === q);
             if (!matchesSearch) return false;
         }
 
         // Apply URL filters
         if (filterPeriod && s.period !== filterPeriod) return false;
         if (filterType && s.coinType !== filterType) return false;
+        
+        if (filterMonth !== null) {
+          const date = new Date(s.createdAt);
+          if (date.getMonth().toString() !== filterMonth) return false;
+        }
 
         return true;
       });
     },
-    [props.projectId, searchQuery, filterPeriod, filterType]
+    [props.projectId, searchQuery, filterPeriod, filterType, filterMonth]
   );
 
   const clearFilters = () => {
@@ -45,7 +64,42 @@ export default function AllFinds(props: { projectId: string }) {
     setSearchParams({});
   };
 
+  const setMonthFilter = (m: number | null) => {
+    const newParams = new URLSearchParams(searchParams);
+    if (m === null) {
+      newParams.delete("month");
+    } else {
+      newParams.set("month", m.toString());
+    }
+    setSearchParams(newParams);
+  };
+
   const findIds = useMemo(() => finds?.map(s => s.id) ?? [], [finds]);
+
+  // Months available in the full dataset (not just filtered)
+  const allFinds = useLiveQuery(() => db.finds.where("projectId").equals(props.projectId).toArray(), [props.projectId]);
+  const availableMonths = useMemo(() => {
+    const months = new Set<number>();
+    allFinds?.forEach(f => months.add(new Date(f.createdAt).getMonth()));
+    return Array.from(months).sort((a, b) => a - b);
+  }, [allFinds]);
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  const stats = useMemo(() => {
+    if (!finds) return null;
+    const s = {
+      total: finds.length,
+      coins: finds.filter(f => f.objectType.toLowerCase().includes("coin")).length,
+      artifacts: finds.filter(f => !f.objectType.toLowerCase().includes("coin")).length,
+      roman: finds.filter(f => f.period === "Roman").length,
+      medieval: finds.filter(f => f.period === "Medieval").length,
+      highId: finds.filter(f => (f.targetId ?? 0) >= 70).length,
+      midId: finds.filter(f => (f.targetId ?? 0) >= 20 && (f.targetId ?? 0) < 70).length,
+      lowId: finds.filter(f => (f.targetId ?? 0) > 0 && (f.targetId ?? 0) < 20).length,
+    };
+    return s;
+  }, [finds]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
@@ -74,7 +128,7 @@ export default function AllFinds(props: { projectId: string }) {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
                 <input 
                     type="text"
-                    placeholder="Search by object type, code, or notes..."
+                    placeholder="Search (e.g. Roman, 13, 15-30)..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
@@ -89,6 +143,39 @@ export default function AllFinds(props: { projectId: string }) {
             )}
         </div>
       </div>
+
+      {availableMonths.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1 mb-4 border-b border-gray-100 dark:border-gray-800">
+          <button 
+            onClick={() => setMonthFilter(null)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${filterMonth === null ? 'bg-emerald-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'}`}
+          >
+            All Year
+          </button>
+          {availableMonths.map(m => (
+            <button 
+              key={m}
+              onClick={() => setMonthFilter(m)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${filterMonth === m.toString() ? 'bg-emerald-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+            >
+              {monthNames[m]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {stats && stats.total > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-6">
+          <StatBubble label="All" value={stats.total} color="bg-gray-100 dark:bg-gray-800" onClick={() => setSearchQuery("")} />
+          {stats.coins > 0 && <StatBubble label="Coins" value={stats.coins} color="bg-emerald-100 text-emerald-700" onClick={() => setSearchQuery("coin")} />}
+          {stats.artifacts > 0 && <StatBubble label="Artifacts" value={stats.artifacts} color="bg-blue-100 text-blue-700" onClick={() => setSearchQuery("")} />}
+          {stats.roman > 0 && <StatBubble label="Roman" value={stats.roman} color="bg-red-100 text-red-700" onClick={() => setSearchQuery("Roman")} />}
+          {stats.medieval > 0 && <StatBubble label="Medieval" value={stats.medieval} color="bg-amber-100 text-amber-700" onClick={() => setSearchQuery("Medieval")} />}
+          {stats.highId > 0 && <StatBubble label="High ID (70+)" value={stats.highId} color="bg-sky-100 text-sky-700" onClick={() => setSearchQuery("70-100")} />}
+          {stats.midId > 0 && <StatBubble label="Mid ID (20-70)" value={stats.midId} color="bg-green-100 text-green-700" onClick={() => setSearchQuery("20-70")} />}
+          {stats.lowId > 0 && <StatBubble label="Low ID (<20)" value={stats.lowId} color="bg-orange-100 text-orange-700" onClick={() => setSearchQuery("0-20")} />}
+        </div>
+      )}
 
       {(!finds || finds.length === 0) ? (
         <div className="text-center py-20 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700">
@@ -119,10 +206,19 @@ export default function AllFinds(props: { projectId: string }) {
                       No photo
                     </div>
                   )}
-                  <div className="absolute top-3 left-3">
+                  <div className="absolute top-3 left-3 flex flex-col gap-1">
                     <span className="font-mono text-[10px] font-bold bg-black/60 backdrop-blur-md text-white px-2 py-1 rounded shadow-sm">
                       {s.findCode}
                     </span>
+                    {s.targetId !== undefined && (
+                      <span className={`font-mono text-[10px] font-bold backdrop-blur-md text-white px-2 py-1 rounded shadow-sm w-fit ${
+                        s.targetId >= 70 ? 'bg-blue-600/80 ring-1 ring-blue-400' : 
+                        s.targetId >= 20 ? 'bg-emerald-600/80 ring-1 ring-emerald-400' : 
+                        'bg-orange-600/80 ring-1 ring-orange-400'
+                      }`}>
+                        ID: {s.targetId}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -163,5 +259,17 @@ export default function AllFinds(props: { projectId: string }) {
         <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />
       )}
     </div>
+  );
+}
+
+function StatBubble({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-2xl text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-sm border border-black/5 dark:border-white/5 ${color}`}
+    >
+      <span className="opacity-70">{label}:</span>
+      <span className="text-sm">{value}</span>
+    </button>
   );
 }

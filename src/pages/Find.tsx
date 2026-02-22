@@ -50,12 +50,23 @@ export default function FindPage(props: { projectId: string; permissionId: strin
   const [decoration, setDecoration] = useState("");
   const [completeness, setCompleteness] = useState<Find["completeness"]>("Complete");
   const [findContext, setFindContext] = useState("");
+  const [detector, setDetector] = useState("");
+  const [targetId, setTargetId] = useState<string>("");
+  const [depthCm, setDepthCm] = useState<string>("");
+  const [detectors, setDetectors] = useState<string[]>([]);
   const [storageLocation, setStorageLocation] = useState("");
   const [notes, setNotes] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getSetting("detectors", []).then(setDetectors);
+    getSetting("defaultDetector", "").then(d => {
+      if (d) setDetector(d);
+    });
+  }, []);
 
   useEffect(() => {
     if (props.permissionId) {
@@ -103,6 +114,8 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     setWidthMm("");
     setHeightMm("");
     setDepthMm("");
+    setTargetId("");
+    setDepthCm("");
     setDecoration("");
     setCompleteness("Complete");
     setFindContext("");
@@ -172,6 +185,9 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         widthMm: widthMm ? parseFloat(widthMm) : null,
         heightMm: heightMm ? parseFloat(heightMm) : null,
         depthMm: depthMm ? parseFloat(depthMm) : null,
+        detector: detector || undefined,
+        targetId: targetId ? parseInt(targetId) : undefined,
+        depthCm: depthCm ? parseFloat(depthCm) : undefined,
         decoration: decoration.trim(),
         completeness,
         findContext: findContext.trim(),
@@ -488,6 +504,53 @@ export default function FindPage(props: { projectId: string; permissionId: strin
                         {acc && <span>ACC: ±{Math.round(acc)}m</span>}
                     </div>
                 )}
+            </div>
+
+            <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-5 rounded-2xl border-2 border-emerald-100 dark:border-emerald-900/30 grid gap-4">
+                <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Signal / Detector Information</h3>
+                
+                <label className="block">
+                    <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Detector Used</div>
+                    <select 
+                        value={detector} 
+                        onChange={(e) => setDetector(e.target.value)}
+                        className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                    >
+                        {detectors.length === 0 ? (
+                            <option value="">(Set in Settings)</option>
+                        ) : (
+                            <>
+                                <option value="">(Select Detector)</option>
+                                {detectors.map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </>
+                        )}
+                    </select>
+                </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <label className="block">
+                        <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Target ID</div>
+                        <input 
+                            type="number"
+                            value={targetId} 
+                            onChange={(e) => setTargetId(e.target.value)} 
+                            placeholder="e.g. 13"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
+                        />
+                    </label>
+                    <label className="block">
+                        <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Depth (cm)</div>
+                        <input 
+                            type="number"
+                            value={depthCm} 
+                            onChange={(e) => setDepthCm(e.target.value)} 
+                            placeholder="e.g. 15"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                        />
+                    </label>
+                </div>
             </div>
 
             <label className="block">
