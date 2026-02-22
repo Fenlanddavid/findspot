@@ -230,7 +230,7 @@ function Shell() {
                 <button onClick={handleCSVExport} className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">
                     CSV
                 </button>
-                <div className="hidden sm:flex gap-3 items-center">
+                <div className="flex gap-3 items-center border-l pl-3 border-gray-200 dark:border-gray-600 ml-1">
                     <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
                         Backup
                     </button>
@@ -243,7 +243,7 @@ function Shell() {
         </div>
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
-            <nav className="flex gap-x-4 gap-y-2 flex-wrap items-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+            <nav className="flex gap-x-3 sm:gap-x-4 gap-y-2 flex-wrap items-center text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/map" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Map</NavLink>
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
@@ -252,17 +252,8 @@ function Shell() {
               <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </nav>
 
-            <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3">
                 <div className="opacity-60 text-[10px] font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded max-w-[100px] truncate">{project.name}</div>
-                <div className="flex sm:hidden gap-3 items-center">
-                    <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
-                        Backup
-                    </button>
-                    <label className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors cursor-pointer">
-                        Restore
-                        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                    </label>
-                </div>
             </div>
         </div>
       </header>
