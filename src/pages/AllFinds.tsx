@@ -91,7 +91,7 @@ export default function AllFinds(props: { projectId: string }) {
     const s = {
       total: finds.length,
       coins: finds.filter(f => f.objectType.toLowerCase().includes("coin")).length,
-      artifacts: finds.filter(f => !f.objectType.toLowerCase().includes("coin")).length,
+      artefacts: finds.filter(f => !f.objectType.toLowerCase().includes("coin")).length,
       roman: finds.filter(f => f.period === "Roman").length,
       medieval: finds.filter(f => f.period === "Medieval").length,
       highId: finds.filter(f => (f.targetId ?? 0) >= 70).length,
@@ -168,7 +168,7 @@ export default function AllFinds(props: { projectId: string }) {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-6">
           <StatBubble label="All" value={stats.total} color="bg-gray-100 dark:bg-gray-800" onClick={() => setSearchQuery("")} />
           {stats.coins > 0 && <StatBubble label="Coins" value={stats.coins} color="bg-emerald-100 text-emerald-700" onClick={() => setSearchQuery("coin")} />}
-          {stats.artifacts > 0 && <StatBubble label="Artifacts" value={stats.artifacts} color="bg-blue-100 text-blue-700" onClick={() => setSearchQuery("")} />}
+          {stats.artefacts > 0 && <StatBubble label="Artefacts" value={stats.artefacts} color="bg-blue-100 text-blue-700" onClick={() => setSearchQuery("")} />}
           {stats.roman > 0 && <StatBubble label="Roman" value={stats.roman} color="bg-red-100 text-red-700" onClick={() => setSearchQuery("Roman")} />}
           {stats.medieval > 0 && <StatBubble label="Medieval" value={stats.medieval} color="bg-amber-100 text-amber-700" onClick={() => setSearchQuery("Medieval")} />}
           {stats.highId > 0 && <StatBubble label="High ID (70+)" value={stats.highId} color="bg-sky-100 text-sky-700" onClick={() => setSearchQuery("70-100")} />}
