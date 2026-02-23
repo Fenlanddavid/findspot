@@ -289,7 +289,7 @@ function Shell() {
         )}
         <Routes>
             <Route path="/" element={<HomeRouter projectId={projectId} />} />
-            <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/session/new?permissionId=${encodeURIComponent(id)}`)} />} />
+            <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/permission/${id}`)} />} />
             <Route path="/permission/:id" element={<PermissionPage projectId={projectId} onSaved={() => {}} />} />
             <Route path="/permissions" element={<AllPermissions projectId={projectId} />} />
             <Route path="/session/new" element={<SessionPage projectId={projectId} />} />

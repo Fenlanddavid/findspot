@@ -8,6 +8,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { PermissionReport } from "../components/PermissionReport";
+import { AgreementModal } from "../components/AgreementModal";
 
 const landTypes: Permission["landType"][] = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -51,8 +52,15 @@ export default function PermissionPage(props: {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
+  const [agreementId, setAgreementId] = useState<string | undefined>();
+  const [agreementModalOpen, setAgreementModalOpen] = useState(false);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+
+  const agreementFile = useLiveQuery(async () => {
+    if (!agreementId) return null;
+    return db.media.get(agreementId);
+  }, [agreementId]);
 
   // Fetch finds for this trip
   const finds = useLiveQuery(async () => {
@@ -103,7 +111,7 @@ export default function PermissionPage(props: {
     
     const sortedMedia = [...allMedia].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const row of sortedMedia) {
-      if (!info.has(row.findId)) {
+      if (row.findId && !info.has(row.findId)) {
         info.set(row.findId, row);
       }
     }
@@ -131,6 +139,7 @@ export default function PermissionPage(props: {
           setLandownerAddress(l.landownerAddress || "");
           setLandType(l.landType);
           setPermissionGranted(l.permissionGranted);
+          setAgreementId((l as any).agreementId);
           setNotes(l.notes);
         }
         setLoading(false);
@@ -195,6 +204,7 @@ export default function PermissionPage(props: {
         landownerAddress,
         landType,
         permissionGranted,
+        agreementId,
         notes,
         createdAt: isEdit ? undefined as any : now, 
         updatedAt: now,
@@ -390,7 +400,14 @@ export default function PermissionPage(props: {
                     </div>
 
                     <div className="flex flex-col gap-2">
-                        <div className="text-sm font-bold text-gray-700 dark:text-gray-300">Permission Status</div>
+                        <div className="flex items-center justify-between">
+                            <div className="text-sm font-bold text-gray-700 dark:text-gray-300">Permission Status</div>
+                            {!isEdit && (
+                                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800 animate-pulse">
+                                    💡 Save record first to generate agreement
+                                </span>
+                            )}
+                        </div>
                         <label className="flex items-center gap-2 cursor-pointer group w-fit">
                             <input 
                                 type="checkbox" 
@@ -439,10 +456,39 @@ export default function PermissionPage(props: {
                             </span>
                             <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 mt-2 break-words">{name}</h3>
                         </div>
-                        <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border-2 flex items-center gap-2 font-black text-[10px] sm:text-sm whitespace-nowrap h-fit ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                            {permissionGranted ? '✓ PERMISSION GRANTED' : '⚠️ NO PERMISSION'}
+                        <div className="flex flex-wrap gap-2 items-center justify-end">
+                          <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border-2 flex items-center gap-2 font-black text-[10px] sm:text-sm whitespace-nowrap h-fit ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
+                              {permissionGranted ? '✓ PERMISSION GRANTED' : '⚠️ NO PERMISSION'}
+                          </div>
+                          <button 
+                              onClick={() => setAgreementModalOpen(true)}
+                              className="text-[10px] sm:text-xs font-black bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 px-3 py-2 rounded-xl text-gray-600 dark:text-gray-400 hover:border-emerald-500 hover:text-emerald-600 transition-all flex items-center gap-1 shadow-sm h-fit"
+                          >
+                            🤝 {agreementId ? "Update Agreement" : "Generate Agreement"}
+                          </button>
                         </div>
                     </div>
+
+                    {agreementFile && (
+                      <div className="bg-emerald-50 dark:bg-emerald-900/10 border-2 border-emerald-100 dark:border-emerald-800/50 p-4 rounded-2xl flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">📄</span>
+                          <div>
+                            <p className="text-sm font-black text-emerald-800 dark:text-emerald-400">Signed Landowner Agreement</p>
+                            <p className="text-[10px] opacity-60 font-mono italic">{agreementFile.filename}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            const url = URL.createObjectURL(agreementFile.blob);
+                            window.open(url, "_blank");
+                          }}
+                          className="bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all"
+                        >
+                          View PDF ↗
+                        </button>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="grid gap-4">
@@ -583,6 +629,17 @@ export default function PermissionPage(props: {
       )}
 
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
+      
+      {agreementModalOpen && currentPermission && (
+        <AgreementModal 
+          permission={currentPermission} 
+          onClose={() => setAgreementModalOpen(false)} 
+          onSaved={(mediaId) => {
+            setAgreementId(mediaId);
+            setAgreementModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

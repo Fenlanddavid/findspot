@@ -27,7 +27,7 @@ export default function FindsBox(props: { projectId: string }) {
     const m = new Map<string, Media>();
     media.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const row of media) {
-        if (!m.has(row.findId)) m.set(row.findId, row);
+        if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
     return m;
   }, [findIds]);

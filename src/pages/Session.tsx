@@ -68,7 +68,7 @@ export default function SessionPage(props: {
     if (!allMedia || !finds) return info;
     const sortedMedia = [...allMedia].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const row of sortedMedia) {
-      if (!info.has(row.findId)) info.set(row.findId, row);
+      if (row.findId && !info.has(row.findId)) info.set(row.findId, row);
     }
     return info;
   }, [allMedia, finds]);

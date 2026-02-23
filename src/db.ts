@@ -38,6 +38,8 @@ export type Permission = {
 
   permissionGranted: boolean;
 
+  agreementId?: string; // Reference to Media table for the signed PDF
+
   notes: string;
 
   createdAt: string;
@@ -137,9 +139,10 @@ export type Find = {
 export type Media = {
   id: string;
   projectId: string;
-  findId: string;
+  findId?: string;
+  permissionId?: string;
 
-  type: "photo";
+  type: "photo" | "document";
   photoType?: "in-situ" | "cleaned" | "photo1" | "photo2" | "photo3" | "photo4" | "other";
   filename: string;
   mime: string;
@@ -245,6 +248,10 @@ export class FindSpotDB extends Dexie {
 
     this.version(8).stores({
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, isFavorite, targetId, detector, createdAt",
+    });
+
+    this.version(9).stores({
+      media: "id, projectId, findId, permissionId, createdAt",
     });
   }
 }

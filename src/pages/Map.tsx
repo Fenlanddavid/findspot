@@ -188,7 +188,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
     mediaRows.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     const m = new Map<string, Media>();
     for (const row of mediaRows) {
-      if (!m.has(row.findId)) {
+      if (row.findId && !m.has(row.findId)) {
         m.set(row.findId, row);
       }
     }

@@ -51,7 +51,7 @@ export default function Home(props: {
     const m = new Map<string, Media>();
     media.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const row of media) {
-        if (!m.has(row.findId)) m.set(row.findId, row);
+        if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
     return m;
   }, [findIds]);
@@ -137,7 +137,10 @@ export default function Home(props: {
                   {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-1">👤 {l.landownerName}</div>}
                   {l.landType && <div className="text-xs font-medium opacity-80 mt-1 truncate capitalize">{l.landType}</div>}
                   {l.permissionGranted ? (
-                    <span className="text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded text-xs font-bold inline-block mt-1">✓ Permission</span>
+                    <div className="flex gap-2 items-center mt-1">
+                      <span className="text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded text-xs font-bold inline-block">✓ Permission</span>
+                      {(l as any).agreementId && <span className="text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded text-xs font-bold inline-block" title="Signed Agreement Available">📄 Agreement</span>}
+                    </div>
                   ) : (
                     <span className="text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded text-xs font-bold inline-block mt-1">⚠️ Missing</span>
                   )}

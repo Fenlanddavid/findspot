@@ -15,8 +15,10 @@ export function PermissionReport(props: {
   const mediaMap = useMemo(() => {
     const m = new Map<string, Media[]>();
     for (const item of props.media) {
-      if (!m.has(item.findId)) m.set(item.findId, []);
-      m.get(item.findId)!.push(item);
+      if (item.findId) {
+        if (!m.has(item.findId)) m.set(item.findId, []);
+        m.get(item.findId)!.push(item);
+      }
     }
     return m;
   }, [props.media]);

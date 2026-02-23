@@ -108,7 +108,7 @@ export default function AllFinds(props: { projectId: string }) {
     // Sort by createdAt to get the first photo
     media.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const row of media) {
-        if (!m.has(row.findId)) m.set(row.findId, row);
+        if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
     return m;
   }, [findIds]);
