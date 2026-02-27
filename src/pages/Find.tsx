@@ -7,6 +7,7 @@ import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
+import { LocationPickerModal } from "../components/LocationPickerModal";
 
 const periods: Find["period"][] = [
   "Prehistoric", "Bronze Age", "Iron Age", "Celtic", "Roman", "Anglo-Saxon", "Early Medieval", "Medieval", "Post-medieval", "Modern", "Unknown",
@@ -60,6 +61,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
 
   useEffect(() => {
     getSetting("detectors", []).then(setDetectors);
@@ -462,15 +464,63 @@ export default function FindPage(props: { projectId: string; permissionId: strin
             </label>
 
             <div className="bg-gray-50/50 dark:bg-gray-900/30 p-5 rounded-2xl border-2 border-gray-100 dark:border-gray-700/50 grid gap-4">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center flex-wrap gap-2">
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Findspot Location</h3>
-                    <button 
-                        type="button"
-                        onClick={doGPS}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2"
-                    >
-                        📍 {lat ? "Update Spot" : "Capture Spot"}
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            type="button"
+                            onClick={() => setIsPickingLocation(true)}
+                            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:bg-emerald-600 hover:text-white"
+                        >
+                            🗺️ Pick on Map
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={doGPS}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2"
+                        >
+                            📍 {lat ? "Update Spot" : "Capture Spot"}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <label className="block">
+                        <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Latitude</div>
+                        <input 
+                            type="number"
+                            step="0.000001"
+                            value={lat ?? ""} 
+                            onChange={(e) => {
+                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                setLat(val);
+                                if (val !== null && lon !== null) {
+                                    const grid = toOSGridRef(val, lon);
+                                    if (grid) setOsGridRef(grid);
+                                }
+                            }} 
+                            placeholder="54.123456"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
+                        />
+                    </label>
+                    <label className="block">
+                        <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Longitude</div>
+                        <input 
+                            type="number"
+                            step="0.000001"
+                            value={lon ?? ""} 
+                            onChange={(e) => {
+                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                setLon(val);
+                                if (val !== null && lat !== null) {
+                                    const grid = toOSGridRef(lat, val);
+                                    if (grid) setOsGridRef(grid);
+                                }
+                            }} 
+                            placeholder="-2.123456"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
+                        />
+                    </label>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -607,6 +657,21 @@ export default function FindPage(props: { projectId: string; permissionId: strin
             )}
         </div>
       </div>
+      {isPickingLocation && (
+          <LocationPickerModal 
+              initialLat={lat}
+              initialLon={lon}
+              onClose={() => setIsPickingLocation(false)}
+              onSelect={(pickedLat, pickedLon) => {
+                  setLat(pickedLat);
+                  setLon(pickedLon);
+                  setAcc(null); // Manual pick doesn't have accuracy
+                  const grid = toOSGridRef(pickedLat, pickedLon);
+                  if (grid) setOsGridRef(grid);
+                  setIsPickingLocation(false);
+              }}
+          />
+      )}
     </div>
   );
 }

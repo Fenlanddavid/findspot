@@ -9,6 +9,7 @@ import { ScaleCalibrationModal } from "./ScaleCalibrationModal";
 import { ScaledImage } from "./ScaledImage";
 import { FindReport } from "./FindReport";
 import { getSetting } from "../services/data";
+import { LocationPickerModal } from "./LocationPickerModal";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
   const find = useLiveQuery(async () => db.finds.get(props.findId), [props.findId]);
@@ -16,6 +17,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [draft, setDraft] = useState<Find | null>(null);
   const [busy, setBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
   
   const [calibratingMedia, setCalibratingMedia] = useState<{ media: Media; url: string } | null>(null);
 
@@ -452,12 +454,61 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               </label>
 
               <div className="bg-gray-50/50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-200 dark:border-gray-700 grid gap-3">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center flex-wrap gap-2">
                     <span className="text-xs font-black uppercase tracking-widest text-gray-400">Findspot Location</span>
-                    <button type="button" onClick={doGPS} disabled={busy} className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center gap-1">
-                        📍 {draft.lat ? "Update" : "Capture"}
-                    </button>
+                    <div className="flex gap-2">
+                        <button 
+                            type="button" 
+                            onClick={() => setIsPickingLocation(true)} 
+                            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center gap-1 hover:bg-emerald-600 hover:text-white"
+                        >
+                            🗺️ Pick on Map
+                        </button>
+                        <button type="button" onClick={doGPS} disabled={busy} className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center gap-1">
+                            📍 {draft.lat ? "Update" : "Capture"}
+                        </button>
+                    </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <label className="grid gap-0.5">
+                        <span className="text-[10px] font-bold opacity-50 uppercase">Latitude</span>
+                        <input 
+                            type="number" 
+                            step="0.000001"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" 
+                            value={draft.lat ?? ""} 
+                            onChange={(e) => {
+                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                const newDraft = { ...draft, lat: val };
+                                if (val !== null && draft.lon !== null) {
+                                    const grid = toOSGridRef(val, draft.lon);
+                                    if (grid) newDraft.osGridRef = grid;
+                                }
+                                setDraft(newDraft);
+                            }} 
+                        />
+                    </label>
+                    <label className="grid gap-0.5">
+                        <span className="text-[10px] font-bold opacity-50 uppercase">Longitude</span>
+                        <input 
+                            type="number" 
+                            step="0.000001"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" 
+                            value={draft.lon ?? ""} 
+                            onChange={(e) => {
+                                const val = e.target.value ? parseFloat(e.target.value) : null;
+                                const newDraft = { ...draft, lon: val };
+                                if (val !== null && draft.lat !== null) {
+                                    const grid = toOSGridRef(draft.lat, val);
+                                    if (grid) newDraft.osGridRef = grid;
+                                }
+                                setDraft(newDraft);
+                            }} 
+                        />
+                    </label>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                     <label className="grid gap-0.5">
                         <span className="text-[10px] font-bold opacity-50 uppercase">OS Grid Ref</span>
@@ -582,6 +633,21 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
           url={calibratingMedia.url} 
           onClose={() => setCalibratingMedia(null)} 
         />
+      )}
+
+      {isPickingLocation && draft && (
+          <LocationPickerModal 
+              initialLat={draft.lat}
+              initialLon={draft.lon}
+              onClose={() => setIsPickingLocation(false)}
+              onSelect={(pickedLat, pickedLon) => {
+                  const newDraft = { ...draft, lat: pickedLat, lon: pickedLon, gpsAccuracyM: null };
+                  const grid = toOSGridRef(pickedLat, pickedLon);
+                  if (grid) newDraft.osGridRef = grid;
+                  setDraft(newDraft);
+                  setIsPickingLocation(false);
+              }}
+          />
       )}
     </>
   );

@@ -9,6 +9,7 @@ import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { PermissionReport } from "../components/PermissionReport";
 import { AgreementModal } from "../components/AgreementModal";
+import { LocationPickerModal } from "../components/LocationPickerModal";
 
 const landTypes: Permission["landType"][] = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -52,6 +53,7 @@ export default function PermissionPage(props: {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [agreementId, setAgreementId] = useState<string | undefined>();
   const [agreementModalOpen, setAgreementModalOpen] = useState(false);
   
@@ -381,22 +383,45 @@ export default function PermissionPage(props: {
                         </label>
                     </div>
 
-                    <div className="bg-gray-50/50 dark:bg-gray-900/20 p-5 rounded-2xl border-2 border-gray-100/50 dark:border-gray-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
-                        <div className="flex flex-col gap-1 w-full">
+                    <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
+                        <div className="flex justify-between items-center flex-wrap gap-2">
                             <div className="text-xs font-bold uppercase tracking-wider opacity-60">Base Coordinates (Center)</div>
-                            <div className="text-sm sm:text-lg font-mono font-bold text-gray-800 dark:text-gray-100 break-all">
-                                {lat && lon ? (
-                                <div className="flex items-center gap-2">
-                                    {lat.toFixed(6)}, {lon.toFixed(6)}
-                                </div>
-                                ) : (
-                                <span className="opacity-40 italic text-sm">Coordinates not set</span>
-                                )}
+                            <div className="flex gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsPickingLocation(true)} 
+                                    className="bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all hover:bg-emerald-600 hover:text-white"
+                                >
+                                    🗺️ Pick on Map
+                                </button>
+                                <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2 whitespace-nowrap">
+                                    📍 {lat ? "Update GPS" : "Get Current GPS"}
+                                </button>
                             </div>
                         </div>
-                        <button type="button" onClick={doGPS} className="w-full sm:w-auto bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold transition-all text-sm whitespace-nowrap">
-                            📍 Save Coordinates
-                        </button>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <label className="block">
+                                <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Latitude</div>
+                                <input 
+                                    type="number" 
+                                    step="0.000001"
+                                    className="w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded p-1.5 text-xs font-mono" 
+                                    value={lat ?? ""} 
+                                    onChange={(e) => setLat(e.target.value ? parseFloat(e.target.value) : null)} 
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Longitude</div>
+                                <input 
+                                    type="number" 
+                                    step="0.000001"
+                                    className="w-full bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded p-1.5 text-xs font-mono" 
+                                    value={lon ?? ""} 
+                                    onChange={(e) => setLon(e.target.value ? parseFloat(e.target.value) : null)} 
+                                />
+                            </label>
+                        </div>
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -639,6 +664,20 @@ export default function PermissionPage(props: {
             setAgreementModalOpen(false);
           }}
         />
+      )}
+
+      {isPickingLocation && (
+          <LocationPickerModal 
+              initialLat={lat}
+              initialLon={lon}
+              onClose={() => setIsPickingLocation(false)}
+              onSelect={(pickedLat, pickedLon) => {
+                  setLat(pickedLat);
+                  setLon(pickedLon);
+                  setAcc(null);
+                  setIsPickingLocation(false);
+              }}
+          />
       )}
     </div>
   );
