@@ -316,9 +316,22 @@ export default function SessionPage(props: {
                                 <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 group-hover:text-white">Finish Session</span>
                             </button>
                         ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-1 opacity-60">
-                                <span className="text-xl">🔒</span>
-                                <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
+                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-1 group">
+                                <div className="flex flex-col items-center justify-center opacity-60">
+                                    <span className="text-xl">🔒</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        if (id && confirm("Re-open this session?")) {
+                                            await db.sessions.update(id, { isFinished: false });
+                                            setIsFinished(false);
+                                        }
+                                    }}
+                                    className="mt-2 text-[8px] font-black uppercase tracking-widest text-emerald-600 hover:underline"
+                                >
+                                    Re-open Session
+                                </button>
                             </div>
                         )}
 
@@ -481,14 +494,12 @@ export default function SessionPage(props: {
 
                 {isEdit && (
                     <div className="grid gap-3">
-                        {!isFinished && (
-                            <button 
-                                onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${id}`)}
-                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2"
-                            >
-                                Add Find to Session
-                            </button>
-                        )}
+                        <button 
+                            onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${id}`)}
+                            className={`w-full ${isFinished ? 'bg-gray-600 hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2`}
+                        >
+                            Add Find to Session {isFinished && <span className="text-[10px] opacity-75 font-normal ml-1">(Closed Session)</span>}
+                        </button>
 
                         {finds && finds.length > 0 ? (
                             finds.map((s) => (

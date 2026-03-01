@@ -30,6 +30,11 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     [props.projectId]
   );
 
+  const session = useLiveQuery(
+    async () => props.sessionId ? db.sessions.get(props.sessionId) : null,
+    [props.sessionId]
+  );
+
   const [locationName, setLocationName] = useState("");
   const [findCode, setFindCode] = useState(makeFindCode());
   const [objectType, setObjectType] = useState("");
@@ -299,6 +304,15 @@ export default function FindPage(props: { projectId: string; permissionId: strin
       </div>
 
       {error && <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm">{error}</div>}
+
+      {session?.isFinished && (
+          <div className="border-2 border-gray-200 bg-gray-50 dark:bg-gray-800/50 dark:border-gray-700 text-gray-600 dark:text-gray-400 p-4 rounded-xl shadow-sm flex items-center gap-3">
+              <span className="text-xl">🔒</span>
+              <div className="text-sm">
+                  <span className="font-bold">Closed Session:</span> You are adding a find to a session that was previously marked as finished.
+              </div>
+          </div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
           <div className={`bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-5 h-fit transition-opacity ${savedId ? 'opacity-50 pointer-events-none' : ''}`}>
