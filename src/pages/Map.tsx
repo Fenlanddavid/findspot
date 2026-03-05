@@ -46,7 +46,22 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const [customTo, setCustomTo] = useState<string>("");
   
   // Map Style
-  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite" | "1800s" | "lidar">("streets");
+  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite" | "lidar">("streets");
+  const [showTracks, setShowTracks] = useState(true);
+
+  // Load persistent style
+  useEffect(() => {
+    db.settings.get("mapStyle").then(s => {
+        if (s && ["streets", "satellite", "lidar"].includes(s.value)) {
+            setMapStyleMode(s.value);
+        }
+    });
+  }, []);
+
+  // Save persistent style
+  useEffect(() => {
+    db.settings.put({ key: "mapStyle", value: mapStyleMode });
+  }, [mapStyleMode]);
 
   // Selection / modals
   const [selected, setSelected] = useState<SelectedPermission | null>(null);
@@ -66,7 +81,6 @@ export default function MapPage({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const finds = useLiveQuery(async () => db.finds.where("projectId").equals(projectId).toArray(), [projectId]);
-  
   const tracks = useLiveQuery(async () => db.tracks.where("projectId").equals(projectId).toArray(), [projectId]);
 
   // Derived state
@@ -166,7 +180,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
             type: "Feature" as const,
             geometry: {
                 type: "LineString" as const,
-                coordinates: t.points.map(p => [p.lon, p.lat])
+                coordinates: (t.points || []).map(p => [p.lon, p.lat])
             },
             properties: {
                 id: t.id,
@@ -211,62 +225,93 @@ export default function MapPage({ projectId }: { projectId: string }) {
         mapRef.current = null;
     }
 
-    let tiles: string[] = [];
-    let attribution = "";
-    let tileSize = 256;
-    let maxZoom = 22;
-    
-    switch (mapStyleMode) {
-        case "streets":
-            tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
-            attribution = "© OpenStreetMap";
-            break;
-        case "satellite":
-            tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
-            attribution = "© Esri World Imagery";
-            break;
-        case "1800s":
-            // Esri OS Six Inch 1st Edition (1888-1913)
-            // Reverting to 256 and trying standard XYZ order
-            tiles = ["https://tiles.arcgis.com/tiles/qHLhI7sjHpaQQMsZ/arcgis/rest/services/OS_Six_Inch_1st_Edition/MapServer/tile/{z}/{x}/{y}"];
-            attribution = "© National Library of Scotland / Esri";
-            tileSize = 256;
-            maxZoom = 18; 
-            break;
-        case "lidar":
-            // Esri World Hillshade
-            tiles = ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"];
-            attribution = "© Esri World Hillshade";
-            maxZoom = 19;
-            break;
-    }
-
     const style: any = {
         version: 8,
-        sources: {
-            [`raster-tiles-${mapStyleMode}`]: {
-                type: "raster",
-                tiles: tiles,
-                tileSize: tileSize,
-                attribution: attribution,
-                minzoom: 0,
-                maxzoom: maxZoom
-            }
-        },
-        layers: [
-            { 
-                id: `raster-layer-${mapStyleMode}`, 
-                type: "raster", 
-                source: `raster-tiles-${mapStyleMode}`, 
-                minzoom: 0, 
-                maxzoom: 24, 
-                paint: {
-                    "raster-fade-duration": 0,
-                    "raster-opacity": 1
-                }
-            }
-        ]
+        sources: {},
+        layers: []
     };
+
+    if (mapStyleMode === "lidar") {
+        // Source 1: Esri World Hillshade (Global base/fallback)
+        style.sources["esri-lidar"] = {
+            type: "raster",
+            tiles: ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"],
+            tileSize: 256,
+            attribution: "© Esri Hillshade",
+            maxzoom: 19
+        };
+        // Source 2: Environment Agency 1m DTM Hillshade (Extreme UK detail)
+        style.sources["ea-lidar"] = {
+            type: "raster",
+            tiles: ["https://environment.data.gov.uk/arcgis/rest/services/Public/LIDAR_Composite_DTM_1m_Hillshade/MapServer/tile/{z}/{y}/{x}"],
+            tileSize: 256,
+            attribution: "© Environment Agency (LiDAR 1m)",
+            maxzoom: 20
+        };
+
+        // Layer 1: Base hillshade (lighter, provides context)
+        style.layers.push({
+            id: "esri-layer",
+            type: "raster",
+            source: "esri-lidar",
+            paint: { 
+                "raster-contrast": 0.2,
+                "raster-brightness-max": 0.8
+            }
+        });
+        // Layer 2: High-detail LiDAR (Extreme contrast)
+        style.layers.push({
+            id: "ea-layer",
+            type: "raster",
+            source: "ea-lidar",
+            paint: { 
+                "raster-contrast": 1.0,      
+                "raster-brightness-min": 0.05, 
+                "raster-brightness-max": 0.25, // Extremely dark highlights to force detail out
+                "raster-fade-duration": 0
+            }
+        });
+        // Layer 3: Overdrive layer (Doubles the shadow/ridge detail)
+        style.layers.push({
+            id: "ea-layer-boost",
+            type: "raster",
+            source: "ea-lidar",
+            paint: { 
+                "raster-contrast": 1.0,
+                "raster-brightness-max": 0.2,
+                "raster-opacity": 0.5,        // 50% opacity boost
+                "raster-fade-duration": 0
+            }
+        });
+    } else {
+        let tiles: string[] = [];
+        let attribution = "";
+        let maxZoom = 22;
+
+        if (mapStyleMode === "streets") {
+            tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
+            attribution = "© OpenStreetMap";
+        } else if (mapStyleMode === "satellite") {
+            tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
+            attribution = "© Esri World Imagery";
+        }
+
+        style.sources[`raster-tiles-${mapStyleMode}`] = {
+            type: "raster",
+            tiles: tiles,
+            tileSize: 256,
+            attribution: attribution,
+            minzoom: 0,
+            maxzoom: maxZoom
+        };
+
+        style.layers.push({
+            id: `raster-layer-${mapStyleMode}`,
+            type: "raster",
+            source: `raster-tiles-${mapStyleMode}`,
+            paint: { "raster-fade-duration": 0 }
+        });
+    }
 
     const map = new maplibregl.Map({
       container: mapDivRef.current,
@@ -297,7 +342,11 @@ export default function MapPage({ projectId }: { projectId: string }) {
         id: "tracks-line",
         type: "line",
         source: "tracks",
-        layout: { "line-join": "round", "line-cap": "round" },
+        layout: { 
+            "line-join": "round", 
+            "line-cap": "round",
+            "visibility": showTracks ? "visible" : "none"
+        },
         paint: {
           "line-color": ["get", "color"],
           "line-width": 4,
@@ -447,7 +496,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
     if (!map || !map.isStyleLoaded()) return;
     const src = map.getSource("localities") as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(featureCollection as any);
-  }, [featureCollection]); // Update pins when data changes
+  }, [featureCollection]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -455,6 +504,14 @@ export default function MapPage({ projectId }: { projectId: string }) {
     const src = map.getSource("tracks") as maplibregl.GeoJSONSource | undefined;
     if (src) src.setData(trackGeoJSON as any);
   }, [trackGeoJSON]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    if (map.getLayer("tracks-line")) {
+      map.setLayoutProperty("tracks-line", "visibility", showTracks ? "visible" : "none");
+    }
+  }, [showTracks]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -535,7 +592,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-80px)]">
+    <div className="flex flex-col gap-4 mb-8">
       <MapFilterBar 
         count={filteredPermissions.length}
         zoomToMyLocation={zoomToMyLocation}
@@ -560,9 +617,11 @@ export default function MapPage({ projectId }: { projectId: string }) {
         needsKey={false}
         mapStyleMode={mapStyleMode}
         setMapStyleMode={setMapStyleMode}
+        showTracks={showTracks}
+        setShowTracks={setShowTracks}
       />
 
-      <div className="flex-1 relative border-2 border-gray-100 dark:border-gray-800 rounded-3xl overflow-hidden shadow-inner bg-gray-50 dark:bg-black">
+      <div className="h-[600px] sm:h-[calc(100vh-250px)] relative border-2 border-gray-100 dark:border-gray-800 rounded-3xl overflow-hidden shadow-inner bg-gray-50 dark:bg-black">
         <div ref={mapDivRef} className="absolute inset-0" />
         
         {/* Selection overlay */}

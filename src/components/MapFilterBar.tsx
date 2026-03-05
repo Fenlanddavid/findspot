@@ -24,8 +24,10 @@ export function MapFilterBar(props: {
   setCustomTo: (v: string) => void;
   onClear: () => void;
   needsKey: boolean;
-  mapStyleMode: "streets" | "satellite" | "1800s" | "lidar";
-  setMapStyleMode: (v: "streets" | "satellite" | "1800s" | "lidar") => void;
+  mapStyleMode: "streets" | "satellite" | "lidar";
+  setMapStyleMode: (v: "streets" | "satellite" | "lidar") => void;
+  showTracks: boolean;
+  setShowTracks: (v: boolean) => void;
 }) {
   return (
     <div className="grid gap-3">
@@ -44,23 +46,25 @@ export function MapFilterBar(props: {
             <button onClick={props.addPermissionHere} className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm">
             + Permission Here
             </button>
-            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 ml-2 border border-gray-200 dark:border-gray-600">
+            <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 ml-2 border border-gray-200 dark:border-gray-600 overflow-x-auto max-w-[calc(100vw-40px)] no-scrollbar">
                  <button 
                     onClick={() => props.setMapStyleMode("streets")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "streets" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
+                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all whitespace-nowrap ${props.mapStyleMode === "streets" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
                  >Streets</button>
                  <button 
                     onClick={() => props.setMapStyleMode("satellite")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "satellite" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
+                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all whitespace-nowrap ${props.mapStyleMode === "satellite" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
                  >Satellite</button>
                  <button 
-                    onClick={() => props.setMapStyleMode("1800s")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "1800s" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
-                 >1800s</button>
-                 <button 
                     onClick={() => props.setMapStyleMode("lidar")}
-                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all ${props.mapStyleMode === "lidar" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
+                    className={`px-3 py-1 rounded-md text-sm font-medium transition-all whitespace-nowrap ${props.mapStyleMode === "lidar" ? "bg-white dark:bg-gray-600 shadow-sm text-emerald-600 dark:text-emerald-300" : "opacity-70 hover:opacity-100"}`}
                  >LiDAR</button>
+                 <button 
+                    onClick={() => props.setShowTracks(!props.showTracks)}
+                    className={`px-3 py-1 ml-1 rounded-md text-sm font-medium transition-all whitespace-nowrap flex items-center gap-1 ${props.showTracks ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" : "opacity-50 grayscale border border-transparent"}`}
+                 >
+                    {props.showTracks ? "👁️ Tracks On" : "👓 Tracks Off"}
+                 </button>
             </div>
             <div className="ml-auto opacity-80 text-sm font-medium bg-gray-50 dark:bg-gray-900 px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
             {props.count} permissions

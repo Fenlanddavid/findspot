@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Modal } from "./Modal";
+import { db } from "../db";
 
 export function LocationPickerModal(props: {
   initialLat?: number | null;
@@ -19,38 +20,111 @@ export function LocationPickerModal(props: {
     const [lat, setLat] = useState(props.initialLat || 54.5);
     const [lon, setLon] = useState(props.initialLon || -2.0);
     const [zoom] = useState(props.initialLat ? 16 : 6);
-    const [mapStyle, setMapStyle] = useState<"streets" | "satellite" | "1800s" | "lidar">("streets");
+    const [mapStyle, setMapStyle] = useState<"streets" | "satellite" | "lidar">("streets");
+    
+    // Load persistent style
+    useEffect(() => {
+        db.settings.get("mapStyle").then(s => {
+            if (s && ["streets", "satellite", "lidar"].includes(s.value)) {
+                setMapStyle(s.value);
+            }
+        });
+    }, []);
+
+    // Save persistent style
+    useEffect(() => {
+        db.settings.put({ key: "mapStyle", value: mapStyle });
+    }, [mapStyle]);
   
     useEffect(() => {
       if (!mapDivRef.current) return;
   
-      let tiles: string[] = [];
-      let attribution = "";
-      let tileSize = 256;
-      let maxZoom = 22;
-      
-      switch (mapStyle) {
-          case "streets":
+      const style: any = {
+          version: 8,
+          sources: {},
+          layers: []
+      };
+
+      if (mapStyle === "lidar") {
+          // Source 1: Esri World Hillshade (Global base/fallback)
+          style.sources["esri-lidar"] = {
+              type: "raster",
+              tiles: ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"],
+              tileSize: 256,
+              attribution: "© Esri Hillshade",
+              maxzoom: 19
+          };
+          // Source 2: Environment Agency 1m DTM Hillshade (Extreme UK detail)
+          style.sources["ea-lidar"] = {
+              type: "raster",
+              tiles: ["https://environment.data.gov.uk/arcgis/rest/services/Public/LIDAR_Composite_DTM_1m_Hillshade/MapServer/tile/{z}/{y}/{x}"],
+              tileSize: 256,
+              attribution: "© Environment Agency (LiDAR 1m)",
+              maxzoom: 20
+          };
+
+          // Layer 1: Base hillshade (lighter, provides context)
+          style.layers.push({
+              id: "esri-layer",
+              type: "raster",
+              source: "esri-lidar",
+              paint: { 
+                  "raster-contrast": 0.2,
+                  "raster-brightness-max": 0.8
+              }
+          });
+          // Layer 2: High-detail LiDAR (Extreme contrast)
+          style.layers.push({
+              id: "ea-layer",
+              type: "raster",
+              source: "ea-lidar",
+              paint: { 
+                  "raster-contrast": 1.0,      
+                  "raster-brightness-min": 0.05, 
+                  "raster-brightness-max": 0.25, // Extremely dark highlights
+                  "raster-fade-duration": 0
+              }
+          });
+          // Layer 3: Overdrive layer (Doubles the shadow/ridge detail)
+          style.layers.push({
+              id: "ea-layer-boost",
+              type: "raster",
+              source: "ea-lidar",
+              paint: { 
+                  "raster-contrast": 1.0,
+                  "raster-brightness-max": 0.2,
+                  "raster-opacity": 0.5,        // 50% opacity boost
+                  "raster-fade-duration": 0
+              }
+          });
+      } else {
+          let tiles: string[] = [];
+          let attribution = "";
+          let maxZoom = 22;
+
+          if (mapStyle === "streets") {
               tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
               attribution = "© OpenStreetMap";
-              break;
-          case "satellite":
+          } else if (mapStyle === "satellite") {
               tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
               attribution = "© Esri World Imagery";
-              break;
-          case "1800s":
-              // Esri OS Six Inch 1st Edition
-              tiles = ["https://tiles.arcgis.com/tiles/qHLhI7sjHpaQQMsZ/arcgis/rest/services/OS_Six_Inch_1st_Edition/MapServer/tile/{z}/{x}/{y}"];
-              attribution = "© National Library of Scotland / Esri";
-              tileSize = 256;
-              maxZoom = 18;
-              break;
-          case "lidar":
-              // Esri World Hillshade
-              tiles = ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"];
-              attribution = "© Esri World Hillshade";
-              maxZoom = 19;
-              break;
+          }
+
+          style.sources[`raster-tiles-${mapStyle}`] = {
+              type: "raster",
+              tiles: tiles,
+              tileSize: 256,
+              attribution: attribution,
+              minzoom: 0,
+              maxzoom: maxZoom
+          };
+
+          style.layers.push({
+              id: `raster-layer-${mapStyle}`,
+              type: "raster",
+              source: `raster-tiles-${mapStyle}`,
+              paint: { "raster-fade-duration": 0 }
+          });
       }
   
       const currentLngLat = mapRef.current ? mapRef.current.getCenter() : (lastPosition.current?.center || [lon, lat]);
@@ -63,29 +137,7 @@ export function LocationPickerModal(props: {
   
       const map = new maplibregl.Map({
         container: mapDivRef.current,
-        style: {
-          version: 8,
-          sources: {
-            [`raster-tiles-${mapStyle}`]: {
-              type: "raster",
-              tiles: tiles,
-              tileSize: tileSize,
-              attribution: attribution,
-              minzoom: 0,
-              maxzoom: maxZoom
-            }
-          },
-          layers: [
-              { 
-                  id: `raster-layer-${mapStyle}`, 
-                  type: "raster", 
-                  source: `raster-tiles-${mapStyle}`, 
-                  minzoom: 0, 
-                  maxzoom: 24,
-                  paint: { "raster-fade-duration": 0, "raster-opacity": 1 }
-              }
-          ]
-        },
+        style: style,
         center: currentLngLat,
         zoom: currentZoom,
       });
@@ -141,12 +193,6 @@ export function LocationPickerModal(props: {
                 className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "satellite" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 Satellite
-            </button>
-            <button 
-                onClick={() => setMapStyle("1800s")}
-                className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "1800s" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-            >
-                1800s
             </button>
             <button 
                 onClick={() => setMapStyle("lidar")}
