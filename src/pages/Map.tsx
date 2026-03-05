@@ -30,6 +30,9 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const nav = useNavigate();
+  
+  // Persistent Position Memory
+  const lastPosition = useRef<{ center: [number, number]; zoom: number } | null>(null);
 
   // Filters
   const [filterPermissionOnly, setFilterPermissionOnly] = useState(false);
@@ -43,7 +46,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const [customTo, setCustomTo] = useState<string>("");
   
   // Map Style
-  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
+  const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite" | "1800s" | "lidar">("streets");
 
   // Selection / modals
   const [selected, setSelected] = useState<SelectedPermission | null>(null);
@@ -199,6 +202,10 @@ export default function MapPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     if (!mapDivRef.current) return;
     
+    // Save state before removal
+    const currentCenter = mapRef.current ? mapRef.current.getCenter() : (lastPosition.current?.center || DEFAULT_CENTER);
+    const currentZoom = mapRef.current ? mapRef.current.getZoom() : (lastPosition.current?.zoom || DEFAULT_ZOOM);
+
     if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -207,6 +214,7 @@ export default function MapPage({ projectId }: { projectId: string }) {
     let tiles: string[] = [];
     let attribution = "";
     let tileSize = 256;
+    let maxZoom = 22;
     
     switch (mapStyleMode) {
         case "streets":
@@ -217,28 +225,61 @@ export default function MapPage({ projectId }: { projectId: string }) {
             tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
             attribution = "© Esri World Imagery";
             break;
+        case "1800s":
+            // Esri OS Six Inch 1st Edition (1888-1913)
+            // Reverting to 256 and trying standard XYZ order
+            tiles = ["https://tiles.arcgis.com/tiles/qHLhI7sjHpaQQMsZ/arcgis/rest/services/OS_Six_Inch_1st_Edition/MapServer/tile/{z}/{x}/{y}"];
+            attribution = "© National Library of Scotland / Esri";
+            tileSize = 256;
+            maxZoom = 18; 
+            break;
+        case "lidar":
+            // Esri World Hillshade
+            tiles = ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"];
+            attribution = "© Esri World Hillshade";
+            maxZoom = 19;
+            break;
     }
 
     const style: any = {
         version: 8,
         sources: {
-            "raster-tiles": {
+            [`raster-tiles-${mapStyleMode}`]: {
                 type: "raster",
                 tiles: tiles,
                 tileSize: tileSize,
-                attribution: attribution
+                attribution: attribution,
+                minzoom: 0,
+                maxzoom: maxZoom
             }
         },
         layers: [
-            { id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }
+            { 
+                id: `raster-layer-${mapStyleMode}`, 
+                type: "raster", 
+                source: `raster-tiles-${mapStyleMode}`, 
+                minzoom: 0, 
+                maxzoom: 24, 
+                paint: {
+                    "raster-fade-duration": 0,
+                    "raster-opacity": 1
+                }
+            }
         ]
     };
 
     const map = new maplibregl.Map({
       container: mapDivRef.current,
       style: style,
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center: currentCenter,
+      zoom: currentZoom,
+    });
+
+    map.on("moveend", () => {
+        lastPosition.current = {
+            center: [map.getCenter().lng, map.getCenter().lat],
+            zoom: map.getZoom()
+        };
     });
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");

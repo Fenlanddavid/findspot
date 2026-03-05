@@ -9,49 +9,94 @@ export function LocationPickerModal(props: {
   onClose: () => void;
   onSelect: (lat: number, lon: number) => void;
 }) {
-  const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
-  const markerRef = useRef<maplibregl.Marker | null>(null);
-
-  const [lat, setLat] = useState(props.initialLat || 54.5);
-  const [lon, setLon] = useState(props.initialLon || -2.0);
-  const [zoom] = useState(props.initialLat ? 16 : 6);
-  const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("streets");
-
-  useEffect(() => {
-    if (!mapDivRef.current) return;
-
-    let tiles: string[] = [];
-    let attribution = "";
+    const mapDivRef = useRef<HTMLDivElement | null>(null);
+    const mapRef = useRef<maplibregl.Map | null>(null);
+    const markerRef = useRef<maplibregl.Marker | null>(null);
     
-    switch (mapStyle) {
-        case "streets":
-            tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
-            attribution = "© OpenStreetMap";
-            break;
-        case "satellite":
-            tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
-            attribution = "© Esri World Imagery";
-            break;
-    }
-
-    const map = new maplibregl.Map({
-      container: mapDivRef.current,
-      style: {
-        version: 8,
-        sources: {
-          "raster-tiles": {
-            type: "raster",
-            tiles: tiles,
-            tileSize: 256,
-            attribution: attribution
-          }
+    // Persistence for style switching
+    const lastPosition = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  
+    const [lat, setLat] = useState(props.initialLat || 54.5);
+    const [lon, setLon] = useState(props.initialLon || -2.0);
+    const [zoom] = useState(props.initialLat ? 16 : 6);
+    const [mapStyle, setMapStyle] = useState<"streets" | "satellite" | "1800s" | "lidar">("streets");
+  
+    useEffect(() => {
+      if (!mapDivRef.current) return;
+  
+      let tiles: string[] = [];
+      let attribution = "";
+      let tileSize = 256;
+      let maxZoom = 22;
+      
+      switch (mapStyle) {
+          case "streets":
+              tiles = ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"];
+              attribution = "© OpenStreetMap";
+              break;
+          case "satellite":
+              tiles = ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
+              attribution = "© Esri World Imagery";
+              break;
+          case "1800s":
+              // Esri OS Six Inch 1st Edition
+              tiles = ["https://tiles.arcgis.com/tiles/qHLhI7sjHpaQQMsZ/arcgis/rest/services/OS_Six_Inch_1st_Edition/MapServer/tile/{z}/{x}/{y}"];
+              attribution = "© National Library of Scotland / Esri";
+              tileSize = 256;
+              maxZoom = 18;
+              break;
+          case "lidar":
+              // Esri World Hillshade
+              tiles = ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"];
+              attribution = "© Esri World Hillshade";
+              maxZoom = 19;
+              break;
+      }
+  
+      const currentLngLat = mapRef.current ? mapRef.current.getCenter() : (lastPosition.current?.center || [lon, lat]);
+      const currentZoom = mapRef.current ? mapRef.current.getZoom() : (lastPosition.current?.zoom || zoom);
+  
+      if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+      }
+  
+      const map = new maplibregl.Map({
+        container: mapDivRef.current,
+        style: {
+          version: 8,
+          sources: {
+            [`raster-tiles-${mapStyle}`]: {
+              type: "raster",
+              tiles: tiles,
+              tileSize: tileSize,
+              attribution: attribution,
+              minzoom: 0,
+              maxzoom: maxZoom
+            }
+          },
+          layers: [
+              { 
+                  id: `raster-layer-${mapStyle}`, 
+                  type: "raster", 
+                  source: `raster-tiles-${mapStyle}`, 
+                  minzoom: 0, 
+                  maxzoom: 24,
+                  paint: { "raster-fade-duration": 0, "raster-opacity": 1 }
+              }
+          ]
         },
-        layers: [{ id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
-      },
-      center: [lon, lat],
-      zoom: zoom,
-    });
+        center: currentLngLat,
+        zoom: currentZoom,
+      });
+  
+      map.on("moveend", () => {
+          lastPosition.current = {
+              center: [map.getCenter().lng, map.getCenter().lat],
+              zoom: map.getZoom()
+          };
+      });
+  
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
@@ -96,6 +141,18 @@ export function LocationPickerModal(props: {
                 className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "satellite" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
             >
                 Satellite
+            </button>
+            <button 
+                onClick={() => setMapStyle("1800s")}
+                className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "1800s" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            >
+                1800s
+            </button>
+            <button 
+                onClick={() => setMapStyle("lidar")}
+                className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "lidar" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
+            >
+                LiDAR
             </button>
           </div>
 
