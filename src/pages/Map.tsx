@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
-import { MapFilterBar, LidarType } from "../components/MapFilterBar";
+import { MapFilterBar } from "../components/MapFilterBar";
 import { PermissionPanel } from "../components/PermissionPanel";
 import { FindModal } from "../components/FindModal";
 import { PermissionQuickAddModal } from "../components/PermissionQuickAddModal";
