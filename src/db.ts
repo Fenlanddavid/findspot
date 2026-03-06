@@ -40,8 +40,21 @@ export type Permission = {
 
   agreementId?: string; // Reference to Media table for the signed PDF
 
+  boundary?: any; // GeoJSON Polygon object
+
   notes: string;
 
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Field = {
+  id: string;
+  projectId: string;
+  permissionId: string;
+  name: string;
+  boundary: any; // GeoJSON Polygon
+  notes: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -50,6 +63,7 @@ export type Session = {
   id: string;
   projectId: string;
   permissionId: string;
+  fieldId: string | null;
 
   date: string; // ISO datetime
   lat: number | null;
@@ -71,6 +85,7 @@ export type Find = {
   id: string;
   projectId: string;
   permissionId: string;
+  fieldId: string | null;
   sessionId: string | null;
 
   findCode: string;
@@ -174,6 +189,7 @@ export type Setting = {
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
+  fields!: Table<Field, string>;
   sessions!: Table<Session, string>;
   finds!: Table<Find, string>;
   media!: Table<Media, string>;
@@ -252,6 +268,42 @@ export class FindSpotDB extends Dexie {
 
     this.version(9).stores({
       media: "id, projectId, findId, permissionId, createdAt",
+    });
+
+    this.version(10).stores({
+      permissions: "id, projectId, name, type, permissionGranted, boundary, createdAt",
+    });
+
+    this.version(11).stores({
+      fields: "id, projectId, permissionId, name, createdAt",
+      sessions: "id, projectId, permissionId, fieldId, date, isFinished, createdAt",
+      finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, targetId, detector, createdAt",
+    }).upgrade(async tx => {
+        const permissions = await tx.table("permissions").toArray();
+        const now = new Date().toISOString();
+        
+        for (const p of permissions) {
+            if (p.boundary) {
+                // Browser-safe ID generation within transaction
+                const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                
+                await tx.table("fields").add({
+                    id: fieldId,
+                    projectId: p.projectId,
+                    permissionId: p.id,
+                    name: "Main Field",
+                    boundary: p.boundary,
+                    notes: "Migrated from permission boundary",
+                    createdAt: now,
+                    updatedAt: now
+                });
+
+                // Update existing sessions to point to this field
+                await tx.table("sessions").where("permissionId").equals(p.id).modify({ fieldId: fieldId });
+                // Update existing finds to point to this field
+                await tx.table("finds").where("permissionId").equals(p.id).modify({ fieldId: fieldId });
+            }
+        }
     });
   }
 }

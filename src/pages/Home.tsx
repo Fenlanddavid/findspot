@@ -3,6 +3,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
+import { StaticMapPreview } from "../components/StaticMapPreview";
+import { calculateCoverage } from "../services/coverage";
 
 export default function Home(props: {
   projectId: string;
@@ -22,9 +24,10 @@ export default function Home(props: {
   const permissions = useLiveQuery(
     async () => {
       let collection = db.permissions.where("projectId").equals(props.projectId);
+      let rows = [];
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        return collection
+        rows = await collection
           .filter(l => 
             l.name.toLowerCase().includes(query) || 
             (l.landownerName?.toLowerCase().includes(query) ?? false) ||
@@ -32,8 +35,54 @@ export default function Home(props: {
           )
           .reverse()
           .sortBy("createdAt");
+      } else {
+        rows = await collection.reverse().sortBy("createdAt");
       }
-      return collection.reverse().sortBy("createdAt");
+
+      // Enhance with cumulative coverage
+      const allTracks = await db.tracks.where("projectId").equals(props.projectId).toArray();
+
+      return Promise.all(rows.map(async (p) => {
+        const fields = await db.fields.where("permissionId").equals(p.id).toArray();
+        
+        let totalAreaM2 = 0;
+        let totalDetectedM2 = 0;
+
+        for (const f of fields) {
+            const sessions = await db.sessions.where("fieldId").equals(f.id).toArray();
+            const sessionIds = sessions.map(s => s.id);
+            const fieldTracks = allTracks.filter(t => t.sessionId && sessionIds.includes(t.sessionId));
+            const result = calculateCoverage(f.boundary, fieldTracks);
+            if (result) {
+                totalAreaM2 += result.totalAreaM2;
+                totalDetectedM2 += result.detectedAreaM2;
+            }
+        }
+
+        const cumulativePercent = totalAreaM2 > 0 ? (totalDetectedM2 / totalAreaM2) * 100 : null;
+
+        // Multi-layered coordinate fallback
+        let lat = typeof p.lat === 'number' ? p.lat : null;
+        let lon = typeof p.lon === 'number' ? p.lon : null;
+
+        // Fallback 1: Use first field boundary center
+        if ((!lat || !lon) && fields.length > 0 && fields[0].boundary?.coordinates?.[0]) {
+            const coords = fields[0].boundary.coordinates[0];
+            lat = coords[0][1];
+            lon = coords[0][0];
+        }
+
+        // Fallback 2: Use most recent find spot
+        if (!lat || !lon) {
+            const recentFind = await db.finds.where("permissionId").equals(p.id).reverse().sortBy("createdAt").then(arr => arr[0]);
+            if (recentFind && recentFind.lat && recentFind.lon) {
+                lat = recentFind.lat;
+                lon = recentFind.lon;
+            }
+        }
+
+        return { ...p, lat, lon, fields, cumulativePercent };
+      }));
     },
     [props.projectId, searchQuery]
   );
@@ -116,42 +165,70 @@ export default function Home(props: {
         {permissions && permissions.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {permissions.slice(0, 12).map((l) => (
-              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all flex flex-col h-full group relative overflow-hidden">
-                {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-0.5 rounded-bl uppercase tracking-widest">Rally</div>}
-                <div className="flex justify-between gap-3 mb-2">
-                  <button 
-                    onClick={() => props.goPermissionEdit(l.id)}
-                    className="text-gray-900 dark:text-white truncate text-lg font-bold group-hover:text-emerald-600 dark:group-hover:text-emerald-400 text-left transition-colors"
-                  >
-                    {l.name || "(Unnamed)"}
-                  </button>
-                </div>
+              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all flex flex-col h-full group relative overflow-hidden">
+                {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
                 
-                <div className="text-sm opacity-70 mb-4 flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                     <span className="text-xs font-mono bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300">
-                        {l.lat && l.lon ? `${l.lat.toFixed(4)}, ${l.lon.toFixed(4)}` : "No GPS"}
-                     </span>
-                     <span className="text-xs opacity-60">{new Date(l.createdAt).toLocaleDateString()}</span>
+                {/* Header */}
+                <div className="flex justify-between items-start gap-3 mb-3">
+                  <div className="min-w-0">
+                    <button 
+                        onClick={() => props.goPermissionEdit(l.id)}
+                        className="text-gray-900 dark:text-white truncate text-lg font-black group-hover:text-emerald-600 dark:group-hover:text-emerald-400 text-left transition-colors leading-tight"
+                    >
+                        {l.name || "(Unnamed)"}
+                    </button>
+                    {l.createdAt && (
+                        <div className="text-[10px] opacity-40 font-mono mt-0.5">
+                            {new Date(l.createdAt).toLocaleDateString()}
+                        </div>
+                    )}
                   </div>
-                  {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-1">👤 {l.landownerName}</div>}
-                  {l.landType && <div className="text-xs font-medium opacity-80 mt-1 truncate capitalize">{l.landType}</div>}
                   {l.permissionGranted ? (
-                    <div className="flex gap-2 items-center mt-1">
-                      <span className="text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded text-xs font-bold inline-block">✓ Permission</span>
-                      {(l as any).agreementId && <span className="text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded text-xs font-bold inline-block" title="Signed Agreement Available">📄 Agreement</span>}
-                    </div>
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter shrink-0">✓ OK</span>
                   ) : (
-                    <span className="text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded text-xs font-bold inline-block mt-1">⚠️ Missing</span>
+                    <span className="bg-red-50 text-red-700 border border-red-100 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter shrink-0">⚠️ NO</span>
                   )}
                 </div>
+
+                {/* Satellite Preview with Progress Overlay */}
+                <div className="relative aspect-video -mx-4 mb-4 cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
+                    <StaticMapPreview 
+                        lat={l.lat} 
+                        lon={l.lon} 
+                        boundary={l.boundary || (l as any).fields?.[0]?.boundary} 
+                        className="h-full w-full rounded-none" 
+                    />
+                    
+                    {(l as any).cumulativePercent !== null && (
+                        <div className="absolute bottom-2 left-2 flex flex-col gap-1">
+                            <div className={`px-2 py-1 rounded-lg backdrop-blur-md border shadow-lg flex flex-col items-center ${ (l as any).cumulativePercent < 90 ? 'bg-orange-600/80 border-orange-400 text-white' : 'bg-emerald-600/80 border-emerald-400 text-white'}`}>
+                                <span className="text-[7px] font-black uppercase leading-none opacity-80 mb-0.5">Undetected</span>
+                                <span className="text-xs font-black leading-none">{Math.round(100 - (l as any).cumulativePercent)}%</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-mono text-white/80">
+                        {l.lat && l.lon ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
+                    </div>
+                </div>
                 
-                <div className="pt-3 mt-auto border-t border-gray-100 dark:border-gray-700 flex gap-4 items-center">
-                  <button onClick={() => props.goFind(l.id)} className="text-xs text-emerald-600 hover:text-emerald-800 font-bold hover:underline flex items-center gap-1">
-                    Add find <span>→</span>
+                <div className="grid gap-2 mb-4 flex-1">
+                  {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">👤 {l.landownerName}</div>}
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                        {(l as any).fields?.length || 0} {(l as any).fields?.length === 1 ? 'Field' : 'Fields'}
+                    </div>
+                    {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
+                  </div>
+                </div>
+                
+                <div className="pt-3 mt-auto border-t border-gray-100 dark:border-gray-700 flex gap-2 items-center">
+                  <button onClick={() => props.goFind(l.id)} className="flex-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100 dark:border-emerald-900/50 uppercase tracking-wider">
+                    Add find
                   </button>
-                  <button onClick={() => props.goPermissionEdit(l.id)} className="text-xs text-gray-500 hover:text-gray-700 font-medium ml-auto px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
-                    Edit Details
+                  <button onClick={() => props.goPermissionEdit(l.id)} className="px-3 bg-gray-50 dark:bg-gray-800 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-[10px] font-bold py-2 rounded-lg transition-colors border border-gray-100 dark:border-gray-700 uppercase">
+                    Details
                   </button>
                 </div>
               </div>

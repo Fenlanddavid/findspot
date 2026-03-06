@@ -10,6 +10,8 @@
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@turf/turf": "^7.3.4",
+    "@types/turf": "^3.5.32",
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^1.1.7",
     "html2canvas": "^1.4.1",

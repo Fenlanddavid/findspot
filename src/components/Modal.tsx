@@ -10,7 +10,7 @@ export function Modal(props: { title: string; onClose: () => void; children: Rea
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div className="w-[min(720px,100%)] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-2xl animate-in fade-in zoom-in duration-200">
+      <div className="w-[min(720px,100%)] max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-2xl animate-in fade-in zoom-in duration-200">
         <div className="flex justify-between gap-3 items-center mb-3">
           <div className="flex items-center gap-3">
             <h2 className="m-0 text-xl font-bold">{props.title}</h2>

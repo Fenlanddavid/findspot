@@ -7,6 +7,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
+import { calculateCoverage, CoverageResult } from "../services/coverage";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -19,6 +20,7 @@ export default function SessionPage(props: {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const permissionId = searchParams.get("permissionId");
+  const urlFieldId = searchParams.get("fieldId");
   const nav = useNavigate();
   const isEdit = !!id;
 
@@ -27,6 +29,7 @@ export default function SessionPage(props: {
   const [lon, setLon] = useState<number | null>(null);
   const [acc, setAcc] = useState<number | null>(null);
 
+  const [fieldId, setFieldId] = useState<string | null>(urlFieldId || null);
   const [landUse, setLandUse] = useState("");
   const [cropType, setCropType] = useState("");
   const [isStubble, setIsStubble] = useState(false);
@@ -41,11 +44,24 @@ export default function SessionPage(props: {
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   
   const [isTracking, setIsTracking] = useState(isTrackingActive());
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
 
   const permission = useLiveQuery(
     async () => (permissionId ? db.permissions.get(permissionId) : (id ? db.sessions.get(id).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
     [permissionId, id]
   );
+
+  const fields = useLiveQuery(async () => {
+    const pId = permissionId || (id ? await db.sessions.get(id).then(s => s?.permissionId) : null);
+    if (!pId) return [];
+    return db.fields.where("permissionId").equals(pId).toArray();
+  }, [permissionId, id]);
+
+  const selectedField = useLiveQuery(async () => {
+    if (!fieldId) return null;
+    return db.fields.get(fieldId);
+  }, [fieldId]);
 
   const finds = useLiveQuery(async () => {
     if (!id) return [];
@@ -63,6 +79,16 @@ export default function SessionPage(props: {
     return db.tracks.where("sessionId").equals(id).toArray();
   }, [id]);
 
+  useEffect(() => {
+    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    if (!showCoverage || !boundary) {
+        setCoverageResult(null);
+        return;
+    }
+    const result = calculateCoverage(boundary, tracks || []);
+    setCoverageResult(result);
+  }, [showCoverage, selectedField, permission, tracks]);
+
   const findThumbMedia = useMemo(() => {
     const info = new Map<string, Media>();
     if (!allMedia || !finds) return info;
@@ -77,7 +103,9 @@ export default function SessionPage(props: {
   const mapRef = React.useRef<maplibregl.Map | null>(null);
 
   useEffect(() => {
-    if (!mapDivRef.current || !tracks || tracks.length === 0) return;
+    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    const hasBoundary = !!boundary;
+    if (!mapDivRef.current || (!hasBoundary && (!tracks || tracks.length === 0) && !isTracking)) return;
 
     if (!mapRef.current) {
       const map = new maplibregl.Map({
@@ -99,9 +127,48 @@ export default function SessionPage(props: {
       });
 
       map.on("load", () => {
+        map.addSource("boundary", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] }
+        });
+
+        map.addLayer({
+            id: "boundary-outline",
+            type: "line",
+            source: "boundary",
+            paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1] }
+        });
+
         map.addSource("tracks", {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] }
+        });
+
+        map.addSource("coverage", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] }
+        });
+
+        map.addLayer({
+            id: "undetected-fill",
+            type: "fill",
+            source: "coverage",
+            paint: {
+              "fill-color": "#ea580c",
+              "fill-opacity": 0.6,
+              "fill-outline-color": "#ea580c"
+            }
+        });
+
+        map.addLayer({
+            id: "undetected-outline",
+            type: "line",
+            source: "coverage",
+            paint: {
+              "line-color": "#ea580c",
+              "line-width": 2,
+              "line-opacity": 0.8
+            }
         });
 
         map.addLayer({
@@ -116,14 +183,19 @@ export default function SessionPage(props: {
           }
         });
 
+        if (showCoverage && coverageResult) {
+            const src = map.getSource("coverage") as maplibregl.GeoJSONSource;
+            if (src) src.setData(coverageResult.undetectionsGeoJSON);
+        }
+
         // Initial fit when data arrives
-        updateMapData(map, tracks);
+        updateMapData(map, tracks || []);
       });
       mapRef.current = map;
     } else {
       const map = mapRef.current;
       if (map.isStyleLoaded()) {
-        updateMapData(map, tracks);
+        updateMapData(map, tracks || []);
       }
     }
 
@@ -142,17 +214,46 @@ export default function SessionPage(props: {
           }))
         };
         source.setData(geojson as any);
+      }
 
-        // Fit bounds
-        const allPoints = tracksData.flatMap(t => t.points);
-        if (allPoints.length > 0) {
-          const bounds = new maplibregl.LngLatBounds();
+      const boundarySource = map.getSource("boundary") as maplibregl.GeoJSONSource;
+      const boundary = selectedField?.boundary || (permission as any)?.boundary;
+      if (boundarySource && boundary) {
+          boundarySource.setData(boundary);
+      }
+
+      // Fit bounds
+      const allPoints = tracksData.flatMap(t => t.points);
+      const bounds = new maplibregl.LngLatBounds();
+      
+      if (boundary && boundary.coordinates?.[0]) {
+          boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+          map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
+      } else if (allPoints.length > 0) {
           allPoints.forEach(p => bounds.extend([p.lon, p.lat]));
           map.fitBounds(bounds, { padding: 60, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
-        }
       }
     }
-  }, [tracks, isFinished]);
+  }, [tracks, isFinished, selectedField, permission]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
+    if (src) {
+        if (showCoverage && coverageResult) {
+            src.setData(coverageResult.undetectionsGeoJSON);
+        } else {
+            src.setData({ type: "FeatureCollection", features: [] });
+        }
+    }
+    if (map.getLayer("undetected-fill")) {
+        map.setLayoutProperty("undetected-fill", "visibility", showCoverage ? "visible" : "none");
+        if (map.getLayer("undetected-outline")) {
+            map.setLayoutProperty("undetected-outline", "visibility", showCoverage ? "visible" : "none");
+        }
+    }
+  }, [showCoverage, coverageResult]);
 
   useEffect(() => {
     if (id) {
@@ -162,12 +263,17 @@ export default function SessionPage(props: {
           setLat(s.lat);
           setLon(s.lon);
           setAcc(s.gpsAccuracyM);
+          setFieldId(s.fieldId || null);
           setLandUse(s.landUse);
           setCropType(s.cropType);
           setIsStubble(s.isStubble);
           setNotes(s.notes);
           setIsFinished(!!s.isFinished);
         }
+        setLoading(false);
+      }).catch(err => {
+        console.error("Failed to load session:", err);
+        setError("Could not load session details.");
         setLoading(false);
       });
     }
@@ -201,6 +307,7 @@ export default function SessionPage(props: {
         id: finalId,
         projectId: props.projectId,
         permissionId: isEdit ? (await db.sessions.get(id))!.permissionId : permissionId!,
+        fieldId,
         date: isoDate,
         lat,
         lon,
@@ -372,6 +479,20 @@ export default function SessionPage(props: {
                         />
                     </label>
 
+                    <label className="block">
+                      <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Field / Area</div>
+                      <select 
+                        value={fieldId ?? ""} 
+                        onChange={(e) => setFieldId(e.target.value || null)}
+                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none font-medium"
+                      >
+                        <option value="">(No specific field)</option>
+                        {fields?.map(f => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </label>
+
                     <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
                         <div className="flex flex-col gap-1">
                             <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
@@ -421,17 +542,17 @@ export default function SessionPage(props: {
 
                         <div className="flex flex-col gap-2 ml-auto">
                             <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
-                            <button 
-                                type="button"
-                                onClick={toggleTracking}
-                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
-                            >
-                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <label className="block">
+                                                                                            <button 
+                                                                                                type="button"
+                                                                                                onClick={toggleTracking}
+                                                                                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
+                                                                                            >
+                                                                                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                                                                                            </button>
+                                                                                        
+                                                                                    </div>
+                                                                                </div>
+                                                                                <label className="block">
                         <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Session Notes</div>
                         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
                     </label>
@@ -452,12 +573,28 @@ export default function SessionPage(props: {
                   </>
                 )}
 
-                {tracks && tracks.length > 0 && (
+                {((tracks && tracks.length > 0) || isTracking || (selectedField && selectedField.boundary)) && (
                     <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30 mt-6">
-                        <div className="flex justify-between items-center mb-2">
-                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Recorded Trail Tracks</h4>
+                        <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                {selectedField ? `Recorded Trail: ${selectedField.name}` : "Recorded Trail Tracks"}
+                            </h4>
                             <div className="flex items-center gap-2">
-                                {tracks.map(t => (
+                                {(selectedField && selectedField.boundary) && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowCoverage(!showCoverage)}
+                                        className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-[10px] border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
+                                    >
+                                        <span>{showCoverage ? '🧭 Gaps On' : '🧭 Show Gaps'}</span>
+                                        {showCoverage && coverageResult && (
+                                            <span className="bg-white/20 px-1 rounded text-[8px]">
+                                                {Math.round(100 - coverageResult.percentCovered)}%
+                                            </span>
+                                        )}
+                                    </button>
+                                )}
+                                {tracks && tracks.map(t => (
                                     <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] font-bold">
                                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
                                         <span>{t.points.length} pts</span>

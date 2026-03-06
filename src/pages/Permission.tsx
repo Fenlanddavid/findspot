@@ -10,6 +10,11 @@ import { FindModal } from "../components/FindModal";
 import { PermissionReport } from "../components/PermissionReport";
 import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
+import { BoundaryPickerModal } from "../components/BoundaryPickerModal";
+import { FieldModal } from "../components/FieldModal";
+import { calculateCoverage, CoverageResult } from "../services/coverage";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 const landTypes: Permission["landType"][] = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -54,10 +59,23 @@ export default function PermissionPage(props: {
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [isPickingBoundary, setIsPickingBoundary] = useState(false);
+  const [boundary, setBoundary] = useState<any | null>(null);
+  const [showCoverage, setShowCoverage] = useState(false);
+  const [shownFieldGapIds, setShownFieldGapIds] = useState<Set<string>>(new Set());
+  const [fieldGapResults, setFieldGapResults] = useState<Map<string, CoverageResult>>(new Map());
+  const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
   const [agreementId, setAgreementId] = useState<string | undefined>();
   const [agreementModalOpen, setAgreementModalOpen] = useState(false);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [isAddingField, setIsAddingField] = useState(false);
+
+  const fields = useLiveQuery(async () => {
+    if (!id) return [];
+    return db.fields.where("permissionId").equals(id).reverse().sortBy("createdAt");
+  }, [id]);
 
   const agreementFile = useLiveQuery(async () => {
     if (!agreementId) return null;
@@ -76,6 +94,7 @@ export default function PermissionPage(props: {
     
     // Fetch counts and tracks in parallel for all sessions
     return Promise.all(rows.map(async (s) => {
+      const field = s.fieldId ? await db.fields.get(s.fieldId) : null;
       const findCount = await db.finds.where("sessionId").equals(s.id).count();
       const sessionTracks = await db.tracks.where("sessionId").equals(s.id).toArray();
       
@@ -87,7 +106,7 @@ export default function PermissionPage(props: {
         }
       }
 
-      return { ...s, findCount, hasTracking: sessionTracks.length > 0, durationMs };
+      return { ...s, fieldName: field?.name, findCount, hasTracking: sessionTracks.length > 0, durationMs };
     }));
   }, [id]);
 
@@ -101,8 +120,9 @@ export default function PermissionPage(props: {
 
   // Fetch all media for the report
   const allMedia = useLiveQuery(async () => {
-    if (!id || !finds) return [];
-    const ids = finds.map(s => s.id);
+    if (!id || !finds || finds.length === 0) return [];
+    const ids = finds.map(s => s.id).filter(Boolean);
+    if (ids.length === 0) return [];
     return db.media.where("findId").anyOf(ids).toArray();
   }, [id, finds]);
 
@@ -119,6 +139,230 @@ export default function PermissionPage(props: {
     }
     return info;
   }, [allMedia, finds]);
+
+  const allTracks = useLiveQuery(async () => {
+    if (!id) return [];
+    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessionIds = sessions.map(s => s.id).filter(Boolean);
+    if (sessionIds.length === 0) return [];
+    return db.tracks.where("sessionId").anyOf(sessionIds).toArray();
+  }, [id]);
+
+  useEffect(() => {
+    if (!showCoverage || !boundary) {
+        setCoverageResult(null);
+    } else {
+        setCoverageResult(calculateCoverage(boundary, allTracks || []));
+    }
+
+    if (shownFieldGapIds.size === 0) {
+        setFieldGapResults(new Map());
+        return;
+    }
+
+    const fIds = Array.from(shownFieldGapIds);
+    Promise.all(fIds.map(async (fId) => {
+        const field = await db.fields.get(fId);
+        if (!field) return null;
+        const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
+        const sessionIds = sessions.map(s => s.id);
+        const fieldTracks = (allTracks ?? []).filter(t => t.sessionId && sessionIds.includes(t.sessionId));
+        const result = calculateCoverage(field.boundary, fieldTracks);
+        return { fId, result };
+    })).then(results => {
+        const next = new Map<string, CoverageResult>();
+        results.forEach(r => {
+            if (r && r.result) next.set(r.fId, r.result);
+        });
+        setFieldGapResults(next);
+    });
+  }, [showCoverage, shownFieldGapIds, boundary, allTracks]);
+
+  const mapDivRef = React.useRef<HTMLDivElement | null>(null);
+  const mapRef = React.useRef<maplibregl.Map | null>(null);
+
+  useEffect(() => {
+    const hasData = boundary || (fields && fields.length > 0);
+    if (!mapDivRef.current || !hasData) return;
+
+    if (!mapRef.current) {
+        const map = new maplibregl.Map({
+            container: mapDivRef.current,
+            style: {
+                version: 8,
+                sources: {
+                    "raster-tiles": {
+                        type: "raster",
+                        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+                        tileSize: 256,
+                        attribution: "© Esri World Imagery"
+                    }
+                },
+                layers: [{ id: "base", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
+            },
+            center: [lon || -2, lat || 54.5],
+            zoom: 16,
+        });
+
+        map.on("load", () => {
+            map.addSource("boundary", {
+                type: "geojson",
+                data: boundary || { type: "FeatureCollection", features: [] }
+            });
+
+            map.addLayer({
+                id: "boundary-outline",
+                type: "line",
+                source: "boundary",
+                paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1] }
+            });
+
+            // Add Sub-Fields Source
+            map.addSource("fields-boundary", {
+                type: "geojson",
+                data: { type: "FeatureCollection", features: [] }
+            });
+
+            map.addLayer({
+                id: "fields-outline",
+                type: "line",
+                source: "fields-boundary",
+                paint: { "line-color": "#0d9488", "line-width": 2 }
+            });
+
+            map.addLayer({
+                id: "field-labels",
+                type: "symbol",
+                source: "fields-boundary",
+                layout: {
+                    "text-field": ["get", "name"],
+                    "text-size": 10,
+                    "text-font": ["Open Sans Bold"],
+                    "text-anchor": "center"
+                },
+                paint: {
+                    "text-color": "#ffffff",
+                    "text-halo-color": "#0d9488",
+                    "text-halo-width": 1
+                }
+            });
+
+            map.addSource("tracks", {
+                type: "geojson",
+                data: { type: "FeatureCollection", features: [] }
+            });
+
+            map.addLayer({
+                id: "tracks-line",
+                type: "line",
+                source: "tracks",
+                layout: { "line-join": "round", "line-cap": "round" },
+                paint: { "line-color": ["get", "color"], "line-width": 3, "line-opacity": 0.6 }
+            });
+
+            map.addSource("coverage", {
+                type: "geojson",
+                data: { type: "FeatureCollection", features: [] }
+            });
+
+            map.addLayer({
+                id: "undetected-fill",
+                type: "fill",
+                source: "coverage",
+                paint: { "fill-color": "#ea580c", "fill-opacity": 0.6 }
+            });
+
+            map.addLayer({
+                id: "undetected-outline",
+                type: "line",
+                source: "coverage",
+                paint: { "line-color": "#ea580c", "line-width": 2, "line-opacity": 0.8 }
+            });
+
+            if (showCoverage && coverageResult) {
+                const src = map.getSource("coverage") as maplibregl.GeoJSONSource;
+                if (src) src.setData(coverageResult.undetectionsGeoJSON);
+            }
+
+            updateMapData(map, allTracks || []);
+        });
+        mapRef.current = map;
+    } else {
+        const map = mapRef.current;
+        if (map.isStyleLoaded()) {
+            updateMapData(map, allTracks || []);
+        }
+    }
+
+    function updateMapData(map: maplibregl.Map, tracksData: any[]) {
+        const trackSource = map.getSource("tracks") as maplibregl.GeoJSONSource;
+        if (trackSource) {
+            trackSource.setData({
+                type: "FeatureCollection",
+                features: tracksData.map(t => ({
+                    type: "Feature",
+                    geometry: { type: "LineString", coordinates: t.points.map((p: any) => [p.lon, p.lat]) },
+                    properties: { color: t.color }
+                }))
+            } as any);
+        }
+
+        const boundarySource = map.getSource("boundary") as maplibregl.GeoJSONSource;
+        if (boundarySource) boundarySource.setData(boundary || { type: "FeatureCollection", features: [] });
+
+        const fieldsSource = map.getSource("fields-boundary") as maplibregl.GeoJSONSource;
+        if (fieldsSource) {
+            fieldsSource.setData({
+                type: "FeatureCollection",
+                features: (fields || []).map(f => ({
+                    type: "Feature",
+                    geometry: f.boundary,
+                    properties: { name: f.name }
+                }))
+            } as any);
+        }
+
+        // Fit bounds to everything
+        if (boundary && boundary.coordinates?.[0]) {
+            const bounds = new maplibregl.LngLatBounds();
+            boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+            
+            // Also extend bounds for all sub-fields
+            fields?.forEach(f => {
+                if (f.boundary && f.boundary.coordinates?.[0]) {
+                    f.boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+                }
+            });
+
+            map.fitBounds(bounds, { padding: 40, duration: 0 });
+        }
+    }
+
+    return () => {
+        if (mapRef.current) {
+            mapRef.current.remove();
+            mapRef.current = null;
+        }
+    };
+  }, [boundary, fields, id, !isEditing]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
+    if (src) {
+        const mainFeatures = showCoverage && coverageResult ? coverageResult.undetectionsGeoJSON.features : [];
+        const fieldFeatures = Array.from(fieldGapResults.values()).flatMap(r => r.undetectionsGeoJSON.features);
+        src.setData({ type: "FeatureCollection", features: [...mainFeatures, ...fieldFeatures] } as any);
+    }
+    if (map.getLayer("undetected-fill")) {
+        const isVisible = showCoverage || fieldGapResults.size > 0;
+        map.setLayoutProperty("undetected-fill", "visibility", isVisible ? "visible" : "none");
+        if (map.getLayer("undetected-outline")) {
+            map.setLayoutProperty("undetected-outline", "visibility", isVisible ? "visible" : "none");
+        }
+    }
+  }, [showCoverage, coverageResult, fieldGapResults]);
 
   useEffect(() => {
     getSetting("ncmdNumber", "").then(setNcmdNumber);
@@ -141,9 +385,14 @@ export default function PermissionPage(props: {
           setLandownerAddress(l.landownerAddress || "");
           setLandType(l.landType);
           setPermissionGranted(l.permissionGranted);
+          setBoundary(l.boundary);
           setAgreementId((l as any).agreementId);
           setNotes(l.notes);
         }
+        setLoading(false);
+      }).catch(err => {
+        console.error("Failed to load permission:", err);
+        setError("Could not load permission details. The database might be busy or migrating.");
         setLoading(false);
       });
     } else {
@@ -206,6 +455,7 @@ export default function PermissionPage(props: {
         landownerAddress,
         landType,
         permissionGranted,
+        boundary,
         agreementId,
         notes,
         createdAt: isEdit ? undefined as any : now, 
@@ -385,22 +635,65 @@ export default function PermissionPage(props: {
 
                     <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
                         <div className="flex justify-between items-center flex-wrap gap-2">
-                            <div className="text-xs font-bold uppercase tracking-wider opacity-60">Base Coordinates (Center)</div>
+                            <div className="text-xs font-bold uppercase tracking-wider opacity-60 font-black">Field Geometry</div>
                             <div className="flex gap-2">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsPickingBoundary(true)} 
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all border ${boundary ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-100 dark:border-gray-800 hover:border-emerald-500 hover:text-emerald-600'}`}
+                                >
+                                    {boundary ? "📐 Boundary Set ✓" : "📐 Define Main Boundary"}
+                                </button>
                                 <button 
                                     type="button" 
                                     onClick={() => setIsPickingLocation(true)} 
                                     className="bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all hover:bg-emerald-600 hover:text-white"
                                 >
-                                    🗺️ Pick on Map
+                                    🗺️ Pick Center
                                 </button>
                                 <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2 whitespace-nowrap">
-                                    📍 {lat ? "Update GPS" : "Get Current GPS"}
+                                    📍 {lat ? "GPS" : "Get GPS"}
                                 </button>
                             </div>
                         </div>
+
+                        {/* Field List inside Geometry box */}
+                        {isEdit && (
+                            <div className="grid gap-2 border-t border-emerald-100 dark:border-emerald-800 pt-4">
+                                <div className="flex justify-between items-center">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsAddingField(true)}
+                                        className="text-[9px] font-black bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 transition-colors uppercase"
+                                    >
+                                        + Add Field
+                                    </button>
+                                </div>
+                                {fields && fields.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {fields.map((f) => (
+                                            <div key={f.id} className="flex items-center justify-between gap-3 bg-white/50 dark:bg-gray-800/50 border border-emerald-100 dark:border-emerald-800 p-2 rounded-lg shadow-sm">
+                                                <div className="min-w-0">
+                                                    <div className="font-bold text-[10px] truncate text-gray-800 dark:text-gray-100">{f.name}</div>
+                                                </div>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => setEditingFieldId(f.id)}
+                                                    className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 px-1.5 py-0.5 rounded hover:bg-white"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] opacity-40 italic">No specific sub-fields defined.</p>
+                                )}
+                            </div>
+                        )}
                         
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 gap-4 border-t border-emerald-100 dark:border-emerald-800 pt-4">
                             <label className="block">
                                 <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Latitude</div>
                                 <input 
@@ -568,16 +861,84 @@ export default function PermissionPage(props: {
                             <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{notes}</p>
                         </div>
                     )}
+
+                    {(boundary || (fields && fields.length > 0)) && (
+                        <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
+                            <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Field Boundaries & Total Coverage</h4>
+                                    <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Includes tracking data from all {sessions?.length} sessions</p>
+                                </div>
+                                <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
+                                    💡 Tap 'Show Gaps' on fields below to see coverage
+                                </div>
+                            </div>
+                            
+                            {/* Map Preview */}
+                            <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
+                                <div ref={mapDivRef} className="absolute inset-0" />
+                            </div>
+
+                            {/* Sub-Fields List in View Mode */}
+                            {fields && fields.length > 0 && (
+                                <div className="mt-6 grid gap-3">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Sub-Fields / Areas</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {fields.map(f => (
+                                            <div key={f.id} className="bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-800 p-4 rounded-xl shadow-sm flex flex-col justify-between">
+                                                <div className="mb-3">
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
+                                                        <button 
+                                                            onClick={() => {
+                                                                const next = new Set(shownFieldGapIds);
+                                                                if (next.has(f.id)) next.delete(f.id);
+                                                                else next.add(f.id);
+                                                                setShownFieldGapIds(next);
+                                                            }}
+                                                            className={`text-[9px] font-black px-2 py-1 rounded border transition-all ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 border-orange-100 text-orange-700 hover:border-orange-400'}`}
+                                                        >
+                                                            {shownFieldGapIds.has(f.id) ? '🧭 GAPS ON' : '🧭 SHOW GAPS'}
+                                                            {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
+                                                                <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}%</span>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                    {f.notes && <div className="text-[10px] opacity-60 line-clamp-2 mt-1 italic">{f.notes}</div>}
+                                                </div>
+                                                <div className="flex gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
+                                                    <button 
+                                                        onClick={() => nav(`/session/new?permissionId=${id}&fieldId=${f.id}`)}
+                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded-lg transition-colors shadow-sm active:translate-y-0.5 transition-transform"
+                                                    >
+                                                        START SESSION
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => setEditingFieldId(f.id)}
+                                                        className="px-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[10px] font-bold text-gray-500 hover:text-emerald-600 rounded-lg transition-colors"
+                                                    >
+                                                        EDIT
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                   </div>
                 )}
             </div>
 
             {/* Right Column: Sessions List */}
-            <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner h-fit max-h-[85vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
-                    <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{sessions?.length ?? 0} total</div>
-                </div>
+            <div className="lg:col-span-1 grid gap-6 h-fit">
+                {/* Sessions Section */}
+                <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
+                        <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{sessions?.length ?? 0} total</div>
+                    </div>
 
                 {!isEdit && (
                     <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm px-4">
@@ -599,31 +960,37 @@ export default function PermissionPage(props: {
                                 <button 
                                     key={s.id} 
                                     onClick={() => nav(`/session/${s.id}`)}
-                                    className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group"
+                                    className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group overflow-hidden relative"
                                 >
-                                    <div className="flex justify-between items-start">
-                                        <div className="font-bold text-gray-800 dark:text-gray-100 group-hover:text-emerald-600">
-                                            {new Date(s.date).toLocaleDateString()}
+                                    {s.hasTracking && (
+                                        <div className="absolute top-0 right-0 bg-sky-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-bl uppercase tracking-widest">
+                                            GPS TRAIL
                                         </div>
-                                        <div className="flex gap-2 items-center">
-                                            {s.findCount > 0 && (
-                                                <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
-                                                    {s.findCount} {s.findCount === 1 ? 'Find' : 'Finds'}
+                                    )}
+                                    
+                                    <div className="flex justify-between items-start mb-1">
+                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                            <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
+                                                {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`text-[10px] font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
+                                                    📍 {s.fieldName || "No specific field"}
                                                 </span>
-                                            )}
-                                            {s.hasTracking && (
-                                                <span title="Trail Map Recorded" className="text-[10px] bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 px-1.5 py-0.5 rounded flex items-center gap-1 font-bold">
-                                                    👣 Trail
-                                                </span>
-                                            )}
+                                            </div>
                                         </div>
+                                        
+                                        {s.findCount > 0 && (
+                                            <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg text-center min-w-[40px]">
+                                                <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 leading-none">{s.findCount}</div>
+                                                <div className="text-[7px] font-bold text-emerald-600 dark:text-emerald-500 uppercase leading-none mt-0.5">Finds</div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="text-xs opacity-60 mt-1 flex items-center justify-between">
-                                        <span>{s.cropType || s.landUse || "General visit"}</span>
-                                        {s.durationMs > 0 && <span className="font-mono opacity-80">{formatDuration(s.durationMs)}</span>}
-                                    </div>
-                                    <div className="mt-2 text-[10px] font-mono opacity-40 italic line-clamp-1">
-                                        {s.notes}
+
+                                    <div className="text-[10px] opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
+                                        <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
+                                        {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">⏱️ {formatDuration(s.durationMs)}</span>}
                                     </div>
                                 </button>
                             ))
@@ -637,6 +1004,7 @@ export default function PermissionPage(props: {
             </div>
         </div>
       </div>
+    </div>
 
       {isEdit && currentPermission && finds && allMedia && sessions && (
         <div className="hidden print:block">
@@ -676,6 +1044,35 @@ export default function PermissionPage(props: {
                   setLon(pickedLon);
                   setAcc(null);
                   setIsPickingLocation(false);
+              }}
+          />
+      )}
+
+      {isPickingBoundary && (
+          <BoundaryPickerModal 
+              initialBoundary={boundary}
+              initialLat={lat}
+              initialLon={lon}
+              onClose={() => setIsPickingBoundary(false)}
+              onSelect={(pickedBoundary) => {
+                  setBoundary(pickedBoundary);
+                  setIsPickingBoundary(false);
+              }}
+          />
+      )}
+
+      {(isAddingField || editingFieldId) && (
+          <FieldModal 
+              projectId={props.projectId}
+              permissionId={id!}
+              field={fields?.find(f => f.id === editingFieldId)}
+              onClose={() => {
+                setIsAddingField(false);
+                setEditingFieldId(null);
+              }}
+              onSaved={() => {
+                setIsAddingField(false);
+                setEditingFieldId(null);
               }}
           />
       )}

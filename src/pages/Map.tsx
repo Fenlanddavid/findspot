@@ -10,6 +10,7 @@ import { FindModal } from "../components/FindModal";
 import { PermissionQuickAddModal } from "../components/PermissionQuickAddModal";
 import { useNavigate } from "react-router-dom";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
+import { calculateCoverage, CoverageResult } from "../services/coverage";
 
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 5;
@@ -49,6 +50,10 @@ export default function MapPage({ projectId }: { projectId: string }) {
   const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
   const [showLidar, setShowLidar] = useState(false);
   const [showTracks, setShowTracks] = useState(true);
+  const [shownCoverageFieldIds, setShownCoverageFieldIds] = useState<Set<string>>(new Set());
+  const [allCoverageResults, setAllCoverageResults] = useState<Map<string, CoverageResult>>(new Map());
+  const [shownCoveragePermissionIds, setShownCoveragePermissionIds] = useState<Set<string>>(new Set());
+  const [permissionCoverageResults, setPermissionCoverageResults] = useState<Map<string, CoverageResult>>(new Map());
 
   // Load persistent style
   useEffect(() => {
@@ -85,6 +90,63 @@ export default function MapPage({ projectId }: { projectId: string }) {
 
   const finds = useLiveQuery(async () => db.finds.where("projectId").equals(projectId).toArray(), [projectId]);
   const tracks = useLiveQuery(async () => db.tracks.where("projectId").equals(projectId).toArray(), [projectId]);
+
+  // Calculate Coverage Effect
+  useEffect(() => {
+    if (shownCoverageFieldIds.size === 0) {
+      setAllCoverageResults(new Map());
+      return;
+    }
+
+    const fieldIds = Array.from(shownCoverageFieldIds);
+    
+    Promise.all(fieldIds.map(async (fId) => {
+        const field = await db.fields.get(fId);
+        if (!field) return null;
+
+        // Find tracks for this field (any session assigned to this field)
+        const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
+        const sessionIds = sessions.map(s => s.id);
+        const fieldTracks = (tracks ?? []).filter(t => t.sessionId && sessionIds.includes(t.sessionId));
+        
+        const result = calculateCoverage(field.boundary, fieldTracks);
+        return { fieldId: fId, result };
+    })).then(results => {
+        const next = new Map<string, CoverageResult>();
+        results.forEach(r => {
+            if (r && r.result) next.set(r.fieldId, r.result);
+        });
+        setAllCoverageResults(next);
+    });
+  }, [shownCoverageFieldIds, tracks]);
+
+  // Permission Coverage Fallback Effect
+  useEffect(() => {
+    if (shownCoveragePermissionIds.size === 0) {
+      setPermissionCoverageResults(new Map());
+      return;
+    }
+
+    const pIds = Array.from(shownCoveragePermissionIds);
+    Promise.all(pIds.map(async (pId) => {
+        const p = await db.permissions.get(pId);
+        if (!p || !p.boundary) return null;
+
+        // Only show if it has no fields (otherwise field toggles should be used)
+        const fieldCount = await db.fields.where("permissionId").equals(pId).count();
+        if (fieldCount > 0) return null;
+
+        const permTracks = (tracks ?? []).filter(t => t.projectId === projectId); // Broad filter for now
+        const result = calculateCoverage(p.boundary, permTracks);
+        return { pId, result };
+    })).then(results => {
+        const next = new Map<string, CoverageResult>();
+        results.forEach(r => {
+            if (r && r.result) next.set(r.pId, r.result);
+        });
+        setPermissionCoverageResults(next);
+    });
+  }, [shownCoveragePermissionIds, tracks, projectId]);
 
   // Derived state
   const landTypeOptions = useMemo(() => {
@@ -357,6 +419,34 @@ export default function MapPage({ projectId }: { projectId: string }) {
         data: trackGeoJSON as any
       });
 
+      map.addSource("coverage", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+
+      // Coverage Layer (Gaps/Undetected) - Rendered underneath points
+      map.addLayer({
+        id: "undetected-fill",
+        type: "fill",
+        source: "coverage",
+        paint: {
+          "fill-color": "#ea580c", // Orange-600
+          "fill-opacity": 0.6,
+          "fill-outline-color": "#ea580c"
+        }
+      });
+
+      map.addLayer({
+        id: "undetected-outline",
+        type: "line",
+        source: "coverage",
+        paint: {
+          "line-color": "#ea580c",
+          "line-width": 2,
+          "line-opacity": 0.8
+        }
+      });
+
       // Track Layer (background/faint)
       map.addLayer({
         id: "tracks-line",
@@ -373,6 +463,14 @@ export default function MapPage({ projectId }: { projectId: string }) {
           "line-opacity": ["case", ["==", ["get", "isActive"], true], 0.8, 0.4]
         }
       });
+
+      if (allCoverageResults.size > 0) {
+        const src = map.getSource("coverage") as maplibregl.GeoJSONSource;
+        if (src) {
+            const features = Array.from(allCoverageResults.values()).flatMap(r => r.undetectionsGeoJSON.features);
+            src.setData({ type: "FeatureCollection", features } as any);
+        }
+      }
 
       map.addSource("localities", {
         type: "geojson",
@@ -528,6 +626,24 @@ export default function MapPage({ projectId }: { projectId: string }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
+    const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
+    if (src) {
+        const fieldFeatures = Array.from(allCoverageResults.values()).flatMap(r => r.undetectionsGeoJSON.features);
+        const permFeatures = Array.from(permissionCoverageResults.values()).flatMap(r => r.undetectionsGeoJSON.features);
+        src.setData({ type: "FeatureCollection", features: [...fieldFeatures, ...permFeatures] } as any);
+    }
+    if (map.getLayer("undetected-fill")) {
+        const isVisible = allCoverageResults.size > 0 || permissionCoverageResults.size > 0;
+        map.setLayoutProperty("undetected-fill", "visibility", isVisible ? "visible" : "none");
+        if (map.getLayer("undetected-outline")) {
+            map.setLayoutProperty("undetected-outline", "visibility", isVisible ? "visible" : "none");
+        }
+    }
+  }, [allCoverageResults, permissionCoverageResults]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
     if (map.getLayer("tracks-line")) {
       map.setLayoutProperty("tracks-line", "visibility", showTracks ? "visible" : "none");
     }
@@ -653,6 +769,27 @@ export default function MapPage({ projectId }: { projectId: string }) {
               selected={selected}
               selectedFinds={selectedFinds as Find[]}
               firstPhotoByFindId={firstPhotoByFindId}
+              shownCoverageFieldIds={shownCoverageFieldIds}
+              onToggleFieldCoverage={(fId) => {
+                const next = new Set(shownCoverageFieldIds);
+                if (next.has(fId)) next.delete(fId);
+                else next.add(fId);
+                setShownCoverageFieldIds(next);
+                // Clear permission toggle if field toggled
+                setShownCoveragePermissionIds(new Set());
+              }}
+              fieldCoverageResults={new Map(Array.from(allCoverageResults.entries()).map(([fid, res]) => [fid, res.percentCovered]))}
+              showPermissionCoverage={selected ? shownCoveragePermissionIds.has(selected.id) : false}
+              onTogglePermissionCoverage={() => {
+                if (!selected) return;
+                const next = new Set(shownCoveragePermissionIds);
+                if (next.has(selected.id)) next.delete(selected.id);
+                else next.add(selected.id);
+                setShownCoveragePermissionIds(next);
+                // Clear field toggles if perm toggled
+                setShownCoverageFieldIds(new Set());
+              }}
+              permissionCoveragePercent={selected ? permissionCoverageResults.get(selected.id)?.percentCovered : undefined}
               onOpenFind={(sid) => setOpenFindId(sid)}
               onEdit={() => nav(`/permission/${selected.id}`)}
               onClose={() => {

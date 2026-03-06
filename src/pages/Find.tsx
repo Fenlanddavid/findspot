@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media, Find } from "../db";
@@ -25,6 +25,9 @@ function makeFindCode(): string {
 
 export default function FindPage(props: { projectId: string; permissionId: string | null; sessionId: string | null }) {
   const navigate = useNavigate();
+  const [locationName, setLocationName] = useState("");
+  const [fieldId, setFieldId] = useState<string | null>(props.sessionId ? null : null); // We'll fetch if session exists
+
   const permissions = useLiveQuery(
     async () => db.permissions.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
     [props.projectId]
@@ -35,7 +38,23 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     [props.sessionId]
   );
 
-  const [locationName, setLocationName] = useState("");
+  useEffect(() => {
+    if (session?.fieldId) {
+      setFieldId(session.fieldId);
+    }
+  }, [session]);
+
+  const currentPermissionId = useMemo(() => {
+    if (props.permissionId) return props.permissionId;
+    // If we have a location name, find its ID
+    return permissions?.find(p => p.name === locationName)?.id || null;
+  }, [props.permissionId, permissions, locationName]);
+
+  const fields = useLiveQuery(async () => {
+    if (!currentPermissionId) return [];
+    return db.fields.where("permissionId").equals(currentPermissionId).toArray();
+  }, [currentPermissionId]);
+
   const [findCode, setFindCode] = useState(makeFindCode());
   const [objectType, setObjectType] = useState("");
   const [coinType, setCoinType] = useState("");
@@ -176,6 +195,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         id,
         projectId: props.projectId,
         permissionId: targetPermissionId,
+        fieldId,
         sessionId: props.sessionId,
         findCode: findCode.trim() || makeFindCode(),
         objectType: objectType.trim(),
@@ -324,6 +344,26 @@ export default function FindPage(props: { projectId: string; permissionId: strin
                 placeholder="Enter permission or location name"
                 className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-bold"
             />
+            </label>
+
+            <label className="block">
+              <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300 flex justify-between">
+                <span>Field / Area</span>
+                {props.sessionId && (
+                  <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Locked to Session</span>
+                )}
+              </div>
+              <select 
+                value={fieldId ?? ""} 
+                onChange={(e) => setFieldId(e.target.value || null)}
+                disabled={!!props.sessionId}
+                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-medium disabled:opacity-50"
+              >
+                <option value="">(No specific field)</option>
+                {fields?.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
             </label>
 
             <div className="grid grid-cols-2 gap-4">
