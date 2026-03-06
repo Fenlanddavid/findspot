@@ -464,6 +464,25 @@ export default function PermissionPage(props: {
 
       if (isEdit) {
         await db.permissions.update(id, permission);
+        
+        // Auto-create "Main Field" if a boundary exists but NO fields exist yet
+        if (boundary) {
+            const fieldCount = await db.fields.where("permissionId").equals(id).count();
+            if (fieldCount === 0) {
+                const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                await db.fields.add({
+                    id: fieldId,
+                    projectId: props.projectId,
+                    permissionId: id,
+                    name: "Main Field",
+                    boundary: boundary,
+                    notes: "Automatically created from permission boundary",
+                    createdAt: now,
+                    updatedAt: now
+                });
+            }
+        }
+
         setIsEditing(false);
         alert("Land record updated!");
       } else {
