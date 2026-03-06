@@ -469,6 +469,22 @@ export default function PermissionPage(props: {
       } else {
         (permission as any).createdAt = now;
         await db.permissions.add(permission);
+
+        // Auto-create "Main Field" if a boundary was defined during creation
+        if (boundary) {
+            const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+            await db.fields.add({
+                id: fieldId,
+                projectId: props.projectId,
+                permissionId: finalId,
+                name: "Main Field",
+                boundary: boundary,
+                notes: "Automatically created from initial permission boundary",
+                createdAt: now,
+                updatedAt: now
+            });
+        }
+
         setIsEditing(false);
         props.onSaved(finalId);
       }
