@@ -50,8 +50,8 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
         }
 
         // 3. Buffer Tracks (Aggressive Cleaning)
-        // Use a 1m minimum radius for stability, or coilWidth/2 if larger
-        const bufferRadiusM = Math.max(1.0, coilWidthM / 2);
+        // Use a 2.0m minimum radius for stability (Doubled from 1.0m per user request)
+        const bufferRadiusM = Math.max(2.0, coilWidthM);
         
         const bufferedSegments = validTracks.map(t => {
             const line = turf.lineString(t.points.map((p: any) => [p.lon, p.lat]));

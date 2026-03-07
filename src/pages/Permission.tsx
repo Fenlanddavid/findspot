@@ -90,7 +90,18 @@ export default function PermissionPage(props: {
 
   const sessions = useLiveQuery(async () => {
     if (!id) return [];
-    const rows = await db.sessions.where("permissionId").equals(id).reverse().sortBy("createdAt");
+    const rows = await db.sessions
+      .where("permissionId")
+      .equals(id)
+      .toArray();
+
+    // Sort by date (descending), then by createdAt (descending)
+    rows.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return b.createdAt.localeCompare(a.createdAt);
+    });
     
     // Fetch counts and tracks in parallel for all sessions
     return Promise.all(rows.map(async (s) => {

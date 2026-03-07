@@ -294,6 +294,39 @@ export default function SessionPage(props: {
     }
   }
 
+  async function handleDelete() {
+    if (!isEdit) return;
+    if (!confirm("Are you sure? This will permanently delete this session, all finds within it, and all tracking data.")) return;
+    
+    setSaving(true);
+    try {
+      await db.transaction("rw", [db.sessions, db.finds, db.media, db.tracks], async () => {
+        // Find all finds in this session
+        const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+        const findIds = sessionFinds.map(f => f.id);
+        
+        // Delete all media for those finds
+        if (findIds.length > 0) {
+          await db.media.where("findId").anyOf(findIds).delete();
+        }
+        
+        // Delete the finds
+        await db.finds.where("sessionId").equals(sessionId).delete();
+        
+        // Delete all tracks for this session
+        await db.tracks.where("sessionId").equals(sessionId).delete();
+        
+        // Delete the session itself
+        await db.sessions.delete(sessionId);
+      });
+      
+      nav(permission ? `/permission/${permission.id}` : "/");
+    } catch (e: any) {
+      setError("Delete failed: " + e.message);
+      setSaving(false);
+    }
+  }
+
   async function save() {
     if (!permissionId && !isEdit) {
         setError("Missing permission ID");
@@ -381,6 +414,15 @@ export default function SessionPage(props: {
                 )}
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
+                {isEdit && (
+                    <button 
+                        onClick={handleDelete}
+                        disabled={saving}
+                        className="text-xs sm:text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
+                    >
+                        Delete
+                    </button>
+                )}
                 <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
             </div>
         </div>
