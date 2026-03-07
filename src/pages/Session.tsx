@@ -22,6 +22,9 @@ export default function SessionPage(props: {
   const permissionId = searchParams.get("permissionId");
   const urlFieldId = searchParams.get("fieldId");
   const nav = useNavigate();
+  
+  // Use a stable sessionId even if it's a new session (id is undefined)
+  const [sessionId] = useState(id || uuid());
   const isEdit = !!id;
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
@@ -48,15 +51,15 @@ export default function SessionPage(props: {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
 
   const permission = useLiveQuery(
-    async () => (permissionId ? db.permissions.get(permissionId) : (id ? db.sessions.get(id).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
-    [permissionId, id]
+    async () => (permissionId ? db.permissions.get(permissionId) : (sessionId ? db.sessions.get(sessionId).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
+    [permissionId, sessionId]
   );
 
   const fields = useLiveQuery(async () => {
-    const pId = permissionId || (id ? await db.sessions.get(id).then(s => s?.permissionId) : null);
+    const pId = permissionId || (sessionId ? await db.sessions.get(sessionId).then(s => s?.permissionId) : null);
     if (!pId) return [];
     return db.fields.where("permissionId").equals(pId).toArray();
-  }, [permissionId, id]);
+  }, [permissionId, sessionId]);
 
   const selectedField = useLiveQuery(async () => {
     if (!fieldId) return null;
@@ -64,20 +67,20 @@ export default function SessionPage(props: {
   }, [fieldId]);
 
   const finds = useLiveQuery(async () => {
-    if (!id) return [];
-    return db.finds.where("sessionId").equals(id).reverse().sortBy("createdAt");
-  }, [id]);
+    if (!sessionId) return [];
+    return db.finds.where("sessionId").equals(sessionId).reverse().sortBy("createdAt");
+  }, [sessionId]);
 
   const allMedia = useLiveQuery(async () => {
-    if (!id || !finds) return [];
+    if (!sessionId || !finds) return [];
     const ids = finds.map(s => s.id);
     return db.media.where("findId").anyOf(ids).toArray();
-  }, [id, finds]);
+  }, [sessionId, finds]);
 
   const tracks = useLiveQuery(async () => {
-    if (!id) return [];
-    return db.tracks.where("sessionId").equals(id).toArray();
-  }, [id]);
+    if (!sessionId) return [];
+    return db.tracks.where("sessionId").equals(sessionId).toArray();
+  }, [sessionId]);
 
   useEffect(() => {
     const boundary = selectedField?.boundary || (permission as any)?.boundary;
@@ -256,8 +259,8 @@ export default function SessionPage(props: {
   }, [showCoverage, coverageResult]);
 
   useEffect(() => {
-    if (id) {
-      db.sessions.get(id).then(s => {
+    if (sessionId) {
+      db.sessions.get(sessionId).then(s => {
         if (s) {
           setDate(new Date(s.date).toISOString().slice(0, 16));
           setLat(s.lat);
@@ -277,7 +280,7 @@ export default function SessionPage(props: {
         setLoading(false);
       });
     }
-  }, [id]);
+  }, [sessionId]);
 
   async function doGPS() {
     setError(null);
@@ -301,12 +304,11 @@ export default function SessionPage(props: {
     try {
       const isoDate = new Date(date).toISOString();
       const now = new Date().toISOString();
-      const finalId = id || uuid();
 
       const session: Session = {
-        id: finalId,
+        id: sessionId,
         projectId: props.projectId,
-        permissionId: isEdit ? (await db.sessions.get(id))!.permissionId : permissionId!,
+        permissionId: isEdit ? (await db.sessions.get(sessionId))!.permissionId : permissionId!,
         fieldId,
         date: isoDate,
         lat,
@@ -322,14 +324,14 @@ export default function SessionPage(props: {
       };
 
       if (isEdit) {
-        await db.sessions.update(id, session);
+        await db.sessions.update(sessionId, session);
         setIsEditing(false);
         alert("Session updated!");
       } else {
         (session as any).createdAt = now;
         await db.sessions.add(session);
         setIsEditing(false);
-        nav(`/session/${finalId}`, { replace: true });
+        nav(`/session/${sessionId}`, { replace: true });
       }
     } catch (e: any) {
       setError(e?.message ?? "Save failed");
@@ -343,7 +345,7 @@ export default function SessionPage(props: {
         await stopTracking();
         setIsTracking(false);
     } else {
-        await startTracking(props.projectId, id || null, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
+        await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
         setIsTracking(true);
     }
   }
@@ -352,8 +354,8 @@ export default function SessionPage(props: {
     if (isTracking) {
         await stopTracking();
     }
-    if (id) {
-        await db.sessions.update(id, { isFinished: true });
+    if (sessionId) {
+        await db.sessions.update(sessionId, { isFinished: true });
         setIsFinished(true);
     }
     nav(permission ? `/permission/${permission.id}` : "/");
@@ -430,8 +432,8 @@ export default function SessionPage(props: {
                                 </div>
                                 <button 
                                     onClick={async () => {
-                                        if (id && confirm("Re-open this session?")) {
-                                            await db.sessions.update(id, { isFinished: false });
+                                        if (sessionId && confirm("Re-open this session?")) {
+                                            await db.sessions.update(sessionId, { isFinished: false });
                                             setIsFinished(false);
                                         }
                                     }}
@@ -542,17 +544,16 @@ export default function SessionPage(props: {
 
                         <div className="flex flex-col gap-2 ml-auto">
                             <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
-                                                                                            <button 
-                                                                                                type="button"
-                                                                                                onClick={toggleTracking}
-                                                                                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
-                                                                                            >
-                                                                                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
-                                                                                            </button>
-                                                                                        
-                                                                                    </div>
-                                                                                </div>
-                                                                                <label className="block">
+                            <button 
+                                type="button"
+                                onClick={toggleTracking}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
+                            >
+                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                            </button>
+                        </div>
+                    </div>
+                    <label className="block">
                         <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Session Notes</div>
                         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium" />
                     </label>
@@ -632,7 +633,7 @@ export default function SessionPage(props: {
                 {isEdit && (
                     <div className="grid gap-3">
                         <button 
-                            onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${id}`)}
+                            onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${sessionId}`)}
                             className={`w-full ${isFinished ? 'bg-gray-600 hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2`}
                         >
                             Add Find to Session {isFinished && <span className="text-[10px] opacity-75 font-normal ml-1">(Closed Session)</span>}

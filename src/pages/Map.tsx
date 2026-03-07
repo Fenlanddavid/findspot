@@ -136,7 +136,11 @@ export default function MapPage({ projectId }: { projectId: string }) {
         const fieldCount = await db.fields.where("permissionId").equals(pId).count();
         if (fieldCount > 0) return null;
 
-        const permTracks = (tracks ?? []).filter(t => t.projectId === projectId); // Broad filter for now
+        // Find all tracks for all sessions of this permission
+        const sessions = await db.sessions.where("permissionId").equals(pId).toArray();
+        const sessionIds = sessions.map(s => s.id);
+        const permTracks = (tracks ?? []).filter(t => t.sessionId && sessionIds.includes(t.sessionId));
+        
         const result = calculateCoverage(p.boundary, permTracks);
         return { pId, result };
     })).then(results => {
