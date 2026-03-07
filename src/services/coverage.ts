@@ -20,22 +20,28 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
     }
 
     try {
-        const fieldPolygon = boundary.type === "Polygon" 
+        // 1. Prepare Field Polygon
+        let rawField: any = boundary.type === "Polygon" 
             ? turf.polygon(boundary.coordinates) 
             : turf.multiPolygon(boundary.coordinates);
-            
-        const totalAreaM2 = turf.area(fieldPolygon);
+        
+        rawField = turf.rewind(rawField);
+        
+        const unkinked = turf.unkinkPolygon(rawField);
+        let fieldPolygon: any = unkinked.features.length > 1 
+            ? turf.union(unkinked) 
+            : unkinked.features[0];
 
+        if (!fieldPolygon) return null;
+        const totalAreaM2 = turf.area(fieldPolygon);
         if (totalAreaM2 === 0) return null;
 
-        // 1. Combine all valid track points into a single MultiLineString
-        const validTrackPaths = tracks
-            .filter(t => t.points && t.points.length >= 2)
-            .map(t => t.points.map((p: any) => [p.lon, p.lat]));
+        // 2. Prepare Tracks
+        const validTracks = tracks.filter(t => t.points && t.points.length >= 2);
 
-        if (validTrackPaths.length === 0) {
+        if (validTracks.length === 0) {
             return {
-                undetectionsGeoJSON: turf.featureCollection([fieldPolygon as any]),
+                undetectionsGeoJSON: turf.featureCollection([fieldPolygon]),
                 detectedAreaM2: 0,
                 totalAreaM2,
                 percentCovered: 0,
@@ -43,14 +49,19 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
             };
         }
 
-        // 2. Create a single MultiLineString and buffer it
-        // This is MUCH faster and more stable than unioning individual buffers
-        const trackLines = turf.multiLineString(validTrackPaths);
-        const combinedDetected = turf.buffer(trackLines, coilWidthM / 1000, { units: "kilometers" });
+        // 3. Buffer Tracks (Aggressive Cleaning)
+        // Use a 1m minimum radius for stability, or coilWidth/2 if larger
+        const bufferRadiusM = Math.max(1.0, coilWidthM / 2);
+        
+        const bufferedSegments = validTracks.map(t => {
+            const line = turf.lineString(t.points.map(p => [p.lon, p.lat]));
+            const simplified = turf.simplify(line, { tolerance: 0.000001, highQuality: false });
+            return turf.buffer(simplified, bufferRadiusM / 1000, { units: "kilometers" });
+        }).filter(Boolean);
 
-        if (!combinedDetected) {
+        if (bufferedSegments.length === 0) {
             return {
-                undetectionsGeoJSON: turf.featureCollection([fieldPolygon as any]),
+                undetectionsGeoJSON: turf.featureCollection([fieldPolygon]),
                 detectedAreaM2: 0,
                 totalAreaM2,
                 percentCovered: 0,
@@ -58,26 +69,40 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
             };
         }
 
-        // 3. Calculate "Undetected Area" (Field - Tracks)
-        // We subtract the detected area from the original field to get the gaps
-        const diff = turf.difference(turf.featureCollection([fieldPolygon, combinedDetected]));
+        // Union all tracks into one "Detected Area"
+        let combinedDetected = bufferedSegments.length === 1 
+            ? bufferedSegments[0] 
+            : turf.union(turf.featureCollection(bufferedSegments as any));
+
+        if (!combinedDetected) return null;
+        combinedDetected = turf.rewind(combinedDetected);
+
+        // 4. Find Intersection (Actual coverage within boundary)
+        const detectedInsideField = turf.intersect(turf.featureCollection([fieldPolygon, combinedDetected]));
+
+        if (!detectedInsideField) {
+            return {
+                undetectionsGeoJSON: turf.featureCollection([fieldPolygon]),
+                detectedAreaM2: 0,
+                totalAreaM2,
+                percentCovered: 0,
+                percentUndetected: 100
+            };
+        }
+
+        const detectedAreaM2 = turf.area(detectedInsideField);
+        const percentCovered = (detectedAreaM2 / totalAreaM2) * 100;
+
+        // 5. Calculate Gaps (Field - Detected Area)
+        const diff = turf.difference(turf.featureCollection([fieldPolygon, detectedInsideField]));
 
         let gaps: any[] = [];
-        let gapAreaM2 = totalAreaM2;
-
         if (diff) {
-            // Flatten MultiPolygons into individual Polygons for better rendering reliability
             const flattened = turf.flatten(diff);
             gaps = flattened.features;
-            gapAreaM2 = turf.area(diff);
         } else {
-            // If diff is null, it means the entire field was covered
-            gaps = [];
-            gapAreaM2 = 0;
+            gaps = []; // 100% covered
         }
-
-        const detectedAreaM2 = Math.max(0, totalAreaM2 - gapAreaM2);
-        const percentCovered = (detectedAreaM2 / totalAreaM2) * 100;
 
         return {
             undetectionsGeoJSON: turf.featureCollection(gaps),

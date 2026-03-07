@@ -48,12 +48,20 @@ export default function Home(props: {
         const sessionIds = new Set(sessions.map(s => s.id));
         const permissionTracks = allTracks.filter(t => t.sessionId && sessionIds.has(t.sessionId));
         
+        // Tracks that are for this permission but not assigned to any specific field
+        const unassignedSessionIds = new Set(sessions.filter(s => !s.fieldId).map(s => s.id));
+
         let totalAreaM2 = 0;
         let totalDetectedM2 = 0;
 
         for (const f of fields) {
-            const fieldSessionIds = sessions.filter(s => s.fieldId === f.id).map(s => s.id);
-            const fieldTracks = permissionTracks.filter(t => t.sessionId && fieldSessionIds.includes(t.sessionId));
+            const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
+            
+            // Include tracks assigned to this field OR unassigned tracks (which might overlap)
+            const fieldTracks = permissionTracks.filter(t => 
+                t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
+            );
+
             const result = calculateCoverage(f.boundary, fieldTracks);
             if (result) {
                 totalAreaM2 += result.totalAreaM2;

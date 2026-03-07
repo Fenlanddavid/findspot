@@ -165,12 +165,18 @@ export default function PermissionPage(props: {
         const field = await db.fields.get(fId);
         if (!field) return null;
         
-        // Find all sessions for THIS specific field
+        // 1. Find all sessions explicitly assigned to this field
         const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
-        const sessionIds = new Set(sessions.map(s => s.id));
+        const fieldSessionIds = new Set(sessions.map(s => s.id));
         
-        // Filter allTracks (which already belong to this permission) for those in this field's sessions
-        const fieldTracks = (allTracks ?? []).filter(t => t.sessionId && sessionIds.has(t.sessionId));
+        // 2. Find sessions for this permission that have NO field assigned (General tracks)
+        const unassignedSessions = await db.sessions.where("permissionId").equals(id!).filter(s => !s.fieldId).toArray();
+        const unassignedSessionIds = new Set(unassignedSessions.map(s => s.id));
+
+        // Filter allTracks for either explicitly assigned or unassigned sessions
+        const fieldTracks = (allTracks ?? []).filter(t => 
+            t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
+        );
         
         const result = calculateCoverage(field.boundary, fieldTracks);
         return { fId, result };

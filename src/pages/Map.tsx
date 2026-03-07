@@ -104,10 +104,17 @@ export default function MapPage({ projectId }: { projectId: string }) {
         const field = await db.fields.get(fId);
         if (!field) return null;
 
-        // Find tracks for this field (any session assigned to this field)
-        const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
-        const sessionIds = sessions.map(s => s.id);
-        const fieldTracks = (tracks ?? []).filter(t => t.sessionId && sessionIds.includes(t.sessionId));
+        // 1. Find sessions explicitly assigned to this field
+        const assignedSessions = await db.sessions.where("fieldId").equals(fId).toArray();
+        const assignedSessionIds = new Set(assignedSessions.map(s => s.id));
+
+        // 2. Find unassigned sessions for the parent permission
+        const unassignedSessions = await db.sessions.where("permissionId").equals(field.permissionId).filter(s => !s.fieldId).toArray();
+        const unassignedSessionIds = new Set(unassignedSessions.map(s => s.id));
+        
+        const fieldTracks = (tracks ?? []).filter(t => 
+            t.sessionId && (assignedSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
+        );
         
         const result = calculateCoverage(field.boundary, fieldTracks);
         return { fieldId: fId, result };
