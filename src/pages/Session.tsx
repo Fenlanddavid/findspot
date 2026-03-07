@@ -95,7 +95,7 @@ export default function SessionPage(props: {
   const findThumbMedia = useMemo(() => {
     const info = new Map<string, Media>();
     if (!allMedia || !finds) return info;
-    const sortedMedia = [...allMedia].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const sortedMedia = [...allMedia].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of sortedMedia) {
       if (row.findId && !info.has(row.findId)) info.set(row.findId, row);
     }
@@ -207,14 +207,16 @@ export default function SessionPage(props: {
       if (source) {
         const geojson = {
           type: "FeatureCollection",
-          features: tracksData.map(t => ({
-            type: "Feature",
-            geometry: {
-              type: "LineString",
-              coordinates: t.points.map(p => [p.lon, p.lat])
-            },
-            properties: { color: t.color }
-          }))
+          features: tracksData
+            .filter(t => t.points && Array.isArray(t.points) && t.points.length >= 2)
+            .map(t => ({
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: t.points.map(p => [p.lon, p.lat])
+              },
+              properties: { color: t.color }
+            }))
         };
         source.setData(geojson as any);
       }
@@ -226,15 +228,28 @@ export default function SessionPage(props: {
       }
 
       // Fit bounds
-      const allPoints = tracksData.flatMap(t => t.points);
+      const allPoints = (tracksData || []).flatMap(t => t.points || []).filter(p => !!p && typeof p.lat === 'number');
       const bounds = new maplibregl.LngLatBounds();
       
-      if (boundary && boundary.coordinates?.[0]) {
-          boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+      let hasDataForBounds = false;
+      if (boundary && boundary.coordinates?.[0] && Array.isArray(boundary.coordinates[0])) {
+          boundary.coordinates[0].forEach((p: [number, number]) => {
+              if (Array.isArray(p) && p.length >= 2) {
+                  bounds.extend(p as [number, number]);
+                  hasDataForBounds = true;
+              }
+          });
+      }
+      
+      if (allPoints.length > 0) {
+          allPoints.forEach(p => {
+              bounds.extend([p.lon, p.lat]);
+              hasDataForBounds = true;
+          });
+      }
+
+      if (hasDataForBounds && !bounds.isEmpty()) {
           map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
-      } else if (allPoints.length > 0) {
-          allPoints.forEach(p => bounds.extend([p.lon, p.lat]));
-          map.fitBounds(bounds, { padding: 60, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
       }
     }
   }, [tracks, isFinished, selectedField, permission]);
@@ -357,7 +372,19 @@ export default function SessionPage(props: {
       };
 
       if (isEdit) {
-        await db.sessions.update(sessionId, session);
+        await db.sessions.update(sessionId, {
+          fieldId,
+          date: isoDate,
+          lat,
+          lon,
+          gpsAccuracyM: acc,
+          landUse,
+          cropType,
+          isStubble,
+          notes,
+          isFinished,
+          updatedAt: now,
+        });
         setIsEditing(false);
         alert("Session updated!");
       } else {

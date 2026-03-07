@@ -108,7 +108,7 @@ export default function Home(props: {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
-    media.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of media) {
         if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }

@@ -97,10 +97,10 @@ export default function PermissionPage(props: {
 
     // Sort by date (descending), then by createdAt (descending)
     rows.sort((a, b) => {
-      const dateA = new Date(a.date).getTime();
-      const dateB = new Date(b.date).getTime();
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
       if (dateB !== dateA) return dateB - dateA;
-      return b.createdAt.localeCompare(a.createdAt);
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
     });
     
     // Fetch counts and tracks in parallel for all sessions
@@ -111,7 +111,11 @@ export default function PermissionPage(props: {
       
       let durationMs = 0;
       if (sessionTracks.length > 0) {
-        const allPoints = sessionTracks.flatMap(t => t.points).sort((a, b) => a.timestamp - b.timestamp);
+        const allPoints = sessionTracks
+          .flatMap(t => t.points || [])
+          .filter(p => !!p && typeof p.timestamp === 'number')
+          .sort((a, b) => a.timestamp - b.timestamp);
+          
         if (allPoints.length > 1) {
           durationMs = allPoints[allPoints.length - 1].timestamp - allPoints[0].timestamp;
         }
@@ -142,7 +146,7 @@ export default function PermissionPage(props: {
     const info = new Map<string, Media>();
     if (!allMedia || !finds) return info;
     
-    const sortedMedia = [...allMedia].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const sortedMedia = [...allMedia].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of sortedMedia) {
       if (row.findId && !info.has(row.findId)) {
         info.set(row.findId, row);
@@ -174,7 +178,7 @@ export default function PermissionPage(props: {
     const fIds = Array.from(shownFieldGapIds);
     Promise.all(fIds.map(async (fId) => {
         const field = await db.fields.get(fId);
-        if (!field) return null;
+        if (!field || !field.boundary) return null;
         
         // 1. Find all sessions explicitly assigned to this field
         const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
@@ -321,11 +325,13 @@ export default function PermissionPage(props: {
         if (trackSource) {
             trackSource.setData({
                 type: "FeatureCollection",
-                features: tracksData.map(t => ({
+                features: tracksData
+                  .filter(t => t.points && Array.isArray(t.points) && t.points.length >= 2)
+                  .map(t => ({
                     type: "Feature",
                     geometry: { type: "LineString", coordinates: t.points.map((p: any) => [p.lon, p.lat]) },
                     properties: { color: t.color }
-                }))
+                  }))
             } as any);
         }
 
@@ -345,18 +351,24 @@ export default function PermissionPage(props: {
         }
 
         // Fit bounds to everything
-        if (boundary && boundary.coordinates?.[0]) {
+        if (boundary && boundary.coordinates?.[0] && Array.isArray(boundary.coordinates[0])) {
             const bounds = new maplibregl.LngLatBounds();
-            boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+            boundary.coordinates[0].forEach((p: [number, number]) => {
+                if (Array.isArray(p) && p.length >= 2) bounds.extend(p as [number, number]);
+            });
             
             // Also extend bounds for all sub-fields
             fields?.forEach(f => {
-                if (f.boundary && f.boundary.coordinates?.[0]) {
-                    f.boundary.coordinates[0].forEach((p: [number, number]) => bounds.extend(p));
+                if (f.boundary && f.boundary.coordinates?.[0] && Array.isArray(f.boundary.coordinates[0])) {
+                    f.boundary.coordinates[0].forEach((p: [number, number]) => {
+                        if (Array.isArray(p) && p.length >= 2) bounds.extend(p as [number, number]);
+                    });
                 }
             });
 
-            map.fitBounds(bounds, { padding: 40, duration: 0 });
+            if (!bounds.isEmpty()) {
+                map.fitBounds(bounds, { padding: 40, duration: 0 });
+            }
         }
     }
 

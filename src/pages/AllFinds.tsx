@@ -106,7 +106,7 @@ export default function AllFinds(props: { projectId: string }) {
     const media = await db.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
     // Sort by createdAt to get the first photo
-    media.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of media) {
         if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
