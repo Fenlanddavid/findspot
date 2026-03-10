@@ -351,10 +351,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * yNorm))) - Math.PI / 2);
                     cluster.center = [lon, lat];
                     
-                    if (sourceType === 'terrain') {
-                        // In ArcGIS Hillshade, low Laplacian (negative) usually means a ridge/bank (Raised) 
-                        // as it's a local maximum in brightness relative to NW light. 
-                        // High Laplacian (positive) usually means a ditch/pit (Sunken).
+                    if (sourceType === 'terrain' || sourceType === 'satellite') {
+                        // Laplacian polarity: 
+                        // Negative sumLap = local maximum (Raised/Bank/Peak)
+                        // Positive sumLap = local minimum (Sunken/Ditch/Trough)
                         cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
                     }
 
@@ -505,7 +505,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 </button>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-3 mb-2">
+                            <div className="grid grid-cols-2 gap-3 mb-4">
                                 <div className="bg-black/20 p-2 rounded-xl">
                                     <span className="block text-[8px] uppercase font-bold opacity-70">Source</span>
                                     <span className="text-[10px] font-black uppercase tracking-widest">{f.source === 'terrain' ? 'Lidar' : 'Aerial'}</span>
@@ -516,23 +516,25 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 </div>
                             </div>
 
-                            {f.source === 'terrain' && (
-                                <div className="px-1 mb-3">
-                                    <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide">Signal Profile: <span className="font-black">{f.polarity || 'Unknown'}</span></p>
+                            <div className="space-y-2 px-1">
+                                <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide">
+                                    Signal Profile: <span className="font-black">{f.polarity || 'Unknown'}</span>
+                                </p>
+                                <div className="flex items-center gap-3">
+                                    <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide whitespace-nowrap">
+                                        Find Probability:
+                                    </p>
+                                    <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden flex items-center">
+                                        <div 
+                                            className="h-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-1000" 
+                                            style={{ width: `${f.findPotential}%` }} 
+                                        />
+                                    </div>
+                                    <span className="text-[10px] font-black text-emerald-400">{f.findPotential}%</span>
                                 </div>
-                            )}
+                            </div>
 
-                            {f.isProtected && <div className="mb-3 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
-                            
-                            <button 
-                                onClick={() => pinToSearch(f)} 
-                                disabled={pinningId === f.id}
-                                className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 ${
-                                    pinningId === f.id ? 'bg-white text-emerald-600 animate-pulse' : 'bg-white text-slate-900 hover:bg-slate-100'
-                                }`}
-                            >
-                                {pinningId === f.id ? '📍 PINNED TO MAP' : '📍 Pin to Search Map'}
-                            </button>
+                            {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
                         </div>
                     ))}
                 </div>
