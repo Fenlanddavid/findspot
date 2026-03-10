@@ -45,6 +45,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [systemLog, setSystemLog] = useState<string[]>(["SYSTEM READY. Execute Scan."]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const navigate = useNavigate();
   
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -138,7 +139,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
-        if (data[0]) mapRef.current?.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 16 });
+        if (data[0]) {
+            mapRef.current?.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 16 });
+            setIsSearchOpen(false);
+        }
     } catch (e) { addLog("Search failed."); }
   };
 
@@ -351,24 +355,35 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-180px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
-      <header className="px-4 py-3 bg-slate-900/50 border-b border-white/5 flex flex-col gap-3 shrink-0 z-50 backdrop-blur-md">
-          <div className="flex justify-between items-center w-full">
-              <p className="m-0 text-[9px] sm:text-[10px] font-black text-emerald-500 tracking-[0.1em] sm:tracking-[0.2em] uppercase whitespace-nowrap">Lidar & Satellite Feature Detection</p>
-              <div className="flex gap-1.5 sm:gap-2 items-center">
-                  <button onClick={() => navigate('/finds?view=map')} className="text-[8px] sm:text-[10px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5 border border-white/5 rounded-lg sm:rounded-xl whitespace-nowrap">Manual Map</button>
-                  <button onClick={clearScan} className="text-[8px] sm:text-[10px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
-                  <button onClick={findMe} className="bg-slate-800 text-white px-2 py-1.5 sm:px-4 sm:py-2 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors">GPS</button>
-                  <button onClick={executeScan} disabled={analyzing} className="bg-emerald-500 text-white px-3 py-1.5 sm:px-6 sm:py-2.5 rounded-lg sm:rounded-xl text-[8px] sm:text-[10px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
-                    {analyzing ? 'Scanning...' : 'Scan'}
+    <div className="flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
+      <header className="bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md">
+          {/* Top Row: Title & Search Toggle */}
+          <div className="flex justify-between items-center px-4 py-2 border-b border-white/5">
+              {!isSearchOpen ? (
+                  <p className="m-0 text-[10px] font-black text-emerald-500 tracking-[0.1em] uppercase whitespace-nowrap">Lidar & Satellite Detection</p>
+              ) : (
+                  <form onSubmit={searchLocation} className="flex gap-2 flex-1 mr-2">
+                      <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search place..." className="bg-black/40 border border-white/10 text-white px-3 py-1 rounded-lg flex-1 text-xs outline-none focus:ring-1 focus:ring-emerald-500" />
+                  </form>
+              )}
+              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="text-slate-400 hover:text-white p-1 text-xs">
+                  {isSearchOpen ? '✕' : '🔍'}
+              </button>
+          </div>
+          
+          {/* Bottom Row: Actions */}
+          <div className="flex justify-between items-center px-4 py-2 bg-black/20">
+              <div className="flex gap-1.5 items-center">
+                  <button onClick={() => navigate('/finds?view=map')} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5 border border-white/5 rounded-lg whitespace-nowrap">Manual Map</button>
+                  <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
+              </div>
+              <div className="flex gap-2 items-center">
+                  <button onClick={findMe} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors">GPS</button>
+                  <button onClick={executeScan} disabled={analyzing} className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
+                    {analyzing ? '...' : 'Scan'}
                   </button>
               </div>
           </div>
-          
-          <form onSubmit={searchLocation} className="flex gap-2 w-full">
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Village, town..." className="bg-black/40 border border-white/10 text-white px-3 py-1.5 rounded-lg flex-1 text-xs focus:ring-1 focus:ring-emerald-500 outline-none transition-all" />
-              <button type="submit" className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-700 transition-colors">SEARCH</button>
-          </form>
       </header>
 
       <div className="flex flex-1 overflow-hidden relative">
