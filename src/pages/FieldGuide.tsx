@@ -9,32 +9,41 @@ interface Cluster {
     type: string; score: number; number: number;
     isProtected: boolean;
     monumentName?: string;
+    aimInfo?: { type: string; period: string; evidence: string };
     confidence: 'High' | 'Medium' | 'Subtle';
     findPotential: number;
     center: [number, number];
-    source: 'terrain' | 'satellite';
+    source: 'terrain' | 'satellite' | 'historic' | 'terrain_global';
+    sources: ('terrain' | 'satellite' | 'historic' | 'terrain_global')[];
     polarity?: 'Raised' | 'Sunken' | 'Unknown';
     metrics?: { circularity: number; density: number; ratio: number; area: number };
 }
 
 /**
- * FieldGuide Standalone V10.0 - Golden Scan Locked Engine
- * Algorithmic Sweetspot: Locked 12 Lidar | 7 Aerial
+ * FieldGuide Standalone V12.4 - Expert Verification Engine
+ * Consensus: Lidar Topography | Satellite Vegetation | HE AIM Mapping
  */
 const SCAN_PROFILE = {
     TERRAIN: {
-        threshold: 0.15,
-        minSize: 20,
+        threshold: 0.10,
+        minSize: 15,
         dilation: 1,
-        minSolidity: 0.15,
+        minSolidity: 0.12,
         minLinearity: 1.0
     },
     AERIAL: {
-        threshold: 0.24,
-        minSize: 150,
+        threshold: 0.22,
+        minSize: 120,
         dilation: 3,
-        minSolidity: 0.32,
-        minLinearity: 4.2
+        minSolidity: 0.30,
+        minLinearity: 4.0
+    },
+    HISTORIC: {
+        threshold: 0.10,
+        minSize: 20,
+        dilation: 2,
+        minSolidity: 0.15,
+        minLinearity: 1.5
     }
 };
 
@@ -119,7 +128,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             completeness: "Complete",
             findContext: "FieldGuide Anomaly",
             storageLocation: "",
-            notes: `Auto-pinned from FieldGuide. Source: ${cluster.source}. Confidence: ${cluster.confidence}.`,
+            notes: `Auto-pinned from FieldGuide V12.5 Consensus. Sources: ${cluster.sources.join(', ')}. Confidence: ${cluster.confidence}.${cluster.aimInfo ? ` VERIFIED: ${cluster.aimInfo.type} (${cluster.aimInfo.period}).` : ""}`,
             createdAt: now,
             updatedAt: now
         });
@@ -156,11 +165,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             type: 'circle', 
             source: 'targets', 
             paint: { 
-                'circle-radius': 18, 
+                'circle-radius': [
+                    'interpolate', ['linear'], ['get', 'consensus'],
+                    1, 18,
+                    2, 22,
+                    3, 26
+                ], 
                 'circle-color': [
                     'case',
                     ['get', 'isProtected'], '#ef4444',
+                    ['>=', ['get', 'consensus'], 2], '#f59e0b',
                     ['==', ['get', 'source'], 'terrain'], '#10b981',
+                    ['==', ['get', 'source'], 'historic'], '#f59e0b',
                     '#3b82f6'
                 ],
                 'circle-stroke-width': 2, 
@@ -221,44 +237,67 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     return inside;
   };
 
-  const scanDataSource = async (sourceType: 'terrain' | 'satellite', zoom: number, tX_start: number, tY_start: number, bounds: maplibregl.LngLatBounds, n: number, assetsGeoJSON: any): Promise<Cluster[]> => {
+  const scanDataSource = async (sourceType: 'terrain' | 'satellite' | 'historic' | 'terrain_global', zoom: number, tX_start: number, tY_start: number, bounds: maplibregl.LngLatBounds, n: number, assetsGeoJSON: any): Promise<Cluster[]> => {
     const stitchSize = 512;
     const stitchCanvas = document.createElement('canvas');
     stitchCanvas.width = stitchSize; stitchCanvas.height = stitchSize;
     const stitchCtx = stitchCanvas.getContext('2d');
     if (!stitchCtx) return [];
 
-    const tilePromises = [];
-    for (let dy = 0; dy < 2; dy++) {
-        for (let dx = 0; dx < 2; dx++) {
-            const tx = tX_start + dx;
-            const ty = tY_start + dy;
-            const url = sourceType === 'terrain'
-                ? `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`
-                : `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+    const isH = sourceType === 'historic';
+    const hZoom = 14;
+    const effectiveZoom = isH ? hZoom : zoom;
+    const zDiff = isH ? (zoom - hZoom) : 0;
+    const zScale = Math.pow(2, zDiff);
 
-            tilePromises.push(new Promise<void>((resolve) => {
-                const img = new Image(); img.crossOrigin = "anonymous"; img.src = url;
-                const timeout = setTimeout(() => resolve(), 4000);
-                img.onload = () => { clearTimeout(timeout); stitchCtx.drawImage(img, dx * 256, dy * 256); resolve(); };
-                img.onerror = () => { clearTimeout(timeout); resolve(); };
-            }));
+    const loadTiles = async (): Promise<boolean> => {
+        stitchCtx.clearRect(0, 0, stitchSize, stitchSize);
+        let successCount = 0;
+
+        const promises = [];
+        for (let dy = 0; dy < 2; dy++) {
+            for (let dx = 0; dx < 2; dx++) {
+                const tx = tX_start + dx;
+                const ty = tY_start + dy;
+
+                let url = "";
+                if (sourceType === 'terrain') url = `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2025_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`;
+                else if (sourceType === 'terrain_global') url = `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`;
+                else if (sourceType === 'satellite') url = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+
+                promises.push(new Promise<void>((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "anonymous";
+                    const timer = setTimeout(() => { img.src = ""; resolve(); }, 4000);
+                    img.onload = () => {
+                        clearTimeout(timer);
+                        successCount++;
+                        stitchCtx.drawImage(img, dx * 256, dy * 256);
+                        resolve();
+                    };
+                    img.onerror = () => { clearTimeout(timer); resolve(); };
+                    img.src = url;
+                }));
+            }
         }
-    }
+        await Promise.all(promises);
+        return successCount > 0;
+    };
 
-    await Promise.all(tilePromises);
+    const loaded = await loadTiles();
+    if (!loaded) return [];
 
     const rawData = stitchCtx.getImageData(0, 0, stitchSize, stitchSize).data;
     const processed = new Float32Array(stitchSize * stitchSize);
-    const laplacian = new Float32Array(stitchSize * stitchSize);
     
-    if (sourceType === 'terrain') {
+    if (sourceType.startsWith('terrain')) {
         let minG = 255, maxG = 0;
         for (let i = 0; i < rawData.length; i += 4) {
             const v = (rawData[i] + rawData[i+1] + rawData[i+2])/3;
             processed[i/4] = v;
             if (v < minG) minG = v; if (v > maxG) maxG = v;
         }
+        if (maxG - minG < 3) return [];
         for (let i = 0; i < processed.length; i++) processed[i] = (processed[i] - minG) / (maxG - minG || 1);
     } else {
         const exgData = new Float32Array(stitchSize * stitchSize);
@@ -287,6 +326,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     const featureMap = new Uint8Array(stitchSize * stitchSize);
     const ridgeMap = new Float32Array(stitchSize * stitchSize);
+    const laplacian = new Float32Array(stitchSize * stitchSize);
     let maxRidge = 0;
 
     for (let y = 2; y < stitchSize - 2; y++) {
@@ -303,7 +343,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         }
     }
 
-    const config = sourceType === 'terrain' ? SCAN_PROFILE.TERRAIN : SCAN_PROFILE.AERIAL;
+    const config = sourceType.startsWith('terrain') ? SCAN_PROFILE.TERRAIN : (sourceType === 'historic' ? SCAN_PROFILE.HISTORIC : SCAN_PROFILE.AERIAL);
     const threshold = maxRidge * config.threshold;
     const dR = config.dilation;
 
@@ -322,7 +362,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         for (let x = 0; x < stitchSize; x++) {
             const idx = y * stitchSize + x;
             if (featureMap[idx] === 1 && visited[idx] === 0) {
-                const cluster: Cluster = { id: Math.random().toString(36).substring(7), points: [], minX: x, maxX: x, minY: y, maxY: y, type: "Anomaly", score: 0, number: 0, isProtected: false, confidence: 'Medium', findPotential: 0, center: [0, 0], source: sourceType, polarity: 'Unknown' };
+                const cluster: Cluster = { id: Math.random().toString(36).substring(7), points: [], minX: x, maxX: x, minY: y, maxY: y, type: "Anomaly", score: 0, number: 0, isProtected: false, confidence: 'Medium', findPotential: 0, center: [0, 0], source: sourceType, sources: [sourceType], polarity: 'Unknown' };
                 const queue: [number, number][] = [[x, y]]; visited[idx] = 1;
                 let sumLap = 0;
                 while (queue.length > 0) {
@@ -340,23 +380,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 const w = (cluster.maxX - cluster.minX) + 1, h = (cluster.maxY - cluster.minY) + 1;
                 const areaPx = cluster.points.length, dens = areaPx / (w * h);
                 const ratio = Math.max(w/h, h/w);
-                
-                const isSolid = dens > (config.minSolidity ?? 0.32); 
-                const isLinear = ratio > (config.minLinearity ?? 4.2);
-                
-                if (areaPx > config.minSize && (sourceType === 'terrain' || isSolid || isLinear)) {
+                if (areaPx > config.minSize && (sourceType.startsWith('terrain') || (dens > (config.minSolidity ?? 0.32)) || (ratio > (config.minLinearity ?? 4.2)))) {
                     const midX = (cluster.minX + cluster.maxX) / 2, midY = (cluster.minY + cluster.maxY) / 2;
                     const lon = (tX_start + midX / 256) / n * 360 - 180;
                     const yNorm = (tY_start + midY / 256) / n;
                     const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * yNorm))) - Math.PI / 2);
                     cluster.center = [lon, lat];
-                    
-                    if (sourceType === 'terrain' || sourceType === 'satellite') {
-                        // Laplacian polarity: 
-                        // Negative sumLap = local maximum (Raised/Bank/Peak)
-                        // Positive sumLap = local minimum (Sunken/Ditch/Trough)
-                        cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
-                    }
+                    cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
 
                     if (lon >= bounds.getWest() && lon <= bounds.getEast() && lat >= bounds.getSouth() && lat <= bounds.getNorth()) {
                         for (const asset of assetsGeoJSON.features as any[]) {
@@ -366,7 +396,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             }
                         }
                         const perimeterPx = (w * 2) + (h * 2), circularity = (4 * Math.PI * areaPx) / Math.pow(perimeterPx, 2);
-                        
                         if (ratio > 6.0) cluster.type = "Pathway / Sunken Lane";
                         else if (ratio > 3.0) cluster.type = "Linear Ditch / Bank";
                         else if (dens > 0.7 && ratio < 1.4) cluster.type = "Foundation / Building";
@@ -387,6 +416,43 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     return clusters;
   };
 
+  const getDistance = (c1: [number, number], c2: [number, number]) => {
+      const R = 6371e3; 
+      const φ1 = c1[1] * Math.PI/180;
+      const φ2 = c2[1] * Math.PI/180;
+      const Δφ = (c2[1]-c1[1]) * Math.PI/180;
+      const Δλ = (c2[0]-c1[0]) * Math.PI/180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  const findConsensus = (rawClusters: Cluster[]): Cluster[] => {
+      const merged: Cluster[] = [];
+      const thresholdM = 40; 
+
+      for (const c of rawClusters) {
+          let found = false;
+          for (const m of merged) {
+              if (getDistance(c.center, m.center) < thresholdM) {
+                  const normalizedSource = c.source.startsWith('terrain') ? 'terrain' : c.source;
+                  if (!m.sources.includes(normalizedSource as any)) m.sources.push(normalizedSource as any);
+                  if (c.source === 'terrain') m.center = [c.center[0], c.center[1]];
+                  else m.center = [(m.center[0] + c.center[0]) / 2, (m.center[1] + c.center[1]) / 2];
+                  m.findPotential = Math.min(100, m.findPotential + (c.findPotential * 0.4));
+                  if (m.sources.length >= 3) m.confidence = 'High';
+                  else if (m.sources.length >= 2 && m.confidence === 'Subtle') m.confidence = 'Medium';
+                  found = true;
+                  break;
+              }
+          }
+          if (!found) {
+              const initialSource = c.source.startsWith('terrain') ? 'terrain' : c.source;
+              merged.push({ ...c, sources: [initialSource as any] });
+          }
+      }
+      return merged;
+  };
+
   const executeScan = async () => {
     if (!mapRef.current) return;
     const currentZoom = mapRef.current.getZoom();
@@ -401,7 +467,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     setAnalyzing(true);
     setDetectedFeatures([]);
-    addLog(`Initiating Scan (Data: Z${zoom})...`);
+    addLog(`Engine Initiating (Z${zoom})...`);
 
     const herUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
     let assetsGeoJSON = { type: 'FeatureCollection', features: [] };
@@ -413,20 +479,75 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     } catch (e) { addLog("HER connection error."); }
 
     try {
-        const [terrainHits, satelliteHits] = await Promise.all([
-            scanDataSource('terrain', zoom, tX_start, tY_start, bounds, n, assetsGeoJSON),
-            scanDataSource('satellite', zoom, tX_start, tY_start, bounds, n, assetsGeoJSON)
-        ]);
+        addLog("Stage 1/4: Lidar DTM...");
+        const terrainHits = await scanDataSource('terrain', zoom, tX_start, tY_start, bounds, n, assetsGeoJSON);
+        
+        addLog("Stage 2/4: Terrain Base...");
+        const terrainGlobalHits = await scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, assetsGeoJSON);
+        
+        addLog("Stage 3/4: Satellite RGB...");
+        const satelliteHits = await scanDataSource('satellite', zoom, tX_start, tY_start, bounds, n, assetsGeoJSON);
+        
+        addLog("Stage 4/4: Expert Mapping (AIM)...");
+        const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
+        let aimGeoJSON = { type: 'FeatureCollection', features: [] };
+        try {
+            const aRes = await fetch(aimUrl);
+            aimGeoJSON = await aRes.json();
+            if (aimGeoJSON.features?.length > 0) addLog(`Lock: ${aimGeoJSON.features.length} AIM Features.`);
+        } catch (e) { addLog("AIM connection error."); }
 
-        const combined = [...terrainHits, ...satelliteHits].map((c, i) => ({ ...c, number: i + 1 }));
-        setDetectedFeatures(combined);
+        const rawCombined = [...terrainHits, ...terrainGlobalHits, ...satelliteHits];
+        const merged = findConsensus(rawCombined);
+        
+        // Cross-reference with AIM data
+        const final = merged.map(c => {
+            for (const aim of (aimGeoJSON.features || [])) {
+                const aimProps = (aim as any).properties;
+                const coords = (aim as any).geometry?.coordinates;
+                if (!coords) continue;
+                
+                // Simple point-in-polygon or proximity check
+                let isMatch = false;
+                if ((aim as any).geometry.type === 'Polygon' || (aim as any).geometry.type === 'MultiPolygon') {
+                    const rings = (aim as any).geometry.type === 'Polygon' ? [coords] : coords;
+                    for (const ring of rings) { if (isPointInPolygon(c.center[1], c.center[0], ring)) { isMatch = true; break; } }
+                } else if ((aim as any).geometry.type === 'Point') {
+                    if (getDistance(c.center, coords) < 50) isMatch = true;
+                }
+
+                if (isMatch) {
+                    if (!c.sources.includes('historic')) c.sources.push('historic');
+                    c.aimInfo = { type: aimProps.MONUMENT_TYPE, period: aimProps.PERIOD, evidence: aimProps.EVIDENCE_1 };
+                    c.confidence = 'High';
+                    c.findPotential = 99;
+                    break;
+                }
+            }
+            return c;
+        }).map((c, i) => ({ ...c, number: i + 1 }));
+        
+        setDetectedFeatures(final);
         
         if (mapRef.current) {
-            const targetGeoJSON = { type: 'FeatureCollection', features: combined.map(f => ({ type: 'Feature', geometry: { type: 'Point', coordinates: f.center }, properties: { id: f.id, number: f.number.toString(), isProtected: f.isProtected, source: f.source } })) };
+            const targetGeoJSON = { 
+                type: 'FeatureCollection', 
+                features: final.map(f => ({ 
+                    type: 'Feature', 
+                    geometry: { type: 'Point', coordinates: f.center }, 
+                    properties: { 
+                        id: f.id, 
+                        number: f.number.toString(), 
+                        isProtected: f.isProtected, 
+                        source: f.sources[0],
+                        consensus: f.sources.length
+                    } 
+                })) 
+            };
             (mapRef.current.getSource('targets') as maplibregl.GeoJSONSource).setData(targetGeoJSON as any);
         }
-        addLog(`Locked ${terrainHits.length} Lidar | ${satelliteHits.length} Aerial.`);
-    } catch (e) { addLog("Engine error."); }
+        addLog(`Scan Complete: ${terrainHits.length + terrainGlobalHits.length} Lidar | ${satelliteHits.length} Aerial | ${final.filter(f => f.aimInfo).length} Verified.`);
+    } catch (e) { addLog("Engine Error."); console.error(e); }
     
     setAnalyzing(false);
   };
@@ -492,8 +613,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             {selectedId && (
                 <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
                     {detectedFeatures.filter(f => f.id === selectedId).map(f => (
-                        <div key={f.id} className={`p-4 rounded-2xl border shadow-2xl ${
-                            f.source === 'terrain' ? 'bg-emerald-500 border-white text-white' : 'bg-sky-500 border-white text-white'
+                        <div key={f.id} className={`p-4 rounded-2xl border shadow-2xl transition-all ${
+                            f.sources.length >= 3 ? 'bg-amber-600 border-yellow-300 text-white shadow-[0_0_30px_rgba(217,119,6,0.5)]' :
+                            f.source === 'terrain' ? 'bg-emerald-500 border-white text-white' : 
+                            f.source === 'historic' ? 'bg-slate-700 border-white text-white' :
+                            'bg-sky-500 border-white text-white'
                         }`}>
                             <div className="flex justify-between items-center mb-2">
                                 <div className="flex items-center gap-2">
@@ -501,14 +625,29 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <h3 className="text-xs font-black uppercase tracking-tight">{f.type}</h3>
                                 </div>
                                 <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="text-white/70 hover:text-white p-1">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"></line><line x1="6" x2="18" y1="18" y2="6"></line></svg>
                                 </button>
                             </div>
                             
                             <div className="grid grid-cols-2 gap-3 mb-4">
-                                <div className="bg-black/20 p-2 rounded-xl">
-                                    <span className="block text-[8px] uppercase font-bold opacity-70">Source</span>
-                                    <span className="text-[10px] font-black uppercase tracking-widest">{f.source === 'terrain' ? 'Lidar' : 'Aerial'}</span>
+                                <div className="bg-black/20 p-2 rounded-xl flex flex-col items-center justify-center">
+                                    <span className="block text-[8px] uppercase font-bold opacity-70 mb-2">Detection Spectrum</span>
+                                    <div className="flex flex-col gap-1 w-full px-1">
+                                        {[
+                                            { id: 'terrain', label: 'Lidar' },
+                                            { id: 'satellite', label: 'Satellite' },
+                                            { id: 'historic', label: 'Historic' }
+                                        ].map(s => (
+                                            <div key={s.id} className="flex items-center justify-between w-full">
+                                                <span className="text-[8px] font-black uppercase tracking-tighter">{s.label}</span>
+                                                <div className={`w-2 h-2 rounded-full border border-white/10 ${
+                                                    f.sources.includes(s.id as any) 
+                                                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' 
+                                                    : 'bg-black/40'
+                                                }`} />
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="bg-black/20 p-2 rounded-xl">
                                     <span className="block text-[8px] uppercase font-bold opacity-70">Confidence</span>
@@ -517,6 +656,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
 
                             <div className="space-y-2 px-1">
+                                {f.aimInfo && (
+                                    <div className="bg-amber-400/20 p-2 rounded-xl border border-amber-400/30 mb-2">
+                                        <p className="m-0 text-[9px] font-black uppercase text-amber-200 leading-tight">Historic Verification:</p>
+                                        <p className="m-0 text-[10px] font-bold text-white tracking-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
+                                        {f.aimInfo.evidence && <p className="m-0 text-[8px] font-medium opacity-70 italic">Evidence: {f.aimInfo.evidence}</p>}
+                                    </div>
+                                )}
                                 <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide">
                                     Signal Profile: <span className="font-black">{f.polarity || 'Unknown'}</span>
                                 </p>
@@ -526,15 +672,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </p>
                                     <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden flex items-center">
                                         <div 
-                                            className="h-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-1000" 
+                                            className="h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000" 
                                             style={{ width: `${f.findPotential}%` }} 
                                         />
                                     </div>
-                                    <span className="text-[10px] font-black text-emerald-400">{f.findPotential}%</span>
+                                    <span className="text-[10px] font-black text-white">{Math.round(f.findPotential)}%</span>
                                 </div>
                             </div>
 
                             {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
+                            {f.sources.length >= 3 && <div className="mt-2 text-[8px] font-black uppercase tracking-[0.2em] text-center text-yellow-200 animate-pulse">✨ TRIPLE-HIT CONSENSUS ✨</div>}
                         </div>
                     ))}
                 </div>
@@ -559,23 +706,48 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }} 
                         className={`p-5 rounded-2xl cursor-pointer transition-all border ${
                             selectedId === f.id 
-                            ? (f.source === 'terrain' ? 'bg-emerald-500 border-white shadow-[0_0_25px_rgba(16,185,129,0.5)]' : 'bg-sky-500 border-white shadow-[0_0_25px_rgba(59,130,246,0.5)]') 
+                            ? (f.sources.length >= 3 ? 'bg-amber-600 border-white shadow-[0_0_25px_rgba(217,119,6,0.6)]' :
+                               f.source === 'terrain' ? 'bg-emerald-500 border-white shadow-[0_0_25px_rgba(16,185,129,0.5)]' : 
+                               f.source === 'historic' ? 'bg-slate-700 border-white shadow-[0_0_25px_rgba(255,255,255,0.2)]' :
+                               'bg-sky-500 border-white shadow-[0_0_25px_rgba(59,130,246,0.5)]') 
                             : 'bg-white/5 border-white/5 hover:bg-white/10'
                         }`}
                     >
                         <div className="flex justify-between items-center mb-3">
                             <div className="w-8 h-8 bg-black/20 rounded-lg flex items-center justify-center text-xs font-black text-white">{f.number}</div>
-                            <div className="px-2 py-1 bg-black/20 rounded text-[8px] font-black text-white uppercase tracking-widest">
-                                {f.source === 'terrain' ? 'Lidar Feature' : 'Aerial Feature'}
+                            <div className="flex flex-col gap-0.5 items-end">
+                                {[
+                                    { id: 'terrain', label: 'Lidar' },
+                                    { id: 'satellite', label: 'Satellite' },
+                                    { id: 'historic', label: 'Historic' }
+                                ].map(s => (
+                                    <div key={s.id} className="flex items-center gap-1.5">
+                                        <span className={`text-[7px] font-black uppercase tracking-tighter ${f.sources.includes(s.id as any) ? 'text-white' : 'text-white/20'}`}>{s.label}</span>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${
+                                            f.sources.includes(s.id as any) 
+                                            ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]' 
+                                            : 'bg-black/40'
+                                        }`} />
+                                    </div>
+                                ))}
                             </div>
                         </div>
                         <h3 className={`text-sm font-black uppercase tracking-tight mb-1 ${selectedId === f.id ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>
+                        
+                        {f.aimInfo && (
+                            <div className="mt-1 mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                                <p className="m-0 text-[8px] font-black uppercase text-amber-400">Verified: {f.aimInfo.type}</p>
+                                <p className="m-0 text-[8px] font-bold text-amber-200/70">{f.aimInfo.period}</p>
+                            </div>
+                        )}
+
                         <div className="flex justify-between items-center">
                             <span className={`text-[10px] font-bold uppercase ${selectedId === f.id ? 'text-white/80' : 'text-slate-500'}`}>Confidence:</span>
-                            <span className={`text-[10px] font-black ${selectedId === f.id ? 'text-white' : (f.source === 'terrain' ? 'text-emerald-400' : 'text-sky-400')}`}>{f.confidence}</span>
+                            <span className={`text-[10px] font-black ${selectedId === f.id ? 'text-white' : (f.sources.length >= 3 ? 'text-amber-400' : f.source === 'terrain' ? 'text-emerald-400' : 'text-sky-400')}`}>{f.confidence}</span>
                         </div>
                         
                         {f.isProtected && <div className="mt-3 p-2 bg-white/20 rounded-lg text-[8px] font-black text-white uppercase tracking-widest text-center">⚠️ Protected Monument</div>}
+                        {f.sources.length >= 3 && <div className="mt-2 text-[7px] font-black uppercase tracking-widest text-center text-white/80">Triple Consensus</div>}
                     </div>
                 ))}
             </div>
