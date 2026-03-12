@@ -5,17 +5,42 @@ import { Modal } from "./Modal";
 
 interface BoundaryPickerModalProps {
   initialBoundary?: any; // GeoJSON Polygon
+  permissionBoundary?: any; // GeoJSON Polygon for zooming in
   initialLat?: number | null;
   initialLon?: number | null;
   onClose: () => void;
   onSelect: (boundary: any) => void;
 }
 
-export function BoundaryPickerModal({ initialBoundary, initialLat, initialLon, onClose, onSelect }: BoundaryPickerModalProps) {
+export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initialLat, initialLon, onClose, onSelect }: BoundaryPickerModalProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [points, setPoints] = useState<[number, number][]>([]);
   const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("satellite");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+      const data = await resp.json();
+      if (data && data.length > 0) {
+        const { lat, lon } = data[0];
+        if (mapRef.current) {
+          mapRef.current.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 16 });
+        }
+      } else {
+        alert("Location not found.");
+      }
+    } catch (err) {
+      console.error("Search failed:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  }
 
   useEffect(() => {
     // Extract points from initial boundary if it exists
@@ -53,6 +78,18 @@ export function BoundaryPickerModal({ initialBoundary, initialLat, initialLon, o
       center: initialLon && initialLat ? [initialLon, initialLat] : [-2, 54.5],
       zoom: initialLon && initialLat ? 16 : 5,
     });
+
+    // Fit bounds if we have a boundary
+    const boundaryToFit = initialBoundary || permissionBoundary;
+    if (boundaryToFit && boundaryToFit.coordinates?.[0] && Array.isArray(boundaryToFit.coordinates[0])) {
+      const bounds = new maplibregl.LngLatBounds();
+      boundaryToFit.coordinates[0].forEach((p: [number, number]) => {
+        if (Array.isArray(p) && p.length >= 2) bounds.extend(p as [number, number]);
+      });
+      if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 40, duration: 0 });
+      }
+    }
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
     map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
@@ -186,10 +223,25 @@ export function BoundaryPickerModal({ initialBoundary, initialLat, initialLon, o
         <div className="relative h-[400px] sm:h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner">
           <div ref={mapDivRef} className="absolute inset-0" />
           
-          <div className="absolute top-4 left-4 flex flex-col gap-2">
+          <div className="absolute top-4 left-4 flex flex-col gap-2 z-10 max-w-[calc(100%-100px)]">
+            <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+              <input 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search area..."
+                className="bg-transparent text-xs font-bold px-2 py-1 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
+              />
+              <button 
+                type="submit"
+                disabled={isSearching}
+                className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {isSearching ? "..." : "🔍"}
+              </button>
+            </form>
             <button 
               onClick={() => setMapStyle(prev => prev === "streets" ? "satellite" : "streets")}
-              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-lg shadow-md text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all"
+              className="w-fit bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-lg shadow-md text-[10px] font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all uppercase"
             >
               {mapStyle === "streets" ? "🛰️ Satellite" : "🗺️ Streets"}
             </button>

@@ -7,12 +7,15 @@ import { BoundaryPickerModal } from "./BoundaryPickerModal";
 interface FieldModalProps {
   projectId: string;
   permissionId: string;
+  permissionBoundary?: any;
+  permissionLat?: number | null;
+  permissionLon?: number | null;
   field?: Field;
   onClose: () => void;
   onSaved: (id: string) => void;
 }
 
-export function FieldModal({ projectId, permissionId, field, onClose, onSaved }: FieldModalProps) {
+export function FieldModal({ projectId, permissionId, permissionBoundary, permissionLat, permissionLon, field, onClose, onSaved }: FieldModalProps) {
   const [name, setName] = useState(field?.name ?? "");
   const [notes, setNotes] = useState(field?.notes ?? "");
   const [boundary, setBoundary] = useState<any | null>(field?.boundary ?? null);
@@ -104,6 +107,9 @@ export function FieldModal({ projectId, permissionId, field, onClose, onSaved }:
       {isPickingBoundary && (
         <BoundaryPickerModal 
           initialBoundary={boundary}
+          permissionBoundary={permissionBoundary}
+          initialLat={permissionLat}
+          initialLon={permissionLon}
           onClose={() => setIsPickingBoundary(false)}
           onSelect={(b) => {
             setBoundary(b);

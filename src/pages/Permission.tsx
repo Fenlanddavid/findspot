@@ -467,6 +467,16 @@ export default function PermissionPage(props: {
     }
   }
 
+  async function handleDeleteField(fieldId: string) {
+    if (!confirm("Are you sure? This will permanently delete this field. Sessions previously assigned to this field will remain but will no longer be linked to it.")) return;
+    
+    try {
+      await db.fields.delete(fieldId);
+    } catch (e: any) {
+      setError("Delete field failed: " + e.message);
+    }
+  }
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -746,13 +756,22 @@ export default function PermissionPage(props: {
                                                 <div className="min-w-0">
                                                     <div className="font-bold text-[10px] truncate text-gray-800 dark:text-gray-100">{f.name}</div>
                                                 </div>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => setEditingFieldId(f.id)}
-                                                    className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 px-1.5 py-0.5 rounded hover:bg-white"
-                                                >
-                                                    Edit
-                                                </button>
+                                                <div className="flex gap-1">
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setEditingFieldId(f.id)}
+                                                        className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 px-1.5 py-0.5 rounded hover:bg-white"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => handleDeleteField(f.id)}
+                                                        className="text-[9px] font-bold text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded hover:bg-white"
+                                                    >
+                                                        Del
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -988,6 +1007,12 @@ export default function PermissionPage(props: {
                                                     >
                                                         EDIT
                                                     </button>
+                                                    <button 
+                                                        onClick={() => handleDeleteField(f.id)}
+                                                        className="px-2 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900 text-[10px] font-bold text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
+                                                    >
+                                                        🗑️
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -1131,20 +1156,24 @@ export default function PermissionPage(props: {
       )}
 
       {(isAddingField || editingFieldId) && (
-          <FieldModal 
-              projectId={props.projectId}
-              permissionId={id!}
-              field={fields?.find(f => f.id === editingFieldId)}
-              onClose={() => {
-                setIsAddingField(false);
-                setEditingFieldId(null);
-              }}
-              onSaved={() => {
-                setIsAddingField(false);
-                setEditingFieldId(null);
-              }}
-          />
+         <FieldModal 
+             projectId={props.projectId}
+             permissionId={id!}
+             permissionBoundary={boundary}
+             permissionLat={lat}
+             permissionLon={lon}
+             field={fields?.find(f => f.id === editingFieldId)}
+             onClose={() => {
+               setIsAddingField(false);
+               setEditingFieldId(null);
+             }}
+             onSaved={() => {
+               setIsAddingField(false);
+               setEditingFieldId(null);
+             }}
+         />
       )}
+
     </div>
   );
 }

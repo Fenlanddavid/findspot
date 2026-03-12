@@ -22,6 +22,37 @@ export function LocationPickerModal(props: {
     const [zoom] = useState(props.initialLat ? 16 : 6);
     const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("streets");
     const [showLidar, setShowLidar] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [isSearching, setIsSearching] = useState(false);
+
+    async function handleSearch(e: React.FormEvent) {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+        setIsSearching(true);
+        try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
+            const data = await resp.json();
+            if (data && data.length > 0) {
+                const { lat, lon } = data[0];
+                const newLat = parseFloat(lat);
+                const newLon = parseFloat(lon);
+                setLat(newLat);
+                setLon(newLon);
+                if (mapRef.current) {
+                    mapRef.current.flyTo({ center: [newLon, newLat], zoom: 16 });
+                }
+                if (markerRef.current) {
+                    markerRef.current.setLngLat([newLon, newLat]);
+                }
+            } else {
+                alert("Location not found.");
+            }
+        } catch (err) {
+            console.error("Search failed:", err);
+        } finally {
+            setIsSearching(false);
+        }
+    }
     
     // Load persistent style
     useEffect(() => {
@@ -210,8 +241,24 @@ export function LocationPickerModal(props: {
         <div className="h-[60vh] rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 relative shadow-inner bg-gray-50 dark:bg-black">
           <div ref={mapDivRef} className="absolute inset-0" />
           
-          <div className="absolute top-2 left-2 z-10 flex flex-col gap-2">
-            <div className="flex gap-1 bg-white/90 dark:bg-gray-900/90 p-1 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+          <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 max-w-[calc(100%-80px)]">
+            <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                <input 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search address..."
+                    className="bg-transparent text-xs font-bold px-2 py-1 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
+                />
+                <button 
+                    type="submit"
+                    disabled={isSearching}
+                    className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                >
+                    {isSearching ? "..." : "🔍"}
+                </button>
+            </form>
+
+            <div className="flex gap-1 bg-white/90 dark:bg-gray-900/90 p-1 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 w-fit">
                 <button 
                     onClick={() => setMapStyle("streets")}
                     className={`px-2 py-1 text-[10px] font-bold rounded ${mapStyle === "streets" ? "bg-emerald-600 text-white" : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"}`}
