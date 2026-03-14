@@ -156,8 +156,13 @@ export default function Settings() {
                       <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{d}</span>
                       <button 
                         onClick={() => removeDetector(d)}
-                        className="text-emerald-500 hover:text-red-500 font-bold ml-1 transition-colors"
-                      >✕</button>
+                        className="text-emerald-500 hover:text-red-500 ml-1 transition-colors flex items-center justify-center p-1"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
                     </div>
                   ))
                 )}

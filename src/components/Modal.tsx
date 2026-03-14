@@ -16,7 +16,12 @@ export function Modal(props: { title: string; onClose: () => void; children: Rea
             <h2 className="m-0 text-xl font-bold">{props.title}</h2>
             {props.headerActions}
           </div>
-          <button onClick={props.onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">✕</button>
+          <button onClick={props.onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <div className="mt-3">{props.children}</div>
       </div>

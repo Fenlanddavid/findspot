@@ -200,7 +200,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     if (mapRef.current) {
         const zoneGeoJSON = {
             type: 'FeatureCollection',
-            features: zones.map(z => ({
+            features: zones
+                .filter(z => z.id === selectedZoneId) // Only include the selected zone
+                .map(z => ({
                 type: 'Feature',
                 geometry: {
                     type: 'Polygon',
@@ -218,7 +220,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const source = mapRef.current.getSource('zones-overlay') as maplibregl.GeoJSONSource;
         if (source) source.setData(zoneGeoJSON as any);
     }
-  }, [zones]);
+  }, [zones, selectedZoneId]);
 
   useEffect(() => {
     if (mapRef.current && mapRef.current.getLayer('zones-outline')) {
@@ -956,8 +958,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                       <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search place..." className="bg-black/40 border border-white/10 text-white px-3 py-1 rounded-lg flex-1 text-xs outline-none focus:ring-1 focus:ring-emerald-500" />
                   </form>
               )}
-              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="text-slate-400 hover:text-white p-1 text-xs">
-                  {isSearchOpen ? '✕' : '🔍'}
+              <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="text-slate-400 hover:text-white p-1">
+                  {isSearchOpen ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  ) : '🔍'}
               </button>
           </div>
           
@@ -999,12 +1006,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         ⚠️ Use Zoom 16.0
                     </div>
                 )}
+                {analyzing && (
+                    <div className="bg-slate-900/90 text-emerald-400 px-6 py-3 rounded-2xl text-[10px] font-black tracking-[0.2em] uppercase shadow-2xl border border-emerald-500/50 animate-pulse flex items-center gap-3 backdrop-blur-xl">
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                        Scanning Terrain...
+                    </div>
+                )}
             </div>
 
             {/* Mobile Tactical Tray (Zone Selection) */}
             {zones.length > 0 && (
-                <div className="absolute top-16 left-0 right-0 z-[100] lg:hidden pointer-events-none">
-                    <div className="flex gap-2 overflow-x-auto px-4 py-2 scrollbar-hide pointer-events-auto">
+                <div className="absolute top-4 left-0 w-full z-[100] lg:hidden pointer-events-none">
+                    <div className="flex gap-2 overflow-x-auto pl-4 pr-10 py-2 scrollbar-hide pointer-events-auto">
                         {zones.map(z => (
                             <div 
                                 key={z.id} 
@@ -1012,15 +1025,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     setSelectedZoneId(z.id === selectedZoneId ? null : z.id);
                                     if (z.id !== selectedZoneId) mapRef.current?.fitBounds(z.bounds as any, { padding: 40 });
                                 }}
-                                className={`px-3 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all active:scale-95 whitespace-nowrap ${
+                                className={`px-4 py-2 rounded-full border shadow-lg backdrop-blur-md transition-all active:scale-95 whitespace-nowrap ${
                                     selectedZoneId === z.id 
                                     ? 'bg-emerald-500 border-white text-white' 
-                                    : 'bg-slate-900/80 border-white/10 text-slate-300'
+                                    : 'bg-slate-900/90 border-white/10 text-slate-300'
                                 }`}
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-black uppercase">Z{z.number}</span>
-                                    <span className="text-[9px] font-bold opacity-80">{z.type}</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wider">Zone {z.number}</span>
                                 </div>
                             </div>
                         ))}
@@ -1044,8 +1056,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="w-6 h-6 bg-black/20 rounded-lg flex items-center justify-center text-[10px] font-black">{f.number}</div>
                                     <h3 className="text-xs font-black uppercase tracking-tight">{f.type}</h3>
                                 </div>
-                                <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="text-white/70 hover:text-white p-1">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"></line><line x1="6" x2="18" y1="18" y2="6"></line></svg>
+                                <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
                                 </button>
                             </div>
                             
@@ -1144,11 +1159,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         <div key={z.id} className="bg-slate-900 border border-white/20 p-5 rounded-2xl shadow-2xl backdrop-blur-xl">
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h3 className="text-sm font-black uppercase tracking-tight text-white">Zone {z.number} Overview</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-none mt-1">{z.description}</p>
+                                    <h3 className="text-sm font-black uppercase tracking-tight text-white">Zone {z.number}</h3>
                                 </div>
-                                <button onClick={() => setSelectedZoneId(null)} className="text-slate-400 hover:text-white p-1">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" x2="6" y1="6" y2="18"></line><line x1="6" x2="18" y1="18" y2="6"></line></svg>
+                                <button onClick={() => setSelectedZoneId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" x2="18" y1="18" y2="18"></line>
+                                    </svg>
                                 </button>
                             </div>
 
@@ -1207,7 +1224,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <h3 className={`text-xs font-black uppercase tracking-tight ${selectedZoneId === z.id ? 'text-white' : 'text-slate-200'}`}>Zone {z.number}</h3>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase leading-none mt-0.5">{z.description}</p>
                                 </div>
                                 <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
                                     z.priority === 'High' ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'

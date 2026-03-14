@@ -639,8 +639,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                         <button 
                           onClick={(e) => { e.stopPropagation(); removePhoto(x.id); }} 
                           disabled={busy}
-                          className="absolute top-1 right-1 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs transition-all shadow-lg hover:scale-110 active:scale-95 z-20 border-2 border-white"
-                        >✕</button>
+                          className="absolute top-1 right-1 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95 z-20 border-2 border-white"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button>
                         <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
                           <span className="truncate flex-1">{x.filename}</span>
                           {x.media.photoType && (
