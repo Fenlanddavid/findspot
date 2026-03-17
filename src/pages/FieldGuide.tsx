@@ -1424,40 +1424,33 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
               </button>
           </div>
           
-          {/* Bottom Row: Actions */}
+          {/* Bottom Row: Dual Actions */}
           <div className="flex justify-between items-center px-4 py-2 bg-black/20 relative">
-              <div className="flex gap-1.5 items-center relative">
-                  <button 
-                    onClick={() => setIsIntelOpen(!isIntelOpen)}
-                    className={`lg:hidden px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all flex items-center justify-center min-w-[40px] ${
-                        isIntelOpen ? 'bg-slate-700 text-white border-white/20' : 
-                        (pasFinds.length > 0 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 
-                         potentialScore ? 'bg-emerald-600 text-white border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 
-                         (!loadingPAS ? 'bg-slate-800 text-blue-400 border-blue-500/40 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-slate-800 text-slate-400 border-white/5'))
-                    }`}
-                  >
-                    {loadingPAS ? (
-                        <div className="flex items-center gap-1.5 px-1">
-                            <div className="w-1 h-1 rounded-full bg-blue-400 animate-ping" />
-                            <span className="text-[8px] text-blue-400">SCANNING...</span>
-                        </div>
-                    ) : potentialScore ? `${potentialScore.score}%` : (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="10" />
-                            <circle cx="12" cy="12" r="3" />
-                        </svg>
-                    )}
-                  </button>
+              {/* Left Side: Historic/Site Intel */}
+              <div className="flex gap-2 items-center relative">
                   {/* Option 3: Ephemeral Instruction */}
                   {!isIntelOpen && pasFinds.length === 0 && !loadingPAS && !potentialScore && (
-                      <div className="absolute bottom-full left-5 mb-1 pointer-events-none animate-pulse">
-                          <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Site Intel</span>
+                      <div className="absolute bottom-full left-1 mb-1 pointer-events-none animate-pulse">
+                          <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Historic Scan</span>
                       </div>
                   )}
-                  <button onClick={() => navigate('/finds?view=map')} className="hidden lg:block text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5 border border-white/5 rounded-lg whitespace-nowrap">Manual Map</button>
+                  <button 
+                    onClick={() => {
+                        if (pasFinds.length === 0) loadPASFinds();
+                        setIsIntelOpen(!isIntelOpen);
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${
+                        isIntelOpen ? 'bg-slate-700 text-white border-white/20' : 
+                        (pasFinds.length > 0 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 
+                         'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]')
+                    } ${loadingPAS ? 'animate-pulse opacity-80' : ''}`}
+                  >
+                    {loadingPAS ? '...' : 'Historic'}
+                  </button>
                   <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
               </div>
-              
+
+              {/* Right Side: Terrain Scan */}
               <div className="flex gap-2 items-center relative">
                   {/* Option 3: Ephemeral Instruction */}
                   {!analyzing && detectedFeatures.length === 0 && (
@@ -1466,7 +1459,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                       </div>
                   )}
                   <button onClick={findMe} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors">GPS</button>
-                  <button onClick={executeScan} disabled={analyzing} className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
+                  <button 
+                    onClick={executeScan} 
+                    disabled={analyzing} 
+                    className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse"
+                  >
                     {analyzing ? '...' : 'Scan'}
                   </button>
               </div>
