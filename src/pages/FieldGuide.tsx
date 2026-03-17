@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useNavigate } from 'react-router-dom';
+import { toOSGridRef } from '../services/gps';
 
 interface Cluster {
     id: string; points: {x: number, y: number}[];
@@ -25,17 +26,67 @@ interface Cluster {
     disturbanceReason?: string;
     metrics?: { circularity: number; density: number; ratio: number; area: number };
 }
-
 interface PASFind {
     id: string;
+    internalId: string;
     objectType: string;
     broadperiod: string;
     county: string;
-    workflow: string;
+    workflow: "PAS";
     lat: number;
     lon: number;
-    distance?: number;
+    isApprox?: boolean; // True if it's a 1km grid centroid or parish centroid
 }
+
+interface PlaceSignal {
+    name: string;
+    meaning: string;
+    distance: number;
+    period: string;
+    confidence: number;
+    type: string;
+}
+
+const ETYMOLOGY_SIGNALS = [
+  // --- ROMAN (90%+) ---
+  { pattern: "chester", meaning: "Roman fort", period: "Roman", confidence: 0.95 },
+  { pattern: "caster", meaning: "Roman fort", period: "Roman", confidence: 0.95 },
+  { pattern: "cester", meaning: "Roman fort", period: "Roman", confidence: 0.95 },
+  { pattern: "street", meaning: "Roman road", period: "Roman", confidence: 0.9 },
+  { pattern: "strat", meaning: "Roman road", period: "Roman", confidence: 0.9 },
+  { pattern: "foss", meaning: "Roman ditch/road", period: "Roman", confidence: 0.85 },
+
+  // --- SAXON / EARLY MEDIEVAL ---
+  { pattern: "bury", meaning: "Fortified place", period: "Saxon", confidence: 0.85 },
+  { pattern: "borough", meaning: "Fortified settlement", period: "Saxon", confidence: 0.85 },
+  { pattern: "burgh", meaning: "Fortified settlement", period: "Saxon", confidence: 0.85 },
+  { pattern: "ham", meaning: "Settlement", period: "Saxon", confidence: 0.75 },
+  { pattern: "ton", meaning: "Farmstead or enclosure", period: "Saxon", confidence: 0.75 },
+  { pattern: "stow", meaning: "Meeting / holy place", period: "Saxon", confidence: 0.85 },
+  { pattern: "ley", meaning: "Clearing in woodland", period: "Saxon", confidence: 0.7 },
+  { pattern: "leigh", meaning: "Clearing", period: "Saxon", confidence: 0.7 },
+  { pattern: "ing", meaning: "People of...", period: "Early Saxon", confidence: 0.8 },
+
+  // --- VIKING / NORSE ---
+  { pattern: "by", meaning: "Viking settlement", period: "Viking", confidence: 0.95 },
+  { pattern: "thorpe", meaning: "Secondary Viking settlement", period: "Viking", confidence: 0.9 },
+  { pattern: "kirk", meaning: "Church site", period: "Viking/Saxon", confidence: 0.85 },
+
+  // --- MEDIEVAL & TRADE ---
+  { pattern: "wick", meaning: "Trading settlement", period: "Early Medieval", confidence: 0.8 },
+  { pattern: "wich", meaning: "Specialised settlement (salt/trade)", period: "Early Medieval", confidence: 0.8 },
+  { pattern: "port", meaning: "Market town", period: "Medieval", confidence: 0.75 },
+  { pattern: "bridge", meaning: "Crossing point", period: "Medieval+", confidence: 0.85 },
+  { pattern: "field", meaning: "Open land", period: "Medieval+", confidence: 0.6 },
+
+  // --- TOPOGRAPHICAL / WATER ---
+  { pattern: "ford", meaning: "River crossing", period: "Multi-period", confidence: 0.85 },
+  { pattern: "mere", meaning: "Lake or wetland", period: "Prehistoric+", confidence: 0.8 },
+  { pattern: "marsh", meaning: "Wetland", period: "Multi-period", confidence: 0.7 },
+  { pattern: "low", meaning: "Burial mound / barrow", period: "Prehistoric/Saxon", confidence: 0.85 },
+  { pattern: "howe", meaning: "Burial mound / barrow", period: "Viking/Saxon", confidence: 0.85 }
+];
+
 
 /**
  * FieldGuide Standalone V12.8 - Expert Verification Engine
@@ -104,10 +155,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   const [systemLog, setSystemLog] = useState<string[]>(["SYSTEM READY. Execute Scan."]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isIntelOpen, setIsIntelOpen] = useState(false);
   
   // PAS & Potential Score State
   const [pasFinds, setPasFinds] = useState<PASFind[]>([]);
+  const [selectedPASFind, setSelectedPASFind] = useState<PASFind | null>(null);
   const [loadingPAS, setLoadingPAS] = useState(false);
+  const [placeSignals, setPlaceSignals] = useState<PlaceSignal[]>([]);
   const [potentialScore, setPotentialScore] = useState<{score: number, reasons: string[]} | null>(null);
   const [monumentPoints, setMonumentPoints] = useState<[number, number][]>([]);
 
@@ -134,55 +188,248 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         if (tSrc) tSrc.setData({ type: 'FeatureCollection', features: [] });
     }
     setPasFinds([]);
+    setPlaceSignals([]);
     setPotentialScore(null);
     setSystemLog(["SYSTEM CLEARED. Ready for new scan."]);
   };
 
   const loadPASFinds = async () => {
-    if (!mapRef.current) return;
+    if (!mapRef.current) {
+        addLog("ERROR: Map engine not initialized.");
+        return;
+    }
+    
     const center = mapRef.current.getCenter();
     setLoadingPAS(true);
-    addLog(`SCANNING PAS DATABASE: [${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}]...`);
+    addLog(`INITIALIZING SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
+    // 1. REVERSE GEOCODE to get Parish/County (The "Another Way")
+    let parish = "";
+    let county = "";
     try {
-        // Use a CORS proxy to bypass Cloudflare/CORS restrictions for client-side fetch
-        const pasUrl = `https://finds.org.uk/database/search/results/lat/${center.lat}/lon/${center.lng}/d/5/format/json`;
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(pasUrl)}`;
-        
-        const response = await fetch(proxyUrl);
-        const proxyData = await response.json();
-        
-        // allorigins returns the actual response as a string in .contents
-        const data = JSON.parse(proxyData.contents);
-
-        if (data.results && data.results.length > 0) {
-            const finds: PASFind[] = data.results.map((r: any) => ({
-                id: r.id,
-                objectType: r.objecttype,
-                broadperiod: r.broadperiod,
-                county: r.county,
-                workflow: r.workflow,
-                lat: parseFloat(r.latitude),
-                lon: parseFloat(r.longitude)
-            })).filter((f: any) => !isNaN(f.lat) && !isNaN(f.lon));
-
-            setPasFinds(finds);
-            addLog(`SUCCESS: Found ${finds.length} PAS records within 5km.`);
-            
-            // Calculate potential based on these finds
-            calculatePotentialScore(finds, monumentPoints);
-        } else {
-            addLog("PAS: No nearby records found in database.");
-            setPasFinds([]);
-            calculatePotentialScore([], monumentPoints);
+        addLog("IDENTIFYING PARISH...");
+        const geoResp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}`, {
+            headers: { 'User-Agent': 'FindSpot-FieldGuide/1.0' }
+        });
+        const geoData = await geoResp.json();
+        if (geoData && geoData.address) {
+            parish = geoData.address.village || geoData.address.town || geoData.address.suburb || "";
+            county = geoData.address.county || "";
+            addLog(`LOCATION: ${parish}, ${county}`);
         }
-    } catch (error) {
-        console.error("PAS Fetch Error:", error);
-        addLog("ERROR: PAS database connection timed out.");
-    } finally {
-        setLoadingPAS(false);
+
+        // SCAN NEARBY PLACE NAMES FOR SIGNALS via Overpass (More comprehensive: millions of entries)
+        addLog("ENGAGING OVERPASS ETYMOLOGY ENGINE...");
+        const latOffsetPlace = 10 / 111.32; // ~10km box
+        const lonOffsetPlace = 10 / (111.32 * Math.cos(center.lat * Math.PI / 180));
+        const pWest = (center.lng - lonOffsetPlace).toFixed(4);
+        const pSouth = (center.lat - latOffsetPlace).toFixed(4);
+        const pEast = (center.lng + lonOffsetPlace).toFixed(4);
+        const pNorth = (center.lat + latOffsetPlace).toFixed(4);
+
+        // Fetch villages, farms, hills, and historic sites with names
+        const overpassQuery = `[out:json][timeout:15];(node["name"]["place"~"city|town|village|hamlet|isolated_dwelling"](${pSouth},${pWest},${pNorth},${pEast});way["name"]["place"~"city|town|village|hamlet|isolated_dwelling"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["natural"~"hill|peak|ridge"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["historic"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["landuse"="farmyard"](${pSouth},${pWest},${pNorth},${pEast}););out center;`;
+        
+        const placeResp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
+        const placeData = await placeResp.json();
+        
+        if (placeData && placeData.elements) {
+            const detectedSignals: PlaceSignal[] = [];
+            
+            // Map technical OSM tags to user-friendly categories
+            const getTypeLabel = (tags: any) => {
+                if (tags.place) return "Populated Place";
+                if (tags.natural) return "Topographic Feature";
+                if (tags.historic) return "Historic Site";
+                if (tags.landuse === "farmyard") return "Agricultural Site";
+                return "Feature";
+            };
+
+            placeData.elements.forEach((el: any) => {
+                const name = el.tags.name;
+                const typeLabel = getTypeLabel(el.tags);
+                const lat = el.lat || el.center?.lat;
+                const lon = el.lon || el.center?.lon;
+                
+                const match = ETYMOLOGY_SIGNALS.find(s => name.toLowerCase().includes(s.pattern));
+                if (match && lat && lon) {
+                    const dist = getDistancePAS(center.lat, center.lng, lat, lon);
+                    if (!detectedSignals.find(ds => ds.name === name)) {
+                        detectedSignals.push({ 
+                            name, 
+                            meaning: match.meaning, 
+                            distance: dist,
+                            period: match.period,
+                            confidence: match.confidence,
+                            type: typeLabel
+                        });
+                    }
+                }
+            });
+            
+            if (detectedSignals.length > 0) {
+                setPlaceSignals(detectedSignals.sort((a, b) => a.distance - b.distance));
+                addLog(`SIGNALS: ${detectedSignals.length} historic signals detected.`);
+            } else {
+                addLog("SIGNALS: No etymological matches in area.");
+            }
+        }
+    } catch (e) {
+        addLog("SIGNAL SCAN FAILED (Overpass Timeout/Proxy)");
     }
+
+    // 2. CALCULATE 4-FIGURE GRID REF (1km Square)
+    const gridRefFull = toOSGridRef(center.lat, center.lng);
+    let grid4 = "";
+    if (gridRefFull && gridRefFull.length > 10) {
+        // e.g. "TL 12345 67890" -> "TL1267" approx (using first 2 digits of each 5-digit block)
+        const parts = gridRefFull.split(" ");
+        if (parts.length === 3) {
+            grid4 = `${parts[0]}${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}`;
+            addLog(`GRID SQUARE: ${grid4}`);
+        }
+    }
+
+    // 3. PREPARE MULTIPLE SEARCH STRATEGIES
+    const latOffset = 8 / 111.32; // ~8km box
+    const lonOffset = 8 / (111.32 * Math.cos(center.lat * Math.PI / 180));
+    const west = (center.lng - lonOffset).toFixed(4);
+    const south = (center.lat - latOffset).toFixed(4);
+    const east = (center.lng + lonOffset).toFixed(4);
+    const north = (center.lat + latOffset).toFixed(4);
+
+    const searchUrls: { url: string, label: string }[] = [];
+    // Strategy A: Bounding Box (Precise points)
+    searchUrls.push({ 
+        url: `https://finds.org.uk/database/search/results/bbox/${west},${south},${east},${north}/show/100/format/json`,
+        label: "BBOX Scan"
+    });
+    
+    // Strategy B: Parish Search (General area mapping - very robust)
+    if (parish && county) {
+        searchUrls.push({ 
+            url: `https://finds.org.uk/database/search/results/parish/${encodeURIComponent(parish)}/county/${encodeURIComponent(county)}/show/100/format/json`,
+            label: "Parish Scan"
+        });
+    }
+
+    // Strategy C: Grid Reference Search (Keyword-based)
+    if (grid4) {
+        searchUrls.push({ 
+            url: `https://finds.org.uk/database/search/results/q/${grid4}/show/100/format/json`,
+            label: "Grid Scan"
+        });
+    }
+
+    const allProxies = [
+        { type: 'raw', name: 'Direct' },
+        { type: 'wrapped', name: 'AllOrigins' },
+        { type: 'raw', name: 'CORSProxy.io' },
+        { type: 'raw', name: 'CodeTabs' },
+        { type: 'raw', name: 'CORS.sh' }
+    ];
+
+    const fetchWithFallback = async (pasUrl: string, label: string): Promise<PASFind[]> => {
+        addLog(`RACING PROXIES FOR: ${label}...`);
+        
+        const raceProxy = async (proxy: {name: string, type: string}): Promise<PASFind[]> => {
+            let finalUrl = pasUrl;
+            if (proxy.name === 'AllOrigins') finalUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(pasUrl)}`;
+            if (proxy.name === 'CORSProxy.io') finalUrl = `https://corsproxy.io/?${encodeURIComponent(pasUrl)}`;
+            if (proxy.name === 'CodeTabs') finalUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(pasUrl)}`;
+            if (proxy.name === 'CORS.sh') finalUrl = `https://proxy.cors.sh/${pasUrl}`;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 4000); // OPTION 3: AGGRESSIVE 4S TIMEOUT
+
+            try {
+                const response = await fetch(finalUrl, {
+                    headers: { 'Accept': 'application/json' },
+                    mode: 'cors',
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                if (!response.ok) throw new Error("Network fail");
+
+                const text = await response.text();
+                if (!text || text.includes('<!DOCTYPE') || text.length < 100) throw new Error("Invalid data");
+
+                let data = JSON.parse(text);
+                if (proxy.type === 'wrapped' && data.contents) data = JSON.parse(data.contents);
+
+                const results = data.results || data.features || [];
+                if (!results.length) throw new Error("No records");
+
+                return results.map((p: any) => {
+                    const item = p.properties || p;
+                    const iLat = Number(item.declat || item.fourFigureLat || item.latitude || item.lat || NaN);
+                    const iLon = Number(item.declon || item.fourFigureLon || item.longitude || item.lon || NaN);
+                    
+                    if (isNaN(iLat) || isNaN(iLon)) return null;
+
+                    return {
+                        id: String(item.findIdentifier || item.id || item.secuid),
+                        internalId: String(item.id || item.secuid || ""),
+                        objectType: String(item.objecttype || "Object"),
+                        broadperiod: String(item.broadperiod || "Unknown"),
+                        county: String(item.county || "Unknown"),
+                        workflow: "PAS",
+                        lat: iLat,
+                        lon: iLon,
+                        isApprox: !!item.fourFigureLat
+                    } as PASFind;
+                }).filter((f: any): f is PASFind => f !== null);
+            } catch (e) {
+                clearTimeout(timeoutId);
+                throw e; // Re-throw so Promise.any knows this proxy failed
+            }
+        };
+
+        try {
+            // OPTION 1: PROXY RACING (Fire all at once, take first successful)
+            const result = await Promise.any(allProxies.map(p => raceProxy(p)));
+            return result;
+        } catch (e) {
+            // If all proxies in the race fail
+            return [];
+        }
+    };
+
+    // Execute all strategies in parallel for speed
+    addLog("EXECUTING MULTISPECTRAL PAS SCAN...");
+    const strategyPromises = searchUrls.map(s => fetchWithFallback(s.url, s.label));
+    const resultsArray = await Promise.all(strategyPromises);
+    
+    let combinedFinds: PASFind[] = [];
+    resultsArray.forEach((results, idx) => {
+        if (results.length > 0) {
+            combinedFinds = [...combinedFinds, ...results];
+            addLog(`READY: ${results.length} records from ${searchUrls[idx].label}`);
+        }
+    });
+
+    // Deduplicate and filter by distance
+    const uniqueMap = new Map();
+    combinedFinds.forEach(f => {
+        if (!uniqueMap.has(f.id)) uniqueMap.set(f.id, f);
+    });
+
+    const finalFinds = Array.from(uniqueMap.values()).filter(f => {
+        const d = getDistancePAS(center.lat, center.lng, f.lat, f.lon);
+        return d < 15;
+    });
+
+    if (finalFinds.length > 0) {
+        setPasFinds(finalFinds);
+        addLog(`SUCCESS: ${finalFinds.length} total finds mapped.`);
+        calculatePotentialScore(finalFinds, monumentPoints);
+    } else {
+        addLog("SCAN FINISHED: 0 records found in this area.");
+    }
+    setLoadingPAS(false);
   };
+
 
   const calculatePotentialScore = (pas: PASFind[], monuments: [number, number][]) => {
     if (!mapRef.current) return;
@@ -251,6 +498,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       },
       center: [-2.0, 54.5],
       zoom: 5.5,
+      clickTolerance: 40,
     });
 
     map.on('load', () => {
@@ -313,7 +561,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             type: 'circle',
             source: 'pas-finds',
             paint: {
-                'circle-radius': 6,
+                'circle-radius': 10,
                 'circle-color': '#3b82f6',
                 'circle-stroke-width': 2,
                 'circle-stroke-color': '#fff'
@@ -322,11 +570,22 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         map.on('click', 'pas-circles', (e) => {
             if (e.features?.[0]) {
-                const props = e.features[0].properties;
+                const props = e.features[0].properties as any;
                 addLog(`PAS FIND: ${props.objectType} (${props.broadperiod}) - ${props.id}`);
+                setSelectedPASFind({
+                    id: props.id,
+                    internalId: String(props.internalId || ""),
+                    objectType: props.objectType,
+                    broadperiod: props.broadperiod,
+                    county: props.county,
+                    workflow: "PAS",
+                    lat: Number(props.lat),
+                    lon: Number(props.lon),
+                    isApprox: !!props.isApprox
+                });
             }
         });
-        
+
         map.on('move', () => {
             const z = map.getZoom();
             setZoomWarning(z > 16.8);
@@ -403,17 +662,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   }, [selectedId]);
 
   useEffect(() => {
+    if (isIntelOpen && pasFinds.length === 0 && !loadingPAS) {
+        loadPASFinds();
+    }
+  }, [isIntelOpen]);
+
+  useEffect(() => {
     if (mapRef.current) {
+        // Group finds by coordinate to detect overlaps
+        const coordGroups: { [key: string]: number } = {};
+        
+        // USER REQUEST: Don't map PAS points because they aren't accurate enough
         const pasGeoJSON = {
             type: 'FeatureCollection',
-            features: pasFinds.map(f => ({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [f.lon, f.lat] },
-                properties: { id: f.id, objectType: f.objectType, broadperiod: f.broadperiod }
-            }))
+            features: [] // Empty features to hide points from map
         };
-        const source = mapRef.current.getSource('pas-finds') as maplibregl.GeoJSONSource;
-        if (source) source.setData(pasGeoJSON as any);
+        
+        const updateSource = () => {
+            const source = mapRef.current?.getSource('pas-finds') as maplibregl.GeoJSONSource;
+            if (source) {
+                source.setData(pasGeoJSON as any);
+            } else if (mapRef.current?.loaded()) {
+                // If loaded but source missing, it might not have been added yet
+            } else {
+                // Map not loaded yet, retry shortly
+                setTimeout(updateSource, 500);
+            }
+        };
+        updateSource();
     }
   }, [pasFinds]);
 
@@ -1149,12 +1425,46 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
           </div>
           
           {/* Bottom Row: Actions */}
-          <div className="flex justify-between items-center px-4 py-2 bg-black/20">
-              <div className="flex gap-1.5 items-center">
-                  <button onClick={() => navigate('/finds?view=map')} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5 border border-white/5 rounded-lg whitespace-nowrap">Manual Map</button>
+          <div className="flex justify-between items-center px-4 py-2 bg-black/20 relative">
+              <div className="flex gap-1.5 items-center relative">
+                  <button 
+                    onClick={() => setIsIntelOpen(!isIntelOpen)}
+                    className={`lg:hidden px-3 py-1.5 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all flex items-center justify-center min-w-[40px] ${
+                        isIntelOpen ? 'bg-slate-700 text-white border-white/20' : 
+                        (pasFinds.length > 0 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 
+                         potentialScore ? 'bg-emerald-600 text-white border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 
+                         (!loadingPAS ? 'bg-slate-800 text-blue-400 border-blue-500/40 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-slate-800 text-slate-400 border-white/5'))
+                    }`}
+                  >
+                    {loadingPAS ? (
+                        <div className="flex items-center gap-1.5 px-1">
+                            <div className="w-1 h-1 rounded-full bg-blue-400 animate-ping" />
+                            <span className="text-[8px] text-blue-400">SCANNING...</span>
+                        </div>
+                    ) : potentialScore ? `${potentialScore.score}%` : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="3" />
+                        </svg>
+                    )}
+                  </button>
+                  {/* Option 3: Ephemeral Instruction */}
+                  {!isIntelOpen && pasFinds.length === 0 && !loadingPAS && !potentialScore && (
+                      <div className="absolute bottom-full left-5 mb-1 pointer-events-none animate-pulse">
+                          <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Site Intel</span>
+                      </div>
+                  )}
+                  <button onClick={() => navigate('/finds?view=map')} className="hidden lg:block text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5 border border-white/5 rounded-lg whitespace-nowrap">Manual Map</button>
                   <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
               </div>
-              <div className="flex gap-2 items-center">
+              
+              <div className="flex gap-2 items-center relative">
+                  {/* Option 3: Ephemeral Instruction */}
+                  {!analyzing && detectedFeatures.length === 0 && (
+                      <div className="absolute bottom-full right-1 mb-1 pointer-events-none animate-pulse text-right">
+                          <span className="text-[7px] font-black text-emerald-500/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-emerald-500/20">Terrain Scan</span>
+                      </div>
+                  )}
                   <button onClick={findMe} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors">GPS</button>
                   <button onClick={executeScan} disabled={analyzing} className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
                     {analyzing ? '...' : 'Scan'}
@@ -1344,7 +1654,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 <button onClick={() => setSelectedZoneId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                         <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" x2="18" y1="18" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
                                 </button>
                             </div>
@@ -1375,6 +1685,160 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Mobile Site Intel HUD Overlay */}
+            {isIntelOpen && (
+                <div className="absolute inset-0 z-[105] lg:hidden bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex flex-col">
+                    {/* HUD Header */}
+                    <div className="p-4 pt-6 border-b border-white/5 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-xl font-black text-white uppercase tracking-tighter italic leading-none">Site Intelligence</h2>
+                            <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em]">Regional Scan Profile</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsIntelOpen(false)} 
+                            className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-white transition-all active:scale-90"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M18 6L6 18M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-24">
+                        {/* Big HUD Score Gauge */}
+                        <div className="relative flex flex-col items-center justify-center py-6">
+                            <div className="relative w-48 h-48 flex items-center justify-center">
+                                {/* Background Ring */}
+                                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                                    <circle cx="96" cy="96" r="80" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/5" />
+                                    {/* Segmented Ring Effect */}
+                                    <circle 
+                                        cx="96" cy="96" r="80" 
+                                        fill="none" 
+                                        stroke="currentColor" 
+                                        strokeWidth="8" 
+                                        className={`${pasFinds.length > 0 ? 'text-red-500' : 'text-emerald-500'} shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all duration-1000`}
+                                        strokeDasharray="502"
+                                        strokeDashoffset={502 - (502 * (potentialScore?.score || 0)) / 100}
+                                        strokeLinecap="round"
+                                    />
+                                </svg>
+                                <div className="text-center">
+                                    <span className="block text-6xl font-black text-white tracking-tighter leading-none">{potentialScore?.score || '0'}</span>
+                                    <span className={`text-xs font-black uppercase tracking-widest mt-1 ${pasFinds.length > 0 ? 'text-red-400' : 'text-emerald-500'}`}>Potential Index</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* PAS Period Summary Grid */}
+                        {pasFinds.length > 0 && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                    <div className="w-1 h-3 bg-blue-500" /> Historic Period Profile
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {Object.entries(
+                                        pasFinds.reduce((acc, f) => {
+                                            const p = f.broadperiod || "Unknown";
+                                            acc[p] = (acc[p] || 0) + 1;
+                                            return acc;
+                                        }, {} as Record<string, number>)
+                                    ).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
+                                        <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
+                                            <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                            <span className="text-sm font-black text-blue-400">{count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Analysis Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                                <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Evidence</span>
+                                <span className="text-lg font-black text-blue-400">{pasFinds.length} <span className="text-[10px] text-blue-400/50 italic">Records</span></span>
+                            </div>
+                            <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                                <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Place Names</span>
+                                <span className="text-lg font-black text-emerald-500">{placeSignals.length} <span className="text-[10px] text-emerald-500/50 italic">Signals</span></span>
+                            </div>
+                        </div>
+
+                        {/* PAS Findings Hud List - MOVED UP */}
+                        {pasFinds.length > 0 && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
+                                    <div className="w-1 h-3 bg-blue-500" /> Historic Findings
+                                </h3>
+                                <div className="space-y-2">
+                                    {pasFinds.map(f => (
+                                        <div 
+                                          key={f.id} 
+                                          onClick={() => { setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }}
+                                          className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all"
+                                        >
+                                            <div className="flex-1 min-w-0 pr-4">
+                                                <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
+                                                <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-[9px] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
+                                                <p className="text-[8px] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Place Name Signals */}
+                        {placeSignals.length > 0 && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                                    <div className="w-1 h-3 bg-emerald-500" /> Etymological Signals
+                                </h3>
+                                <div className="space-y-2">
+                                    {placeSignals.map((s, i) => (
+                                        <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl relative overflow-hidden group">
+                                            {/* Signal Type Badge */}
+                                            <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[7px] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
+                                            
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="text-sm font-black text-white uppercase italic tracking-tight">"{s.name}"</span>
+                                                <span className="text-[9px] font-bold text-emerald-500/60 uppercase">{s.distance.toFixed(1)} km</span>
+                                            </div>
+                                            <p className="text-[8px] font-black text-emerald-500/40 uppercase mb-2 tracking-widest">{s.type}</p>
+                                            <p className="text-[10px] font-bold text-slate-300 leading-tight">
+                                                <span className="text-emerald-500/80 uppercase text-[9px]">Meaning:</span> {s.meaning}
+                                            </p>
+
+                                            <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2">
+                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-white/5 px-1.5 py-0.5 rounded">{s.period}</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <div className="w-10 h-1 bg-black/40 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className="h-full bg-emerald-500" 
+                                                            style={{ width: `${s.confidence * 100}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-[7px] font-black text-emerald-500/60">{(s.confidence * 100).toFixed(0)}%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Bottom Status Bar */}
+                    <div className="p-4 pb-8 bg-black/40 border-t border-white/5">
+                        <p className="text-center text-[8px] font-black text-slate-500 uppercase tracking-[0.3em] italic animate-pulse">Scanning Spectral Data... [Consensus v12.8]</p>
+                    </div>
                 </div>
             )}
         </div>
@@ -1415,8 +1879,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 )}
             </div>
 
-            {/* PAS Intelligence Section */}
-            <div className="p-6 border-b border-white/10 bg-blue-500/5">
+            {/* PAS Intelligence Section - Desktop Only */}
+            <div className="hidden lg:block p-6 border-b border-white/10 bg-blue-500/5">
                 <div className="flex justify-between items-baseline mb-4">
                     <h2 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">PAS Intelligence</h2>
                     <button 
@@ -1433,9 +1897,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 {pasFinds.length > 0 ? (
                     <div className="space-y-3">
                         <p className="text-[9px] font-black text-blue-400/60 uppercase tracking-widest mb-2">{pasFinds.length} Recorded Finds Nearby</p>
-                        <div className="space-y-2">
-                            {pasFinds.slice(0, 3).map(f => (
-                                <div key={f.id} className="bg-black/30 p-2.5 rounded-xl border border-blue-500/10 hover:border-blue-500/30 transition-all cursor-crosshair">
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
+                            {pasFinds.map(f => (
+                                <div key={f.id} onClick={() => { setSelectedPASFind(f); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-black/30 p-2.5 rounded-xl border border-blue-500/10 hover:border-blue-500/30 transition-all cursor-crosshair">
                                     <div className="flex justify-between items-start mb-1">
                                         <span className="text-[10px] font-black text-white truncate pr-2 uppercase">{f.objectType}</span>
                                         <span className="text-[8px] font-bold text-blue-400 shrink-0">{f.broadperiod}</span>
@@ -1446,9 +1910,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                 </div>
                             ))}
-                            {pasFinds.length > 3 && (
-                                <p className="text-[8px] text-center font-black text-slate-500 uppercase tracking-widest pt-1">+ {pasFinds.length - 3} more historic records</p>
-                            )}
                         </div>
                     </div>
                 ) : (
@@ -1619,6 +2080,76 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             </div>
         </div>
       </div>
+
+      {/* PAS Specimen Card Modal */}
+      {selectedPASFind && (
+          <div className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+              <div className="bg-slate-900 border border-blue-500/30 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                  <div className="relative h-32 bg-blue-600/20 flex items-center justify-center border-b border-white/5">
+                      <div className="absolute top-4 right-4">
+                        <button onClick={() => setSelectedPASFind(null)} className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-all border border-white/10">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" x2="18" y1="18"></line>
+                            </svg>
+                        </button>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.5)] mb-2">
+                           <span className="text-xl font-black text-white italic">H</span>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Historic Specimen</span>
+                      </div>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                      <div className="space-y-1">
+                          <h3 className="text-xl font-black text-white uppercase tracking-tight">{selectedPASFind.objectType}</h3>
+                          <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[9px] font-black text-blue-400 uppercase tracking-widest">{selectedPASFind.broadperiod}</span>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">{selectedPASFind.id}</span>
+                          </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                          <div className="bg-black/40 p-3 rounded-2xl border border-white/5">
+                              <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Source</span>
+                              <span className="text-[10px] font-black text-white uppercase italic">Portable Antiquities</span>
+                          </div>
+                          <div className="bg-black/40 p-3 rounded-2xl border border-white/5">
+                              <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Region</span>
+                              <span className="text-[10px] font-black text-white uppercase italic">{selectedPASFind.county}</span>
+                          </div>
+                      </div>
+
+                      <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 space-y-2">
+                          <div className="flex items-center gap-2">
+                              <div className={`w-1.5 h-1.5 rounded-full ${selectedPASFind.isApprox ? "bg-amber-400" : "bg-blue-400"}`} />
+                              <p className="text-[11px] font-bold text-slate-300 leading-tight">
+                                {selectedPASFind.isApprox 
+                                  ? "Approximate location: 1km Parish/Grid centroid." 
+                                  : "Coordinates obfuscated to 100m for heritage protection."}
+                              </p>
+                          </div>
+                      </div>
+
+                      <a 
+                        href={`https://finds.org.uk/database/artefacts/record/id/${selectedPASFind.internalId || String(selectedPASFind.id || "").replace(/\D/g, '')}`} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+                      >
+                          View Official PAS Record
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                              <polyline points="15 3 21 3 21 9"></polyline>
+                              <line x1="10" y1="14" x2="21" y2="3"></line>
+                          </svg>
+                      </a>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 }
