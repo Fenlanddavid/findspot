@@ -1445,7 +1445,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                          'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]')
                     } ${loadingPAS ? 'animate-pulse opacity-80' : ''}`}
                   >
-                    {loadingPAS ? '...' : 'Historic'}
+                    {loadingPAS ? 'Scanning...' : 'Historic'}
                   </button>
                   <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
               </div>
