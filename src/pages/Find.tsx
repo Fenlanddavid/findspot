@@ -509,7 +509,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
             </label>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <label className="block">
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Weight (g)</div>
                     <input 
@@ -522,16 +522,38 @@ export default function FindPage(props: { projectId: string; permissionId: strin
                 </label>
                 <label className="block">
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Width (mm)</div>
-                    <input 
+                    <input
                         type="number"
-                        value={widthMm} 
-                        onChange={(e) => setWidthMm(e.target.value)} 
+                        step="0.1"
+                        value={widthMm}
+                        onChange={(e) => setWidthMm(e.target.value)}
                         placeholder="0.0"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
                 </label>
-            </div>
-
+                <label className="block">
+                    <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Height (mm)</div>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={heightMm}
+                        onChange={(e) => setHeightMm(e.target.value)}
+                        placeholder="0.0"
+                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                    />
+                </label>
+                <label className="block">
+                    <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Depth (mm)</div>
+                    <input
+                        type="number"
+                        step="0.1"
+                        value={depthMm}
+                        onChange={(e) => setDepthMm(e.target.value)}
+                        placeholder="0.0"
+                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                    />
+                </label>
+                </div>
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Decoration / Description</div>
                 <input 

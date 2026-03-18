@@ -11,16 +11,41 @@ export async function captureGPS(): Promise<GPSFix> {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    let bestFix: GPSFix | null = null;
+    let watchId: number | null = null;
+
+    // Force high-accuracy lock
+    const timeoutId = setTimeout(() => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (bestFix) resolve(bestFix);
+      else reject(new Error("GPS timeout: Could not get a stable lock."));
+    }, 10000); // 10s max wait for precision
+
+    watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        resolve({
+        const fix = {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
           accuracyM: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
-        });
+        };
+
+        if (!bestFix || (fix.accuracyM !== null && (bestFix.accuracyM === null || fix.accuracyM < bestFix.accuracyM))) {
+          bestFix = fix;
+        }
+
+        // If we hit our target precision (under 10m), finish early
+        if (fix.accuracyM !== null && fix.accuracyM <= 10) {
+          clearTimeout(timeoutId);
+          if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+          resolve(fix);
+        }
       },
-      (err) => reject(new Error(err.message || "GPS capture failed")),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      (err) => {
+        clearTimeout(timeoutId);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        reject(new Error(err.message || "GPS capture failed"));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   });
 }

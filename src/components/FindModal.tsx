@@ -12,6 +12,7 @@ import { getSetting } from "../services/data";
 import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
 import { shareElementAsImage } from "../services/share";
+import PASReportModal from "./PASReportModal";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
   const find = useLiveQuery(async () => db.finds.get(props.findId), [props.findId]);
@@ -20,6 +21,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [isPASModalOpen, setIsPASModalOpen] = useState(false);
   
   const [calibratingMedia, setCalibratingMedia] = useState<{ media: Media; url: string } | null>(null);
 
@@ -199,6 +201,12 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               className="text-[10px] font-black text-white bg-emerald-600 px-2 py-1 rounded border border-emerald-700 transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm active:scale-95 disabled:opacity-50"
             >
               <span className="text-[12px]">📤</span> Post Find
+            </button>
+            <button 
+              onClick={() => setIsPASModalOpen(true)}
+              className="text-[10px] font-black text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-200 dark:border-blue-800 transition-all uppercase tracking-widest shadow-sm"
+            >
+              PAS Report
             </button>
             <button 
               onClick={handlePrint}
@@ -460,7 +468,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 </label>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Width (mm)</span>
                   <input type="number" step="0.1" className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.widthMm || ""} onChange={(e) => setDraft({ ...draft, widthMm: e.target.value ? parseFloat(e.target.value) : null })} />
@@ -734,6 +742,15 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             photoUrl={imageUrls[0]?.url}
           />
       </div>
+
+      {draft && media && (
+          <PASReportModal 
+            isOpen={isPASModalOpen}
+            onClose={() => setIsPASModalOpen(false)}
+            find={draft}
+            photos={media}
+          />
+      )}
     </>
   );
 }
