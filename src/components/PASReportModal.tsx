@@ -200,7 +200,7 @@ Recorded via FindSpot
             <div id="pas-report-preview" className="min-w-[600px] bg-white text-black p-12 shadow-xl border border-gray-200 font-serif">
                 <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
                     <div>
-                        <h1 className="text-3xl font-black uppercase tracking-tighter italic leading-none mb-1">
+                        <h1 className="text-3xl font-black uppercase tracking-tighter italic leading-none mb-4">
                             {userName ? `${userName} PAS Report` : "PAS Report"}
                         </h1>
                         <p className="text-[11px] font-bold font-sans uppercase tracking-widest opacity-70">
@@ -216,7 +216,7 @@ Recorded via FindSpot
                 <div className="grid grid-cols-2 gap-10 mb-10">
                     <div className="flex flex-col gap-8">
                         <section>
-                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black mb-2 font-sans tracking-widest">Classification</h3>
+                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-2 font-sans tracking-widest">Classification</h3>
                             <div className="flex flex-col gap-1 text-sm">
                                 <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Object</span> {find.objectType}</p>
                                 <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Period</span> {find.period}</p>
@@ -225,7 +225,7 @@ Recorded via FindSpot
                             </div>
                         </section>
                         <section>
-                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black mb-2 font-sans tracking-widest">Location</h3>
+                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-2 font-sans tracking-widest">Location</h3>
                             <div className="flex flex-col gap-1 text-sm">
                                 <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Parish</span> {location.parish}</p>
                                 <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">County</span> {location.county}</p>
@@ -250,7 +250,7 @@ Recorded via FindSpot
                 </div>
 
                 <section className="mb-12">
-                    <h3 className="text-[10px] font-bold uppercase border-b-2 border-black mb-3 font-sans tracking-widest">Archaeological Description</h3>
+                    <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-3 font-sans tracking-widest">Archaeological Description</h3>
                     <textarea 
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
