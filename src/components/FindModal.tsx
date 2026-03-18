@@ -7,7 +7,6 @@ import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { ScaleCalibrationModal } from "./ScaleCalibrationModal";
 import { ScaledImage } from "./ScaledImage";
-import { FindReport } from "./FindReport";
 import { getSetting } from "../services/data";
 import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
@@ -27,10 +26,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
   const [permission, setPermission] = useState<Permission | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [ncmdNumber, setNcmdNumber] = useState("");
-  const [ncmdExpiry, setNcmdExpiry] = useState("");
-  const [detectoristName, setDetectoristName] = useState("");
-  const [detectoristEmail, setDetectoristEmail] = useState("");
   const [detectorList, setDetectorList] = useState<string[]>([]);
 
   const shareCardRef = React.useRef<HTMLDivElement>(null);
@@ -40,17 +35,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
       setDraft(find);
       db.permissions.get(find.permissionId).then(p => setPermission(p || null));
       if (find.sessionId) db.sessions.get(find.sessionId).then(s => setSession(s || null));
-      getSetting("ncmdNumber", "").then(setNcmdNumber);
-      getSetting("ncmdExpiry", "").then(setNcmdExpiry);
-      getSetting("detectorist", "").then(setDetectoristName);
-      getSetting("detectoristEmail", "").then(setDetectoristEmail);
       getSetting("detectors", []).then(setDetectorList);
     }
   }, [find?.id]);
-
-  function handlePrint() {
-    window.print();
-  }
 
   async function handleShare() {
     if (!shareCardRef.current || !draft) return;
@@ -207,12 +194,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               className="text-[10px] font-black text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-200 dark:border-blue-800 transition-all uppercase tracking-widest shadow-sm"
             >
               PAS Report
-            </button>
-            <button 
-              onClick={handlePrint}
-              className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
-            >
-              Create PDF
             </button>
             <button 
               onClick={() => setIsEditing(true)}
@@ -693,21 +674,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
           )}
         </div>
       </Modal>
-
-      {draft && media && (
-        <div className="hidden print:block">
-            <FindReport 
-              find={draft} 
-              media={media} 
-              permission={permission || undefined} 
-              session={session || undefined}
-              ncmdNumber={ncmdNumber}
-              ncmdExpiry={ncmdExpiry}
-              detectoristName={detectoristName}
-              detectoristEmail={detectoristEmail}
-            />
-        </div>
-      )}
 
       {calibratingMedia && (
         <ScaleCalibrationModal 
