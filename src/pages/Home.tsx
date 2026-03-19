@@ -102,7 +102,10 @@ export default function Home(props: {
     [props.projectId]
   );
 
-  const findIds = useMemo(() => finds?.slice(0, 12).map(s => s.id) ?? [], [finds]);
+  const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
+  const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
+
+  const findIds = useMemo(() => recentFinds?.slice(0, 12).map(s => s.id) ?? [], [recentFinds]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
@@ -132,6 +135,30 @@ export default function Home(props: {
             <span>🏟️</span> Club/Rally
         </button>
       </div>
+
+      {pendingFinds && pendingFinds.length > 0 && (
+        <section className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 animate-in slide-in-from-top-4">
+            <div className="flex justify-between items-center mb-3 px-1">
+                <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                    <span className="animate-pulse">🟠</span> {pendingFinds.length} Pending Quick Finds
+                </h3>
+                <button onClick={() => props.goFindsWithFilter("filter=pending")} className="text-[10px] font-black uppercase text-amber-600 hover:underline">View Queue</button>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
+                {pendingFinds.map(f => (
+                    <div 
+                        key={f.id} 
+                        onClick={() => props.goFind(f.permissionId)} 
+                        className="min-w-[140px] bg-white dark:bg-gray-800 p-3 rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95"
+                    >
+                        <div className="text-[10px] font-black text-amber-600 uppercase mb-1">{f.findCode}</div>
+                        <div className="text-[8px] opacity-40 font-mono mb-2">{new Date(f.createdAt).toLocaleTimeString()}</div>
+                        <button className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight">Finish Record</button>
+                    </div>
+                ))}
+            </div>
+        </section>
+      )}
 
       <div className="flex flex-col gap-3 overflow-hidden">
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Quick View Finds</h3>
@@ -167,8 +194,22 @@ export default function Home(props: {
         </div>
         
         {(!permissions || permissions.length === 0) && (
-            <div className="text-gray-500 italic bg-gray-50 dark:bg-gray-800/50 p-10 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-center">
-                {searchQuery ? "No results found matching your search." : "No permissions recorded yet. Start by adding a new permission!"}
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-12 rounded-3xl border-4 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
+                <div className="text-5xl mb-4">🗺️</div>
+                <h3 className="text-xl font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-tight">Ready to start?</h3>
+                <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-6 max-w-xs mx-auto">
+                    {searchQuery ? "No results found matching your search." : "Welcome! Add your first permission or start a club rally to begin recording finds."}
+                </p>
+                {!searchQuery && (
+                    <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                        <button onClick={props.goPermission} className="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all">
+                            Add Permission
+                        </button>
+                        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-teal-600 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all">
+                            Join a Rally
+                        </button>
+                    </div>
+                )}
             </div>
         )}
         

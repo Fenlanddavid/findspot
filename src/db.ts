@@ -95,6 +95,7 @@ export type Find = {
   pasId?: string;
   
   isFavorite?: boolean;
+  isPending?: boolean;
 
   // Specific Findspot Location
   lat: number | null;
@@ -310,6 +311,10 @@ export class FindSpotDB extends Dexie {
 
     this.version(12).stores({
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, targetId, detector, ruler, dateRange, createdAt",
+    });
+
+    this.version(13).stores({
+      finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, createdAt",
     });
   }
 }

@@ -14,6 +14,7 @@ import AllFinds from "./pages/AllFinds";
 import FindsBox from "./pages/FindsBox";
 import AllPermissions from "./pages/AllPermissions";
 import Settings from "./pages/Settings";
+import GlobalActions from "./components/GlobalActions";
 
 export function Logo() {
   return (
@@ -303,6 +304,8 @@ function Shell() {
             <Route path="/permission/:id" element={<LinkToPermission />} />
         </Routes>
       </main>
+
+      <GlobalActions projectId={projectId} />
     </div>
   );
 }
@@ -341,12 +344,14 @@ function FindRouter({ projectId }: { projectId: string }) {
   const [params] = useSearchParams();
   const permissionId = params.get("permissionId");
   const sessionId = params.get("sessionId");
+  const quickId = params.get("quickId");
   const lat = params.get("lat");
   const lon = params.get("lon");
   return <FindPage 
     projectId={projectId} 
     permissionId={permissionId ?? null} 
     sessionId={sessionId ?? null} 
+    quickId={quickId ?? null}
     initialLat={lat ? parseFloat(lat) : null}
     initialLon={lon ? parseFloat(lon) : null}
   />;

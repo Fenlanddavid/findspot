@@ -5,7 +5,7 @@ import { db, Media, Find } from "../db";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
-import { getSetting } from "../services/data";
+import { getSetting, setSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 
@@ -23,10 +23,17 @@ function makeFindCode(): string {
   return `FS-${year}-${rand}`;
 }
 
-export default function FindPage(props: { projectId: string; permissionId: string | null; sessionId: string | null; initialLat?: number | null; initialLon?: number | null }) {
+export default function FindPage(props: { 
+  projectId: string; 
+  permissionId: string | null; 
+  sessionId: string | null; 
+  quickId: string | null;
+  initialLat?: number | null; 
+  initialLon?: number | null 
+}) {
   const navigate = useNavigate();
   const [locationName, setLocationName] = useState("");
-  const [fieldId, setFieldId] = useState<string | null>(props.sessionId ? null : null); // We'll fetch if session exists
+  const [fieldId, setFieldId] = useState<string | null>(null);
 
   const permissions = useLiveQuery(
     async () => db.permissions.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
@@ -46,7 +53,6 @@ export default function FindPage(props: { projectId: string; permissionId: strin
 
   const currentPermissionId = useMemo(() => {
     if (props.permissionId) return props.permissionId;
-    // If we have a location name, find its ID
     return permissions?.find(p => p.name === locationName)?.id || null;
   }, [props.permissionId, permissions, locationName]);
 
@@ -98,17 +104,53 @@ export default function FindPage(props: { projectId: string; permissionId: strin
     getSetting("defaultDetector", "").then(d => {
       if (d) setDetector(d);
     });
+
+    // Load sticky metadata
+    getSetting("lastPeriod", "Roman").then(p => setPeriod(p as any));
+    getSetting("lastMaterial", "Copper alloy").then(m => setMaterial(m as any));
   }, []);
+
+  useEffect(() => {
+    if (props.quickId) {
+      db.finds.get(props.quickId).then(f => {
+        if (f) {
+            setSavedId(f.id);
+            setFindCode(f.findCode);
+            setObjectType(f.objectType === "Pending Quick Find" ? "" : f.objectType);
+            setLat(f.lat);
+            setLon(f.lon);
+            setAcc(f.gpsAccuracyM);
+            const grid = toOSGridRef(f.lat!, f.lon!);
+            if (grid) setOsGridRef(grid);
+            setNotes(f.notes);
+            
+            // If it came with a permission already
+            if (f.permissionId) {
+                db.permissions.get(f.permissionId).then(p => {
+                    if (p) setLocationName(p.name);
+                });
+            }
+        }
+      });
+    }
+  }, [props.quickId]);
 
   useEffect(() => {
     if (props.permissionId) {
       db.permissions.get(props.permissionId).then(l => {
         if (l) setLocationName(l.name);
       });
-    } else if (permissions && permissions.length > 0 && !locationName) {
+    } else if (permissions && permissions.length > 0 && !locationName && !props.quickId) {
       setLocationName(permissions[0].name || "");
     }
-  }, [props.permissionId, permissions]);
+  }, [props.permissionId, permissions, props.quickId]);
+
+  // Capture GPS automatically if missing and not editing
+  useEffect(() => {
+      if (!lat && !props.quickId && !savedId) {
+          doGPS();
+      }
+  }, []);
 
   const media = useLiveQuery(
     async () => (savedId ? db.media.where("findId").equals(savedId).toArray() : []),
@@ -165,6 +207,10 @@ export default function FindPage(props: { projectId: string; permissionId: strin
       const trimmedName = locationName.trim();
       let targetPermissionId = "";
       
+      const id = savedId || props.quickId || uuid();
+      const isEditMode = !!(savedId || props.quickId);
+      const now = new Date().toISOString();
+      
       // Find or create permission
       const existing = await db.permissions
         .where("projectId")
@@ -176,7 +222,6 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         targetPermissionId = existing.id;
       } else {
         targetPermissionId = uuid();
-        const now = new Date().toISOString();
         const defaultDetectorist = await getSetting("detectorist", "");
         await db.permissions.add({
           id: targetPermissionId,
@@ -195,9 +240,6 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         });
       }
 
-      const id = uuid();
-      const now = new Date().toISOString();
-
       const s: Find = {
         id,
         projectId: props.projectId,
@@ -213,7 +255,7 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         lon,
         gpsAccuracyM: acc,
         osGridRef,
-        w3w,
+        w3w: w3w.trim(),
         period,
         material,
         weightG: weightG ? parseFloat(weightG) : null,
@@ -228,11 +270,26 @@ export default function FindPage(props: { projectId: string; permissionId: strin
         findContext: findContext.trim(),
         storageLocation: storageLocation.trim(),
         notes: notes.trim(),
-        createdAt: now,
+        isPending: false, // Mark as no longer pending on save
+        createdAt: props.quickId ? undefined as any : now, 
         updatedAt: now,
       };
 
-      await db.finds.add(s);
+      if (props.quickId || isEditMode) {
+        await db.finds.update(id, s);
+      } else {
+        (s as any).createdAt = now;
+        await db.finds.add(s);
+      }
+
+      // Sticky metadata
+      setSetting("lastPeriod", period);
+      setSetting("lastMaterial", material);
+      if (detector) setSetting("defaultDetector", detector);
+
+      // Haptic feedback
+      if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
+
       setSavedId(id);
     } catch (e: any) {
       setError(e?.message ?? "Save failed");
