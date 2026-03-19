@@ -146,6 +146,7 @@ interface Zone {
 
 export default function FieldGuide({ projectId }: { projectId: string }) {
   const [analyzing, setAnalyzing] = useState(false);
+  const [isSatellite, setIsSatellite] = useState(false);
   const [detectedFeatures, setDetectedFeatures] = useState<Cluster[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
@@ -493,8 +494,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       container: mapContainerRef.current,
       style: {
         version: 8,
-        sources: { 'osm': { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' } },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+        sources: { 
+            'osm': { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' },
+            'satellite': { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' }
+        },
+        layers: [
+            { id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'none' : 'visible' } },
+            { id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'visible' : 'none' } }
+        ]
       },
       center: [-2.0, 54.5],
       zoom: 5.5,
@@ -596,6 +603,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     mapRef.current = map;
   }, []);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    if (map.getLayer('osm')) map.setLayoutProperty('osm', 'visibility', isSatellite ? 'none' : 'visible');
+    if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', isSatellite ? 'visible' : 'none');
+  }, [isSatellite]);
 
   useEffect(() => {
     if (mapRef.current) {
@@ -1473,6 +1487,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       <div className="flex flex-1 overflow-hidden relative">
         <div className="flex-1 relative bg-slate-900">
             <div ref={mapContainerRef} className="absolute inset-0" />
+            
+            {/* Map Layer Toggle */}
+            <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
+                <button 
+                    onClick={() => setIsSatellite(!isSatellite)}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${
+                        isSatellite 
+                        ? 'bg-emerald-500 border-white text-white' 
+                        : 'bg-slate-900/90 border-white/10 text-slate-300'
+                    }`}
+                >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                        <polyline points="2 17 12 22 22 17" />
+                        <polyline points="2 12 12 17 22 12" />
+                    </svg>
+                </button>
+            </div>
             
             {/* Center Reticle */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20">
