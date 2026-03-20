@@ -1085,10 +1085,10 @@ export default function PermissionPage(props: {
                             {standaloneFinds.map(f => {
                                 const thumb = allMedia?.find(m => m.findId === f.id);
                                 return (
-                                    <div key={f.id} className="bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-800/50 rounded-xl shadow-sm overflow-hidden flex flex-col group">
+                                    <div key={f.id} className="bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-800/50 rounded-xl shadow-sm flex flex-col group relative">
                                         <button 
                                             onClick={() => setOpenFindId(f.id)}
-                                            className="w-full text-left p-3 flex items-center gap-3 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all border-b border-gray-50 dark:border-gray-700/50"
+                                            className="w-full text-left p-3 flex items-center gap-3 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all border-b border-gray-50 dark:border-gray-700/50 rounded-t-xl"
                                         >
                                             <div className="w-10 h-10 bg-sky-100 dark:bg-sky-900/50 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
                                                 {thumb ? (
@@ -1112,21 +1112,21 @@ export default function PermissionPage(props: {
                                         </button>
 
                                         {/* Quick Actions Bar */}
-                                        <div className="p-2 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2">
+                                        <div className="p-2 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 rounded-b-xl">
                                             {sessions && sessions.length > 0 ? (
                                                 <div className="relative flex-1 group/link">
                                                     <button className="w-full bg-sky-600 text-white text-[9px] font-black py-2 rounded-lg shadow-sm hover:bg-sky-700 transition-all uppercase tracking-widest text-center flex items-center justify-center gap-1">
-                                                        <span>🔗 Link to Visit / Session</span>
+                                                        <span>🔗 Link to Visit</span>
                                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                                                     </button>
                                                     
-                                                    {/* Session Selection Menu */}
-                                                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 border-2 border-sky-200 dark:border-sky-800 rounded-xl shadow-2xl p-1 hidden group-hover/link:block z-50 animate-in fade-in slide-in-from-bottom-2">
+                                                    {/* Session Selection Menu - Positioned to pop out without being clipped */}
+                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border-2 border-sky-400 dark:border-sky-600 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.3)] p-1 hidden group-hover/link:block z-50 animate-in fade-in slide-in-from-top-2">
                                                         <div className="text-[8px] font-black text-sky-600 uppercase p-2 border-b border-gray-50 dark:border-gray-700 mb-1 flex justify-between items-center">
                                                             <span>Select a Visit</span>
                                                             <span className="opacity-50">Recent 5</span>
                                                         </div>
-                                                        <div className="max-h-48 overflow-y-auto">
+                                                        <div className="max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 pr-1">
                                                             {sessions.slice(0, 5).map((s: any) => (
                                                                 <button 
                                                                     key={s.id}
@@ -1135,17 +1135,17 @@ export default function PermissionPage(props: {
                                                                             await db.finds.update(f.id, { 
                                                                                 sessionId: s.id, 
                                                                                 fieldId: s.fieldId || f.fieldId,
-                                                                                isPending: false // Ensure it's fully recorded
+                                                                                isPending: false 
                                                                             });
                                                                         }
                                                                     }}
                                                                     className="w-full text-left p-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0 group/item"
                                                                 >
-                                                                    <div className="text-[10px] font-black text-gray-800 dark:text-gray-100 group-hover/item:text-emerald-600 transition-colors">
-                                                                        🗓️ {new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                                    <div className="text-[10px] font-black text-gray-800 dark:text-gray-100 group-hover/item:text-emerald-600 transition-colors leading-tight">
+                                                                        🗓️ {new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                                                                     </div>
-                                                                    <div className="text-[8px] opacity-60 truncate font-medium">
-                                                                        {s.fieldName || "General Location"} {s.cropType ? `(${s.cropType})` : ""}
+                                                                    <div className="text-[8px] opacity-60 truncate font-bold mt-0.5">
+                                                                        {s.fieldName || "General Location"}
                                                                     </div>
                                                                 </button>
                                                             ))}
@@ -1154,7 +1154,7 @@ export default function PermissionPage(props: {
                                                             onClick={() => nav(`/session/new?permissionId=${id}`)}
                                                             className="w-full text-center p-2 mt-1 text-[8px] font-black text-emerald-600 uppercase hover:bg-gray-50 dark:hover:bg-gray-900 rounded-lg transition-colors border-t border-gray-100 dark:border-gray-700"
                                                         >
-                                                            + Start New Visit Instead
+                                                            + Start New Visit
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1163,7 +1163,7 @@ export default function PermissionPage(props: {
                                                     onClick={() => nav(`/session/new?permissionId=${id}`)}
                                                     className="w-full bg-emerald-600 text-white text-[9px] font-black py-2 rounded-lg shadow-sm hover:bg-emerald-700 transition-all uppercase tracking-widest text-center"
                                                 >
-                                                    + Create First Visit to Link
+                                                    + Create Visit
                                                 </button>
                                             )}
                                         </div>
