@@ -64,15 +64,13 @@ export default function Settings() {
 
     // Fetch Community Stats
     fetch("https://api.counterapi.dev/v1/findspot-uk/installs/")
-      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(res => res.json())
       .then(data => {
         if (data && typeof data.count === 'number') {
           setInstallCount(data.count);
-        } else {
-          setInstallCount(null);
         }
       })
-      .catch(() => setInstallCount(null));
+      .catch(err => console.error("Stats fetch failed:", err));
   }, []);
 
   async function handleRequestPersistence() {
@@ -360,7 +358,7 @@ export default function Settings() {
         </section>
 
         {typeof installCount === 'number' && (
-          <div className="mt-2 flex justify-end items-center gap-1 opacity-20 hover:opacity-60 transition-opacity cursor-default pr-2">
+          <div className="mt-2 flex justify-end items-center gap-1 opacity-40 hover:opacity-100 transition-opacity cursor-default pr-2">
             <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
             <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
           </div>
