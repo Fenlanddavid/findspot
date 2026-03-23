@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useNavigate } from 'react-router-dom';
 import { toOSGridRef } from '../services/gps';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db';
 
 interface Cluster {
     id: string; points: {x: number, y: number}[];
@@ -24,6 +26,8 @@ interface Cluster {
     rescanCount?: number; // Number of times anchored
     disturbanceRisk?: 'Low' | 'Medium' | 'High';
     disturbanceReason?: string;
+    aspect?: number; // 0-360 degrees
+    relativeElevation?: 'Ridge' | 'Hollow' | 'Slope' | 'Flat';
     metrics?: { circularity: number; density: number; ratio: number; area: number };
 }
 interface PASFind {
@@ -36,6 +40,7 @@ interface PASFind {
     lat: number;
     lon: number;
     isApprox?: boolean; // True if it's a 1km grid centroid or parish centroid
+    osmType?: string; // e.g. node, way, relation
 }
 
 interface PlaceSignal {
@@ -130,26 +135,31 @@ const SCAN_PROFILE = {
     }
 };
 
-interface Zone {
+interface Hotspot {
     id: string;
     number: number;
-    type: 'Settlement' | 'Activity' | 'Route' | 'Disturbed' | 'Unknown';
-    priority: 'High' | 'Medium' | 'Low';
-    persistence: 'High' | 'Medium' | 'Low';
-    disturbance: 'High' | 'Medium' | 'Low';
+    score: number; // 0-100 (cap at 98)
+    confidence: 'Weak' | 'Moderate' | 'Strong' | 'Elite';
+    type: 'Settlement Edge' | 'Water Interaction' | 'Movement Corridor' | 'Raised Dry Point' | 'Field Activity Zone';
+    explanation: string[]; // Reasons why it stands out
     center: [number, number];
     bounds: [[number, number], [number, number]]; // [SW, NE]
     memberIds: string[];
-    description: string;
-    insights: string[];
+    metrics: {
+        anomaly: number;
+        context: number;
+        convergence: number;
+        behaviour: number;
+        penalty: number;
+    };
 }
 
 export default function FieldGuide({ projectId }: { projectId: string }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [isSatellite, setIsSatellite] = useState(false);
   const [detectedFeatures, setDetectedFeatures] = useState<Cluster[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
   const [heritageCount, setHeritageCount] = useState(0);
   const [zoomWarning, setZoomWarning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -157,7 +167,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isIntelOpen, setIsIntelOpen] = useState(false);
+  const [targetPeriod, setTargetPeriod] = useState<'All' | 'Bronze Age' | 'Roman' | 'Medieval'>('All');
   
+  const permissions = useLiveQuery(() => db.permissions.where("projectId").equals(projectId).toArray()) || [];
+  const fields = useLiveQuery(() => db.fields.where("projectId").equals(projectId).toArray()) || [];
+
   // PAS & Potential Score State
   const [pasFinds, setPasFinds] = useState<PASFind[]>([]);
   const [selectedPASFind, setSelectedPASFind] = useState<PASFind | null>(null);
@@ -178,8 +192,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
   const clearScan = () => {
     setDetectedFeatures([]);
-    setZones([]); // Clear all strategic zones
-    setSelectedZoneId(null); // Clear active zone border
+    setHotspots([]); // Clear all strategic hotspots
+    setSelectedHotspotId(null); // Clear active hotspot border
     setHeritageCount(0);
     setSelectedId(null);
     if (mapRef.current) {
@@ -201,277 +215,176 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }
     
     const center = mapRef.current.getCenter();
+    const bounds = mapRef.current.getBounds();
     setLoadingPAS(true);
-    addLog(`INITIALIZING SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
+    addLog(`INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
-    // 1. REVERSE GEOCODE to get Parish/County (The "Another Way")
-    let parish = "";
-    let county = "";
     try {
-        addLog("IDENTIFYING PARISH...");
-        const geoResp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}`, {
-            headers: { 'User-Agent': 'FindSpot-FieldGuide/1.0' }
-        });
-        const geoData = await geoResp.json();
-        if (geoData && geoData.address) {
-            parish = geoData.address.village || geoData.address.town || geoData.address.suburb || "";
-            county = geoData.address.county || "";
-            addLog(`LOCATION: ${parish}, ${county}`);
-        }
-
-        // SCAN NEARBY PLACE NAMES FOR SIGNALS via Overpass (More comprehensive: millions of entries)
-        addLog("ENGAGING OVERPASS ETYMOLOGY ENGINE...");
-        const latOffsetPlace = 10 / 111.32; // ~10km box
-        const lonOffsetPlace = 10 / (111.32 * Math.cos(center.lat * Math.PI / 180));
-        const pWest = (center.lng - lonOffsetPlace).toFixed(4);
-        const pSouth = (center.lat - latOffsetPlace).toFixed(4);
-        const pEast = (center.lng + lonOffsetPlace).toFixed(4);
-        const pNorth = (center.lat + latOffsetPlace).toFixed(4);
-
-        // Fetch villages, farms, hills, and historic sites with names
-        const overpassQuery = `[out:json][timeout:15];(node["name"]["place"~"city|town|village|hamlet|isolated_dwelling"](${pSouth},${pWest},${pNorth},${pEast});way["name"]["place"~"city|town|village|hamlet|isolated_dwelling"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["natural"~"hill|peak|ridge"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["historic"](${pSouth},${pWest},${pNorth},${pEast});node["name"]["landuse"="farmyard"](${pSouth},${pWest},${pNorth},${pEast}););out center;`;
+        // Calculate a buffered bounding box (min 1km) to ensure we fetch data even when zoomed in tight
+        const latBuffer = 0.009; // approx 1km
+        const lonBuffer = 0.015; // approx 1km at UK latitudes
         
-        const placeResp = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
-        const placeData = await placeResp.json();
-        
-        if (placeData && placeData.elements) {
-            const detectedSignals: PlaceSignal[] = [];
+        const west = Number(Math.min(bounds.getWest(), center.lng - lonBuffer).toFixed(4));
+        const south = Number(Math.min(bounds.getSouth(), center.lat - latBuffer).toFixed(4));
+        const east = Number(Math.max(bounds.getEast(), center.lng + lonBuffer).toFixed(4));
+        const north = Number(Math.max(bounds.getNorth(), center.lat + latBuffer).toFixed(4));
+
+        // 1. REVERSE GEOCODING (Parish & County)
+        try {
+            addLog("STAGE: Geocoding Location...");
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}`);
+            const geoData = await geoRes.json();
+            if (geoData && geoData.address) {
+                const parish = geoData.address.parish || geoData.address.village || geoData.address.town || "Unknown Parish";
+                const county = geoData.address.county || geoData.address.state_district || "Unknown County";
+                
+                // Calculate 4-figure OS Grid Reference
+                const fullGrid = toOSGridRef(center.lat, center.lng);
+                const parts = fullGrid.split(' ');
+                const fourFigure = parts.length === 3 ? `${parts[0]} ${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}` : fullGrid;
+                
+                addLog(`LOCATION: ${parish}, ${county} [${fourFigure}]`);
+            }
+        } catch (e) { console.error("Reverse Geocoding Failed", e); }
+
+        // 2. ETYMOLOGY ENGINE (Place Names)
+        let discoveredSignals: PlaceSignal[] = [];
+        try {
+            addLog("STAGE: Searching Etymological Signals...");
+            const placeQuery = `[out:json][timeout:25];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east});node["standing_remains"](${south},${west},${north},${east});way["standing_remains"](${south},${west},${north},${east}););out center;`;
+            const pRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(placeQuery)}`);
+            const pData = await pRes.json();
             
-            // Map technical OSM tags to user-friendly categories
-            const getTypeLabel = (tags: any) => {
-                if (tags.place) return "Populated Place";
-                if (tags.natural) return "Topographic Feature";
-                if (tags.historic) return "Historic Site";
-                if (tags.landuse === "farmyard") return "Agricultural Site";
-                return "Feature";
-            };
+            if (pData && pData.elements) {
+                const signals: PlaceSignal[] = [];
+                pData.elements.forEach((el: any) => {
+                    const name = el.tags?.name || "";
+                    if (!name) return;
 
-            placeData.elements.forEach((el: any) => {
-                const name = el.tags.name;
-                const typeLabel = getTypeLabel(el.tags);
+                    const lat = el.lat || el.center?.lat;
+                    const lon = el.lon || el.center?.lon;
+                    if (!lat || !lon) return;
+
+                    ETYMOLOGY_SIGNALS.forEach(sig => {
+                        if (name.toLowerCase().includes(sig.pattern.toLowerCase())) {
+                            // Robust type mapping - use the first available descriptive tag value
+                            const typeValue = el.tags?.historic || el.tags?.heritage || el.tags?.place || el.tags?.natural || el.tags?.landuse || el.tags?.standing_remains || "Location";
+                            
+                            signals.push({
+                                name: name,
+                                meaning: sig.meaning,
+                                distance: getDistancePAS(center.lat, center.lng, lat, lon),
+                                period: sig.period,
+                                confidence: sig.confidence,
+                                type: String(typeValue)
+                            });
+                        }
+                    });
+                });
+                discoveredSignals = signals.sort((a, b) => b.confidence - a.confidence);
+                setPlaceSignals(discoveredSignals);
+                if (discoveredSignals.length > 0) addLog(`SUCCESS: ${discoveredSignals.length} etymological signals detected.`);
+            }
+        } catch (e) { console.error("Etymology Engine Failed", e); }
+
+        // 3. HERITAGE SCAN (OSM Heritage)
+        addLog("STAGE: Querying Heritage Engine...");
+        // Expanded Overpass query with tightened radius (2000m) and more tags
+        const overpassQuery = `[out:json][timeout:30];(node["historic"](around:2000, ${center.lat}, ${center.lng});way["historic"](around:2000, ${center.lat}, ${center.lng});node["heritage"](around:2000, ${center.lat}, ${center.lng});way["heritage"](around:2000, ${center.lat}, ${center.lng});node["archaeological_site"](around:2000, ${center.lat}, ${center.lng});way["archaeological_site"](around:2000, ${center.lat}, ${center.lng});node["standing_remains"](around:2000, ${center.lat}, ${center.lng});way["standing_remains"](around:2000, ${center.lat}, ${center.lng}););out center;`;
+        
+        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
+        const data = await response.json();
+        
+        if (data && data.elements) {
+            const mappedFinds: PASFind[] = data.elements.map((el: any) => {
                 const lat = el.lat || el.center?.lat;
                 const lon = el.lon || el.center?.lon;
                 
-                const match = ETYMOLOGY_SIGNALS.find(s => name.toLowerCase().includes(s.pattern));
-                if (match && lat && lon) {
-                    const dist = getDistancePAS(center.lat, center.lng, lat, lon);
-                    if (!detectedSignals.find(ds => ds.name === name)) {
-                        detectedSignals.push({ 
-                            name, 
-                            meaning: match.meaning, 
-                            distance: dist,
-                            period: match.period,
-                            confidence: match.confidence,
-                            type: typeLabel
-                        });
-                    }
-                }
-            });
+                // Robust heritage type mapping
+                const type = el.tags?.historic || el.tags?.archaeological_site || el.tags?.heritage || el.tags?.standing_remains || el.tags?.site_type || "Heritage Site";
+                const name = el.tags?.name;
+                
+                // Distance from center
+                const dist = getDistancePAS(center.lat, center.lng, lat, lon);
+                
+                // Filter distance: if outside viewport, must be within 2km
+                const inViewport = lat >= south && lat <= north && lon >= west && lon <= east;
+                if (!inViewport && dist > 2) return null;
+
+                const descriptiveType = name ? `${name} (${type})` : type;
+                
+                return {
+                    id: `OSM-${el.id}`,
+                    internalId: String(el.id),
+                    objectType: String(descriptiveType).charAt(0).toUpperCase() + String(descriptiveType).slice(1),
+                    broadperiod: el.tags?.period || "Unknown",
+                    county: "Local Area",
+                    workflow: "PAS",
+                    lat,
+                    lon,
+                    isApprox: false,
+                    osmType: el.type
+                };
+            }).filter((f: any) => f !== null && f.lat && f.lon);
+
+            setPasFinds(mappedFinds);
+            addLog(`SUCCESS: ${mappedFinds.length} heritage features identified within 2km.`);
             
-            if (detectedSignals.length > 0) {
-                setPlaceSignals(detectedSignals.sort((a, b) => a.distance - b.distance));
-                addLog(`SIGNALS: ${detectedSignals.length} historic signals detected.`);
-            } else {
-                addLog("SIGNALS: No etymological matches in area.");
-            }
+            // Pass discoveredSignals directly to ensure we use the latest discovered data
+            calculatePotentialScore(mappedFinds, monumentPoints, discoveredSignals);
+        } else {
+            addLog("SCAN FINISHED: No heritage features found.");
+            calculatePotentialScore([], monumentPoints, discoveredSignals);
         }
     } catch (e) {
-        addLog("SIGNAL SCAN FAILED (Overpass Timeout/Proxy)");
+        addLog("HERITAGE SCAN FAILED (Overpass Timeout)");
+        console.error(e);
+    } finally {
+        setLoadingPAS(false);
     }
-
-    // 2. CALCULATE 4-FIGURE GRID REF (1km Square)
-    const gridRefFull = toOSGridRef(center.lat, center.lng);
-    let grid4 = "";
-    if (gridRefFull && gridRefFull.length > 10) {
-        // e.g. "TL 12345 67890" -> "TL1267" approx (using first 2 digits of each 5-digit block)
-        const parts = gridRefFull.split(" ");
-        if (parts.length === 3) {
-            grid4 = `${parts[0]}${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}`;
-            addLog(`GRID SQUARE: ${grid4}`);
-        }
-    }
-
-    // 3. PREPARE MULTIPLE SEARCH STRATEGIES
-    const latOffset = 8 / 111.32; // ~8km box
-    const lonOffset = 8 / (111.32 * Math.cos(center.lat * Math.PI / 180));
-    const west = (center.lng - lonOffset).toFixed(4);
-    const south = (center.lat - latOffset).toFixed(4);
-    const east = (center.lng + lonOffset).toFixed(4);
-    const north = (center.lat + latOffset).toFixed(4);
-
-    const searchUrls: { url: string, label: string }[] = [];
-    // Strategy A: Bounding Box (Precise points)
-    searchUrls.push({ 
-        url: `https://finds.org.uk/database/search/results/bbox/${west},${south},${east},${north}/show/100/format/json`,
-        label: "BBOX Scan"
-    });
-    
-    // Strategy B: Parish Search (General area mapping - very robust)
-    if (parish && county) {
-        searchUrls.push({ 
-            url: `https://finds.org.uk/database/search/results/parish/${encodeURIComponent(parish)}/county/${encodeURIComponent(county)}/show/100/format/json`,
-            label: "Parish Scan"
-        });
-    }
-
-    // Strategy C: Grid Reference Search (Keyword-based)
-    if (grid4) {
-        searchUrls.push({ 
-            url: `https://finds.org.uk/database/search/results/q/${grid4}/show/100/format/json`,
-            label: "Grid Scan"
-        });
-    }
-
-    const allProxies = [
-        { type: 'raw', name: 'Direct' },
-        { type: 'wrapped', name: 'AllOrigins' },
-        { type: 'raw', name: 'CORSProxy.io' },
-        { type: 'raw', name: 'CodeTabs' },
-        { type: 'raw', name: 'CORS.sh' }
-    ];
-
-    const fetchWithFallback = async (pasUrl: string, label: string): Promise<PASFind[]> => {
-        addLog(`RACING PROXIES FOR: ${label}...`);
-        
-        const raceProxy = async (proxy: {name: string, type: string}): Promise<PASFind[]> => {
-            let finalUrl = pasUrl;
-            if (proxy.name === 'AllOrigins') finalUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(pasUrl)}`;
-            if (proxy.name === 'CORSProxy.io') finalUrl = `https://corsproxy.io/?${encodeURIComponent(pasUrl)}`;
-            if (proxy.name === 'CodeTabs') finalUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(pasUrl)}`;
-            if (proxy.name === 'CORS.sh') finalUrl = `https://proxy.cors.sh/${pasUrl}`;
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 4000); // OPTION 3: AGGRESSIVE 4S TIMEOUT
-
-            try {
-                const response = await fetch(finalUrl, {
-                    headers: { 'Accept': 'application/json' },
-                    mode: 'cors',
-                    signal: controller.signal
-                });
-
-                clearTimeout(timeoutId);
-                if (!response.ok) throw new Error("Network fail");
-
-                const text = await response.text();
-                if (!text || text.includes('<!DOCTYPE') || text.length < 100) throw new Error("Invalid data");
-
-                let data = JSON.parse(text);
-                if (proxy.type === 'wrapped' && data.contents) data = JSON.parse(data.contents);
-
-                const results = data.results || data.features || [];
-                if (!results.length) throw new Error("No records");
-
-                return results.map((p: any) => {
-                    const item = p.properties || p;
-                    const iLat = Number(item.declat || item.fourFigureLat || item.latitude || item.lat || NaN);
-                    const iLon = Number(item.declon || item.fourFigureLon || item.longitude || item.lon || NaN);
-                    
-                    if (isNaN(iLat) || isNaN(iLon)) return null;
-
-                    return {
-                        id: String(item.findIdentifier || item.id || item.secuid),
-                        internalId: String(item.id || item.secuid || ""),
-                        objectType: String(item.objecttype || "Object"),
-                        broadperiod: String(item.broadperiod || "Unknown"),
-                        county: String(item.county || "Unknown"),
-                        workflow: "PAS",
-                        lat: iLat,
-                        lon: iLon,
-                        isApprox: !!item.fourFigureLat
-                    } as PASFind;
-                }).filter((f: any): f is PASFind => f !== null);
-            } catch (e) {
-                clearTimeout(timeoutId);
-                throw e; // Re-throw so Promise.any knows this proxy failed
-            }
-        };
-
-        try {
-            // OPTION 1: PROXY RACING (Fire all at once, take first successful)
-            const result = await Promise.any(allProxies.map(p => raceProxy(p)));
-            return result;
-        } catch (e) {
-            // If all proxies in the race fail
-            return [];
-        }
-    };
-
-    // Execute all strategies in parallel for speed
-    addLog("EXECUTING MULTISPECTRAL PAS SCAN...");
-    const strategyPromises = searchUrls.map(s => fetchWithFallback(s.url, s.label));
-    const resultsArray = await Promise.all(strategyPromises);
-    
-    let combinedFinds: PASFind[] = [];
-    resultsArray.forEach((results, idx) => {
-        if (results.length > 0) {
-            combinedFinds = [...combinedFinds, ...results];
-            addLog(`READY: ${results.length} records from ${searchUrls[idx].label}`);
-        }
-    });
-
-    // Deduplicate and filter by distance
-    const uniqueMap = new Map();
-    combinedFinds.forEach(f => {
-        if (!uniqueMap.has(f.id)) uniqueMap.set(f.id, f);
-    });
-
-    const finalFinds = Array.from(uniqueMap.values()).filter(f => {
-        const d = getDistancePAS(center.lat, center.lng, f.lat, f.lon);
-        return d < 15;
-    });
-
-    if (finalFinds.length > 0) {
-        setPasFinds(finalFinds);
-        addLog(`SUCCESS: ${finalFinds.length} total finds mapped.`);
-        calculatePotentialScore(finalFinds, monumentPoints);
-    } else {
-        addLog("SCAN FINISHED: 0 records found in this area.");
-    }
-    setLoadingPAS(false);
   };
 
 
-  const calculatePotentialScore = (pas: PASFind[], monuments: [number, number][]) => {
+  const calculatePotentialScore = (pas: PASFind[], monuments: [number, number][], signals: PlaceSignal[]) => {
     if (!mapRef.current) return;
     const center = mapRef.current.getCenter();
-    let score = 30; // Base score for any field
+    let score = 25; 
     const reasons: string[] = [];
 
-    // 1. Proximity to PAS Finds (High Weight)
-    const nearbyPAS = pas.filter(f => {
+    // 1. Proximity to OSM Heritage Features
+    const nearbyHeritage = pas.filter(f => {
         const dist = getDistancePAS(center.lat, center.lng, f.lat, f.lon);
-        return dist < 1.0; // 1km radius
+        return dist < 1.5; // 1.5km radius
     });
 
-    if (nearbyPAS.length > 5) {
-        score += 35;
-        reasons.push(`${nearbyPAS.length} historic finds within 1km`);
-    } else if (nearbyPAS.length > 0) {
-        score += 20;
-        reasons.push(`Known historic finds in immediate vicinity`);
+    if (nearbyHeritage.length >= 3) {
+        score += 45;
+        reasons.push(`${nearbyHeritage.length} heritage features within 1.5km`);
+    } else if (nearbyHeritage.length > 0) {
+        score += 25;
+        reasons.push(`Heritage sites detected in vicinity`);
     }
 
-    // 2. Proximity to Scheduled Monuments/HE AIM (High Weight)
+    // 2. Proximity to Scheduled Monuments (High Weight)
     const nearbyMonuments = monuments.filter(m => {
         const dist = getDistancePAS(center.lat, center.lng, m[1], m[0]);
-        return dist < 0.5; // 500m radius
+        return dist < 0.6; // 600m radius
     });
 
     if (nearbyMonuments.length > 0) {
-        score += 25;
-        reasons.push("Adjacent to recorded archaeological monument");
+        score += 35;
+        reasons.push("Adjacent to Scheduled Monument");
     }
 
-    // 3. Geographic Features (Water/Slope)
-    // For now, we simulate this based on the existing hydrology scan if any linear features were found
-    const hasWater = detectedFeatures.some(f => f.source === 'hydrology' && f.metrics && f.metrics.ratio > 5);
-    if (hasWater) {
-        score += 15;
-        reasons.push("Near palaeochannel or historic watercourse");
+    // 3. Etymological Signals
+    const nearbySignals = signals.filter(s => s.distance < 2.0);
+    if (nearbySignals.length > 0) {
+        const bestSignal = [...nearbySignals].sort((a, b) => b.confidence - a.confidence)[0];
+        score += Math.round(bestSignal.confidence * 20);
+        reasons.push(`Significant etymological signal: ${bestSignal.name}`);
     }
 
-    // Cap score at 98% (Archaeology is never 100% certain!)
+    // Cap at 98%
     const finalScore = Math.min(score, 98);
     setPotentialScore({ score: finalScore, reasons });
   };
@@ -513,26 +426,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         map.addLayer({ id: 'monuments-fill', type: 'fill', source: 'monuments', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.25 } });
         map.addLayer({ id: 'monuments-outline', type: 'line', source: 'monuments', paint: { 'line-color': '#ef4444', 'line-width': 3 } });
         
-        map.addSource('zones-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addSource('hotspots-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({ 
-            id: 'zones-outline', 
+            id: 'hotspots-outline', 
             type: 'line', 
-            source: 'zones-overlay', 
+            source: 'hotspots-overlay', 
             paint: { 
                 'line-color': [
-                    'match', ['get', 'type'],
-                    'Settlement', '#f59e0b',
-                    'Activity', '#10b981',
-                    'Route', '#0ea5e9',
-                    'Disturbed', '#64748b',
-                    '#fff'
-                ],
-                'line-width': 3, 
-                'line-opacity': [
                     'case',
-                    ['==', ['get', 'id'], ''], 0, // Placeholder for selected ID logic
-                    1.0
-                ] 
+                    ['>=', ['get', 'score'], 80], '#f59e0b', // Priority
+                    ['>=', ['get', 'score'], 45], '#10b981', // Moderate/High
+                    '#3b82f6' // Low/Possible
+                ],
+                'line-width': 4, 
+                'line-opacity': 1.0
+            } 
+        });
+        map.addLayer({ 
+            id: 'hotspots-fill', 
+            type: 'fill', 
+            source: 'hotspots-overlay', 
+            paint: { 
+                'fill-color': [
+                    'case',
+                    ['>=', ['get', 'score'], 80], '#f59e0b',
+                    ['>=', ['get', 'score'], 45], '#10b981',
+                    '#3b82f6'
+                ],
+                'fill-opacity': 0.15
             } 
         });
 
@@ -578,7 +499,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         map.on('click', 'pas-circles', (e) => {
             if (e.features?.[0]) {
                 const props = e.features[0].properties as any;
-                addLog(`PAS FIND: ${props.objectType} (${props.broadperiod}) - ${props.id}`);
+                addLog(`HERITAGE: ${props.objectType} - ${props.id}`);
                 setSelectedPASFind({
                     id: props.id,
                     internalId: String(props.internalId || ""),
@@ -588,7 +509,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     workflow: "PAS",
                     lat: Number(props.lat),
                     lon: Number(props.lon),
-                    isApprox: !!props.isApprox
+                    isApprox: !!props.isApprox,
+                    osmType: props.osmType
                 });
             }
         });
@@ -613,39 +535,39 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (mapRef.current) {
-        const zoneGeoJSON = {
+        const hotspotGeoJSON = {
             type: 'FeatureCollection',
-            features: zones
-                .filter(z => z.id === selectedZoneId) // Only include the selected zone
-                .map(z => ({
+            features: hotspots
+                .filter(h => h.id === selectedHotspotId) // Only include the selected hotspot
+                .map(h => ({
                 type: 'Feature',
                 geometry: {
                     type: 'Polygon',
                     coordinates: [[
-                        [z.bounds[0][0], z.bounds[0][1]],
-                        [z.bounds[1][0], z.bounds[0][1]],
-                        [z.bounds[1][0], z.bounds[1][1]],
-                        [z.bounds[0][0], z.bounds[1][1]],
-                        [z.bounds[0][0], z.bounds[0][1]]
+                        [h.bounds[0][0], h.bounds[0][1]],
+                        [h.bounds[1][0], h.bounds[0][1]],
+                        [h.bounds[1][0], h.bounds[1][1]],
+                        [h.bounds[0][0], h.bounds[1][1]],
+                        [h.bounds[0][0], h.bounds[0][1]]
                     ]]
                 },
-                properties: { id: z.id, type: z.type, priority: z.priority }
+                properties: { id: h.id, type: h.type, score: h.score }
             }))
         };
-        const source = mapRef.current.getSource('zones-overlay') as maplibregl.GeoJSONSource;
-        if (source) source.setData(zoneGeoJSON as any);
+        const source = mapRef.current.getSource('hotspots-overlay') as maplibregl.GeoJSONSource;
+        if (source) source.setData(hotspotGeoJSON as any);
     }
-  }, [zones, selectedZoneId]);
+  }, [hotspots, selectedHotspotId]);
 
   useEffect(() => {
-    if (mapRef.current && mapRef.current.getLayer('zones-outline')) {
-        if (selectedZoneId) {
-            mapRef.current.setFilter('zones-outline', ['==', ['get', 'id'], selectedZoneId]);
+    if (mapRef.current && mapRef.current.getLayer('hotspots-outline')) {
+        if (selectedHotspotId) {
+            mapRef.current.setFilter('hotspots-outline', ['==', ['get', 'id'], selectedHotspotId]);
         } else {
-            mapRef.current.setFilter('zones-outline', ['==', ['get', 'id'], '']);
+            mapRef.current.setFilter('hotspots-outline', ['==', ['get', 'id'], '']);
         }
     }
-  }, [selectedZoneId]);
+  }, [selectedHotspotId]);
 
   useEffect(() => {
     if (mapRef.current) {
@@ -683,13 +605,26 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     if (mapRef.current) {
-        // Group finds by coordinate to detect overlaps
+        // Map PAS points with a slight offset for identical coordinates to prevent stacking
         const coordGroups: { [key: string]: number } = {};
         
-        // USER REQUEST: Don't map PAS points because they aren't accurate enough
         const pasGeoJSON = {
             type: 'FeatureCollection',
-            features: [] // Empty features to hide points from map
+            features: pasFinds.map(f => {
+                const key = `${f.lat.toFixed(4)},${f.lon.toFixed(4)}`;
+                const count = coordGroups[key] || 0;
+                coordGroups[key] = count + 1;
+                
+                // Jitter slightly if they are exactly the same
+                const jitterLat = f.lat + (count * 0.0001);
+                const jitterLon = f.lon + (count * 0.0001);
+
+                return {
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [jitterLon, jitterLat] },
+                    properties: { ...f }
+                };
+            })
         };
         
         const updateSource = () => {
@@ -1004,6 +939,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         cluster.center = [lon, lat];
                         cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
 
+                        // --- TOPOGRAPHICAL ANALYSIS (PHASE 2) ---
+                        if (sourceType.startsWith('terrain')) {
+                            const ix = Math.floor(midX), iy = Math.floor(midY);
+                            if (ix > 0 && ix < stitchSize - 1 && iy > 0 && iy < stitchSize - 1) {
+                                // 1. ASPECT CALCULATION (Slope Direction)
+                                const dz_dx = (processed[iy * stitchSize + (ix + 1)] - processed[iy * stitchSize + (ix - 1)]) / 2.0;
+                                const dz_dy = (processed[(iy + 1) * stitchSize + ix] - processed[(iy - 1) * stitchSize + ix]) / 2.0;
+                                let aspect = Math.atan2(dz_dy, -dz_dx) * (180 / Math.PI);
+                                if (aspect < 0) aspect += 360;
+                                cluster.aspect = aspect;
+
+                                // 2. RELATIVE ELEVATION (Shelter vs Exposure)
+                                const cVal = processed[iy * stitchSize + ix];
+                                let higher = 0, lower = 0;
+                                const neighbors = [
+                                    processed[(iy-1)*stitchSize+(ix-1)], processed[(iy-1)*stitchSize+ix], processed[(iy-1)*stitchSize+(ix+1)],
+                                    processed[iy*stitchSize+(ix-1)],                                     processed[iy*stitchSize+(ix+1)],
+                                    processed[(iy+1)*stitchSize+(ix-1)], processed[(iy+1)*stitchSize+ix], processed[(iy+1)*stitchSize+(ix+1)]
+                                ];
+                                neighbors.forEach(v => { if (v > cVal + 0.02) higher++; else if (v < cVal - 0.02) lower++; });
+
+                                if (higher >= 6) cluster.relativeElevation = 'Hollow';
+                                else if (lower >= 6) cluster.relativeElevation = 'Ridge';
+                                else if (higher >= 1 && lower >= 1) cluster.relativeElevation = 'Slope';
+                                else cluster.relativeElevation = 'Flat';
+                            }
+                        }
+
                         if (lon >= bounds.getWest() && lon <= bounds.getEast() && lat >= bounds.getSouth() && lat <= bounds.getNorth()) {
                             for (const asset of assetsGeoJSON.features as any[]) {
                                 if (asset.geometry?.type === 'Polygon' && isPointInPolygon(lat, lon, asset.geometry.coordinates)) { cluster.isProtected = true; cluster.monumentName = asset.properties.Name; break; }
@@ -1038,7 +1001,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                             const confidenceVal = (dens * 0.3) + (circularity * 0.3) + (Math.min(areaPx/600, 1) * 0.4);
                             cluster.confidence = confidenceVal > 0.6 ? 'High' : (confidenceVal > 0.35 ? 'Medium' : 'Subtle');
-                            cluster.findPotential = Math.min(99, Math.round((confidenceVal * 100)));
+                            cluster.findPotential = Math.min(96, Math.round((confidenceVal * 100)));
                             cluster.metrics = { circularity, density: dens, ratio, area: areaPx };
                             allClusters.push(cluster);
                         }
@@ -1086,7 +1049,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                   if (c.source === 'terrain') m.center = [c.center[0], c.center[1]];
                   else m.center = [(m.center[0] + c.center[0]) / 2, (m.center[1] + c.center[1]) / 2];
-                  m.findPotential = Math.min(100, m.findPotential + (c.findPotential * 0.4));
+                  m.findPotential = Math.min(96, m.findPotential + (c.findPotential * 0.4));
                   
                   // Prioritize Palaeochannel type if hydrology is present in consensus
                   if (c.source === 'hydrology') {
@@ -1096,7 +1059,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                   // Temporal Difference: Summer Stress vs Spring Baseline
                   if (m.sources.includes('satellite_summer') && !m.sources.includes('satellite_spring')) {
                       m.type = "Temporal Cropmark (Drought Stress)";
-                      m.findPotential = Math.min(100, m.findPotential + 20);
+                      m.findPotential = Math.min(96, m.findPotential + 20);
                   }
 
                   if (m.sources.length >= 3) m.confidence = 'High';
@@ -1137,10 +1100,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
               if (enclosures.length > 0 && houses.length > 0) {
                   c.contextLabel = "Enclosed Settlement / Farmstead";
-                  c.findPotential = Math.min(100, c.findPotential + 10);
+                  c.findPotential = Math.min(96, c.findPotential + 10);
               } else if (houses.length >= 2) {
                   c.contextLabel = "Habitation Cluster / Settlement Nucleus";
-                  c.findPotential = Math.min(100, c.findPotential + 5);
+                  c.findPotential = Math.min(96, c.findPotential + 5);
               } else if (ditches.length >= 2) {
                   c.contextLabel = "Organized Field System / Celtic Fields";
               }
@@ -1196,90 +1159,271 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       return results;
   };
 
-  const generateZones = (clusters: Cluster[]): Zone[] => {
-      const results: Zone[] = [];
-      const usedIds = new Set<string>();
-      const radiusM = 120; // Radius for Zone Discovery
+  const generateHotspots = (clusters: Cluster[], pas: PASFind[], monuments: [number, number][], period: string = 'All', perms: any[] = [], flds: any[] = []): Hotspot[] => {
+       const results: Hotspot[] = [];
+       const usedIds = new Set<string>();
+       const radiusM = 50;
 
-      for (const c of clusters) {
-          if (usedIds.has(c.id)) continue;
+       for (const c of clusters) {
+           if (usedIds.has(c.id)) continue;
 
-          // Discover all members in this spatial neighborhood
-          const members = clusters.filter(n => !usedIds.has(n.id) && getDistance(c.center, n.center) < radiusM);
-          if (members.length < 2) continue; // Zones require multiple hits
+           // 1. CLUSTER OVERLAPPING HITS
+           const members = clusters.filter(n => !usedIds.has(n.id) && getDistance(c.center, n.center) < radiusM);
+           if (members.length === 0) continue;
+           members.forEach(m => usedIds.add(m.id));
 
-          members.forEach(m => usedIds.add(m.id));
+           // 2. INITIALIZE METRICS
+           let anomaly = 0;
+           let context = 0;
+           let convergence = 0;
+           let behaviour = 0;
+           let penalty = 0;
+           const explanation: string[] = [];
 
-          // Calculate Zone Geometry (Bounding Box)
+           // A. ANOMALY SCORE (0-40)
+           const sources = new Set(members.flatMap(m => m.sources));
+           const hasLidar = sources.has('terrain') || sources.has('terrain_global');
+           const hasSatellite = sources.has('satellite_spring') || sources.has('satellite_summer');
+           const hasHydrology = sources.has('hydrology');
+           const hasHistoric = sources.has('historic');
+
+           if (hasLidar) {
+               const bestLidar = members.find(m => m.sources.includes('terrain') || m.sources.includes('terrain_global'));
+               let lidarScore = 0;
+               if (bestLidar?.confidence === 'High') lidarScore = 15;
+               else if (bestLidar?.confidence === 'Medium') lidarScore = 8;
+               else lidarScore = 4;
+
+               // Roman Multiplier for Linear (Roads)
+               if (period === 'Roman' && bestLidar?.metrics && bestLidar.metrics.ratio > 3) {
+                   lidarScore = Math.round(lidarScore * 1.3);
+                   explanation.push("Roman-aligned linear relief");
+               } else if (lidarScore >= 15) {
+                   explanation.push("Structured LiDAR relief anomaly");
+               } else if (lidarScore >= 8) {
+                   explanation.push("Clear terrain anomaly");
+               } else {
+                   explanation.push("Weak relief signature");
+               }
+               anomaly += lidarScore;
+           }
+
+           if (hasSatellite) {
+               const hasSummer = sources.has('satellite_summer');
+               const hasSpring = sources.has('satellite_spring');
+               let satScore = 0;
+               if (hasSummer && hasSpring) { 
+                   satScore = 17; // Increased from 10 (+7 Repeatability boost)
+                   explanation.push("Multi-temporal cropmark (Verified)"); 
+               }
+               else if (hasSummer) { satScore = 6; explanation.push("Visible vegetation stress"); }
+               else { satScore = 3; explanation.push("Faint aerial anomaly"); }
+               anomaly += satScore;
+           }
+
+           if (hasHydrology) {
+               const bestHydro = members.find(m => m.sources.includes('hydrology'));
+               let hydroScore = (bestHydro && bestHydro.metrics && bestHydro.metrics.ratio > 5) ? 10 : 5;
+
+               // Bronze Age Hydrology Weighting
+               if (period === 'Bronze Age') {
+                   hydroScore = Math.round(hydroScore * 1.2);
+                   explanation.push("Bronze Age water association");
+               } else {
+                   explanation.push(hydroScore >= 10 ? "Major water interaction point" : "Historic water feature");
+               }
+               anomaly += hydroScore;
+           }
+
+           if (hasHistoric) { 
+               let histScore = 5;
+               if (period === 'Roman') histScore = 8; // PAS Roman density weight
+               anomaly += histScore;
+               explanation.push("Matches historic record"); 
+           }
+
+           // B. CONTEXT SCORE (0-20)
+           const center = c.center;
+           const isRaised = members.some(m => m.polarity === 'Raised');
+
+           if (isRaised) { 
+               let raisedScore = 8;
+               if (period === 'Bronze Age') raisedScore = 11; // Elevated ground preference
+               context += raisedScore; 
+               explanation.push("Raised dry footing"); 
+           }
+
+           // Topographical Preference Logic (Phase 2)
+           const hasAspect = members.some(m => m.aspect !== undefined);
+           const hasElevation = members.some(m => m.relativeElevation !== undefined);
+
+           if (hasAspect) {
+               // South-facing preference (135 - 225 degrees)
+               const isSouthFacing = members.some(m => m.aspect && m.aspect > 135 && m.aspect < 225);
+               if (isSouthFacing) {
+                   context += 4;
+                   explanation.push("Favourable south-facing aspect");
+               }
+           }
+
+           if (hasElevation) {
+               const isSheltered = members.some(m => m.relativeElevation === 'Hollow');
+               const isExposed = members.some(m => m.relativeElevation === 'Ridge');
+
+               if (isSheltered) {
+                   context += 4;
+                   explanation.push("Sheltered topographical hollow");
+               } else if (isExposed) {
+                   penalty -= 4; // Section 10 Penalty
+                   explanation.push("Exposed ridge-line (high exposure)");
+               }
+           }
+
+           // Boundary Context (Phase 3)
+           let isNearBoundary = false;
+           let isBoundaryCorner = false;
+           const allBoundaries = [...perms.map(p => p.boundary), ...flds.map(f => f.boundary)].filter(b => b && b.coordinates);
+
+           for (const b of allBoundaries) {
+               const coords = b.coordinates[0]; // Polygon outer ring
+               for (let i = 0; i < coords.length; i++) {
+                   const p1 = coords[i];
+                   const dist = getDistance(center, [p1[0], p1[1]]);
+                   if (dist < 15) {
+                       isNearBoundary = true;
+                       // Check for corner (angle change between segments)
+                       const pPrev = coords[i === 0 ? coords.length - 2 : i - 1];
+                       const pNext = coords[i === coords.length - 1 ? 1 : i + 1];
+                       const angle1 = Math.atan2(p1[1] - pPrev[1], p1[0] - pPrev[0]);
+                       const angle2 = Math.atan2(pNext[1] - p1[1], pNext[0] - p1[0]);
+                       const angleDiff = Math.abs(angle2 - angle1);
+                       if (angleDiff > 0.4 && angleDiff < 2.7) { // roughly 25 to 155 degrees
+                           isBoundaryCorner = true;
+                       }
+                       break;
+                   }
+               }
+               if (isNearBoundary) break;
+           }
+
+           if (isBoundaryCorner) { context += 6; explanation.push("Strategic boundary corner"); }
+           else if (isNearBoundary) { context += 4; explanation.push("Historic boundary activity zone"); }
+
+           const nearbyPAS = pas.filter(f => getDistance(center, [f.lon, f.lat]) < 500);
+           const nearbyMonuments = monuments.filter(m => getDistance(center, m) < 500);
+
+           if (nearbyPAS.length > 3 || nearbyMonuments.length > 0) { 
+               let proxScore = 6;
+               if (period === 'Roman' || period === 'Medieval') proxScore = 9; // High-density era weighting
+               context += proxScore; 
+               explanation.push("Proximity to historic records"); 
+           }
+           if (hasHydrology && isRaised) { context += 6; explanation.push("Wet/Dry transition edge"); }
+
+           // C. CONVERGENCE BONUS (0-20)
+           const sourceCount = sources.size;
+           const convergenceMap = [0, 0, 6, 12, 18, 20];
+           convergence = convergenceMap[Math.min(sourceCount, 5)];
+
+           if (hasLidar && hasSatellite) convergence += 3;
+           if (hasLidar && hasHydrology) convergence += 4;
+           if (hasHydrology && isRaised) convergence += 4;
+           if (hasLidar && nearbyPAS.length > 0) convergence += 4;
+
+           // Multi-year Satellite Boost
+           if (sources.has('satellite_spring') && sources.has('satellite_summer')) convergence += 5;
+
+           convergence = Math.min(20, convergence);
+           if (convergence >= 12) explanation.push("High multi-source consensus");
+
+           // D. BEHAVIOUR BONUS (0-15)
+           const isCorridor = members.some(m => m.type.includes('Corridor') || m.type.includes('Trackway'));
+           const isEnclosure = members.some(m => m.type.includes('Enclosure') || m.type.includes('Henge'));
+
+           if (hasHydrology) { behaviour += 5; explanation.push("Strategic water access point"); }
+           if (isCorridor) { behaviour += 5; explanation.push("Movement corridor / Pinch point"); }
+
+           // Access Point Detection (Phase 3)
+           if (isCorridor && isNearBoundary) {
+               behaviour += 5;
+               explanation.push("Probable historic access point (Gate/Stile)");
+           }
+
+           if (isEnclosure || members.length > 3) { 
+               let actScore = 5;
+               if (period === 'Medieval') actScore = 8; // Medieval field system/settlement density
+               behaviour += actScore; 
+               explanation.push("High-use activity area"); 
+           }
+
+           // Human Pause Point Logic (Phase 3 - Combinator)
+           const isPausePoint = (hasHydrology && isRaised && isCorridor) || (isBoundaryCorner && isCorridor) || (isBoundaryCorner && hasHydrology && isRaised);
+           if (isPausePoint) {
+               behaviour += 6;
+               explanation.push("High-intensity Human Pause Point");
+           }
+
+           // E. FALSE POSITIVE PENALTY (0 to -25)
+           members.forEach(m => {
+               if (m.disturbanceRisk === 'High') penalty -= 15;
+               else if (m.disturbanceRisk === 'Medium') penalty -= 8;
+
+               // Negative Signal: Featureless Flat Ground
+               if (m.metrics && m.metrics.density < 0.05) {
+                   penalty -= 5;
+                   explanation.push("Flat/Featureless Terrain");
+               }
+           });
+           if (sourceCount === 1 && members[0].confidence === 'Subtle') penalty -= 6;
+
+           penalty = Math.max(-25, penalty);
+           if (penalty < -10) explanation.push("Risk of modern disturbance");
+
+           // FINAL CALCULATION
+           const score = Math.min(98, Math.max(0, anomaly + context + convergence + behaviour + penalty));
+
+           let confidence: Hotspot['confidence'] = 'Weak';
+           if (convergence >= 18) confidence = 'Elite';
+           else if (convergence >= 12) confidence = 'Strong';
+           else if (convergence >= 6) confidence = 'Moderate';
+
+           let type: Hotspot['type'] = 'Field Activity Zone';
+           if (isPausePoint) type = 'Raised Dry Point'; // Defaulting to something descriptive
+           if (hasHydrology && isRaised) type = 'Raised Dry Point';
+           else if (hasHydrology) type = 'Water Interaction';
+           else if (isCorridor && isNearBoundary) type = 'Movement Corridor';
+           else if (isCorridor) type = 'Movement Corridor';
+           else if (members.some(m => m.contextLabel?.includes('Settlement'))) type = 'Settlement Edge';
+
+           if (isPausePoint && score > 70) type = 'Settlement Edge'; // Upgrade to settlement if very high score
+
+          // Bounding Box
           let minLon = members[0].center[0], maxLon = members[0].center[0];
           let minLat = members[0].center[1], maxLat = members[0].center[1];
-          let sumLon = 0, sumLat = 0;
-
           members.forEach(m => {
               minLon = Math.min(minLon, m.center[0]); maxLon = Math.max(maxLon, m.center[0]);
               minLat = Math.min(minLat, m.center[1]); maxLat = Math.max(maxLat, m.center[1]);
-              sumLon += m.center[0]; sumLat += m.center[1];
           });
-
-          // Classification & Insight Logic
-          const habCount = members.filter(m => m.type.includes('Roundhouse') || m.type.includes('Foundation')).length;
-          const enclosureCount = members.filter(m => m.type.includes('Enclosure') || m.type.includes('Ring')).length;
-          const trackCount = members.filter(m => m.type.includes('Movement') || m.type.includes('Corridor')).length;
-          const hydroCount = members.filter(m => m.sources.includes('hydrology')).length;
-          const highPersistenceCount = members.filter(m => (m.persistenceScore || 0) > 70).length;
-          const structuralCount = members.filter(m => m.scaleTier === 'Structural').length;
-
-          let type: Zone['type'] = 'Unknown';
-          let priority: Zone['priority'] = 'Low';
-          let desc = "General Cluster of Interest";
-          const insights: string[] = [`${members.length} linked anomalies`];
-
-          if (enclosureCount > 0 && habCount > 0) {
-              type = 'Settlement'; priority = 'High'; desc = "Settlement Cluster Zone";
-              insights.push("Core habitation structures detected");
-          } else if (habCount >= 2) {
-              type = 'Settlement'; priority = 'High'; desc = "Habitation Nucleus Zone";
-              insights.push("Multiple domestic foundations");
-          } else if (highPersistenceCount >= 3) {
-              type = 'Activity'; priority = 'High'; desc = "High-Intensity Activity Zone";
-          } else if (trackCount > 0) {
-              type = 'Route'; priority = 'Medium'; desc = "Route-Edge Target Zone";
-              insights.push("Aligned with movement corridor");
-          } else if (members.every(m => m.confidence === 'Subtle')) {
-              type = 'Disturbed'; priority = 'Low'; desc = "Disturbed / Low-Confidence Zone";
-          }
-
-          if (hydroCount > 0) insights.push("Near palaeochannel edge");
-          if (structuralCount > 0) insights.push("Structural-scale signatures present");
-          if (highPersistenceCount > 0) insights.push("Highly stable multispectral signals");
-
-          const avgPersistence = members.reduce((acc, m) => acc + (m.persistenceScore || 0), 0) / members.length;
-          const persistence: Zone['persistence'] = avgPersistence > 70 ? 'High' : avgPersistence > 40 ? 'Medium' : 'Low';
-          
-          // Estimate disturbance (High if many subtle satellite-only hits, Low if solid Lidar consensus)
-          const disturbance: Zone['disturbance'] = members.every(m => m.sources.includes('terrain')) ? 'Low' : 'Medium';
 
           results.push({
               id: Math.random().toString(36).substring(7),
-              number: 0, // Placeholder
-              type, priority, persistence, disturbance,
-              center: [sumLon / members.length, sumLat / members.length],
-              bounds: [[minLon - 0.0005, minLat - 0.0005], [maxLon + 0.0005, maxLat + 0.0005]],
+              number: 0,
+              score,
+              confidence,
+              type,
+              explanation: Array.from(new Set(explanation)).slice(0, 4),
+              center: [ (minLon + maxLon) / 2, (minLat + maxLat) / 2 ],
+              bounds: [[minLon - 0.0004, minLat - 0.0004], [maxLon + 0.0004, maxLat + 0.0004]],
               memberIds: members.map(m => m.id),
-              description: desc,
-              insights: insights.slice(0, 3) // Max 3 bullets
+              metrics: { anomaly, context, convergence, behaviour, penalty }
           });
       }
 
-      // Sort by priority and assign consecutive numbers
       return results
-          .sort((a, b) => {
-              const priorities = { 'High': 3, 'Medium': 2, 'Low': 1 };
-              return (priorities[b.priority] || 0) - (priorities[a.priority] || 0);
-          })
-          .map((z, i) => ({ ...z, number: i + 1 }));
-  };
-
+          .filter(h => h.score >= 15)
+          .sort((a, b) => b.score - a.score)
+          .map((h, i) => ({ ...h, number: i + 1 }));
+      };
   const executeScan = async () => {
     if (!mapRef.current) return;
     
@@ -1297,12 +1441,20 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     setAnalyzing(true);
     setDetectedFeatures([]); // CLEAR PREVIOUS TARGETS
-    setZones([]); // Reset zones for the new scan area
-    setSelectedZoneId(null); // Clear any active zone border
+    setHotspots([]); // Reset hotspots for the new scan area
+    setSelectedHotspotId(null); // Clear any active hotspot border
     setSelectedId(null); // Clear active target selection
     addLog(`Engine Initiating (Fixed Z${scanZoom})...`);
 
-    const herUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+    // Calculate a buffered bounding box (min 1km) to ensure we fetch data even when zoomed in tight
+    const latBuffer = 0.009; // approx 1km
+    const lonBuffer = 0.015; // approx 1km at UK latitudes
+    const qWest = Math.min(bounds.getWest(), center.lng - lonBuffer);
+    const qSouth = Math.min(bounds.getSouth(), center.lat - latBuffer);
+    const qEast = Math.max(bounds.getEast(), center.lng + lonBuffer);
+    const qNorth = Math.max(bounds.getNorth(), center.lat + latBuffer);
+
+    const herUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
     let assetsGeoJSON = { type: 'FeatureCollection', features: [] };
     try {
         const hRes = await fetch(herUrl);
@@ -1341,7 +1493,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         addLog("Stage 6/6: Summer Stress (ExG)...");
         const summerHits = await scanDataSource('satellite_summer', scanZoom, tX_start, tY_start, bounds, n, assetsGeoJSON);
         
-        const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
+        const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         let aimGeoJSON = { type: 'FeatureCollection', features: [] };
         try {
             const aRes = await fetch(aimUrl);
@@ -1371,7 +1523,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     if (!c.sources.includes('historic')) c.sources.push('historic');
                     c.aimInfo = { type: aimProps.MONUMENT_TYPE, period: aimProps.PERIOD, evidence: aimProps.EVIDENCE_1 };
                     c.confidence = 'High';
-                    c.findPotential = 99;
+                    c.findPotential = 96;
                     break;
                 }
             }
@@ -1403,14 +1555,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const contextualized = analyzeContext(suppressed)
             .sort((a, b) => b.findPotential - a.findPotential)
             .map((c, i) => ({ ...c, number: i + 1 }));
+const tacticalHotspots = generateHotspots(contextualized, pasFinds, monumentPoints, targetPeriod, permissions, fields);
 
-        const tacticalZones = generateZones(contextualized);
+// SYNC STATE
+setDetectedFeatures(contextualized);
+setHotspots(tacticalHotspots);
 
-        // SYNC STATE
-        setDetectedFeatures(contextualized);
-        setZones(tacticalZones);
+// Auto-load PAS for the new scan area
+        // loadPASFinds(); // REMOVED: Only trigger when manually pressed
 
-        addLog(`Scan Complete. Consensus Verified.`);
+        setAnalyzing(false);
+
+        addLog(`Scan Complete. ${tacticalHotspots.length} Hotspots identified.`);
     } catch (e) { addLog("Engine Error."); console.error(e); }
     
     setAnalyzing(false);
@@ -1450,7 +1606,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                   )}
                   <button 
                     onClick={() => {
-                        if (pasFinds.length === 0) loadPASFinds();
+                        loadPASFinds();
                         setIsIntelOpen(!isIntelOpen);
                     }}
                     className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${
@@ -1472,6 +1628,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                           <span className="text-[7px] font-black text-emerald-500/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-emerald-500/20">Terrain Scan</span>
                       </div>
                   )}
+                  <select 
+                    value={targetPeriod} 
+                    onChange={(e) => setTargetPeriod(e.target.value as any)}
+                    className="bg-slate-800 text-white border border-white/10 px-2 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase outline-none focus:ring-1 focus:ring-emerald-500 appearance-none text-center min-w-[80px]"
+                  >
+                    <option value="All">All Periods</option>
+                    <option value="Bronze Age">Bronze Age</option>
+                    <option value="Roman">Roman</option>
+                    <option value="Medieval">Medieval</option>
+                  </select>
                   <button onClick={findMe} className="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors">GPS</button>
                   <button 
                     onClick={executeScan} 
@@ -1533,34 +1699,102 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 )}
             </div>
 
-            {/* Mobile Tactical Tray (Zone Selection) */}
-            {zones.length > 0 && (
-                <div className="absolute top-4 left-0 w-full z-[100] lg:hidden pointer-events-none">
-                    <div className="flex gap-2 overflow-x-auto pl-4 pr-10 py-2 scrollbar-hide pointer-events-auto">
-                        {zones.map(z => (
-                            <div 
-                                key={z.id} 
+            {/* Mobile Tactical Tray (Hotspot Selection) */}
+            {hotspots.length > 0 && (
+                <div className="absolute top-4 left-4 z-[100] lg:hidden pointer-events-none flex flex-col gap-2">
+                    <div className="bg-slate-900/90 text-emerald-400 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl border border-emerald-500/30 backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                        Hotspot detected
+                    </div>
+                    <div className="flex flex-col gap-2 pointer-events-auto max-h-[40vh] overflow-y-auto scrollbar-hide pb-4">
+                        {hotspots.slice(0, 3).map(h => (
+                            <button
+                                key={h.id}
                                 onClick={() => {
-                                    setSelectedZoneId(z.id === selectedZoneId ? null : z.id);
-                                    if (z.id !== selectedZoneId) mapRef.current?.fitBounds(z.bounds as any, { padding: 40 });
+                                    setSelectedHotspotId(h.id === selectedHotspotId ? null : h.id);
+                                    if (h.id !== selectedHotspotId) mapRef.current?.fitBounds(h.bounds as any, { padding: 40 });
                                 }}
-                                className={`px-4 py-2 rounded-full border shadow-lg backdrop-blur-md transition-all active:scale-95 whitespace-nowrap ${
-                                    selectedZoneId === z.id 
-                                    ? 'bg-emerald-500 border-white text-white' 
+                                className={`w-14 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 flex-shrink-0 ${
+                                    selectedHotspotId === h.id
+                                    ? 'bg-emerald-500 border-white text-white shadow-[0_0_20px_rgba(16,185,129,0.5)]'
                                     : 'bg-slate-900/90 border-white/10 text-slate-300'
                                 }`}
                             >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-black uppercase tracking-wider">Zone {z.number}</span>
-                                </div>
-                            </div>
+                                <span className="text-[12px] font-black tracking-tight">{h.score}%</span>
+                            </button>
                         ))}
                     </div>
                 </div>
             )}
+            {/* Mobile Hotspot Card Popup */}
+            {selectedHotspotId && (
+                <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
+                    {hotspots.filter(h => h.id === selectedHotspotId).map(h => (
+                        <div key={h.id} className={`p-5 rounded-3xl border shadow-2xl transition-all ${
+                            h.score >= 80 ? 'bg-amber-600 border-yellow-300 text-white shadow-[0_0_40px_rgba(217,119,6,0.6)]' :
+                            h.score >= 45 ? 'bg-emerald-600 border-emerald-400 text-white' :
+                            'bg-slate-800 border-white/20 text-white'
+                        }`}>
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                                            h.score >= 80 ? 'bg-red-500 text-white' : 
+                                            h.score >= 65 ? 'bg-orange-500 text-white' :
+                                            h.score >= 45 ? 'bg-emerald-500 text-white' :
+                                            'bg-slate-700 text-slate-300'
+                                        }`}>
+                                            {h.score >= 80 ? 'Priority' : h.score >= 65 ? 'High' : h.score >= 45 ? 'Moderate' : 'Possible'} Probability
+                                        </div>
+                                        <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
+                                            h.confidence === 'Elite' ? 'bg-white text-black' : 'bg-black/20 text-white/80'
+                                        }`}>
+                                            {h.confidence} Confidence
+                                        </div>
+                                    </div>
+                                    <h3 className="text-lg font-black uppercase tracking-tight leading-none">{h.type} — {h.score}%</h3>
+                                </div>
+                                <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div className="bg-black/20 rounded-2xl p-4 mb-4">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-3">Why this area stands out:</p>
+                                <div className="space-y-2">
+                                    {h.explanation.map((reason, idx) => (
+                                        <div key={idx} className="flex items-start gap-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                                            <p className="text-xs font-bold text-white leading-tight flex-1">{reason}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="bg-white/10 p-2 rounded-xl text-center">
+                                    <span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Anomaly</span>
+                                    <span className="text-[10px] font-black">{h.metrics.anomaly}</span>
+                                </div>
+                                <div className="bg-white/10 p-2 rounded-xl text-center">
+                                    <span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Context</span>
+                                    <span className="text-[10px] font-black">{h.metrics.context}</span>
+                                </div>
+                                <div className="bg-white/10 p-2 rounded-xl text-center">
+                                    <span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Bonus</span>
+                                    <span className="text-[10px] font-black text-emerald-400">+{h.metrics.convergence + h.metrics.behaviour}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Mobile Target Card Popup */}
-            {selectedId && !selectedZoneId && (
+            {selectedId && !selectedHotspotId && (
                 <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
                     {detectedFeatures.filter(f => f.id === selectedId).map(f => (
                         <div key={f.id} className={`p-4 rounded-2xl border shadow-2xl transition-all ${
@@ -1671,52 +1905,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
             )}
 
-            {/* Mobile Zone Detail Card Popup */}
-            {selectedZoneId && (
-                <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
-                    {zones.filter(z => z.id === selectedZoneId).map(z => (
-                        <div key={z.id} className="bg-slate-900 border border-white/20 p-5 rounded-2xl shadow-2xl backdrop-blur-xl">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 className="text-sm font-black uppercase tracking-tight text-white">Zone {z.number}</h3>
-                                </div>
-                                <button onClick={() => setSelectedZoneId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3 mb-5">
-                                <div className="bg-black/40 p-2.5 rounded-xl border border-white/5">
-                                    <span className="block text-[8px] uppercase font-bold text-slate-500 mb-1">Persistence</span>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
-                                        z.persistence === 'High' ? 'text-emerald-400' : 'text-amber-400'
-                                    }`}>{z.persistence}</span>
-                                </div>
-                                <div className="bg-black/40 p-2.5 rounded-xl border border-white/5">
-                                    <span className="block text-[8px] uppercase font-bold text-slate-500 mb-1">Disturbance</span>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${
-                                        z.disturbance === 'Low' ? 'text-emerald-400' : 'text-red-400'
-                                    }`}>{z.disturbance}</span>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <p className="text-[9px] font-black uppercase text-emerald-500 tracking-[0.15em] mb-2">Why it matters</p>
-                                {z.insights.map((insight, idx) => (
-                                    <div key={idx} className="flex items-center gap-2.5">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
-                                        <p className="text-[11px] font-bold text-slate-200 leading-tight">{insight}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {/* Mobile Site Intel HUD Overlay */}
             {isIntelOpen && (
                 <div className="absolute inset-0 z-[105] lg:hidden bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex flex-col">
@@ -1762,7 +1950,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
                         </div>
 
-                        {/* PAS Period Summary Grid */}
+                        {/* Historic Period Summary Grid */}
                         {pasFinds.length > 0 && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] flex items-center gap-2">
@@ -1797,7 +1985,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
                         </div>
 
-                        {/* PAS Findings Hud List - MOVED UP */}
+                        {/* Historic Findings Hud List - MOVED UP */}
                         {pasFinds.length > 0 && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
@@ -1908,10 +2096,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 )}
             </div>
 
-            {/* PAS Intelligence Section - Desktop Only */}
+            {/* Historic Site Intelligence Section - Desktop Only */}
             <div className="hidden lg:block p-6 border-b border-white/10 bg-blue-500/5">
                 <div className="flex justify-between items-baseline mb-4">
-                    <h2 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">PAS Intelligence</h2>
+                    <h2 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Historic Site Intelligence</h2>
                     <button 
                         onClick={loadPASFinds}
                         disabled={loadingPAS}
@@ -1942,66 +2130,52 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     </div>
                 ) : (
-                    <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">No PAS records loaded. Click scan to fetch data.</p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">No historic records loaded. Click scan to fetch data.</p>
                 )}
             </div>
 
             <div className="p-6 border-b border-white/5 shrink-0 overflow-y-auto max-h-[40%] scrollbar-hide">
                 <div className="flex justify-between items-baseline mb-4">
-                    <h2 className="text-sm font-black text-white uppercase tracking-tighter">Strategic Zones</h2>
-                    {selectedZoneId && <button onClick={() => setSelectedZoneId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
+                    <h2 className="text-sm font-black text-white uppercase tracking-tighter">Strategic Hotspots</h2>
+                    {selectedHotspotId && <button onClick={() => setSelectedHotspotId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
                 </div>
                 <div className="flex flex-col gap-4">
-                    {zones.length > 0 ? zones.map(z => (
+                    {hotspots.length > 0 ? hotspots.map(h => (
                         <div 
-                            key={z.id} 
+                            key={h.id} 
                             onClick={() => {
-                                setSelectedZoneId(z.id);
-                                mapRef.current?.fitBounds(z.bounds as any, { padding: 40 });
+                                setSelectedHotspotId(h.id);
+                                mapRef.current?.fitBounds(h.bounds as any, { padding: 40 });
                             }}
                             className={`p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98] ${
-                                selectedZoneId === z.id ? 'bg-white/10 border-white ring-4 ring-white/10' :
-                                z.type === 'Settlement' ? 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40' :
-                                z.type === 'Activity' ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40' :
+                                selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' :
+                                h.score >= 80 ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40' :
+                                h.score >= 45 ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40' :
                                 'bg-white/5 border-white/10 hover:border-white/20'
                             }`}
                         >
                             <div className="flex justify-between items-start mb-3">
                                 <div>
-                                    <h3 className={`text-xs font-black uppercase tracking-tight ${selectedZoneId === z.id ? 'text-white' : 'text-slate-200'}`}>Zone {z.number}</h3>
+                                    <h3 className={`text-xs font-black uppercase tracking-tight ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{h.type}</h3>
+                                    <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.1em]">{h.score}% Probability</span>
                                 </div>
                                 <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                                    z.priority === 'High' ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'
-                                }`}>{z.priority} Priority</div>
+                                    h.confidence === 'Elite' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 
+                                    h.confidence === 'Strong' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
+                                }`}>{h.confidence} Confidence</div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-                                <div className="bg-black/20 p-2 rounded-xl">
-                                    <span className="block text-[7px] uppercase font-bold text-slate-500">Persistence</span>
-                                    <span className={`text-[9px] font-black uppercase tracking-widest ${
-                                        z.persistence === 'High' ? 'text-emerald-400' : 'text-amber-400'
-                                    }`}>{z.persistence}</span>
-                                </div>
-                                <div className="bg-black/20 p-2 rounded-xl">
-                                    <span className="block text-[7px] uppercase font-bold text-slate-500">Disturbance</span>
-                                    <span className={`text-[9px] font-black uppercase tracking-widest ${
-                                        z.disturbance === 'Low' ? 'text-emerald-400' : 'text-red-400'
-                                    }`}>{z.disturbance}</span>
-                                </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <p className="text-[8px] font-black uppercase text-emerald-500/70 tracking-widest mb-1.5">Why it matters</p>
-                                {z.insights.map((insight, idx) => (
+                            <div className="space-y-1.5 mt-3">
+                                {h.explanation.map((reason, idx) => (
                                     <div key={idx} className="flex items-center gap-2">
-                                        <div className="w-1 h-1 rounded-full bg-emerald-500" />
-                                        <p className="text-[10px] font-bold text-slate-300 leading-tight">{insight}</p>
+                                        <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+                                        <p className="text-[10px] font-bold text-slate-300 leading-tight">{reason}</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )) : (
-                        <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical zones defined.</p>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical hotspots defined.</p>
                     )}
                 </div>
             </div>
@@ -2110,24 +2284,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {/* PAS Specimen Card Modal */}
+      {/* Heritage Feature Card Modal */}
       {selectedPASFind && (
           <div className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-              <div className="bg-slate-900 border border-blue-500/30 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                  <div className="relative h-32 bg-blue-600/20 flex items-center justify-center border-b border-white/5">
+              <div className="bg-slate-900 border border-emerald-500/30 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                  <div className="relative h-32 bg-emerald-600/20 flex items-center justify-center border-b border-white/5">
                       <div className="absolute top-4 right-4">
                         <button onClick={() => setSelectedPASFind(null)} className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-all border border-white/10">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                 <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" x2="18" y1="18"></line>
+                                <line x1="6" y1="18" x2="18" y2="6"></line>
                             </svg>
                         </button>
                       </div>
                       <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.5)] mb-2">
+                        <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.5)] mb-2">
                            <span className="text-xl font-black text-white italic">H</span>
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Historic Specimen</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Heritage Feature</span>
                       </div>
                   </div>
 
@@ -2135,7 +2309,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                       <div className="space-y-1">
                           <h3 className="text-xl font-black text-white uppercase tracking-tight">{selectedPASFind.objectType}</h3>
                           <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[9px] font-black text-blue-400 uppercase tracking-widest">{selectedPASFind.broadperiod}</span>
+                              <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-400 uppercase tracking-widest">{selectedPASFind.broadperiod}</span>
                               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">{selectedPASFind.id}</span>
                           </div>
                       </div>
@@ -2143,32 +2317,30 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                       <div className="grid grid-cols-2 gap-4">
                           <div className="bg-black/40 p-3 rounded-2xl border border-white/5">
                               <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Source</span>
-                              <span className="text-[10px] font-black text-white uppercase italic">Portable Antiquities</span>
+                              <span className="text-[10px] font-black text-white uppercase italic">OSM Heritage</span>
                           </div>
                           <div className="bg-black/40 p-3 rounded-2xl border border-white/5">
-                              <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Region</span>
-                              <span className="text-[10px] font-black text-white uppercase italic">{selectedPASFind.county}</span>
+                              <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Status</span>
+                              <span className="text-[10px] font-black text-white uppercase italic">Standing Remains</span>
                           </div>
                       </div>
 
-                      <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 space-y-2">
+                      <div className="bg-emerald-500/5 p-4 rounded-2xl border border-emerald-500/10 space-y-2">
                           <div className="flex items-center gap-2">
-                              <div className={`w-1.5 h-1.5 rounded-full ${selectedPASFind.isApprox ? "bg-amber-400" : "bg-blue-400"}`} />
+                              <div className={`w-1.5 h-1.5 rounded-full bg-emerald-400`} />
                               <p className="text-[11px] font-bold text-slate-300 leading-tight">
-                                {selectedPASFind.isApprox 
-                                  ? "Approximate location: 1km Parish/Grid centroid." 
-                                  : "Coordinates obfuscated to 100m for heritage protection."}
+                                High-precision coordinates from the OpenStreetMap community heritage dataset.
                               </p>
                           </div>
                       </div>
 
                       <a 
-                        href={`https://finds.org.uk/database/artefacts/record/id/${selectedPASFind.internalId || String(selectedPASFind.id || "").replace(/\D/g, '')}`} 
+                        href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`} 
                         target="_blank" 
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-2 w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
+                        className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-[0.98]"
                       >
-                          View Official PAS Record
+                          View on OpenStreetMap
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                               <polyline points="15 3 21 3 21 9"></polyline>
