@@ -29,6 +29,8 @@ interface Cluster {
     aspect?: number; // 0-360 degrees
     relativeElevation?: 'Ridge' | 'Hollow' | 'Slope' | 'Flat';
     metrics?: { circularity: number; density: number; ratio: number; area: number };
+    explanationLines?: string[];
+    isHighConfidenceCrossing?: boolean;
 }
 interface PASFind {
     id: string;
@@ -50,6 +52,17 @@ interface PlaceSignal {
     period: string;
     confidence: number;
     type: string;
+}
+
+interface HistoricRoute {
+    id: string;
+    type: "roman_road" | "historic_trackway" | "holloway" | "green_lane" | "droveway" | "suspected_route";
+    source: "osm" | "historic_map_digitised" | "lidar_interpreted" | "manual";
+    confidenceClass: "A" | "B" | "C" | "D";
+    certaintyScore: number;
+    geometry: [number, number][]; // [lat, lon] coordinates
+    bbox: [[number, number], [number, number]]; // [[minLon, minLat], [maxLon, maxLat]]
+    period?: "roman" | "medieval" | "post-medieval" | "unknown";
 }
 
 const ETYMOLOGY_SIGNALS = [
@@ -145,6 +158,7 @@ interface Hotspot {
     center: [number, number];
     bounds: [[number, number], [number, number]]; // [SW, NE]
     memberIds: string[];
+    isHighConfidenceCrossing?: boolean;
     metrics: {
         anomaly: number;
         context: number;
@@ -160,6 +174,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   const [detectedFeatures, setDetectedFeatures] = useState<Cluster[]>([]);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>(null);
+  const [historicRoutes, setHistoricRoutes] = useState<HistoricRoute[]>([]);
   const [heritageCount, setHeritageCount] = useState(0);
   const [zoomWarning, setZoomWarning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -560,7 +575,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         map.on('move', () => {
             const z = map.getZoom();
-            setZoomWarning(z > 16.8);
+            setZoomWarning(z > 16.5);
         });
 
         setTimeout(() => map.resize(), 300);
@@ -1076,6 +1091,56 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   };
 
+  // FAST Flat-surface approximation for segment loops
+  const getFlatDistanceSq = (p1: [number, number], p2: [number, number]) => {
+      const dx = (p1[0] - p2[0]) * Math.cos(p1[1] * Math.PI / 180);
+      const dy = p1[1] - p2[1];
+      return (dx * dx + dy * dy) * 12346344456; // Magic constant for squared meters approx in UK
+  };
+
+  const getDistanceToLine = (pt: [number, number], line: [number, number][], bbox: [[number, number], [number, number]]) => {
+      // 1. QUICK BBOX CHECK (Roughly 100m padding)
+      const lat = pt[1], lon = pt[0];
+      if (lon < bbox[0][0] - 0.002 || lon > bbox[1][0] + 0.002 || lat < bbox[0][1] - 0.002 || lat > bbox[1][1] + 0.002) {
+          return Infinity;
+      }
+
+      let minDistSq = Infinity;
+      for (let i = 0; i < line.length - 1; i++) {
+          const dSq = getDistanceSqToSegment(pt, line[i], line[i+1]);
+          if (dSq < minDistSq) minDistSq = dSq;
+      }
+      return Math.sqrt(minDistSq);
+  };
+
+  const getDistanceSqToSegment = (pt: [number, number], p1: [number, number], p2: [number, number]) => {
+      const x = pt[0], y = pt[1];
+      const x1 = p1[0], y1 = p1[1];
+      const x2 = p2[0], y2 = p2[1];
+      
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len_sq = dx * dx + dy * dy;
+      let param = -1;
+      if (len_sq !== 0) {
+          param = ((x - x1) * dx + (y - y1) * dy) / len_sq;
+      }
+
+      let xx, yy;
+      if (param < 0) {
+          xx = x1; yy = y1;
+      } else if (param > 1) {
+          xx = x2; yy = y2;
+      } else {
+          xx = x1 + param * dx;
+          yy = y1 + param * dy;
+      }
+
+      const dxFinal = (x - xx) * Math.cos(y * Math.PI / 180);
+      const dyFinal = y - yy;
+      return (dxFinal * dxFinal + dyFinal * dyFinal) * 12346344456;
+  };
+
   const findConsensus = (rawClusters: Cluster[]): Cluster[] => {
       const merged: Cluster[] = [];
       const thresholdM = 40; 
@@ -1154,12 +1219,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       return merged;
   };
 
-  const analyzeContext = (clusters: Cluster[]): Cluster[] => {
+  const analyzeContext = (clusters: Cluster[], routes: HistoricRoute[] = []): Cluster[] => {
       const results = [...clusters];
       const proximityM = 60; // Max distance for "Settlement" grouping
 
       for (let i = 0; i < results.length; i++) {
           const c = results[i];
+          if (!c.explanationLines) c.explanationLines = [];
+
           const neighbors = results.filter(n => n.id !== c.id && getDistance(c.center, n.center) < proximityM);
           
           if (neighbors.length >= 2) {
@@ -1176,6 +1243,33 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
               } else if (ditches.length >= 2) {
                   c.contextLabel = "Organized Field System / Celtic Fields";
               }
+          }
+
+          // --- NEW MOVEMENT LOGIC FOR TARGETS ---
+          let hasRouteProximity = false;
+          for (const route of routes) {
+              const dist = getDistanceToLine(c.center, route.geometry, route.bbox);
+              if (route.type === 'roman_road' && dist < 150) {
+                  c.findPotential = Math.min(96, c.findPotential + 12);
+                  c.explanationLines.push("Roman road proximity");
+                  if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) {
+                      c.explanationLines.push("LiDAR relief agrees with movement corridor");
+                  }
+                  hasRouteProximity = true;
+              } else if (dist < 100) {
+                  c.findPotential = Math.min(96, c.findPotential + 7);
+                  c.explanationLines.push("Historic route proximity");
+                  hasRouteProximity = true;
+              }
+          }
+
+          if (c.sources.includes('hydrology') && hasRouteProximity) {
+              c.explanationLines.push("Near likely crossing point");
+              c.isHighConfidenceCrossing = true;
+          }
+
+          if (c.polarity === 'Raised' && hasRouteProximity) {
+              c.explanationLines.push("Strong route-to-terrain relationship");
           }
       }
       return results;
@@ -1228,7 +1322,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       return results;
   };
 
-  const generateHotspots = (clusters: Cluster[], pas: PASFind[], monuments: [number, number][], period: string = 'All', perms: any[] = [], flds: any[] = []): Hotspot[] => {
+  const generateHotspots = (clusters: Cluster[], pas: PASFind[], monuments: [number, number][], period: string = 'All', perms: any[] = [], flds: any[] = [], routes: HistoricRoute[] = []): Hotspot[] => {
        const results: Hotspot[] = [];
        const usedIds = new Set<string>();
 
@@ -1308,6 +1402,70 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                }
            }
 
+           // --- NEW MOVEMENT LOGIC (ROMAN ROADS & TRACKWAYS) ---
+           let routeScore = 0;
+           let routeReasons: string[] = [];
+           let hasRomanProximity = false;
+           let hasHistProximity = false;
+           let routeCount = 0;
+
+           for (const route of routes) {
+               const dist = getDistanceToLine(center, route.geometry, route.bbox);
+               if (route.type === 'roman_road') {
+                   if (dist < 100) { routeScore += 8; hasRomanProximity = true; routeCount++; }
+                   else if (dist < 250) { routeScore += 6; hasRomanProximity = true; routeCount++; }
+                   else if (dist < 500) { routeScore += 3; hasRomanProximity = true; routeCount++; }
+               } else {
+                   if (dist < 75) { routeScore += 5; hasHistProximity = true; routeCount++; }
+                   else if (dist < 200) { routeScore += 3; hasHistProximity = true; routeCount++; }
+                   else if (dist < 400) { routeScore += 1; hasHistProximity = true; routeCount++; }
+               }
+           }
+
+           // Junction Bonus
+           if (routeCount >= 2) {
+               const nearbyRoutes = routes.filter(r => getDistanceToLine(center, r.geometry, r.bbox) < 500);
+               const romanCount = nearbyRoutes.filter(r => r.type === 'roman_road').length;
+               const histCount = nearbyRoutes.length - romanCount;
+               if (romanCount >= 2) { routeScore += 7; routeReasons.push("Near Roman route junction"); }
+               else if (romanCount >= 1 && histCount >= 1) { routeScore += 6; routeReasons.push("Near historic route convergence"); }
+               else if (histCount >= 2) { routeScore += 4; routeReasons.push("Route junction nearby"); }
+           }
+
+           // Water Crossing Bonus
+           let isHighConfidenceCrossing = false;
+           if (hasHydrology) {
+               if (hasRomanProximity) { routeScore += 7; routeReasons.push("Likely Roman water crossing"); isHighConfidenceCrossing = true; }
+               else if (hasHistProximity) { routeScore += 5; routeReasons.push("Historic crossing point"); isHighConfidenceCrossing = true; }
+           }
+
+           // Dry Island / Raised Ground Bonus
+           if (isRaised) {
+               if (hasRomanProximity) { routeScore += 6; routeReasons.push("Raised access point beside Roman route"); }
+               else if (hasHistProximity) { routeScore += 4; routeReasons.push("Raised ground beside movement corridor"); }
+           }
+
+           // Boundary / Slope Break Bonus
+           // (Assuming independent signals logic from FieldGuide-testing)
+           const independentSignals = [hasLidar, sources.has('satellite_summer'), hasHydrology, isRaised].filter(Boolean).length;
+           
+           if (routeScore > 0) {
+               if (independentSignals === 0) {
+                   routeScore = Math.round(routeScore * 0.7); // Downgrade by 30%
+               } else if (independentSignals >= 2) {
+                   routeScore = Math.round(routeScore * 1.3); // Upgrade by 30%
+                   if (hasRomanProximity) routeReasons.push("Confidence boosted by Roman road corridor");
+                   else routeReasons.push("Confidence boosted by historic route proximity");
+               }
+           }
+
+           // Add specific interpretive reasons to explanation
+           if (hasRomanProximity && routeScore > 5) explanation.push("Near probable Roman road corridor");
+           else if (hasHistProximity && routeScore > 3) explanation.push("Historic movement corridor nearby");
+           
+           routeReasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
+           behaviour += routeScore;
+
            // D. FALSE POSITIVE PENALTY & NEGATIVE EXPLANATIONS
            members.forEach(m => {
                if (m.disturbanceRisk === 'High') {
@@ -1355,6 +1513,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
               center: [ (minLon + maxLon) / 2, (minLat + maxLat) / 2 ],
               bounds: [[minLon - 0.0004, minLat - 0.0004], [maxLon + 0.0004, maxLat + 0.0004]],
               memberIds: members.map(m => m.id),
+              isHighConfidenceCrossing,
               metrics: { anomaly, context, convergence, behaviour, penalty }
           });
       }
@@ -1386,15 +1545,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     setSelectedId(null); // Clear active target selection
     addLog(`Engine Initiating (Fixed Z${scanZoom})...`);
 
-    // Calculate a buffered bounding box (min 1km) to ensure we fetch data even when zoomed in tight
-    const latBuffer = 0.009; // approx 1km
-    const lonBuffer = 0.015; // approx 1km at UK latitudes
-    const qWest = Math.min(bounds.getWest(), center.lng - lonBuffer);
-    const qSouth = Math.min(bounds.getSouth(), center.lat - latBuffer);
-    const qEast = Math.max(bounds.getEast(), center.lng + lonBuffer);
-    const qNorth = Math.max(bounds.getNorth(), center.lat + latBuffer);
+    // Use visible bounds for HER to keep it fast
+    const qWest = bounds.getWest();
+    const qSouth = bounds.getSouth();
+    const qEast = bounds.getEast();
+    const qNorth = bounds.getNorth();
 
     const herUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+    
     let assetsGeoJSON = { type: 'FeatureCollection', features: [] };
     try {
         const hRes = await fetch(herUrl);
@@ -1413,6 +1571,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         (mapRef.current.getSource('monuments') as maplibregl.GeoJSONSource).setData(assetsGeoJSON as any);
     } catch (e) { addLog("HER connection error."); }
+
+    // START DEFERRED OVERPASS SCAN (Reduced 1km radius for speed)
+    const routeQuery = `[out:json][timeout:30];(way["historic"="roman_road"](around:1000, ${center.lat}, ${center.lng});way["roman_road"="yes"](around:1000, ${center.lat}, ${center.lng});way["name"~"Roman Road",i](around:1000, ${center.lat}, ${center.lng});way["historic"="trackway"](around:1000, ${center.lat}, ${center.lng});way["holloway"="yes"](around:1000, ${center.lat}, ${center.lng});way["highway"="track"]["historic"="yes"](around:1000, ${center.lat}, ${center.lng}););out geom;`;
+    const routePromise = fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(routeQuery)}`).then(r => r.json()).catch(e => null);
 
     try {
         addLog("Stage 1/5: Lidar DTM...");
@@ -1433,6 +1595,42 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         addLog("Stage 6/6: Summer Stress (ExG)...");
         const summerHits = await scanDataSource('satellite_summer', scanZoom, tX_start, tY_start, bounds, n, assetsGeoJSON);
         
+        addLog("Stage 7/7: Syncing Routes...");
+        let routes: HistoricRoute[] = [];
+        try {
+            // RACE CONDITION: Wait for routePromise but timeout after 3 seconds to prevent engine hang
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+            const rData = await Promise.race([routePromise, timeoutPromise]) as any;
+            
+            if (rData && rData.elements) {
+                routes = rData.elements.map((el: any) => {
+                    const geom = el.geometry.map((g: any) => [g.lon, g.lat]);
+                    const lons = geom.map((g: any) => g[0]);
+                    const lats = geom.map((g: any) => g[1]);
+                    const routeBbox: [[number, number], [number, number]] = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+                    
+                    return {
+                        id: `route-${el.id}`,
+                        type: (el.tags.historic === 'roman_road' || el.tags.roman_road === 'yes' || (el.tags.name && el.tags.name.toLowerCase().includes('roman road'))) ? 'roman_road' : 
+                              el.tags.holloway === 'yes' ? 'holloway' : 'historic_trackway',
+                        source: 'osm',
+                        confidenceClass: 'B',
+                        certaintyScore: 70,
+                        geometry: geom,
+                        bbox: routeBbox,
+                        period: (el.tags.historic === 'roman_road' || el.tags.roman_road === 'yes' || (el.tags.name && el.tags.name.toLowerCase().includes('roman road'))) ? 'roman' : 'unknown'
+                    };
+                });
+                setHistoricRoutes(routes);
+                if (routes.length > 0) addLog(`Lock: ${routes.length} movement corridors.`);
+            } else {
+                routes = historicRoutes;
+            }
+        } catch (e) { 
+            addLog("Route sync bypassed (using cache)."); 
+            routes = historicRoutes;
+        }
+
         const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         let aimGeoJSON = { type: 'FeatureCollection', features: [] };
         try {
@@ -1492,10 +1690,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         // RUN MODERN DISTURBANCE SUPPRESSION (Suppress drainage, ploughing, etc.)
         const suppressed = suppressDisturbance(updatedFeatures);
 
-        const contextualized = analyzeContext(suppressed)
+        const contextualized = analyzeContext(suppressed, routes)
             .sort((a, b) => b.findPotential - a.findPotential)
             .map((c, i) => ({ ...c, number: i + 1 }));
-const tacticalHotspots = generateHotspots(contextualized, pasFinds, monumentPoints, targetPeriod, permissions, fields);
+const tacticalHotspots = generateHotspots(contextualized, pasFinds, monumentPoints, targetPeriod, permissions, fields, routes);
 
 // SYNC STATE
 setDetectedFeatures(contextualized);
@@ -1578,6 +1776,7 @@ setHotspots(tacticalHotspots);
                   <button 
                     onClick={executeScan} 
                     disabled={analyzing} 
+                    title="Scan area locked to Z16 for precision"
                     className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse"
                   >
                     {analyzing ? '...' : 'Scan'}
@@ -1624,7 +1823,7 @@ setHotspots(tacticalHotspots);
                 )}
                 {zoomWarning && (
                     <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20">
-                        ⚠️ Use Zoom 16.0
+                        ⚠️ MAX SCAN ZOOM
                     </div>
                 )}
                 {analyzing && (
@@ -1689,15 +1888,20 @@ setHotspots(tacticalHotspots);
                                         </div>
                                     </div>
                                     <h3 className="text-lg font-black uppercase tracking-tight leading-none">{h.type} — {h.score}%</h3>
-                                </div>
-                                <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
+                                    </div>
+                                    <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                       <line x1="18" y1="6" x2="6" y2="18"></line>
+                                       <line x1="6" y1="6" x2="18" y2="18"></line>
                                     </svg>
-                                </button>
-                            </div>
+                                    </button>
+                                    </div>
 
+                                    {h.isHighConfidenceCrossing && (
+                                    <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-4 animate-pulse">
+                                    <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
+                                    </div>
+                                    )}
                             <div className="bg-black/20 rounded-2xl p-4 mb-4">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-3">Why this area stands out:</p>
                                 <div className="space-y-2">
@@ -1816,6 +2020,23 @@ setHotspots(tacticalHotspots);
                                     <div className="bg-amber-400/20 p-2 rounded-xl border border-amber-400/30 mb-2">
                                         <p className="m-0 text-[9px] font-black uppercase text-amber-200 leading-tight">Historic Verification:</p>
                                         <p className="m-0 text-[10px] font-bold text-white tracking-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
+                                    </div>
+                                )}
+
+                                {f.isHighConfidenceCrossing && (
+                                    <div className="bg-blue-600/40 p-2 rounded-xl border border-blue-400 mb-2 animate-pulse">
+                                        <p className="m-0 text-[10px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
+                                    </div>
+                                )}
+
+                                {f.explanationLines && f.explanationLines.length > 0 && (
+                                    <div className="mt-2 mb-3 space-y-1 bg-black/20 p-2 rounded-xl border border-white/5">
+                                        {f.explanationLines.map((line, idx) => (
+                                            <div key={idx} className="flex items-center gap-1.5">
+                                                <div className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
+                                                <p className="text-[9px] font-bold text-emerald-100/80 leading-tight uppercase italic">{line}</p>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                                 <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide">
@@ -2131,8 +2352,13 @@ setHotspots(tacticalHotspots);
                                     h.confidence === 'Elite' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 
                                     h.confidence === 'Strong' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
                                 }`}>{h.confidence} Confidence</div>
-                            </div>
+                                </div>
 
+                                {h.isHighConfidenceCrossing && (
+                                <div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-3 animate-pulse">
+                                   <p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
+                                </div>
+                                )}
                             <div className="space-y-1.5 mt-3">
                                 {h.explanation.map((reason, idx) => (
                                     <div key={idx} className="flex items-center gap-2">
@@ -2215,6 +2441,23 @@ setHotspots(tacticalHotspots);
                             <div className="mt-1 mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                                 <p className="m-0 text-[8px] font-black uppercase text-amber-400">Verified: {f.aimInfo.type}</p>
                                 <p className="m-0 text-[8px] font-bold text-amber-200/70">{f.aimInfo.period}</p>
+                            </div>
+                        )}
+
+                        {f.isHighConfidenceCrossing && (
+                            <div className="bg-blue-600/40 p-2 rounded-xl border border-blue-400 mb-2 animate-pulse">
+                                <p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
+                            </div>
+                        )}
+
+                        {f.explanationLines && f.explanationLines.length > 0 && (
+                            <div className="mt-2 mb-3 space-y-1 bg-black/20 p-2 rounded-xl border border-white/5">
+                                {f.explanationLines.map((line, idx) => (
+                                    <div key={idx} className="flex items-center gap-1.5">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
+                                        <p className="text-[9px] font-bold text-emerald-100/80 leading-tight uppercase italic">{line}</p>
+                                    </div>
+                                ))}
                             </div>
                         )}
 
