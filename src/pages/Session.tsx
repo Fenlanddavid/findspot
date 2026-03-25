@@ -8,8 +8,59 @@ import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
+import { Modal } from "../components/Modal";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+function SessionSummary({ 
+  coverage, 
+  findsCount, 
+  bestZone, 
+  totalTime,
+  onClose 
+}: { 
+  coverage: number, 
+  findsCount: number, 
+  bestZone: string, 
+  totalTime: string | null,
+  onClose: () => void 
+}) {
+  return (
+      <Modal title="Session Complete" onClose={onClose}>
+          <div className="flex flex-col gap-6 py-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {coverage > 0 && (
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Coverage</span>
+                        <span className="text-sm font-black text-emerald-600">{Math.round(coverage)}%</span>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
+                      <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Finds</span>
+                      <span className="text-sm font-black text-emerald-600">{findsCount}</span>
+                  </div>
+                  {totalTime && (
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Duration</span>
+                        <span className="text-sm font-black text-emerald-600">{totalTime}</span>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1 overflow-hidden">
+                      <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Best Zone</span>
+                      <span className="text-[9px] font-black text-emerald-600 truncate uppercase mt-0.5">{bestZone}</span>
+                  </div>
+              </div>
+
+              <button 
+                  onClick={onClose}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px]"
+              >
+                  Close & Finish
+              </button>
+          </div>
+      </Modal>
+  );
+}
 
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 13;
@@ -49,6 +100,9 @@ export default function SessionPage(props: {
   const [isTracking, setIsTracking] = useState(isTrackingActive());
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
+
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, bestZone: string, totalTime: string | null }>({ coverage: 0, findsCount: 0, bestZone: "None", totalTime: null });
 
   const permission = useLiveQuery(
     async () => (permissionId ? db.permissions.get(permissionId) : (sessionId ? db.sessions.get(sessionId).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
@@ -414,11 +468,80 @@ export default function SessionPage(props: {
     if (isTracking) {
         await stopTracking();
     }
+    
+    // Calculate final stats for summary
+    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    let finalCoverage = 0;
+    if (boundary && tracks && tracks.length > 0) {
+        const result = calculateCoverage(boundary, tracks);
+        if (result) finalCoverage = result.percentCovered;
+    }
+    
+    const count = await db.finds.where("sessionId").equals(sessionId).count();
+    
+    // Determine Best Zone (Field name with most finds in this session)
+    let bestZoneName = "General Area";
+    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+    if (sessionFinds.length > 0) {
+        const fieldCounts = new Map<string, number>();
+        sessionFinds.forEach(f => {
+            if (f.fieldId) {
+                fieldCounts.set(f.fieldId, (fieldCounts.get(f.fieldId) || 0) + 1);
+            }
+        });
+        
+        if (fieldCounts.size > 0) {
+            let maxCount = -1;
+            let bestFieldId = "";
+            fieldCounts.forEach((c, id) => {
+                if (c > maxCount) {
+                    maxCount = c;
+                    bestFieldId = id;
+                }
+            });
+            const bField = await db.fields.get(bestFieldId);
+            if (bField) bestZoneName = bField.name;
+        } else if (selectedField) {
+            bestZoneName = selectedField.name;
+        } else if (permission) {
+            bestZoneName = permission.name;
+        }
+    } else if (selectedField) {
+        bestZoneName = selectedField.name;
+    } else if (permission) {
+        bestZoneName = permission.name;
+    }
+
+    // Duration calculation
+    let durationStr: string | null = null;
+    if (tracks && tracks.length > 0) {
+        const allPoints = tracks
+            .flatMap(t => t.points || [])
+            .filter(p => !!p && typeof p.timestamp === 'number')
+            .sort((a, b) => a.timestamp - b.timestamp);
+            
+        if (allPoints.length > 1) {
+            const ms = allPoints[allPoints.length - 1].timestamp - allPoints[0].timestamp;
+            const mins = Math.floor(ms / 60000);
+            const hrs = Math.floor(mins / 60);
+            if (hrs > 0) durationStr = `${hrs}h ${mins % 60}m`;
+            else durationStr = `${mins}m`;
+        }
+    }
+
+    setSummaryData({
+        coverage: finalCoverage,
+        findsCount: count,
+        bestZone: bestZoneName,
+        totalTime: durationStr
+    });
+    
     if (sessionId) {
         await db.sessions.update(sessionId, { isFinished: true });
         setIsFinished(true);
     }
-    nav(permission ? `/permission/${permission.id}` : "/");
+    
+    setShowSummary(true);
   }
 
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
@@ -728,6 +851,15 @@ export default function SessionPage(props: {
         </div>
       </div>
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
+      {showSummary && (
+        <SessionSummary 
+          coverage={summaryData.coverage} 
+          findsCount={summaryData.findsCount} 
+          bestZone={summaryData.bestZone} 
+          totalTime={summaryData.totalTime}
+          onClose={() => nav(permission ? `/permission/${permission.id}` : "/")} 
+        />
+      )}
     </div>
   );
 }

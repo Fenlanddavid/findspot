@@ -402,12 +402,22 @@ export default function FindPage(props: {
                 View All Finds
             </button>
             {savedId && (
-                <button 
-                    onClick={resetForm}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all"
-                >
-                    + Record Another Find
-                </button>
+                <>
+                    {sessionId && (
+                        <button 
+                            onClick={() => navigate(`/session/${sessionId}`)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2"
+                        >
+                            <span>←</span> Back to Session
+                        </button>
+                    )}
+                    <button 
+                        onClick={resetForm}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all"
+                    >
+                        + Record Another Find
+                    </button>
+                </>
             )}
         </div>
       </div>
