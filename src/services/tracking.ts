@@ -5,17 +5,25 @@ let watchId: number | null = null;
 let currentTrackId: string | null = null;
 let wakeLock: any = null;
 
+export function isWakeLockSupported(): boolean {
+  return 'wakeLock' in navigator;
+}
+
 // Request wake lock to prevent screen from sleeping
 async function requestWakeLock() {
+  if (!isWakeLockSupported()) return;
+  
   try {
-    if ('wakeLock' in navigator) {
-      wakeLock = await (navigator as any).wakeLock.request('screen');
-      console.log('Wake Lock is active');
-      
-      wakeLock.addEventListener('release', () => {
-        console.log('Wake Lock was released');
-      });
+    if (wakeLock) {
+      await wakeLock.release();
     }
+    wakeLock = await (navigator as any).wakeLock.request('screen');
+    console.log('Wake Lock is active');
+    
+    wakeLock.addEventListener('release', () => {
+      console.log('Wake Lock was released');
+      wakeLock = null;
+    });
   } catch (err: any) {
     console.error(`${err.name}, ${err.message}`);
   }

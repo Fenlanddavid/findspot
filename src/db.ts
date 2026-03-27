@@ -79,6 +79,9 @@ export type Session = {
   notes: string;
   isFinished: boolean;
 
+  startTime?: string; // ISO datetime when tracking started
+  endTime?: string;   // ISO datetime when session was finished
+
   createdAt: string;
   updatedAt: string;
 };
@@ -321,6 +324,10 @@ export class FindSpotDB extends Dexie {
 
     this.version(14).stores({
       permissions: "id, projectId, name, type, permissionGranted, boundary, validFrom, createdAt",
+    });
+
+    this.version(15).stores({
+      sessions: "id, projectId, permissionId, fieldId, date, isFinished, startTime, endTime, createdAt",
     });
   }
 }

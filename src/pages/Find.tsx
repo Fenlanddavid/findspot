@@ -856,7 +856,17 @@ export default function FindPage(props: {
 
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col gap-4 h-fit sticky top-4">
             <div className="flex flex-col gap-4 mb-2">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Photos</h2>
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Photos</h2>
+                    {!savedId && (
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-2 py-1 rounded-lg flex items-center gap-1.5 animate-pulse shrink-0">
+                            <span className="text-[10px]">ℹ️</span>
+                            <span className="text-[8px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-widest">
+                                Save find first
+                            </span>
+                        </div>
+                    )}
+                </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100"}`}>
@@ -880,7 +890,11 @@ export default function FindPage(props: {
                 </div>
             </div>
 
-            {!savedId && <div className="text-center py-12 opacity-40 italic text-sm border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-2xl">Save the record first to attach photos.</div>}
+            {!savedId && (
+                <div className="text-center py-8 opacity-40 italic text-sm border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-2xl">
+                    The photo gallery will appear here once the record is saved.
+                </div>
+            )}
 
             {media && media.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">

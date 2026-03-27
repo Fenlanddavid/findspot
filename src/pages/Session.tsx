@@ -6,9 +6,10 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
-import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId } from "../services/tracking";
+import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
+import { TrackingOverlay } from "../components/TrackingOverlay";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -98,6 +99,7 @@ export default function SessionPage(props: {
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   
   const [isTracking, setIsTracking] = useState(isTrackingActive());
+  const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
 
@@ -458,9 +460,17 @@ export default function SessionPage(props: {
     if (isTracking) {
         await stopTracking();
         setIsTracking(false);
+        setShowTrackingOverlay(false);
     } else {
         await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
         setIsTracking(true);
+        setShowTrackingOverlay(true);
+
+        // Record start time if not already set
+        const s = await db.sessions.get(sessionId);
+        if (s && !s.startTime) {
+            await db.sessions.update(sessionId, { startTime: new Date().toISOString() });
+        }
     }
   }
 
@@ -469,6 +479,9 @@ export default function SessionPage(props: {
         await stopTracking();
     }
     
+    const now = new Date();
+    const endTimeIso = now.toISOString();
+
     // Calculate final stats for summary
     const boundary = selectedField?.boundary || (permission as any)?.boundary;
     let finalCoverage = 0;
@@ -479,7 +492,7 @@ export default function SessionPage(props: {
     
     const count = await db.finds.where("sessionId").equals(sessionId).count();
     
-    // Determine Best Zone (Field name with most finds in this session)
+    // Determine Best Zone
     let bestZoneName = "General Area";
     const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
     if (sessionFinds.length > 0) {
@@ -506,15 +519,21 @@ export default function SessionPage(props: {
         } else if (permission) {
             bestZoneName = permission.name;
         }
-    } else if (selectedField) {
-        bestZoneName = selectedField.name;
-    } else if (permission) {
-        bestZoneName = permission.name;
     }
 
-    // Duration calculation
+    // Duration calculation - use startTime if available
     let durationStr: string | null = null;
-    if (tracks && tracks.length > 0) {
+    const s = await db.sessions.get(sessionId);
+    const startT = s?.startTime ? new Date(s.startTime).getTime() : null;
+    
+    if (startT) {
+        const ms = now.getTime() - startT;
+        const mins = Math.floor(ms / 60000);
+        const hrs = Math.floor(mins / 60);
+        if (hrs > 0) durationStr = `${hrs}h ${mins % 60}m`;
+        else durationStr = `${mins}m`;
+    } else if (tracks && tracks.length > 0) {
+        // Fallback to tracks
         const allPoints = tracks
             .flatMap(t => t.points || [])
             .filter(p => !!p && typeof p.timestamp === 'number')
@@ -537,7 +556,10 @@ export default function SessionPage(props: {
     });
     
     if (sessionId) {
-        await db.sessions.update(sessionId, { isFinished: true });
+        await db.sessions.update(sessionId, { 
+            isFinished: true,
+            endTime: endTimeIso
+        });
         setIsFinished(true);
     }
     
@@ -598,12 +620,24 @@ export default function SessionPage(props: {
                             </div>
                         </div>
                         {!isFinished && (
-                            <button 
-                                onClick={toggleTracking}
-                                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 w-full sm:w-auto ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
-                            >
-                                <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
-                            </button>
+                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                <button 
+                                    onClick={toggleTracking}
+                                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
+                                >
+                                    <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
+                                </button>
+                                {isTracking && (
+                                    <button 
+                                        onClick={() => setShowTrackingOverlay(true)}
+                                        className="bg-black text-white px-4 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 border-2 border-gray-800"
+                                        title="Fullscreen Tracking Mode"
+                                    >
+                                        <span className="text-lg">📱</span>
+                                        <span className="sm:hidden text-xs uppercase tracking-widest">Fullscreen</span>
+                                    </button>
+                                )}
+                            </div>
                         )}
                     </div>
 
@@ -736,13 +770,31 @@ export default function SessionPage(props: {
 
                         <div className="flex flex-col gap-2 ml-auto">
                             <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
-                            <button 
-                                type="button"
-                                onClick={toggleTracking}
-                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
-                            >
-                                <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
-                            </button>
+                            <div className="flex gap-2">
+                                {isEdit ? (
+                                    <>
+                                        <button 
+                                            type="button"
+                                            onClick={toggleTracking}
+                                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
+                                        >
+                                            <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                                        </button>
+                                        {isTracking && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => setShowTrackingOverlay(true)}
+                                                className="bg-black text-white px-3 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs border border-gray-700"
+                                                title="Fullscreen Tracking Mode"
+                                            >
+                                                <span>📱</span>
+                                            </button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <span className="text-[10px] opacity-40 italic">Start session to enable mapping</span>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <label className="block">
@@ -860,6 +912,11 @@ export default function SessionPage(props: {
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")} 
         />
       )}
+      <TrackingOverlay 
+        isVisible={showTrackingOverlay} 
+        onClose={() => setShowTrackingOverlay(false)} 
+        wakeLockSupported={isWakeLockSupported()} 
+      />
     </div>
   );
 }
