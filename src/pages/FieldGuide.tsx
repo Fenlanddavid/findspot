@@ -152,7 +152,7 @@ interface Hotspot {
     id: string;
     number: number;
     score: number; // 0-100 (cap at 98)
-    confidence: 'Weak' | 'Moderate' | 'Strong' | 'Elite';
+    confidence: 'Low Confidence' | 'Developing Signal' | 'Strong Signal' | 'High Probability';
     type: 'Settlement Edge' | 'Water Interaction' | 'Movement Corridor' | 'Raised Dry Point' | 'Field Activity Zone';
     explanation: string[]; // Reasons why it stands out
     center: [number, number];
@@ -206,7 +206,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         signals: number  // 0-100
     }
   } | null>(null);
-  const [scanConfidence, setScanConfidence] = useState<'High' | 'Medium' | 'Low' | null>(null);
+  const [scanConfidence, setScanConfidence] = useState<'High Probability' | 'Developing Signal' | 'Low Confidence' | null>(null);
   const [monumentPoints, setMonumentPoints] = useState<[number, number][]>([]);
 
   const navigate = useNavigate();
@@ -441,11 +441,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     // 4. DATA DESERT LOGIC → UPDATE
     // Low confidence if no historical support AND only terrain anomalies
-    let confidence: 'High' | 'Medium' | 'Low' = 'Medium';
+    let confidence: 'High Probability' | 'Developing Signal' | 'Low Confidence' = 'Developing Signal';
     const hasHistoricSupport = historicPoints > 0 || signalPoints > 15;
     
-    if (hasHistoricSupport && (pas.length + signals.length) > 5) confidence = 'High';
-    else if (!hasHistoricSupport) confidence = 'Low'; // Data Desert (Terrain only)
+    if (hasHistoricSupport && (pas.length + signals.length) > 5) confidence = 'High Probability';
+    else if (!hasHistoricSupport) confidence = 'Low Confidence'; // Data Desert (Terrain only)
     
     setScanConfidence(confidence);
   };
@@ -1503,15 +1503,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
            // FINAL CALCULATION
            const score = Math.min(98, Math.max(0, anomaly + context + convergence + behaviour + penalty));
 
-           // 3. CONFIDENCE DECAY → APPLY GLOBALLY
-           let confidence: Hotspot['confidence'] = 'Weak';
-           if (score > 85 && sources.size >= 3) confidence = 'Elite';
-           else if (score > 65 && sources.size >= 2) confidence = 'Strong';
-           else if (score > 40) confidence = 'Moderate';
+           // 3. CONFIDENCE BASED ON SIGNAL AGREEMENT (Multi-Source Trust)
+           const signalCount = sources.size;
+           const hasStrongAgreement = signalCount >= 3;
+           const hasModerateAgreement = signalCount >= 2;
+
+           let confidence: Hotspot['confidence'] = 'Low Confidence';
+           if (score > 80 && hasStrongAgreement) confidence = 'High Probability';
+           else if (score > 60 && hasModerateAgreement) confidence = 'Strong Signal';
+           else if (score > 35) confidence = 'Developing Signal';
            
-           // Downgrade if no behavioural logic or context support
-           if (confidence === 'Strong' && behaviour < 5 && context < 5) confidence = 'Moderate';
-           if (confidence === 'Elite' && behaviour < 8) confidence = 'Strong';
+           // Professional Tone: Downgrade if no specific behavioural/context logic support
+           if (confidence === 'Strong Signal' && behaviour < 5 && context < 5) confidence = 'Developing Signal';
+           if (confidence === 'High Probability' && behaviour < 8) confidence = 'Strong Signal';
 
            let type: Hotspot['type'] = 'Field Activity Zone';
            if (hasHydrology && isRaised) type = 'Raised Dry Point';
@@ -1889,17 +1893,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-2">Hotspot</h3>
                                     <div className="flex items-center gap-2">
                                         <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                                            h.score >= 80 ? 'bg-red-500 text-white' : 
-                                            h.score >= 65 ? 'bg-orange-500 text-white' :
-                                            h.score >= 45 ? 'bg-emerald-500 text-white' :
+                                            h.score >= 80 ? 'bg-amber-600 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)]' : 
+                                            h.score >= 65 ? 'bg-orange-600 text-white' :
+                                            h.score >= 45 ? 'bg-emerald-600 text-white' :
                                             'bg-slate-700 text-slate-300'
                                         }`}>
-                                            {h.score >= 80 ? 'Priority' : h.score >= 65 ? 'High' : h.score >= 45 ? 'Moderate' : 'Possible'} Probability
+                                            {h.score >= 80 ? 'High Probability' : h.score >= 65 ? 'Strong Signal' : h.score >= 45 ? 'Developing Signal' : 'Possible Anomaly'}
                                         </div>
                                         <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                                            h.confidence === 'Elite' ? 'bg-white text-black' : 'bg-black/20 text-white/80'
+                                            h.confidence === 'High Probability' ? 'bg-white text-black' : 'bg-black/20 text-white/80'
                                         }`}>
-                                            {h.confidence} Confidence
+                                            {h.confidence}
                                         </div>
                                     </div>
                                 </div>
@@ -2064,16 +2068,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 </p>
                                 <div className="flex items-center gap-3">
                                     <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide whitespace-nowrap">
-                                        Find Probability:
+                                        Potential Index:
                                     </p>
                                     <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden flex items-center">
-                                        <div 
-                                            className="h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000" 
-                                            style={{ width: `${f.findPotential}%` }} 
+                                        <div
+                                            className="h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000"
+                                            style={{ width: `${f.findPotential}%` }}
                                         />
                                     </div>
-                                    <span className="text-[10px] font-black text-white">{Math.round(f.findPotential)}%</span>
+                                    <span className="text-[10px] font-black text-white">{Math.round(f.findPotential)}</span>
                                 </div>
+
                             </div>
 
                             {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
@@ -2155,8 +2160,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <div className="bg-white/5 p-4 rounded-3xl border border-white/10 relative">
                                 {scanConfidence && (
                                     <span className={`absolute top-2 right-2 text-[6px] font-black px-1 rounded border ${
-                                        scanConfidence === 'High' ? 'text-emerald-400 border-emerald-400/30' :
-                                        scanConfidence === 'Medium' ? 'text-amber-400 border-amber-400/30' :
+                                        scanConfidence === 'High Probability' ? 'text-emerald-400 border-emerald-400/30' :
+                                        scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' :
                                         'text-red-400 border-red-400/30'
                                     }`}>
                                         {scanConfidence}
@@ -2376,9 +2381,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <span className="text-[10px] font-black text-emerald-500 tracking-tight">{h.score}%</span>
                                     </div>
                                     <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
-                                        h.confidence === 'Elite' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 
-                                        h.confidence === 'Strong' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
-                                    }`}>{h.confidence} Confidence</div>
+                                        h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 
+                                        h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'
+                                    }`}>{h.confidence}</div>
                                 </div>
                             </div>
 
