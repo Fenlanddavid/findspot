@@ -41,8 +41,8 @@ export default function Home(props: {
         if (b.sessionCount !== a.sessionCount) {
           return b.sessionCount - a.sessionCount;
         }
-        const bDate = b.lastSessionDate || b.createdAt;
-        const aDate = a.lastSessionDate || a.createdAt;
+        const bDate = b.lastSessionDate || b.createdAt || "";
+        const aDate = a.lastSessionDate || a.createdAt || "";
         return bDate.localeCompare(aDate);
       });
 

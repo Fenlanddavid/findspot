@@ -62,7 +62,7 @@ export async function enrichPermissions(
 
     // Sort sessions to find the latest date
     const lastSessionDate = sessions.length > 0 
-      ? [...sessions].sort((a, b) => b.date.localeCompare(a.date))[0].date 
+      ? [...sessions].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0].date 
       : null;
 
     let totalAreaM2 = 0;
