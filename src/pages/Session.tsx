@@ -151,7 +151,11 @@ export default function SessionPage(props: {
   const findThumbMedia = useMemo(() => {
     const info = new Map<string, Media>();
     if (!allMedia || !finds) return info;
-    const sortedMedia = [...allMedia].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    const sortedMedia = [...allMedia].sort((a, b) => {
+        const aDate = a?.createdAt || "";
+        const bDate = b?.createdAt || "";
+        return aDate.localeCompare(bDate);
+    });
     for (const row of sortedMedia) {
       if (row.findId && !info.has(row.findId)) info.set(row.findId, row);
     }
@@ -160,6 +164,16 @@ export default function SessionPage(props: {
 
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
+
+  // Destroy the map when the component unmounts to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const boundary = selectedField?.boundary || (permission as any)?.boundary;
@@ -409,10 +423,20 @@ export default function SessionPage(props: {
       const isoDate = new Date(date).toISOString();
       const now = new Date().toISOString();
 
-      const session: Session = {
-        id: sessionId,
-        projectId: props.projectId,
-        permissionId: isEdit ? (await db.sessions.get(sessionId))!.permissionId : permissionId!,
+      let resolvedPermissionId: string;
+      if (isEdit) {
+        const existing = await db.sessions.get(sessionId);
+        if (!existing) {
+          setError("Session not found — it may have been deleted.");
+          setSaving(false);
+          return;
+        }
+        resolvedPermissionId = existing.permissionId;
+      } else {
+        resolvedPermissionId = permissionId!;
+      }
+
+      const sessionFields = {
         fieldId,
         date: isoDate,
         lat,
@@ -423,28 +447,21 @@ export default function SessionPage(props: {
         isStubble,
         notes,
         isFinished,
-        createdAt: isEdit ? undefined as any : now, 
         updatedAt: now,
       };
 
+      const session: Session = {
+        id: sessionId,
+        projectId: props.projectId,
+        permissionId: resolvedPermissionId,
+        ...sessionFields,
+        createdAt: now,
+      };
+
       if (isEdit) {
-        await db.sessions.update(sessionId, {
-          fieldId,
-          date: isoDate,
-          lat,
-          lon,
-          gpsAccuracyM: acc,
-          landUse,
-          cropType,
-          isStubble,
-          notes,
-          isFinished,
-          updatedAt: now,
-        });
+        await db.sessions.update(sessionId, sessionFields);
         setIsEditing(false);
-        alert("Session updated!");
       } else {
-        (session as any).createdAt = now;
         await db.sessions.add(session);
         setIsEditing(false);
         nav(`/session/${sessionId}`, { replace: true });

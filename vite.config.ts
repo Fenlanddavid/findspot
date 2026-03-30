@@ -7,7 +7,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' instead of 'autoUpdate' so a mid-session refresh doesn't
+      // interrupt the user or risk a DB migration running without consent.
+      registerType: 'prompt',
       includeAssets: ['logo.svg'],
       manifest: {
         name: 'FindSpot UK',
@@ -33,8 +35,28 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
+        // so the app works fully offline after installation.
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+      },
+      devOptions: {
+        // Enable the virtual PWA module in dev mode so useRegisterSW
+        // works the same way in development as in production builds.
+        enabled: true,
       }
     })
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split large libraries into separate cacheable chunks
+          'maplibre': ['maplibre-gl'],
+          'turf': ['@turf/turf'],
+          'pdf': ['jspdf', 'html2canvas'],
+        }
+      }
+    }
+  }
 })

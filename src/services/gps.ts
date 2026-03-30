@@ -113,18 +113,11 @@ export function toOSGridRef(lat: number, lon: number): string {
     ['HL', 'HM', 'HN', 'HO', 'HP', 'JL', 'JM'],
   ];
 
-  const gridE = Math.floor(E / 100000);
-  const gridN = Math.floor(N / 100000);
-  
-  // OS Grid Letters logic is 500km blocks, simplified for common UK area:
-  const e100 = Math.floor(E / 100000);
-  const n100 = Math.floor(N / 100000);
-  const l1 = String.fromCharCode('A'.charCodeAt(0) + (19 - Math.floor(n100 / 5) * 5) + Math.floor(e100 / 5));
-  const l2 = String.fromCharCode('A'.charCodeAt(0) + (24 - (n100 % 5) * 5) + (e100 % 5));
-  // Standard letters are tricky, using a simpler lookup for the 100km squares
   const eIndex = Math.floor(E / 100000);
   const nIndex = Math.floor(N / 100000);
-  
+
+  if (nIndex < 0 || nIndex >= gridLetters.length || eIndex < 0 || eIndex >= gridLetters[0].length) return "";
+
   const square = gridLetters[nIndex][eIndex];
   
   const eRemainder = Math.floor((E % 100000) / 10).toString().padStart(4, '0');

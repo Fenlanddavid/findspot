@@ -23,13 +23,69 @@ function makeFindCode(): string {
   return `FS-${year}-${rand}`;
 }
 
-export default function FindPage(props: { 
-  projectId: string; 
-  permissionId: string | null; 
-  sessionId: string | null; 
+type FormState = {
+  findCode: string;
+  objectType: string;
+  coinType: string;
+  coinDenomination: string;
+  ruler: string;
+  lat: number | null;
+  lon: number | null;
+  acc: number | null;
+  osGridRef: string;
+  w3w: string;
+  period: Find["period"];
+  material: Find["material"];
+  weightG: string;
+  widthMm: string;
+  heightMm: string;
+  depthMm: string;
+  decoration: string;
+  completeness: Find["completeness"];
+  findContext: string;
+  detector: string;
+  targetId: string;
+  depthCm: string;
+  storageLocation: string;
+  notes: string;
+};
+
+function makeInitialForm(initialLat?: number | null, initialLon?: number | null): FormState {
+  return {
+    findCode: makeFindCode(),
+    objectType: "",
+    coinType: "",
+    coinDenomination: "",
+    ruler: "",
+    lat: initialLat ?? null,
+    lon: initialLon ?? null,
+    acc: null,
+    osGridRef: (initialLat && initialLon) ? toOSGridRef(initialLat, initialLon) || "" : "",
+    w3w: "",
+    period: "Roman",
+    material: "Copper alloy",
+    weightG: "",
+    widthMm: "",
+    heightMm: "",
+    depthMm: "",
+    decoration: "",
+    completeness: "Complete",
+    findContext: "",
+    detector: "",
+    targetId: "",
+    depthCm: "",
+    storageLocation: "",
+    notes: "",
+  };
+}
+
+export default function FindPage(props: {
+  projectId: string;
+  permissionId: string | null;
+  sessionId: string | null;
   quickId: string | null;
-  initialLat?: number | null; 
-  initialLon?: number | null 
+  initialLat?: number | null;
+  initialLon?: number | null
 }) {
   const navigate = useNavigate();
   const [locationName, setLocationName] = useState("");
@@ -61,13 +117,12 @@ export default function FindPage(props: {
   // Reset field/session if permission changes
   useEffect(() => {
     if (currentPermissionId) {
-        // If the current session or field doesn't belong to this permission, reset them
         if (session && session.permissionId !== currentPermissionId) {
             setSessionId(null);
             setFieldId(null);
         }
     }
-  }, [currentPermissionId]);
+  }, [currentPermissionId, session]);
 
   const fields = useLiveQuery(async () => {
     if (!currentPermissionId) return [];
@@ -79,38 +134,9 @@ export default function FindPage(props: {
     return db.sessions.where("permissionId").equals(currentPermissionId).reverse().sortBy("date");
   }, [currentPermissionId]);
 
-  const [findCode, setFindCode] = useState(makeFindCode());
-  const [objectType, setObjectType] = useState("");
-  const [coinType, setCoinType] = useState("");
-  const [coinDenomination, setCoinDenomination] = useState("");
-  const [ruler, setRuler] = useState("");
-
-  const [lat, setLat] = useState<number | null>(props.initialLat ?? null);
-  const [lon, setLon] = useState<number | null>(props.initialLon ?? null);
-  const [acc, setAcc] = useState<number | null>(null);
-  const [osGridRef, setOsGridRef] = useState(() => {
-    if (props.initialLat && props.initialLon) {
-      return toOSGridRef(props.initialLat, props.initialLon) || "";
-    }
-    return "";
-  });
-  const [w3w, setW3w] = useState("");
-
-  const [period, setPeriod] = useState<Find["period"]>("Roman");
-  const [material, setMaterial] = useState<Find["material"]>("Copper alloy");
-  const [weightG, setWeightG] = useState<string>("");
-  const [widthMm, setWidthMm] = useState<string>("");
-  const [heightMm, setHeightMm] = useState<string>("");
-  const [depthMm, setDepthMm] = useState<string>("");
-  const [decoration, setDecoration] = useState("");
-  const [completeness, setCompleteness] = useState<Find["completeness"]>("Complete");
-  const [findContext, setFindContext] = useState("");
-  const [detector, setDetector] = useState("");
-  const [targetId, setTargetId] = useState<string>("");
-  const [depthCm, setDepthCm] = useState<string>("");
+  const [form, setForm] = useState<FormState>(() => makeInitialForm(props.initialLat, props.initialLon));
   const [detectors, setDetectors] = useState<string[]>([]);
-  const [storageLocation, setStorageLocation] = useState("");
-  const [notes, setNotes] = useState("");
+  const update = (patch: Partial<FormState>) => setForm(prev => ({ ...prev, ...patch }));
 
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -120,35 +146,34 @@ export default function FindPage(props: {
   useEffect(() => {
     getSetting("detectors", []).then(setDetectors);
     getSetting("defaultDetector", "").then(d => {
-      if (d) setDetector(d);
+      if (d) update({ detector: d as string });
     });
-
-    // Load sticky metadata
-    getSetting("lastPeriod", "Roman").then(p => setPeriod(p as any));
-    getSetting("lastMaterial", "Copper alloy").then(m => setMaterial(m as any));
+    getSetting("lastPeriod", "Roman").then(p => update({ period: p as Find["period"] }));
+    getSetting("lastMaterial", "Copper alloy").then(m => update({ material: m as Find["material"] }));
   }, []);
 
   useEffect(() => {
     if (props.quickId) {
       db.finds.get(props.quickId).then(f => {
         if (f) {
-            setSavedId(f.id);
-            setFindCode(f.findCode);
-            setObjectType(f.objectType === "Pending Quick Find" ? "" : f.objectType);
-            setLat(f.lat);
-            setLon(f.lon);
-            setAcc(f.gpsAccuracyM);
-            const grid = toOSGridRef(f.lat!, f.lon!);
-            if (grid) setOsGridRef(grid);
-            setNotes(f.notes);
-            
-            if (f.permissionId) {
-                db.permissions.get(f.permissionId).then(p => {
-                    if (p) setLocationName(p.name);
-                });
-            }
-            if (f.sessionId) setSessionId(f.sessionId);
-            if (f.fieldId) setFieldId(f.fieldId);
+          setSavedId(f.id);
+          const grid = (f.lat && f.lon) ? toOSGridRef(f.lat, f.lon) || "" : "";
+          update({
+            findCode: f.findCode,
+            objectType: f.objectType === "Pending Quick Find" ? "" : f.objectType,
+            lat: f.lat,
+            lon: f.lon,
+            acc: f.gpsAccuracyM,
+            osGridRef: grid,
+            notes: f.notes,
+          });
+          if (f.permissionId) {
+            db.permissions.get(f.permissionId).then(p => {
+              if (p) setLocationName(p.name);
+            });
+          }
+          if (f.sessionId) setSessionId(f.sessionId);
+          if (f.fieldId) setFieldId(f.fieldId);
         }
       });
     }
@@ -166,7 +191,7 @@ export default function FindPage(props: {
 
   // Capture GPS automatically if missing and not editing
   useEffect(() => {
-      if (!lat && !props.quickId && !savedId) {
+      if (!form.lat && !props.quickId && !savedId) {
           doGPS();
       }
   }, []);
@@ -180,11 +205,8 @@ export default function FindPage(props: {
     setError(null);
     try {
       const fix = await captureGPS();
-      setLat(fix.lat);
-      setLon(fix.lon);
-      setAcc(fix.accuracyM);
       const grid = toOSGridRef(fix.lat, fix.lon);
-      if (grid) setOsGridRef(grid);
+      update({ lat: fix.lat, lon: fix.lon, acc: fix.accuracyM, osGridRef: grid || form.osGridRef });
     } catch (e: any) {
       setError(e?.message ?? "GPS failed");
     }
@@ -192,28 +214,7 @@ export default function FindPage(props: {
 
   function resetForm() {
     setSavedId(null);
-    setFindCode(makeFindCode());
-    setObjectType("");
-    setCoinType("");
-    setCoinDenomination("");
-    setRuler("");
-    setLat(null);
-    setLon(null);
-    setAcc(null);
-    setOsGridRef("");
-    setW3w("");
-    setPeriod("Roman");
-    setMaterial("Copper alloy");
-    setWeightG("");
-    setWidthMm("");
-    setHeightMm("");
-    setDepthMm("");
-    setTargetId("");
-    setDepthCm("");
-    setDecoration("");
-    setCompleteness("Complete");
-    setFindContext("");
-    setNotes("");
+    setForm({ ...makeInitialForm(), findCode: makeFindCode() });
     setError(null);
   }
 
@@ -222,14 +223,14 @@ export default function FindPage(props: {
     setSaving(true);
     try {
       if (!locationName.trim()) throw new Error("Enter a location name first.");
-      
+
       const trimmedName = locationName.trim();
       let targetPermissionId = "";
-      
+
       const id = savedId || props.quickId || uuid();
       const isEditMode = !!(savedId || props.quickId);
       const now = new Date().toISOString();
-      
+
       // Find or create permission
       const existing = await db.permissions
         .where("projectId")
@@ -250,7 +251,7 @@ export default function FindPage(props: {
           lat: null,
           lon: null,
           gpsAccuracyM: null,
-          collector: defaultDetectorist,
+          collector: defaultDetectorist as string,
           landType: "other",
           permissionGranted: false,
           notes: "Automatically created via Club/Rally Dig",
@@ -259,52 +260,50 @@ export default function FindPage(props: {
         });
       }
 
-      const s: Find = {
+      const s: Omit<Find, 'createdAt'> = {
         id,
         projectId: props.projectId,
         permissionId: targetPermissionId,
         fieldId,
         sessionId,
-        findCode: findCode.trim() || makeFindCode(),
-        objectType: objectType.trim(),
-        coinType: coinType.trim(),
-        coinDenomination: coinDenomination.trim(),
-        ruler: ruler.trim(),
-        lat,
-        lon,
-        gpsAccuracyM: acc,
-        osGridRef,
-        w3w: w3w.trim(),
-        period,
-        material,
-        weightG: weightG ? parseFloat(weightG) : null,
-        widthMm: widthMm ? parseFloat(widthMm) : null,
-        heightMm: heightMm ? parseFloat(heightMm) : null,
-        depthMm: depthMm ? parseFloat(depthMm) : null,
-        detector: detector || undefined,
-        targetId: targetId ? parseInt(targetId) : undefined,
-        depthCm: depthCm ? parseFloat(depthCm) : undefined,
-        decoration: decoration.trim(),
-        completeness,
-        findContext: findContext.trim(),
-        storageLocation: storageLocation.trim(),
-        notes: notes.trim(),
-        isPending: false, // Mark as no longer pending on save
-        createdAt: props.quickId ? undefined as any : now, 
+        findCode: form.findCode.trim() || makeFindCode(),
+        objectType: form.objectType.trim(),
+        coinType: form.coinType.trim(),
+        coinDenomination: form.coinDenomination.trim(),
+        ruler: form.ruler.trim(),
+        lat: form.lat,
+        lon: form.lon,
+        gpsAccuracyM: form.acc,
+        osGridRef: form.osGridRef,
+        w3w: form.w3w.trim(),
+        period: form.period,
+        material: form.material,
+        weightG: form.weightG ? parseFloat(form.weightG) : null,
+        widthMm: form.widthMm ? parseFloat(form.widthMm) : null,
+        heightMm: form.heightMm ? parseFloat(form.heightMm) : null,
+        depthMm: form.depthMm ? parseFloat(form.depthMm) : null,
+        detector: form.detector || undefined,
+        targetId: form.targetId ? parseInt(form.targetId) : undefined,
+        depthCm: form.depthCm ? parseFloat(form.depthCm) : undefined,
+        decoration: form.decoration.trim(),
+        completeness: form.completeness,
+        findContext: form.findContext.trim(),
+        storageLocation: form.storageLocation.trim(),
+        notes: form.notes.trim(),
+        isPending: false,
         updatedAt: now,
       };
 
       if (props.quickId || isEditMode) {
         await db.finds.update(id, s);
       } else {
-        (s as any).createdAt = now;
-        await db.finds.add(s);
+        await db.finds.add({ ...s, createdAt: now });
       }
 
       // Sticky metadata
-      setSetting("lastPeriod", period);
-      setSetting("lastMaterial", material);
-      if (detector) setSetting("defaultDetector", detector);
+      setSetting("lastPeriod", form.period);
+      setSetting("lastMaterial", form.material);
+      if (form.detector) setSetting("defaultDetector", form.detector);
 
       // Haptic feedback
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
@@ -356,7 +355,7 @@ export default function FindPage(props: {
 
   function PhotoThumb(props: { mediaId: string; filename: string; photoType?: string }) {
      const [media, setMedia] = useState<Media | null>(null);
-     
+
      useEffect(() => {
         let active = true;
         db.media.get(props.mediaId).then(m => {
@@ -368,13 +367,13 @@ export default function FindPage(props: {
      }, [props.mediaId]);
 
      if (!media) return <div className="w-full h-32 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-lg" />;
-     
+
      return (
         <div className="relative group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden aspect-square">
-           <ScaledImage 
-              media={media} 
-              imgClassName="object-cover" 
-              className="w-full h-full" 
+           <ScaledImage
+              media={media}
+              imgClassName="object-cover"
+              className="w-full h-full"
            />
            <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[10px] truncate absolute bottom-0 inset-x-0 z-10 flex justify-between items-center">
              <span>{props.filename}</span>
@@ -395,7 +394,7 @@ export default function FindPage(props: {
           {props.permissionId ? "Add Find" : "Club/Rally Dig"}
         </h2>
         <div className="flex gap-3">
-            <button 
+            <button
                 onClick={() => navigate("/finds")}
                 className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all"
             >
@@ -404,14 +403,14 @@ export default function FindPage(props: {
             {savedId && (
                 <>
                     {sessionId && (
-                        <button 
+                        <button
                             onClick={() => navigate(`/session/${sessionId}`)}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2"
                         >
                             <span>←</span> Back to Session
                         </button>
                     )}
-                    <button 
+                    <button
                         onClick={resetForm}
                         className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all"
                     >
@@ -454,8 +453,8 @@ export default function FindPage(props: {
                     </div>
                 </div>
             ) : (
-                <input 
-                    value={locationName} 
+                <input
+                    value={locationName}
                     onChange={(e) => setLocationName(e.target.value)}
                     placeholder="Enter permission or location name"
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-bold"
@@ -470,8 +469,8 @@ export default function FindPage(props: {
                     <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Locked to Session</span>
                 )}
               </div>
-              <select 
-                value={sessionId ?? ""} 
+              <select
+                value={sessionId ?? ""}
                 onChange={(e) => setSessionId(e.target.value || null)}
                 disabled={!!props.sessionId}
                 className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-medium disabled:opacity-50"
@@ -492,8 +491,8 @@ export default function FindPage(props: {
                   <span className="text-[10px] text-emerald-600 font-black uppercase tracking-widest">Locked to Session</span>
                 )}
               </div>
-              <select 
-                value={fieldId ?? ""} 
+              <select
+                value={fieldId ?? ""}
                 onChange={(e) => setFieldId(e.target.value || null)}
                 disabled={!!session?.fieldId}
                 className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-medium disabled:opacity-50"
@@ -508,18 +507,18 @@ export default function FindPage(props: {
             <div className="grid grid-cols-2 gap-4">
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Find Code</div>
-                <input 
-                    value={findCode} 
-                    onChange={(e) => setFindCode(e.target.value)} 
+                <input
+                    value={form.findCode}
+                    onChange={(e) => update({ findCode: e.target.value })}
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-mono text-sm"
                 />
             </label>
 
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Completeness</div>
-                <select 
-                    value={completeness} 
-                    onChange={(e) => setCompleteness(e.target.value as any)}
+                <select
+                    value={form.completeness}
+                    onChange={(e) => update({ completeness: e.target.value as Find["completeness"] })}
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                 >
                 {completenesses.map((c) => (
@@ -532,21 +531,21 @@ export default function FindPage(props: {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="block">
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Object Type / Identification</div>
-                    <input 
-                        value={objectType} 
-                        onChange={(e) => setObjectType(e.target.value)} 
-                        placeholder="e.g., Coin, Buckle, Brooch" 
+                    <input
+                        value={form.objectType}
+                        onChange={(e) => update({ objectType: e.target.value })}
+                        placeholder="e.g., Coin, Buckle, Brooch"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
                 </label>
 
-                {(objectType.toLowerCase().includes("coin") || coinType) && (
+                {(form.objectType.toLowerCase().includes("coin") || form.coinType) && (
                     <div className="grid grid-cols-1 gap-5 p-4 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 animate-in slide-in-from-left-2">
                         <label className="block">
                             <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">Coin Classification</div>
-                            <select 
-                                value={coinType} 
-                                onChange={(e) => setCoinType(e.target.value)}
+                            <select
+                                value={form.coinType}
+                                onChange={(e) => update({ coinType: e.target.value })}
                                 className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                             >
                                 <option value="">(Select)</option>
@@ -558,11 +557,11 @@ export default function FindPage(props: {
                         </label>
                         <label className="block">
                             <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">Denomination</div>
-                            <input 
+                            <input
                                 list="denominations"
-                                value={coinDenomination} 
-                                onChange={(e) => setCoinDenomination(e.target.value)} 
-                                placeholder="e.g., Stater, Penny, Shilling" 
+                                value={form.coinDenomination}
+                                onChange={(e) => update({ coinDenomination: e.target.value })}
+                                placeholder="e.g., Stater, Penny, Shilling"
                                 className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                             />
                             <datalist id="denominations">
@@ -597,16 +596,16 @@ export default function FindPage(props: {
                         </label>
                         <label className="block">
                             <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                                {period === 'Celtic' ? 'Tribe / Ruler' : 
-                                 period === 'Roman' ? 'Emperor / Ruler' : 
+                                {form.period === 'Celtic' ? 'Tribe / Ruler' :
+                                 form.period === 'Roman' ? 'Emperor / Ruler' :
                                  'Ruler / Issuer'}
                             </div>
-                            <input 
-                                value={ruler} 
-                                onChange={(e) => setRuler(e.target.value)} 
+                            <input
+                                value={form.ruler}
+                                onChange={(e) => update({ ruler: e.target.value })}
                                 placeholder={
-                                    period === 'Celtic' ? 'e.g., Iceni, Trinovantes' :
-                                    period === 'Roman' ? 'e.g., Hadrian, Constantine' :
+                                    form.period === 'Celtic' ? 'e.g., Iceni, Trinovantes' :
+                                    form.period === 'Roman' ? 'e.g., Hadrian, Constantine' :
                                     'e.g., Henry II, Elizabeth I'
                                 }
                                 className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
@@ -619,9 +618,9 @@ export default function FindPage(props: {
             <div className="grid grid-cols-2 gap-4">
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Period</div>
-                <select 
-                    value={period} 
-                    onChange={(e) => setPeriod(e.target.value as any)}
+                <select
+                    value={form.period}
+                    onChange={(e) => update({ period: e.target.value as Find["period"] })}
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                 >
                 {periods.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -630,9 +629,9 @@ export default function FindPage(props: {
 
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Material</div>
-                <select 
-                    value={material} 
-                    onChange={(e) => setMaterial(e.target.value as any)}
+                <select
+                    value={form.material}
+                    onChange={(e) => update({ material: e.target.value as Find["material"] })}
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                 >
                 {materials.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -643,10 +642,10 @@ export default function FindPage(props: {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <label className="block">
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Weight (g)</div>
-                    <input 
+                    <input
                         type="number"
-                        value={weightG} 
-                        onChange={(e) => setWeightG(e.target.value)} 
+                        value={form.weightG}
+                        onChange={(e) => update({ weightG: e.target.value })}
                         placeholder="0.00"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
@@ -656,8 +655,8 @@ export default function FindPage(props: {
                     <input
                         type="number"
                         step="0.1"
-                        value={widthMm}
-                        onChange={(e) => setWidthMm(e.target.value)}
+                        value={form.widthMm}
+                        onChange={(e) => update({ widthMm: e.target.value })}
                         placeholder="0.0"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
@@ -667,8 +666,8 @@ export default function FindPage(props: {
                     <input
                         type="number"
                         step="0.1"
-                        value={heightMm}
-                        onChange={(e) => setHeightMm(e.target.value)}
+                        value={form.heightMm}
+                        onChange={(e) => update({ heightMm: e.target.value })}
                         placeholder="0.0"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
@@ -678,8 +677,8 @@ export default function FindPage(props: {
                     <input
                         type="number"
                         step="0.1"
-                        value={depthMm}
-                        onChange={(e) => setDepthMm(e.target.value)}
+                        value={form.depthMm}
+                        onChange={(e) => update({ depthMm: e.target.value })}
                         placeholder="0.0"
                         className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                     />
@@ -687,10 +686,10 @@ export default function FindPage(props: {
                 </div>
             <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Decoration / Description</div>
-                <input 
-                    value={decoration} 
-                    onChange={(e) => setDecoration(e.target.value)} 
-                    placeholder="e.g., Zoomorphic, enamelled" 
+                <input
+                    value={form.decoration}
+                    onChange={(e) => update({ decoration: e.target.value })}
+                    placeholder="e.g., Zoomorphic, enamelled"
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                 />
             </label>
@@ -699,19 +698,19 @@ export default function FindPage(props: {
                 <div className="flex justify-between items-center flex-wrap gap-2">
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-400">Findspot Location</h3>
                     <div className="flex gap-2">
-                        <button 
+                        <button
                             type="button"
                             onClick={() => setIsPickingLocation(true)}
                             className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:bg-emerald-600 hover:text-white"
                         >
                             🗺️ Pick on Map
                         </button>
-                        <button 
+                        <button
                             type="button"
                             onClick={doGPS}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2"
                         >
-                            📍 {lat ? "Update Spot" : "Capture Spot"}
+                            📍 {form.lat ? "Update Spot" : "Capture Spot"}
                         </button>
                     </div>
                 </div>
@@ -719,36 +718,30 @@ export default function FindPage(props: {
                 <div className="grid grid-cols-2 gap-4">
                     <label className="block">
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Latitude</div>
-                        <input 
+                        <input
                             type="number"
                             step="0.000001"
-                            value={lat ?? ""} 
+                            value={form.lat ?? ""}
                             onChange={(e) => {
                                 const val = e.target.value ? parseFloat(e.target.value) : null;
-                                setLat(val);
-                                if (val !== null && lon !== null) {
-                                    const grid = toOSGridRef(val, lon);
-                                    if (grid) setOsGridRef(grid);
-                                }
-                            }} 
+                                const grid = (val !== null && form.lon !== null) ? toOSGridRef(val, form.lon) || form.osGridRef : form.osGridRef;
+                                update({ lat: val, osGridRef: grid });
+                            }}
                             placeholder="54.123456"
                             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
                         />
                     </label>
                     <label className="block">
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Longitude</div>
-                        <input 
+                        <input
                             type="number"
                             step="0.000001"
-                            value={lon ?? ""} 
+                            value={form.lon ?? ""}
                             onChange={(e) => {
                                 const val = e.target.value ? parseFloat(e.target.value) : null;
-                                setLon(val);
-                                if (val !== null && lat !== null) {
-                                    const grid = toOSGridRef(lat, val);
-                                    if (grid) setOsGridRef(grid);
-                                }
-                            }} 
+                                const grid = (val !== null && form.lat !== null) ? toOSGridRef(form.lat, val) || form.osGridRef : form.osGridRef;
+                                update({ lon: val, osGridRef: grid });
+                            }}
                             placeholder="-2.123456"
                             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
                         />
@@ -758,9 +751,9 @@ export default function FindPage(props: {
                 <div className="grid grid-cols-2 gap-4">
                     <label className="block">
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">OS Grid Ref</div>
-                        <input 
-                            value={osGridRef} 
-                            onChange={(e) => setOsGridRef(e.target.value)} 
+                        <input
+                            value={form.osGridRef}
+                            onChange={(e) => update({ osGridRef: e.target.value })}
                             placeholder="e.g. TL 1234 5678"
                             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
                         />
@@ -769,9 +762,9 @@ export default function FindPage(props: {
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">What3Words</div>
                         <div className="relative">
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-red-500 font-bold text-xs">///</span>
-                            <input 
-                                value={w3w} 
-                                onChange={(e) => setW3w(e.target.value)} 
+                            <input
+                                value={form.w3w}
+                                onChange={(e) => update({ w3w: e.target.value })}
                                 placeholder="index.home.raft"
                                 className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 pl-7 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
                             />
@@ -779,23 +772,23 @@ export default function FindPage(props: {
                     </label>
                 </div>
 
-                {lat && lon && (
+                {form.lat && form.lon && (
                     <div className="text-[10px] font-mono opacity-40 flex gap-3">
-                        <span>LAT: {lat.toFixed(6)}</span>
-                        <span>LON: {lon.toFixed(6)}</span>
-                        {acc && <span>ACC: ±{Math.round(acc)}m</span>}
+                        <span>LAT: {form.lat.toFixed(6)}</span>
+                        <span>LON: {form.lon.toFixed(6)}</span>
+                        {form.acc && <span>ACC: ±{Math.round(form.acc)}m</span>}
                     </div>
                 )}
             </div>
 
             <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-5 rounded-2xl border-2 border-emerald-100 dark:border-emerald-900/30 grid gap-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Signal / Detector Information</h3>
-                
+
                 <label className="block">
                     <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Detector Used</div>
-                    <select 
-                        value={detector} 
-                        onChange={(e) => setDetector(e.target.value)}
+                    <select
+                        value={form.detector}
+                        onChange={(e) => update({ detector: e.target.value })}
                         className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
                     >
                         {detectors.length === 0 ? (
@@ -814,22 +807,22 @@ export default function FindPage(props: {
                 <div className="grid grid-cols-2 gap-4">
                     <label className="block">
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Target ID</div>
-                        <input 
+                        <input
                             type="number"
-                            value={targetId} 
-                            onChange={(e) => setTargetId(e.target.value)} 
+                            value={form.targetId}
+                            onChange={(e) => update({ targetId: e.target.value })}
                             placeholder="e.g. 13"
                             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
                         />
                     </label>
                     <label className="block">
                         <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Depth (cm)</div>
-                        <input 
+                        <input
                             type="number"
-                            value={depthCm} 
-                            onChange={(e) => setDepthCm(e.target.value)} 
+                            value={form.depthCm}
+                            onChange={(e) => update({ depthCm: e.target.value })}
                             placeholder="e.g. 15"
-                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
                         />
                     </label>
                 </div>
@@ -837,17 +830,17 @@ export default function FindPage(props: {
 
             <label className="block">
             <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Notes</div>
-            <textarea 
-                value={notes} 
-                onChange={(e) => setNotes(e.target.value)} 
-                rows={3} 
+            <textarea
+                value={form.notes}
+                onChange={(e) => update({ notes: e.target.value })}
+                rows={3}
                 className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
             />
             </label>
 
-            <button 
-                onClick={saveFind} 
-                disabled={saving || !locationName.trim()} 
+            <button
+                onClick={saveFind}
+                disabled={saving || !locationName.trim()}
                 className={`mt-2 w-full px-6 py-4 rounded-xl font-bold text-lg shadow-md transition-all transform active:scale-95 disabled:opacity-50 disabled:transform-none ${savedId ? "bg-green-600 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
             >
             {saving ? "Saving..." : savedId ? "Find Saved ✓" : "Save Find"}
@@ -867,21 +860,21 @@ export default function FindPage(props: {
                         </div>
                     )}
                 </div>
-                
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100"}`}>
                        <span className="text-xl">🕳️</span>
                        <span>Photo 1</span>
                        <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} disabled={!savedId} className="hidden" />
                     </label>
-                    
+
                     <label className={`px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50" : "bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-100"}`}>
                        <span className="text-xl">🧼</span>
                        <span>Photo 2</span>
                        <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} disabled={!savedId} className="hidden" />
                     </label>
                 </div>
-                
+
                 <div className="flex gap-2">
                     <label className={`flex-1 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1 ${!savedId ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200"}`}>
                        📁 Upload Files
@@ -904,16 +897,13 @@ export default function FindPage(props: {
         </div>
       </div>
       {isPickingLocation && (
-          <LocationPickerModal 
-              initialLat={lat}
-              initialLon={lon}
+          <LocationPickerModal
+              initialLat={form.lat}
+              initialLon={form.lon}
               onClose={() => setIsPickingLocation(false)}
               onSelect={(pickedLat, pickedLon) => {
-                  setLat(pickedLat);
-                  setLon(pickedLon);
-                  setAcc(null); // Manual pick doesn't have accuracy
                   const grid = toOSGridRef(pickedLat, pickedLon);
-                  if (grid) setOsGridRef(grid);
+                  update({ lat: pickedLat, lon: pickedLon, acc: null, osGridRef: grid || "" });
                   setIsPickingLocation(false);
               }}
           />

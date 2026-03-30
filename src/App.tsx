@@ -1,20 +1,25 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
+import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
 import { ensureDefaultProject } from "./app/seed";
 import { exportData, importData, exportToCSV, requestPersistentStorage, setSetting, getSetting } from "./services/data";
 
+// Eagerly loaded — core navigation paths
 import Home from "./pages/Home";
 import PermissionPage from "./pages/Permission";
-import SessionPage from "./pages/Session";
 import FindPage from "./pages/Find";
-import FieldGuide from "./pages/FieldGuide";
-import AllFinds from "./pages/AllFinds";
-import FindsBox from "./pages/FindsBox";
-import AllPermissions from "./pages/AllPermissions";
 import Settings from "./pages/Settings";
 import GlobalActions from "./components/GlobalActions";
+
+// Lazily loaded — heavy pages (map, PDF, turf)
+const SessionPage = React.lazy(() => import("./pages/Session"));
+const AllFinds = React.lazy(() => import("./pages/AllFinds"));
+const FindsBox = React.lazy(() => import("./pages/FindsBox"));
+const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
+const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
+const Discover = React.lazy(() => import("./pages/Discover"));
 
 export function Logo() {
   return (
@@ -46,11 +51,15 @@ export function Logo() {
 }
 
 function Shell() {
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
   const [projectId, setProjectId] = useState<string | null>(null);
   const [showBackupReminder, setShowBackupReminder] = useState(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
+  const [shellError, setShellError] = useState<string | null>(null);
+  const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
@@ -144,51 +153,51 @@ function Shell() {
     }
   }, [theme]);
 
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function handleExport() {
     try {
       const json = await exportData();
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      
-      // Update last backup date
+      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
       await setSetting("lastBackupDate", new Date().toISOString());
     } catch (e) {
-      alert("Export failed: " + e);
+      setShellError("Export failed: " + e);
     }
   }
 
   async function handleCSVExport() {
     try {
       const csv = await exportToCSV();
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `findspot-records-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(new Blob([csv], { type: "text/csv" }), `findspot-records-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (e) {
-      alert("CSV Export failed: " + e);
+      setShellError("CSV export failed: " + e);
     }
   }
 
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!confirm("This will merge imported data into your current database. Continue?")) return;
-    
+    setImportPendingFile(file);
+    e.target.value = "";
+  }
+
+  async function confirmImport() {
+    if (!importPendingFile) return;
+    const file = importPendingFile;
+    setImportPendingFile(null);
     try {
       const text = await file.text();
       await importData(text);
-      alert("Import successful! Reloading to refresh data...");
       window.location.reload();
     } catch (e) {
-      alert("Import failed: " + e);
+      setShellError("Import failed: " + e);
     }
   }
 
@@ -239,12 +248,20 @@ function Shell() {
             
             <div className="flex items-center gap-3 border-l pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
                 {!isStandalone && (
-                  <button 
-                    onClick={() => alert("To install FindSpot, tap your browser's menu (⋮ or share icon) and select 'Add to Home Screen'.")}
-                    className="text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
-                  >
-                    ⚠️ Not Installed
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowInstallHelp(h => !h)}
+                      className="text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
+                    >
+                      ⚠️ Not Installed
+                    </button>
+                    {showInstallHelp && (
+                      <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-3 shadow-xl w-56 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
+                        Tap your browser's menu (⋮ or share icon) and select 'Add to Home Screen'.
+                        <button onClick={() => setShowInstallHelp(false)} className="block mt-2 text-emerald-600 font-bold">Got it</button>
+                      </div>
+                    )}
+                  </div>
                 )}
                 <button onClick={handleCSVExport} className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">
                     CSV
@@ -266,8 +283,8 @@ function Shell() {
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>FieldGuide</NavLink>
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
-              <NavLink to="/finds" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Search</NavLink>
-              <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>The Finds Box</NavLink>
+              <NavLink to="/discover" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Discover</NavLink>
+              <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</NavLink>
               <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </nav>
 
@@ -278,6 +295,33 @@ function Shell() {
       </header>
 
       <main>
+        {needRefresh && (
+          <div className="mb-4 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div className="text-sm text-sky-800 dark:text-sky-300">
+              <span className="font-bold">Update available.</span> A new version of FindSpot is ready to install.
+            </div>
+            <button onClick={() => updateServiceWorker(true)} className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shrink-0">
+              Update Now
+            </button>
+          </div>
+        )}
+        {shellError && (
+          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between gap-4">
+            <span className="text-sm text-red-800 dark:text-red-300">{shellError}</span>
+            <button onClick={() => setShellError(null)} className="text-red-600 dark:text-red-400 font-bold text-xs shrink-0">Dismiss</button>
+          </div>
+        )}
+        {importPendingFile && (
+          <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-blue-800 dark:text-blue-300">
+              <span className="font-bold">Import "{importPendingFile.name}"?</span> This will merge data into your current database.
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={confirmImport} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Confirm Import</button>
+              <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
+            </div>
+          </div>
+        )}
         {showBackupReminder && (
           <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
             <div className="flex items-center gap-3">
@@ -306,6 +350,7 @@ function Shell() {
             </div>
           </div>
         )}
+        <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold animate-pulse">Loading…</div>}>
         <Routes>
             <Route path="/" element={<HomeRouter projectId={projectId} />} />
             <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/permission/${id}`)} />} />
@@ -314,6 +359,7 @@ function Shell() {
             <Route path="/session/new" element={<SessionPage projectId={projectId} />} />
             <Route path="/session/:id" element={<SessionPage projectId={projectId} />} />
             <Route path="/find" element={<FindRouter projectId={projectId} />} />
+            <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} />} />
@@ -321,6 +367,7 @@ function Shell() {
             <Route path="/permission" element={<LinkToPermission />} />
             <Route path="/permission/:id" element={<LinkToPermission />} />
         </Routes>
+        </Suspense>
       </main>
 
       <GlobalActions projectId={projectId} />
@@ -378,10 +425,37 @@ function FindRouter({ projectId }: { projectId: string }) {
   />;
 }
 
+class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: "2rem", fontFamily: "monospace", background: "#111", color: "#fff", minHeight: "100vh" }}>
+          <h2 style={{ color: "#ef4444" }}>App Error</h2>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: "12px", color: "#fca5a5" }}>{this.state.error.message}</pre>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: "10px", opacity: 0.6 }}>{this.state.error.stack}</pre>
+          <button onClick={() => window.location.reload()} style={{ marginTop: "1rem", padding: "0.5rem 1rem", background: "#10b981", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer" }}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
-      <Shell />
-    </BrowserRouter>
+    <AppErrorBoundary>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <Shell />
+      </BrowserRouter>
+    </AppErrorBoundary>
   );
 }

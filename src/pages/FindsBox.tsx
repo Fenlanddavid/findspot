@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 
 export default function FindsBox(props: { projectId: string }) {
+  const navigate = useNavigate();
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const finds = useLiveQuery(
     async () => {
@@ -25,7 +28,11 @@ export default function FindsBox(props: { projectId: string }) {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
-    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    media.sort((a, b) => {
+        const aDate = a?.createdAt || "";
+        const bDate = b?.createdAt || "";
+        return aDate.localeCompare(bDate);
+    });
     for (const row of media) {
         if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
@@ -34,13 +41,53 @@ export default function FindsBox(props: { projectId: string }) {
 
   return (
     <div className="max-w-6xl mx-auto pb-20 px-4">
-      <header className="py-8 mt-4">
-        <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl sm:text-4xl">📦</span>
-            <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">The Finds Box</h1>
+
+      {/* Search your finds */}
+      <section className="pt-8 mt-4 mb-10">
+        <h3 className="text-base font-black text-gray-900 dark:text-gray-100 mb-1">Search Finds</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Browse everything you've recorded across all permissions</p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigate(searchQuery.trim() ? `/finds?q=${encodeURIComponent(searchQuery.trim())}` : "/finds");
+          }}
+          className="flex gap-2"
+        >
+          <div className="relative flex-1">
+            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search objects, periods, notes…"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl pl-9 pr-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+          <button
+            type="submit"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest px-5 rounded-xl transition-colors shrink-0"
+          >
+            Search
+          </button>
+        </form>
+        <button
+          onClick={() => navigate("/finds")}
+          className="mt-2 text-[10px] text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+        >
+          Browse all finds →
+        </button>
+      </section>
+
+      {/* Header + Starred finds */}
+      <header className="mb-6">
+        <div className="flex items-center gap-3 mb-1">
+          <span className="text-3xl sm:text-4xl">⭐</span>
+          <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">Finds</h1>
         </div>
         <p className="text-gray-500 dark:text-gray-400 font-medium max-w-xl leading-relaxed">
-            Tap the star on any find to showcase it here.
+          Tap the star on any find to showcase it here.
         </p>
       </header>
 

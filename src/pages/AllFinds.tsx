@@ -14,9 +14,10 @@ export default function AllFinds(props: { projectId: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<"list" | "map">(searchParams.get("view") === "map" ? "map" : "list");
   const filterPeriod = searchParams.get("period");
-  const filterMonth = searchParams.get("month"); 
-  
-  const [searchQuery, setSearchQuery] = useState("");
+  const filterType = searchParams.get("type");
+  const filterPending = searchParams.get("filter") === "pending";
+
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
 
   // --- DATA FETCHING ---
@@ -33,14 +34,12 @@ export default function AllFinds(props: { projectId: string }) {
             if (!matchesSearch) return false;
         }
         if (filterPeriod && s.period !== filterPeriod) return false;
-        if (filterMonth !== null) {
-          const date = new Date(s.createdAt);
-          if (date.getMonth().toString() !== filterMonth) return false;
-        }
+        if (filterType && !s.objectType.toLowerCase().includes(filterType.toLowerCase())) return false;
+        if (filterPending && !s.isPending) return false;
         return true;
       });
     },
-    [props.projectId, searchQuery, filterPeriod, filterMonth]
+    [props.projectId, searchQuery, filterPeriod, filterType, filterPending]
   );
 
   // --- MAP LOGIC ---
@@ -51,35 +50,35 @@ export default function AllFinds(props: { projectId: string }) {
   const [showLidar, setShowLidar] = useState(false);
 
   useEffect(() => {
-    db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value));
+    db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
     db.settings.get("searchShowLidar").then(s => s && setShowLidar(!!s.value));
   }, []);
 
+  // Create/destroy the map only when entering/leaving map view.
+  // Style and LIDAR are toggled in a separate effect to preserve pan/zoom state.
   useEffect(() => {
     if (viewMode !== 'map' || !mapDivRef.current) return;
 
     const center = lastPos.current?.center || DEFAULT_CENTER;
     const zoom = lastPos.current?.zoom || DEFAULT_ZOOM;
 
-    const style: any = { version: 8, sources: {}, layers: [] };
-    
-    if (showLidar) {
-        style.sources["lidar"] = { type: "raster", tiles: ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"], tileSize: 256 };
-        style.layers.push({ id: "lidar-layer", type: "raster", source: "lidar", paint: { "raster-contrast": 0.2 } });
-    }
-
-    const baseTiles = mapStyleMode === "streets" 
-        ? ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"]
-        : ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"];
-
-    style.sources["base"] = { type: "raster", tiles: baseTiles, tileSize: 256 };
-    style.layers.push({ id: "base-layer", type: "raster", source: "base", paint: { "raster-opacity": showLidar ? 0.4 : 1.0 } });
-
     const map = new maplibregl.Map({
       container: mapDivRef.current,
-      style: style,
-      center: center,
-      zoom: zoom,
+      style: {
+        version: 8,
+        sources: {
+          osm: { type: "raster", tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 },
+          satellite: { type: "raster", tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256 },
+          lidar: { type: "raster", tiles: ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"], tileSize: 256 },
+        },
+        layers: [
+          { id: "osm-layer", type: "raster", source: "osm", layout: { visibility: "visible" } },
+          { id: "satellite-layer", type: "raster", source: "satellite", layout: { visibility: "none" } },
+          { id: "lidar-layer", type: "raster", source: "lidar", layout: { visibility: "none" }, paint: { "raster-contrast": 0.2, "raster-opacity": 0.6 } },
+        ],
+      } as any,
+      center,
+      zoom,
     });
 
     map.on('moveend', () => {
@@ -87,33 +86,42 @@ export default function AllFinds(props: { projectId: string }) {
     });
 
     map.on('load', () => {
-        if (finds && finds.length > 0) {
-            map.addSource('finds', {
-                type: 'geojson',
-                data: {
-                    type: 'FeatureCollection',
-                    features: finds.filter(f => f.lat && f.lon).map(f => ({
-                        type: 'Feature',
-                        geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
-                        properties: { id: f.id }
-                    }))
-                }
-            });
-            map.addLayer({
-                id: 'finds-points',
-                type: 'circle',
-                source: 'finds',
-                paint: { 'circle-radius': 7, 'circle-color': '#10b981', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
-            });
-            map.on('click', 'finds-points', (e) => {
-                if (e.features?.[0]) setOpenFindId(e.features[0].properties?.id);
-            });
-        }
+        map.addSource('finds', {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] }
+        });
+        map.addLayer({
+            id: 'finds-points',
+            type: 'circle',
+            source: 'finds',
+            paint: { 'circle-radius': 7, 'circle-color': '#10b981', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
+        });
+        map.on('click', 'finds-points', (e) => {
+            if (e.features?.[0]) setOpenFindId(e.features[0].properties?.id);
+        });
     });
 
     mapRef.current = map;
     return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
-  }, [viewMode, mapStyleMode, showLidar]);
+  }, [viewMode]);
+
+  // Update base layer style without recreating the map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const isStreets = mapStyleMode === "streets";
+    map.setLayoutProperty("osm-layer", "visibility", isStreets && !showLidar ? "visible" : "none");
+    map.setLayoutProperty("satellite-layer", "visibility", !isStreets && !showLidar ? "visible" : "none");
+    map.setLayoutProperty("lidar-layer", "visibility", showLidar ? "visible" : "none");
+    // Show the base map underneath LiDAR at reduced opacity
+    if (showLidar) {
+      map.setLayoutProperty(isStreets ? "osm-layer" : "satellite-layer", "visibility", "visible");
+      map.setPaintProperty(isStreets ? "osm-layer" : "satellite-layer", "raster-opacity", 0.4);
+    } else {
+      map.setPaintProperty("osm-layer", "raster-opacity", 1.0);
+      map.setPaintProperty("satellite-layer", "raster-opacity", 1.0);
+    }
+  }, [mapStyleMode, showLidar]);
 
   useEffect(() => {
     if (mapRef.current && mapRef.current.getSource('finds') && finds) {
@@ -144,7 +152,11 @@ export default function AllFinds(props: { projectId: string }) {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
-    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    media.sort((a, b) => {
+        const aDate = a?.createdAt || "";
+        const bDate = b?.createdAt || "";
+        return aDate.localeCompare(bDate);
+    });
     for (const row of media) if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     return m;
   }, [findIds]);
@@ -211,11 +223,3 @@ export default function AllFinds(props: { projectId: string }) {
   );
 }
 
-function StatBubble({ label, value, color, onClick }: { label: string; value: number; color: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className={`flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-2xl text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-sm border border-black/5 dark:border-white/5 ${color}`}>
-      <span className="opacity-70 uppercase tracking-tighter">{label}:</span>
-      <span className="text-sm font-black">{value}</span>
-    </button>
-  );
-}

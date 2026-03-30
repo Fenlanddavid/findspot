@@ -62,15 +62,21 @@ export default function Settings() {
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
 
-    // Fetch Community Stats
-    fetch("https://api.counterapi.dev/v1/findspot-uk/installs/")
+    // Fetch Community Stats — non-critical, abort after 5s
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    fetch("https://api.counterapi.dev/v1/findspot-uk/installs/", { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
-        if (data && typeof data.count === 'number') {
-          setInstallCount(data.count);
-        }
+        clearTimeout(timeoutId);
+        if (data && typeof data.count === 'number') setInstallCount(data.count);
       })
-      .catch(err => console.error("Stats fetch failed:", err));
+      .catch(() => {}); // Non-critical — ignore failures
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   async function handleRequestPersistence() {

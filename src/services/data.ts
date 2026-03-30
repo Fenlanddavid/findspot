@@ -72,7 +72,12 @@ export async function exportToCSV(): Promise<string> {
 }
 
 export async function importData(json: string) {
-  const data = JSON.parse(json);
+  let data: any;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    throw new Error("Invalid backup file: could not parse JSON.");
+  }
   
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
 

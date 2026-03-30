@@ -58,6 +58,7 @@ export default function PermissionPage(props: {
   const [notes, setNotes] = useState("");
 
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
@@ -114,7 +115,9 @@ export default function PermissionPage(props: {
       const dateA = a.date ? new Date(a.date).getTime() : 0;
       const dateB = b.date ? new Date(b.date).getTime() : 0;
       if (dateB !== dateA) return dateB - dateA;
-      return (b.createdAt || "").localeCompare(a.createdAt || "");
+      const bDate = b?.createdAt || "";
+      const aDate = a?.createdAt || "";
+      return bDate.localeCompare(aDate);
     });
     
     // Fetch counts and tracks in parallel for all sessions
@@ -160,7 +163,11 @@ export default function PermissionPage(props: {
     const info = new Map<string, Media>();
     if (!allMedia || !finds) return info;
     
-    const sortedMedia = [...allMedia].sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    const sortedMedia = [...allMedia].sort((a, b) => {
+        const aDate = a?.createdAt || "";
+        const bDate = b?.createdAt || "";
+        return aDate.localeCompare(bDate);
+    });
     for (const row of sortedMedia) {
       if (row.findId && !info.has(row.findId)) {
         info.set(row.findId, row);
@@ -374,7 +381,7 @@ export default function PermissionPage(props: {
             // Also extend bounds for all sub-fields
             fields?.forEach(f => {
                 if (f.boundary && f.boundary.coordinates?.[0] && Array.isArray(f.boundary.coordinates[0])) {
-                    f.boundary.coordinates[0].forEach((p: [number, number]) => {
+                    f.boundary.coordinates[0].forEach((p) => {
                         if (Array.isArray(p) && p.length >= 2) bounds.extend(p as [number, number]);
                     });
                 }
@@ -392,7 +399,7 @@ export default function PermissionPage(props: {
             mapRef.current = null;
         }
     };
-  }, [boundary, fields, id, !isEditing]);
+  }, [boundary, fields, id, isEditing]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -529,7 +536,7 @@ export default function PermissionPage(props: {
         if (boundary) {
             const fieldCount = await db.fields.where("permissionId").equals(id).count();
             if (fieldCount === 0) {
-                const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                const fieldId = uuid();
                 await db.fields.add({
                     id: fieldId,
                     projectId: props.projectId,
@@ -544,7 +551,7 @@ export default function PermissionPage(props: {
         }
 
         setIsEditing(false);
-        alert("Land record updated!");
+        setSaved(true);
       } else {
         (permission as any).createdAt = now;
         await db.permissions.add(permission);
@@ -627,6 +634,12 @@ export default function PermissionPage(props: {
         {error && (
             <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 font-medium flex gap-3 items-center">
                 <span className="text-xl">⚠️</span> {error}
+            </div>
+        )}
+        {saved && (
+            <div className="border-2 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl shadow-sm font-medium flex gap-3 items-center justify-between">
+                <span>Land record saved.</span>
+                <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100">Dismiss</button>
             </div>
         )}
 

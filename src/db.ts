@@ -1,4 +1,10 @@
 import Dexie, { Table } from "dexie";
+import { v4 as uuid } from "uuid";
+
+type GeoJSONPolygon = {
+  type: "Polygon";
+  coordinates: number[][][];
+};
 
 export type Project = {
   id: string;
@@ -40,7 +46,7 @@ export type Permission = {
 
   agreementId?: string; // Reference to Media table for the signed PDF
 
-  boundary?: any; // GeoJSON Polygon object
+  boundary?: GeoJSONPolygon;
 
   notes: string;
 
@@ -55,7 +61,7 @@ export type Field = {
   projectId: string;
   permissionId: string;
   name: string;
-  boundary: any; // GeoJSON Polygon
+  boundary: GeoJSONPolygon;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -191,7 +197,7 @@ export type Track = {
 
 export type Setting = {
   key: string;
-  value: any;
+  value: string | number | boolean;
 };
 
 export class FindSpotDB extends Dexie {
@@ -293,7 +299,7 @@ export class FindSpotDB extends Dexie {
         for (const p of permissions) {
             if (p.boundary) {
                 // Browser-safe ID generation within transaction
-                const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+                const fieldId = uuid();
                 
                 await tx.table("fields").add({
                     id: fieldId,

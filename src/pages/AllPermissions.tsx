@@ -3,7 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { useNavigate } from "react-router-dom";
 import { StaticMapPreview } from "../components/StaticMapPreview";
-import { calculateCoverage } from "../services/coverage";
+import { enrichPermissions } from "../services/permissions";
 
 export default function AllPermissions(props: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,60 +27,7 @@ export default function AllPermissions(props: { projectId: string }) {
         rows = await collection.reverse().sortBy("createdAt");
       }
 
-      // Enhance with cumulative coverage
-      const allTracks = await db.tracks.where("projectId").equals(props.projectId).toArray();
-
-      return Promise.all(rows.map(async (p) => {
-        const fields = await db.fields.where("permissionId").equals(p.id).toArray();
-        const sessions = await db.sessions.where("permissionId").equals(p.id).toArray();
-        const sessionIds = new Set(sessions.map(s => s.id));
-        const permissionTracks = allTracks.filter(t => t.sessionId && sessionIds.has(t.sessionId));
-        
-        // Tracks that are for this permission but not assigned to any specific field
-        const unassignedSessionIds = new Set(sessions.filter(s => !s.fieldId).map(s => s.id));
-
-        let totalAreaM2 = 0;
-        let totalDetectedM2 = 0;
-
-        for (const f of fields) {
-            const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
-            
-            // Include tracks assigned to this field OR unassigned tracks (which might overlap)
-            const fieldTracks = permissionTracks.filter(t => 
-                t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
-            );
-
-            const result = calculateCoverage(f.boundary, fieldTracks);
-            if (result) {
-                totalAreaM2 += result.totalAreaM2;
-                totalDetectedM2 += result.detectedAreaM2;
-            }
-        }
-
-        const cumulativePercent = totalAreaM2 > 0 ? (totalDetectedM2 / totalAreaM2) * 100 : null;
-
-        // Multi-layered coordinate fallback
-        let lat = typeof p.lat === 'number' ? p.lat : null;
-        let lon = typeof p.lon === 'number' ? p.lon : null;
-
-        // Fallback 1: Use first field boundary center
-        if ((!lat || !lon) && fields.length > 0 && fields[0].boundary?.coordinates?.[0]) {
-            const coords = fields[0].boundary.coordinates[0];
-            lat = coords[0][1];
-            lon = coords[0][0];
-        }
-
-        // Fallback 2: Use most recent find spot
-        if (!lat || !lon) {
-            const recentFind = await db.finds.where("permissionId").equals(p.id).reverse().sortBy("createdAt").then(arr => arr[0]);
-            if (recentFind && recentFind.lat && recentFind.lon) {
-                lat = recentFind.lat;
-                lon = recentFind.lon;
-            }
-        }
-
-        return { ...p, lat, lon, fields, cumulativePercent, tracks: permissionTracks };
-      }));
+      return enrichPermissions(props.projectId, rows);
     },
     [props.projectId, searchQuery]
   );

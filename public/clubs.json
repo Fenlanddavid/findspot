@@ -1,0 +1,168 @@
+[
+  {
+    "id": "club-001",
+    "name": "The Fen Diggers Metal Detecting Club",
+    "description": "Friendly club welcoming all experience levels.",
+    "town": "Wisbech",
+    "county": "Cambridgeshire",
+    "postcode": "PE13",
+    "facebookUrl": "https://www.facebook.com/groups/2008140415972942/",
+    "digDays": "",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-002",
+    "name": "Danebury Metal Detecting Club",
+    "description": "A place where you can discuss ring pulls, coppers, and grabbing a pint with friends.",
+    "town": "Danebury",
+    "county": "Hampshire",
+    "postcode": "SP11",
+    "facebookUrl": "https://www.facebook.com/daneburyMDC",
+    "digDays": "",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-003",
+    "name": "West Norfolk Metal Detecting Club",
+    "county": "Norfolk",
+    "postcode": "PE30",
+    "facebookUrl": "https://www.facebook.com/groups/1500895944174527/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-004",
+    "name": "Sudbury Metal Detecting Club",
+    "town": "Sudbury",
+    "county": "Suffolk",
+    "postcode": "CO10",
+    "facebookUrl": "https://www.facebook.com/groups/244695821915373/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-005",
+    "name": "Brentwood & District Metal Detecting Club",
+    "town": "Brentwood",
+    "county": "Essex",
+    "postcode": "CM14",
+    "facebookUrl": "https://www.facebook.com/groups/19013124108/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-006",
+    "name": "Friends of Colchester Detecting Club",
+    "town": "Colchester",
+    "county": "Essex",
+    "postcode": "CO1",
+    "facebookUrl": "https://www.facebook.com/groups/311198030931896/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-007",
+    "name": "Wickford Metal Detecting Club",
+    "town": "Wickford",
+    "county": "Essex",
+    "postcode": "SS11",
+    "facebookUrl": "https://www.facebook.com/groups/156772191397559/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-008",
+    "name": "Bourne Metal Detecting Club",
+    "town": "Bourne",
+    "county": "Lincolnshire",
+    "postcode": "PE10",
+    "facebookUrl": "https://www.facebook.com/groups/737921121127809/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-009",
+    "name": "Spire Metal Detecting Club (SMDC)",
+    "county": "Derbyshire",
+    "postcode": "S42",
+    "facebookUrl": "https://www.facebook.com/groups/2082066372110169/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-010",
+    "name": "Kirkby Sutton Metal Detectorists Club",
+    "county": "Nottinghamshire",
+    "postcode": "NG17",
+    "facebookUrl": "https://www.facebook.com/groups/1106738590456324",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-011",
+    "name": "South Manchester Metal Detecting Club (SMMDC)",
+    "county": "Greater Manchester",
+    "postcode": "SK4",
+    "facebookUrl": "https://www.facebook.com/groups/656148037447500/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-012",
+    "name": "Kendal & District Metal Detecting Club",
+    "town": "Kendal",
+    "county": "Cumbria",
+    "postcode": "LA9",
+    "facebookUrl": "https://www.facebook.com/groups/KandDMDC/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-013",
+    "name": "West Kirby Metal Detecting Club",
+    "town": "West Kirby",
+    "county": "Merseyside",
+    "postcode": "CH48",
+    "facebookUrl": "https://www.facebook.com/groups/164743894136206/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-014",
+    "name": "Metal Detecting Wirral (M.D.W)",
+    "county": "Merseyside",
+    "postcode": "CH41",
+    "facebookUrl": "https://www.facebook.com/groups/2838857703102076/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-015",
+    "name": "County Durham Metal Detectorists (CDMD)",
+    "county": "Durham",
+    "postcode": "DH1",
+    "facebookUrl": "https://www.facebook.com/groups/cdmduk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-016",
+    "name": "Northumberland Metal Detecting Club",
+    "county": "Northumberland",
+    "postcode": "NE46",
+    "facebookUrl": "https://www.facebook.com/groups/1682431081823757/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-017",
+    "name": "South & Mid Wales Veterans & Civilian MDC",
+    "county": "Mid Wales",
+    "postcode": "SY16",
+    "facebookUrl": "https://www.facebook.com/groups/922199556386975/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-018",
+    "name": "Wrexham Metal Detecting Club",
+    "town": "Wrexham",
+    "county": "Wrexham",
+    "postcode": "LL11",
+    "facebookUrl": "https://www.facebook.com/groups/504288799688278/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-019",
+    "name": "Fermanagh Metal Detecting Club (FMDC)",
+    "county": "Northern Ireland",
+    "postcode": "BT74",
+    "facebookUrl": "https://www.facebook.com/groups/800764697853192/",
+    "verificationStatus": "verified"
+  }
+]

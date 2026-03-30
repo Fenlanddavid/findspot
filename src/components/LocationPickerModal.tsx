@@ -57,8 +57,8 @@ export function LocationPickerModal(props: {
     // Load persistent style
     useEffect(() => {
         db.settings.get("mapStyle").then(s => {
-            if (s && ["streets", "satellite"].includes(s.value)) {
-                setMapStyle(s.value as any);
+            if (s && ["streets", "satellite"].includes(String(s.value))) {
+                setMapStyle(s.value as "streets" | "satellite");
             }
         });
         db.settings.get("showLidar").then(s => setShowLidar(!!s?.value));

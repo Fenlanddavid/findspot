@@ -12,6 +12,8 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   const [isCapturing, setIsCapturing] = React.useState(false);
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [lastQuickId, setLastQuickId] = React.useState<string | null>(null);
+  const [noGpsWarning, setNoGpsWarning] = React.useState(false);
+  const [fabError, setFabError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   const activeSession = useLiveQuery(
@@ -32,32 +34,32 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   async function quickFind() {
     if (isCapturing) return;
     setIsCapturing(true);
+    setFabError(null);
+    setNoGpsWarning(false);
 
     // Provide immediate haptic feedback
     if (navigator.vibrate) navigator.vibrate(50);
 
     const id = uuid();
     const now = new Date().toISOString();
-    
-    // Attempt to get GPS silently but with a shorter timeout for "Quick" feel
+
+    // Attempt to get GPS silently
     let lat = null, lon = null, acc = null;
     try {
-        // We still use captureGPS but we know it might take time
         const fix = await captureGPS();
         lat = fix.lat;
         lon = fix.lon;
         acc = fix.accuracyM;
     } catch(e) {
-        console.warn("Silent GPS failed for Quick Find");
+        setNoGpsWarning(true);
     }
 
-    // Default to last permission or a placeholder
+    // Default to last permission
     const lastPerm = await db.permissions.where("projectId").equals(projectId).reverse().sortBy("createdAt").then(arr => arr[0]);
-    
+
     if (!lastPerm) {
         setIsCapturing(false);
-        alert("Please add at least one Permission first before using Quick Find.");
-        navigate("/permission");
+        setFabError("Add a permission first before using Quick Find.");
         return;
     }
 
@@ -121,7 +123,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
         setShowSuccess(false);
         if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
     } catch(err) {
-        alert("Failed to save photo: " + err);
+        setFabError("Failed to save photo: " + err);
     } finally {
         setLastQuickId(null);
     }
@@ -129,6 +131,12 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 pointer-events-none">
+      {fabError && (
+        <div className="pointer-events-auto bg-red-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-red-500/50 min-w-[200px]">
+          <span className="text-[10px]">{fabError}</span>
+          <button onClick={() => setFabError(null)} className="opacity-60 hover:opacity-100 text-xs shrink-0">✕</button>
+        </div>
+      )}
       {showSuccess && (
           <div className="pointer-events-auto bg-gray-900/95 backdrop-blur-md text-white p-4 rounded-3xl shadow-2xl flex flex-col gap-3 animate-in slide-in-from-right-4 border border-emerald-500/50 mb-2 min-w-[200px]">
               <div className="flex items-center justify-between gap-4">
@@ -138,18 +146,34 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
                   </div>
                   <button onClick={() => setShowSuccess(false)} className="opacity-40 hover:opacity-100 text-xs">✕</button>
               </div>
+              {noGpsWarning && (
+                <div className="text-[9px] text-amber-400 flex items-center gap-1.5 bg-amber-900/30 px-2 py-1 rounded-lg">
+                  ⚠️ No GPS — open the find to add a location
+                </div>
+              )}
               <div className="flex gap-2">
                   <label className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest cursor-pointer shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
                       📸 Take Photo
                       <input type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" />
                   </label>
-                  <button 
+                  <button
                     onClick={() => setShowSuccess(false)}
                     className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
                   >
                     Done
                   </button>
               </div>
+              <button
+                onClick={async () => {
+                  if (!lastQuickId) return;
+                  await db.finds.delete(lastQuickId);
+                  setLastQuickId(null);
+                  setShowSuccess(false);
+                }}
+                className="text-[9px] text-red-400 hover:text-red-300 opacity-60 hover:opacity-100 text-center transition-all"
+              >
+                Undo — delete this find
+              </button>
           </div>
       )}
 

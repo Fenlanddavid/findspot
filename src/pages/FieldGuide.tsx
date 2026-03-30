@@ -604,6 +604,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     });
 
     mapRef.current = map;
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -707,18 +713,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             })
         };
         
+        let canceled = false;
         const updateSource = () => {
+            if (canceled) return;
             const source = mapRef.current?.getSource('pas-finds') as maplibregl.GeoJSONSource;
             if (source) {
                 source.setData(pasGeoJSON as any);
-            } else if (mapRef.current?.loaded()) {
-                // If loaded but source missing, it might not have been added yet
-            } else {
+            } else if (!mapRef.current?.loaded()) {
                 // Map not loaded yet, retry shortly
                 setTimeout(updateSource, 500);
             }
         };
         updateSource();
+        return () => { canceled = true; };
     }
   }, [pasFinds]);
 

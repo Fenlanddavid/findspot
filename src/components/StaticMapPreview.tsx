@@ -5,7 +5,7 @@ import React, { useMemo, useState } from "react";
  * It uses a layered approach to ensure SOMETHING is always displayed.
  */
 export function StaticMapPreview({ lat, lon, boundary, tracks, className = "" }: { lat?: number | null, lon?: number | null, boundary?: any, tracks?: any[], className?: string }) {
-    const [hasError, setHasError] = useState(false);
+    const [errorCount, setErrorCount] = useState(0);
     const zoom = 15;
 
     // Guard: If no coordinates, show a placeholder
@@ -68,14 +68,20 @@ export function StaticMapPreview({ lat, lon, boundary, tracks, className = "" }:
 
     return (
         <div className={`relative overflow-hidden bg-gray-200 dark:bg-gray-900 shadow-inner group/map ${className}`}>
-            {/* The Image */}
-            <img 
-                src={hasError ? fallbackUrl : satelliteUrl}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover/map:scale-110"
-                alt="Field Preview"
-                onError={() => setHasError(true)}
-                loading="lazy"
-            />
+            {/* The Image — falls back to OSM on first error, shows placeholder on second */}
+            {errorCount < 2 ? (
+                <img
+                    src={errorCount === 0 ? satelliteUrl : fallbackUrl}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover/map:scale-110"
+                    alt="Field Preview"
+                    onError={() => setErrorCount(c => c + 1)}
+                    loading="lazy"
+                />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                    <span className="text-[10px] font-bold opacity-30 uppercase tracking-tighter">Map unavailable</span>
+                </div>
+            )}
             
             {/* SVG Overlay for Boundary and Tracks */}
             <svg 
@@ -119,9 +125,11 @@ export function StaticMapPreview({ lat, lon, boundary, tracks, className = "" }:
                 </div>
             )}
 
-            <div className="absolute bottom-1 right-1 bg-black/50 backdrop-blur-sm text-[6px] text-white px-1 rounded font-black uppercase tracking-widest opacity-50">
-                {hasError ? "OSM" : "ESRI"}
-            </div>
+            {errorCount < 2 && (
+                <div className="absolute bottom-1 right-1 bg-black/50 backdrop-blur-sm text-[6px] text-white px-1 rounded font-black uppercase tracking-widest opacity-50">
+                    {errorCount === 0 ? "ESRI" : "OSM"}
+                </div>
+            )}
         </div>
     );
 }

@@ -85,7 +85,11 @@ export function PermissionReport(props: {
       )}
 
       <div className="grid gap-12">
-        {[...props.sessions].sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(session => {
+        {[...props.sessions].sort((a, b) => {
+          const dateB = b?.date || "";
+          const dateA = a?.date || "";
+          return dateB.localeCompare(dateA);
+        }).map(session => {
             const sessionFinds = findsBySession.map.get(session.id) || [];
             if (sessionFinds.length === 0) return null;
 

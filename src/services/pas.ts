@@ -37,24 +37,29 @@ export const generatePASDescription = (find: Find): string => {
 
 /**
  * Calculates a 'Recording Quality Score' based on data completeness.
+ *
+ * Score breakdown (max 100):
+ *   Measurements  30pts  weight (10) + width/diameter (10) + height/thickness (10)
+ *   Location      30pts  GPS coordinates (all-or-nothing — partial coords are useless)
+ *   Photos        40pts  first photo (20) + second photo (10) + third photo (10)
  */
 export const calculateRecordingScore = (find: Find, photoCount: number): { score: number; reasons: string[] } => {
   let score = 0;
   const reasons: string[] = [];
 
-  // Measurements (Max 30)
+  // Measurements (max 30)
   if (find.weightG) score += 10; else reasons.push("Missing weight");
   if (find.widthMm) score += 10; else reasons.push("Missing width/diameter");
   if (find.heightMm || find.depthMm) score += 10; else reasons.push("Missing height/thickness");
 
-  // Location (Max 30)
+  // Location (max 30) — all-or-nothing because a single coordinate is meaningless
   if (find.lat && find.lon) {
-    score += 30; // Combined score for having coordinates
+    score += 30;
   } else {
     reasons.push("Missing GPS coordinates");
   }
 
-  // Visuals (Max 40)
+  // Photos (max 40)
   if (photoCount > 0) score += 20; else reasons.push("No photos attached");
   if (photoCount >= 2) score += 10;
   if (photoCount >= 3) score += 10;
@@ -68,6 +73,7 @@ export const calculateRecordingScore = (find: Find, photoCount: number): { score
 export const getParishAndCounty = async (lat: number, lon: number): Promise<{ parish: string; county: string }> => {
   try {
     const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`);
+    if (!resp.ok) throw new Error(`Nominatim error: ${resp.status}`);
     const data = await resp.json();
     const address = data.address || {};
     

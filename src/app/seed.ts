@@ -3,7 +3,9 @@ import { v4 as uuid } from "uuid";
 
 export async function ensureDefaultProject(): Promise<string> {
   const existing = await db.projects.toArray();
-  if (existing.length > 0) return existing[0].id;
+  // Return the first project that has both a valid id and name
+  const valid = existing.find(p => p.id && p.name);
+  if (valid) return valid.id;
 
   const id = uuid();
   await db.projects.add({

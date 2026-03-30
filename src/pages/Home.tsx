@@ -4,7 +4,7 @@ import { db, Media } from "../db";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 import { StaticMapPreview } from "../components/StaticMapPreview";
-import { calculateCoverage } from "../services/coverage";
+import { enrichPermissions, EnrichedPermission } from "../services/permissions";
 
 export default function Home(props: {
   projectId: string;
@@ -23,76 +23,30 @@ export default function Home(props: {
   
   const permissions = useLiveQuery(
     async () => {
-      let collection = db.permissions.where("projectId").equals(props.projectId);
-      let rows = [];
+      let rows = await db.permissions.where("projectId").equals(props.projectId).toArray();
+      
+      let enriched = await enrichPermissions(props.projectId, rows);
+
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        rows = await collection
-          .filter(l => 
-            l.name.toLowerCase().includes(query) || 
-            (l.landownerName?.toLowerCase().includes(query) ?? false) ||
-            (l.notes?.toLowerCase().includes(query) ?? false)
-          )
-          .reverse()
-          .sortBy("createdAt");
-      } else {
-        rows = await collection.reverse().sortBy("createdAt");
+        enriched = enriched.filter(l => 
+          l.name.toLowerCase().includes(query) || 
+          (l.landownerName?.toLowerCase().includes(query) ?? false) ||
+          (l.notes?.toLowerCase().includes(query) ?? false)
+        );
       }
 
-      // Enhance with cumulative coverage
-      const allTracks = await db.tracks.where("projectId").equals(props.projectId).toArray();
-
-      return Promise.all(rows.map(async (p) => {
-        const fields = await db.fields.where("permissionId").equals(p.id).toArray();
-        const sessions = await db.sessions.where("permissionId").equals(p.id).toArray();
-        const sessionIds = new Set(sessions.map(s => s.id));
-        const permissionTracks = allTracks.filter(t => t.sessionId && sessionIds.has(t.sessionId));
-        
-        // Tracks that are for this permission but not assigned to any specific field
-        const unassignedSessionIds = new Set(sessions.filter(s => !s.fieldId).map(s => s.id));
-
-        let totalAreaM2 = 0;
-        let totalDetectedM2 = 0;
-
-        for (const f of fields) {
-            const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
-            
-            // Include tracks assigned to this field OR unassigned tracks (which might overlap)
-            const fieldTracks = permissionTracks.filter(t => 
-                t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
-            );
-
-            const result = calculateCoverage(f.boundary, fieldTracks);
-            if (result) {
-                totalAreaM2 += result.totalAreaM2;
-                totalDetectedM2 += result.detectedAreaM2;
-            }
+      // Sort by session count descending, then by last session date, then by creation date
+      enriched.sort((a, b) => {
+        if (b.sessionCount !== a.sessionCount) {
+          return b.sessionCount - a.sessionCount;
         }
+        const bDate = b.lastSessionDate || b.createdAt;
+        const aDate = a.lastSessionDate || a.createdAt;
+        return bDate.localeCompare(aDate);
+      });
 
-        const cumulativePercent = totalAreaM2 > 0 ? (totalDetectedM2 / totalAreaM2) * 100 : null;
-
-        // Multi-layered coordinate fallback
-        let lat = typeof p.lat === 'number' ? p.lat : null;
-        let lon = typeof p.lon === 'number' ? p.lon : null;
-
-        // Fallback 1: Use first field boundary center
-        if ((!lat || !lon) && fields.length > 0 && fields[0].boundary?.coordinates?.[0]) {
-            const coords = fields[0].boundary.coordinates[0];
-            lat = coords[0][1];
-            lon = coords[0][0];
-        }
-
-        // Fallback 2: Use most recent find spot
-        if (!lat || !lon) {
-            const recentFind = await db.finds.where("permissionId").equals(p.id).reverse().sortBy("createdAt").then(arr => arr[0]);
-            if (recentFind && recentFind.lat && recentFind.lon) {
-                lat = recentFind.lat;
-                lon = recentFind.lon;
-            }
-        }
-
-        return { ...p, lat, lon, fields, cumulativePercent, tracks: permissionTracks };
-      }));
+      return enriched.slice(0, 3);
     },
     [props.projectId, searchQuery]
   );
@@ -105,13 +59,17 @@ export default function Home(props: {
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
 
-  const findIds = useMemo(() => recentFinds?.slice(0, 12).map(s => s.id) ?? [], [recentFinds]);
+  const findIds = useMemo(() => recentFinds?.slice(0, 3).map(s => s.id) ?? [], [recentFinds]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
-    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    media.sort((a, b) => {
+        const aDate = a?.createdAt || "";
+        const bDate = b?.createdAt || "";
+        return aDate.localeCompare(bDate);
+    });
     for (const row of media) {
         if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
     }
@@ -175,7 +133,7 @@ export default function Home(props: {
       <section className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions & Rallies</h2>
+                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
                 <button onClick={props.goPermissions} className="text-sm text-emerald-600 font-bold hover:underline">View All</button>
             </div>
             <div className="flex items-center gap-3 w-full md:max-w-md">
@@ -215,7 +173,7 @@ export default function Home(props: {
         
         {permissions && permissions.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {permissions.slice(0, 12).map((l) => (
+            {permissions.map((l) => (
               <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all flex flex-col h-full group relative overflow-hidden">
                 {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
                 
@@ -243,19 +201,19 @@ export default function Home(props: {
 
                 {/* Satellite Preview with Progress Overlay */}
                 <div className="relative aspect-video -mx-4 mb-4 cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
-                    <StaticMapPreview 
-                        lat={l.lat} 
-                        lon={l.lon} 
-                        boundary={l.boundary || (l as any).fields?.[0]?.boundary} 
-                        tracks={(l as any).tracks}
-                        className="h-full w-full rounded-none" 
+                    <StaticMapPreview
+                        lat={l.lat}
+                        lon={l.lon}
+                        boundary={l.boundary || l.fields?.[0]?.boundary}
+                        tracks={l.tracks}
+                        className="h-full w-full rounded-none"
                     />
-                    
-                    {(l as any).cumulativePercent !== null && (
+
+                    {l.cumulativePercent !== null && (
                         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
-                            <div className={`px-2 py-1 rounded-lg backdrop-blur-md border shadow-lg flex flex-col items-center ${ (l as any).cumulativePercent < 90 ? 'bg-orange-600/80 border-orange-400 text-white' : 'bg-emerald-600/80 border-emerald-400 text-white'}`}>
+                            <div className={`px-2 py-1 rounded-lg backdrop-blur-md border shadow-lg flex flex-col items-center ${ l.cumulativePercent < 90 ? 'bg-orange-600/80 border-orange-400 text-white' : 'bg-emerald-600/80 border-emerald-400 text-white'}`}>
                                 <span className="text-[7px] font-black uppercase leading-none opacity-80 mb-0.5">Undetected</span>
-                                <span className="text-xs font-black leading-none">{Math.round(100 - (l as any).cumulativePercent)}%</span>
+                                <span className="text-xs font-black leading-none">{Math.round(100 - l.cumulativePercent)}%</span>
                             </div>
                         </div>
                     )}
@@ -269,7 +227,7 @@ export default function Home(props: {
                   {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">👤 {l.landownerName}</div>}
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                        {(l as any).fields?.length || 0} {(l as any).fields?.length === 1 ? 'Field' : 'Fields'}
+                        {l.sessionCount} {l.sessionCount === 1 ? 'Visit' : 'Visits'}
                     </div>
                     {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
                   </div>
@@ -291,14 +249,15 @@ export default function Home(props: {
 
       <section>
         <div className="flex items-baseline justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Recent Finds</h2>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
+            <button onClick={props.goAllFinds} className="text-sm text-emerald-600 font-bold hover:underline">View All</button>
         </div>
 
-        {(!finds || finds.length === 0) && <div className="text-gray-500 italic bg-gray-50 dark:bg-gray-800/50 p-10 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">No finds recorded yet.</div>}
+        {(!recentFinds || recentFinds.length === 0) && <div className="text-gray-500 italic bg-gray-50 dark:bg-gray-800/50 p-10 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">No finds recorded yet.</div>}
         
-        {finds && finds.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {finds.slice(0, 12).map((s) => {
+        {recentFinds && recentFinds.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {recentFinds.slice(0, 3).map((s) => {
               const media = firstMediaMap?.get(s.id);
               return (
                 <div key={s.id} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all flex flex-col h-full group cursor-pointer" onClick={() => setOpenFindId(s.id)}>
