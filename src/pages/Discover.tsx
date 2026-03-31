@@ -21,6 +21,7 @@ export type DetectingEvent = {
   lon?: number;
   organiserName?: string;
   sourceUrl?: string;
+  facebookUrl?: string;
   entryFee?: string;
   verificationStatus: VerificationStatus;
   createdAt: string;
