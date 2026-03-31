@@ -98,7 +98,7 @@ export default function Home(props: {
         <section className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 animate-in slide-in-from-top-4">
             <div className="flex justify-between items-center mb-3 px-1">
                 <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                    <span className="animate-pulse">🟠</span> {pendingFinds.length} Pending Quick Finds
+                    <span className="animate-pulse">🟠</span> {pendingFinds.length} Pending Finds
                 </h3>
                 <button onClick={() => props.goFindsWithFilter("filter=pending")} className="text-[10px] font-black uppercase text-amber-600 hover:underline">View Queue</button>
             </div>

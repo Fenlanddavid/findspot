@@ -423,6 +423,15 @@ export default function FindPage(props: {
 
       {error && <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm">{error}</div>}
 
+      {props.quickId && (
+          <div className="border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl flex items-center gap-3">
+              <span className="text-xl">🟠</span>
+              <div className="text-sm">
+                  <span className="font-bold">Finish this quick find —</span> fill in the details below and hit Save to complete the record.
+              </div>
+          </div>
+      )}
+
       {session?.isFinished && (
           <div className="border-2 border-gray-200 bg-gray-50 dark:bg-gray-800/50 dark:border-gray-700 text-gray-600 dark:text-gray-400 p-4 rounded-xl shadow-sm flex items-center gap-3">
               <span className="text-xl">🔒</span>
