@@ -243,22 +243,38 @@ function EventCard({
         <h3 className="font-black text-sm text-gray-900 dark:text-gray-100 leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
           {event.title}
         </h3>
-        {event.sourceUrl && (
-          <a
-            href={event.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-gray-400 hover:text-emerald-500 shrink-0 mt-0.5"
-            title="Open source"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-              <polyline points="15 3 21 3 21 9" />
-              <line x1="10" y1="14" x2="21" y2="3" />
-            </svg>
-          </a>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+          {event.sourceUrl && (
+            <a
+              href={event.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-gray-400 hover:text-emerald-500"
+              title="Open website"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+          )}
+          {event.facebookUrl && (
+            <a
+              href={event.facebookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-gray-400 hover:text-blue-500"
+              title="Facebook"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
+              </svg>
+            </a>
+          )}
+        </div>
       </div>
       <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-1.5 flex flex-wrap gap-x-2 gap-y-0">
         <span className="font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-500">
@@ -409,7 +425,17 @@ function EventDetailModal({
               rel="noopener noreferrer"
               className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
             >
-              Open Source
+              Website
+            </a>
+          )}
+          {event.facebookUrl && (
+            <a
+              href={event.facebookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
+            >
+              Facebook
             </a>
           )}
           {event.lat != null && event.lon != null && (
@@ -989,7 +1015,7 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
     ]).then(([events, clubs]) =>
       Promise.all([resolveCoordinates(events), resolveCoordinates(clubs)])
     ).then(([events, clubs]) => {
-      setRemoteEvents(events.filter((e) => e.startDate >= today));
+      setRemoteEvents(events.filter((e) => (e.endDate ?? e.startDate) >= today));
       setRemoteClubs(clubs);
       setLoadingRemote(false);
     });
@@ -1190,6 +1216,10 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
             )}
           </>
         )}
+        <p className="text-[9px] text-gray-400 dark:text-gray-600 text-center mt-3 leading-relaxed">
+          Events listed for information only. FindSpot is not affiliated with any organiser, club, or rally.
+          Always verify details directly with the organiser before attending.
+        </p>
       </section>
 
       {/* Modals */}

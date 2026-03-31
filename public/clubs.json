@@ -7,7 +7,6 @@
     "county": "Cambridgeshire",
     "postcode": "PE13",
     "facebookUrl": "https://www.facebook.com/groups/2008140415972942/",
-    "digDays": "",
     "verificationStatus": "verified"
   },
   {
@@ -18,7 +17,6 @@
     "county": "Hampshire",
     "postcode": "SP11",
     "facebookUrl": "https://www.facebook.com/daneburyMDC",
-    "digDays": "",
     "verificationStatus": "verified"
   },
   {
@@ -163,6 +161,183 @@
     "county": "Northern Ireland",
     "postcode": "BT74",
     "facebookUrl": "https://www.facebook.com/groups/800764697853192/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-020",
+    "name": "Dales & Matlock Metal Detecting Club",
+    "county": "Derbyshire",
+    "postcode": "DE",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-021",
+    "name": "Loughborough Coin & Search Society",
+    "town": "Loughborough",
+    "county": "Leicestershire",
+    "postcode": "LE",
+    "websiteUrl": "https://lcss.org.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-022",
+    "name": "Lincolnshire Search Society",
+    "county": "Lincolnshire",
+    "postcode": "LN",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-023",
+    "name": "Retford Archaeology Metal Detecting Group",
+    "town": "Retford",
+    "county": "Nottinghamshire",
+    "postcode": "DN22",
+    "websiteUrl": "https://www.life-publications.com/retford/retford-archaeological-metal-detecting-group/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-024",
+    "name": "Friends of Dedham Vale Detectorists",
+    "county": "Essex",
+    "postcode": "CO",
+    "facebookUrl": "https://www.facebook.com/groups/friendsofDVD/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-025",
+    "name": "Full Members of Colchester Detecting Club",
+    "town": "Colchester",
+    "county": "Essex",
+    "postcode": "CO",
+    "facebookUrl": "https://www.facebook.com/groups/516302709860353/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-026",
+    "name": "Wymondham & Attleborough Detecting Club",
+    "county": "Norfolk",
+    "postcode": "NR",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-027",
+    "name": "St Edmunds Searchers",
+    "county": "Suffolk",
+    "postcode": "IP",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-028",
+    "name": "Dunelme Metal Detecting Club",
+    "county": "Durham",
+    "postcode": "DH",
+    "facebookUrl": "https://www.facebook.com/profile.php?id=100064789148508",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-029",
+    "name": "Cheshire East Metal Detecting Club",
+    "county": "Cheshire",
+    "postcode": "CW",
+    "facebookUrl": "https://www.facebook.com/groups/551623001070702/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-030",
+    "name": "WLMDC – Members & Organised Digs",
+    "county": "Lancashire",
+    "postcode": "PR",
+    "facebookUrl": "https://www.facebook.com/groups/1799106707042115/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-031",
+    "name": "Weald & Downland Metal Detecting Club",
+    "county": "West Sussex",
+    "postcode": "BN",
+    "facebookUrl": "https://www.facebook.com/groups/353347461706991/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-032",
+    "name": "Berkshire Metal Detecting Group",
+    "county": "Berkshire",
+    "postcode": "RG",
+    "facebookUrl": "https://www.facebook.com/groups/578505379792472/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-033",
+    "name": "Woodley Searchers Group",
+    "town": "Woodley",
+    "county": "Berkshire",
+    "postcode": "RG",
+    "facebookUrl": "https://www.facebook.com/groups/962665807427118/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-034",
+    "name": "The Soil Searchers",
+    "county": "South East",
+    "websiteUrl": "https://www.tssmdc.co.uk",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-035",
+    "name": "Hampshire Seekers Metal Detecting Club",
+    "county": "Hampshire",
+    "postcode": "SO",
+    "facebookUrl": "https://www.facebook.com/groups/641735059567484/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-036",
+    "name": "Portchester Metal Detecting Club",
+    "town": "Portchester",
+    "county": "Hampshire",
+    "postcode": "PO16",
+    "facebookUrl": "https://www.facebook.com/groups/384408963920568/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-037",
+    "name": "Weekend Wanderers Detecting Club",
+    "county": "Hampshire",
+    "postcode": "SO",
+    "facebookUrl": "https://www.facebook.com/groups/353664795769169/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-038",
+    "name": "Cantium Metal Detecting Club",
+    "county": "Kent",
+    "postcode": "CT",
+    "facebookUrl": "https://www.facebook.com/groups/724313449348863/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-039",
+    "name": "Dartford Metal Detecting Club",
+    "town": "Dartford",
+    "county": "Kent",
+    "postcode": "DA",
+    "facebookUrl": "https://www.facebook.com/groups/1460118480921022/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-040",
+    "name": "Oxford Blues Metal Detecting Club",
+    "county": "Oxfordshire",
+    "postcode": "OX",
+    "facebookUrl": "https://www.facebook.com/groups/obmdc/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-041",
+    "name": "Surrey Metal Detecting Club",
+    "county": "Surrey",
+    "postcode": "GU",
+    "facebookUrl": "https://www.facebook.com/groups/surreymetaldetecting/",
     "verificationStatus": "verified"
   }
 ]
