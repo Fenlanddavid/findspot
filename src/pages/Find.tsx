@@ -773,10 +773,16 @@ export default function FindPage(props: {
                 </div>
 
                 {form.lat && form.lon && (
-                    <div className="text-[10px] font-mono opacity-40 flex gap-3">
+                    <div className="text-[10px] font-mono opacity-40 flex gap-3 items-center">
                         <span>LAT: {form.lat.toFixed(6)}</span>
                         <span>LON: {form.lon.toFixed(6)}</span>
-                        {form.acc && <span>ACC: ±{Math.round(form.acc)}m</span>}
+                        {form.acc != null && (
+                          <span className={`px-1.5 py-0.5 rounded font-bold opacity-100 ${
+                            form.acc <= 10 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
+                            form.acc <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
+                                             "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                          }`}>±{Math.round(form.acc)}m</span>
+                        )}
                     </div>
                 )}
             </div>
