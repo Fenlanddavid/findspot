@@ -27,10 +27,11 @@ export default function AllFinds(props: { projectId: string }) {
       return results.filter(s => {
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            const matchesSearch = s.objectType.toLowerCase().includes(q) || 
+            const matchesSearch = s.objectType.toLowerCase().includes(q) ||
                                  s.findCode.toLowerCase().includes(q) ||
                                  s.notes.toLowerCase().includes(q) ||
-                                 s.period.toLowerCase().includes(q);
+                                 s.period.toLowerCase().includes(q) ||
+                                 s.material.toLowerCase().includes(q);
             if (!matchesSearch) return false;
         }
         if (filterPeriod && s.period !== filterPeriod) return false;
@@ -179,6 +180,23 @@ export default function AllFinds(props: { projectId: string }) {
             <input type="text" placeholder="Search objects, notes, periods..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm" />
         </div>
       </header>
+
+      {stats && stats.total > 0 && (
+        <div className="flex gap-3 mb-4 flex-wrap">
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
+            <div className="text-lg font-black text-gray-800 dark:text-gray-100">{stats.total}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Finds</div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
+            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">{stats.coins}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Coins</div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
+            <div className="text-lg font-black text-amber-600 dark:text-amber-400">{stats.roman}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Roman</div>
+          </div>
+        </div>
+      )}
 
       {viewMode === 'list' ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -104,14 +104,20 @@ export default function Home(props: {
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
                 {pendingFinds.map(f => (
-                    <div 
-                        key={f.id} 
-                        onClick={() => props.goFind(f.permissionId, f.id)} 
-                        className="min-w-[140px] bg-white dark:bg-gray-800 p-3 rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm cursor-pointer hover:shadow-md transition-all active:scale-95"
+                    <div
+                        key={f.id}
+                        className="min-w-[140px] bg-white dark:bg-gray-800 p-3 rounded-xl border border-amber-200 dark:border-amber-700 shadow-sm transition-all"
                     >
                         <div className="text-[10px] font-black text-amber-600 uppercase mb-1">{f.findCode}</div>
                         <div className="text-[8px] opacity-40 font-mono mb-2">{new Date(f.createdAt).toLocaleTimeString()}</div>
-                        <button className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight">Finish Record</button>
+                        <button
+                            onClick={() => props.goFind(f.permissionId, f.id)}
+                            className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5"
+                        >Finish Record</button>
+                        <button
+                            onClick={() => { if (window.confirm("Delete this pending find?")) db.finds.delete(f.id); }}
+                            className="w-full bg-transparent border border-red-200 dark:border-red-800 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-colors"
+                        >Delete</button>
                     </div>
                 ))}
             </div>

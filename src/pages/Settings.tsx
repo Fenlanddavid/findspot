@@ -47,6 +47,7 @@ export default function Settings() {
   const [customModel, setCustomModel] = useState("");
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+  const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
@@ -82,11 +83,12 @@ export default function Settings() {
   async function handleRequestPersistence() {
     const success = await requestPersistentStorage();
     setPersistent(success);
-    if (success) {
-        alert("Storage is now persistent! Your browser will prioritize keeping this data safe.");
-    } else {
-        alert("Persistence could not be granted. This usually depends on browser settings or disk space.");
-    }
+    setPersistenceMsg(
+      success
+        ? { ok: true, text: "Storage is now persistent. Your browser will prioritise keeping this data safe." }
+        : { ok: false, text: "Persistence could not be granted. This usually depends on browser settings or available disk space." }
+    );
+    setTimeout(() => setPersistenceMsg(null), 5000);
   }
 
   async function toggleTheme() {
@@ -329,7 +331,12 @@ export default function Settings() {
                 )}
               </div>
             </div>
-            
+            {persistenceMsg && (
+              <div className={`px-4 py-3 rounded-xl text-sm font-medium ${persistenceMsg.ok ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"}`}>
+                {persistenceMsg.text}
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
               <div>
                 <h3 className="font-bold text-gray-800 dark:text-gray-100">Last Backup</h3>
