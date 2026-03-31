@@ -970,6 +970,7 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(false);
   const [radius, setRadius] = useState<Radius>(25);
   const [typeFilter, setTypeFilter] = useState<EventType | "all">("all");
 
@@ -987,10 +988,10 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
   const [showAllClubs, setShowAllClubs] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
 
-  // Get user location on mount
   function requestLocation() {
     setLocating(true);
     setLocationError(false);
+    setLocationEnabled(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
@@ -1004,7 +1005,11 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
     );
   }
 
-  useEffect(() => { requestLocation(); }, []);
+  function disableLocation() {
+    setLocationEnabled(false);
+    setUserLocation(null);
+    setLocationError(false);
+  }
 
   // Fetch remote data on mount, resolving any postcode fields to lat/lon
   useEffect(() => {
@@ -1094,14 +1099,34 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">
           Rallies, club digs &amp; local clubs
         </p>
-        {(locationError || (!userLocation && !locating)) && (
-          <button
-            onClick={requestLocation}
-            className="mt-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-colors"
-          >
-            {locating ? "Locating…" : "Enable Location"}
-          </button>
-        )}
+        <div className="mt-3">
+          {!locationEnabled ? (
+            <button
+              onClick={requestLocation}
+              className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
+            >
+              Location off — tap to enable
+            </button>
+          ) : locating ? (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest animate-pulse inline-block">
+              Locating…
+            </div>
+          ) : locationError ? (
+            <button
+              onClick={requestLocation}
+              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors"
+            >
+              Location unavailable — tap to retry
+            </button>
+          ) : (
+            <button
+              onClick={disableLocation}
+              className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors"
+            >
+              Location on — tap to disable
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── CLUBS ────────────────────────────────────────────── */}
