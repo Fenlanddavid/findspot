@@ -1067,7 +1067,7 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
             ? haversineKm(userLocation.lat, userLocation.lon, club.lat, club.lon)
             : undefined,
       }))
-      .filter(({ distanceKm }) => !userLocation || distanceKm === undefined || distanceKm <= radiusKm)
+      .filter(({ distanceKm }) => !userLocation || (distanceKm !== undefined && distanceKm <= radiusKm))
       .sort((a, b) => {
         if (a.distanceKm !== undefined && b.distanceKm !== undefined)
           return a.distanceKm - b.distanceKm;
