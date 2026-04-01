@@ -59,6 +59,28 @@ export default function Home(props: {
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
 
+  const finds2026Stats = useMemo(() => {
+    if (!finds) return null;
+    const thisYear = finds.filter(f => !f.isPending && (f.createdAt || "").startsWith("2026"));
+    if (thisYear.length === 0) return null;
+
+    const gold = thisYear.filter(f => f.material === "Gold").length;
+    const silver = thisYear.filter(f => f.material === "Silver").length;
+    const hammered = thisYear.filter(f =>
+      (f.objectType || "").toLowerCase().includes("hammered") ||
+      (f.coinType || "").toLowerCase().includes("hammered")
+    ).length;
+
+    const periodOrder = ["Prehistoric", "Bronze Age", "Iron Age", "Celtic", "Roman", "Anglo-Saxon", "Early Medieval", "Medieval", "Post-medieval", "Modern", "Unknown"];
+    const periodCounts: { period: string; count: number }[] = [];
+    for (const period of periodOrder) {
+      const count = thisYear.filter(f => f.period === period).length;
+      if (count > 0) periodCounts.push({ period, count });
+    }
+
+    return { total: thisYear.length, gold, silver, hammered, periodCounts };
+  }, [finds]);
+
   const findIds = useMemo(() => recentFinds?.slice(0, 3).map(s => s.id) ?? [], [recentFinds]);
 
   const firstMediaMap = useLiveQuery(async () => {
@@ -124,17 +146,44 @@ export default function Home(props: {
         </section>
       )}
 
-      <div className="flex flex-col gap-3 overflow-hidden">
-        <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Quick View Finds</h3>
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1">
-            <QuickFilterBtn label="Hammered" onClick={() => props.goFindsWithFilter("type=Hammered")} />
-            <QuickFilterBtn label="Bronze Age" onClick={() => props.goFindsWithFilter("period=Bronze Age")} />
-            <QuickFilterBtn label="Roman" onClick={() => props.goFindsWithFilter("period=Roman")} />
-            <QuickFilterBtn label="Celtic" onClick={() => props.goFindsWithFilter("period=Celtic")} />
-            <QuickFilterBtn label="Anglo-Saxon" onClick={() => props.goFindsWithFilter("period=Anglo-Saxon")} />
-        </div>
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-1 -mt-1">Tip: Scroll for more filters</p>
-      </div>
+      {finds2026Stats && (
+        <section>
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Finds 2026</h3>
+            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{finds2026Stats.total} Total</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1" title="Scroll to see more">
+
+            {finds2026Stats.gold > 0 && (
+              <button onClick={() => props.goFindsWithFilter("material=Gold")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg px-3 py-1.5 hover:border-yellow-500 transition-colors shrink-0">
+                <span className="text-sm font-black text-yellow-700 dark:text-yellow-400">{finds2026Stats.gold}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-500">Gold</span>
+              </button>
+            )}
+            {finds2026Stats.silver > 0 && (
+              <button onClick={() => props.goFindsWithFilter("material=Silver")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-gray-50 dark:bg-gray-700/40 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:border-gray-500 transition-colors shrink-0">
+                <span className="text-sm font-black text-gray-600 dark:text-gray-300">{finds2026Stats.silver}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Silver</span>
+              </button>
+            )}
+            {finds2026Stats.hammered > 0 && (
+              <button onClick={() => props.goFindsWithFilter("type=Hammered")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-emerald-500 transition-colors shadow-sm shrink-0">
+                <span className="text-sm font-black text-gray-800 dark:text-gray-100">{finds2026Stats.hammered}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Hammered</span>
+              </button>
+            )}
+            {finds2026Stats.periodCounts.map(({ period, count }) => (
+              <button key={period} onClick={() => props.goFindsWithFilter(`period=${period}`)} className="whitespace-nowrap flex items-baseline gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-emerald-500 transition-colors shadow-sm shrink-0">
+                <span className="text-sm font-black text-gray-800 dark:text-gray-100">{count}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">{period}</span>
+              </button>
+            ))}
+          </div>
+          {(finds2026Stats.periodCounts.length + (finds2026Stats.gold > 0 ? 1 : 0) + (finds2026Stats.silver > 0 ? 1 : 0) + (finds2026Stats.hammered > 0 ? 1 : 0)) > 4 && (
+            <p className="text-[9px] text-gray-400 dark:text-gray-500 italic ml-1 mt-1">Scroll for more</p>
+          )}
+        </section>
+      )}
 
       <section className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
@@ -307,13 +356,3 @@ export default function Home(props: {
   );
 }
 
-function QuickFilterBtn({ label, onClick }: { label: string, onClick: () => void }) {
-    return (
-        <button 
-            onClick={onClick}
-            className="whitespace-nowrap px-5 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm transition-all hover:shadow-md hover:border-emerald-500 dark:hover:border-emerald-500 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
-        >
-            {label}
-        </button>
-    );
-}

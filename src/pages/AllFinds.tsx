@@ -15,6 +15,7 @@ export default function AllFinds(props: { projectId: string }) {
   const [viewMode, setViewMode] = useState<"list" | "map">(searchParams.get("view") === "map" ? "map" : "list");
   const filterPeriod = searchParams.get("period");
   const filterType = searchParams.get("type");
+  const filterMaterial = searchParams.get("material");
   const filterPending = searchParams.get("filter") === "pending";
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
@@ -27,20 +28,22 @@ export default function AllFinds(props: { projectId: string }) {
       return results.filter(s => {
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            const matchesSearch = s.objectType.toLowerCase().includes(q) ||
-                                 s.findCode.toLowerCase().includes(q) ||
-                                 s.notes.toLowerCase().includes(q) ||
-                                 s.period.toLowerCase().includes(q) ||
-                                 s.material.toLowerCase().includes(q);
+            const matchesSearch = (s.objectType || "").toLowerCase().includes(q) ||
+                                 (s.findCode || "").toLowerCase().includes(q) ||
+                                 (s.notes || "").toLowerCase().includes(q) ||
+                                 (s.period || "").toLowerCase().includes(q) ||
+                                 (s.material || "").toLowerCase().includes(q) ||
+                                 (s.coinType || "").toLowerCase().includes(q);
             if (!matchesSearch) return false;
         }
         if (filterPeriod && s.period !== filterPeriod) return false;
-        if (filterType && !s.objectType.toLowerCase().includes(filterType.toLowerCase())) return false;
+        if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase())) return false;
+        if (filterMaterial && s.material !== filterMaterial) return false;
         if (filterPending && !s.isPending) return false;
         return true;
       });
     },
-    [props.projectId, searchQuery, filterPeriod, filterType, filterPending]
+    [props.projectId, searchQuery, filterPeriod, filterType, filterMaterial, filterPending]
   );
 
   // --- MAP LOGIC ---

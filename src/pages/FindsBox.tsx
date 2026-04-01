@@ -44,7 +44,7 @@ export default function FindsBox(props: { projectId: string }) {
 
       {/* Search your finds */}
       <section className="pt-8 mt-4 mb-10">
-        <h3 className="text-base font-black text-gray-900 dark:text-gray-100 mb-1">Search Finds</h3>
+        <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100 mb-1">Search Finds</h3>
         <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Browse everything you've recorded across all permissions</p>
         <form
           onSubmit={(e) => {
@@ -83,8 +83,8 @@ export default function FindsBox(props: { projectId: string }) {
       {/* Header + Starred finds */}
       <header className="mb-6">
         <div className="flex items-center gap-3 mb-1">
-          <span className="text-3xl sm:text-4xl">⭐</span>
-          <h1 className="text-3xl sm:text-4xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">Finds</h1>
+          <span className="text-xl sm:text-2xl">⭐</span>
+          <h1 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">Top Finds</h1>
         </div>
         <p className="text-gray-500 dark:text-gray-400 font-medium max-w-xl leading-relaxed">
           Tap the star on any find to showcase it here.
