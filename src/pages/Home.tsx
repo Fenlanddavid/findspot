@@ -147,7 +147,7 @@ export default function Home(props: {
       )}
 
       {finds2026Stats && (
-        <section>
+        <section className="min-w-0 overflow-hidden">
           <div className="flex items-baseline justify-between mb-2">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Finds 2026</h3>
             <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{finds2026Stats.total} Total</span>
