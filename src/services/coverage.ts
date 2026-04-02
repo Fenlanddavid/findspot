@@ -80,8 +80,8 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
         rawField = turf.rewind(rawField);
         
         const unkinked = turf.unkinkPolygon(rawField);
-        let fieldPolygon: any = unkinked.features.length > 1 
-            ? turf.union(unkinked) 
+        let fieldPolygon: any = unkinked.features.length > 1
+            ? (turf.union(unkinked) ?? unkinked.features[0])
             : unkinked.features[0];
 
         if (!fieldPolygon) return null;
@@ -129,9 +129,9 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
         }
 
         // Union all tracks into one "Detected Area"
-        let combinedDetected: any = bufferedSegments.length === 1 
-            ? bufferedSegments[0] 
-            : turf.union(turf.featureCollection(bufferedSegments as any));
+        let combinedDetected: any = bufferedSegments.length === 1
+            ? bufferedSegments[0]
+            : (turf.union(turf.featureCollection(bufferedSegments as any)) ?? bufferedSegments[0]);
 
         if (!combinedDetected) return null;
         combinedDetected = turf.rewind(combinedDetected);

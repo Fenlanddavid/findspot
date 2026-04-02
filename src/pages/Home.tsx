@@ -20,6 +20,7 @@ export default function Home(props: {
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   
   const permissions = useLiveQuery(
     async () => {
@@ -136,10 +137,23 @@ export default function Home(props: {
                             onClick={() => props.goFind(f.permissionId, f.id)}
                             className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5"
                         >Finish Record</button>
-                        <button
-                            onClick={() => { if (window.confirm("Delete this pending find?")) db.finds.delete(f.id); }}
+                        {confirmingDeleteId === f.id ? (
+                          <div className="flex gap-1 mt-1">
+                            <button
+                              onClick={() => { db.finds.delete(f.id); setConfirmingDeleteId(null); }}
+                              className="flex-1 bg-red-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight"
+                            >Yes</button>
+                            <button
+                              onClick={() => setConfirmingDeleteId(null)}
+                              className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight"
+                            >No</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingDeleteId(f.id)}
                             className="w-full bg-transparent border border-red-200 dark:border-red-800 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-colors"
-                        >Delete</button>
+                          >Delete</button>
+                        )}
                     </div>
                 ))}
             </div>
