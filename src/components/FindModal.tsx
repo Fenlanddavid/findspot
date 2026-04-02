@@ -29,6 +29,10 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [detectorList, setDetectorList] = useState<string[]>([]);
 
   const shareCardRef = React.useRef<HTMLDivElement>(null);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
 
   useEffect(() => {
     if (find) {
@@ -42,15 +46,18 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function handleShare() {
     if (!shareCardRef.current || !draft) return;
     setBusy(true);
+    setShareError(null);
     try {
       // Small delay to ensure everything is rendered
       await new Promise(r => setTimeout(r, 100));
-      
+
       const filename = `findspot-${draft.findCode || 'find'}`;
       const title = `FindSpot: ${draft.objectType}`;
       const text = `Today's best find`;
-      
+
       await shareElementAsImage(shareCardRef.current, filename, title, text);
+    } catch (e: any) {
+      setShareError(e.message || "Failed to generate share image");
     } finally {
       setBusy(false);
     }
@@ -76,6 +83,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function doGPS() {
     if (!draft) return;
     setBusy(true);
+    setGpsError(null);
     try {
       const fix = await captureGPS();
       const grid = toOSGridRef(fix.lat, fix.lon);
@@ -87,7 +95,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         osGridRef: grid || draft.osGridRef,
       });
     } catch (e: any) {
-      alert(e.message || "GPS failed");
+      setGpsError(e.message || "GPS failed");
     } finally {
       setBusy(false);
     }
@@ -104,7 +112,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
   async function del() {
     if (!draft) return;
-    if (!confirm("Delete this find?")) return;
     setBusy(true);
     await db.media.where("findId").equals(draft.id).delete();
     await db.finds.delete(draft.id);
@@ -155,9 +162,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   }
 
   async function removePhoto(mediaId: string) {
-    if (!confirm("Remove this photo?")) return;
     setBusy(true);
     await db.media.delete(mediaId);
+    setConfirmingRemoveId(null);
     setBusy(false);
   }
 
@@ -205,6 +212,12 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         ) : undefined}
       >
         <div className="no-print grid gap-6 max-h-[80vh] overflow-y-auto pr-1">
+          {shareError && (
+            <div className="mb-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex items-center justify-between gap-3">
+              <span className="text-xs text-red-700 dark:text-red-300 font-medium">{shareError}</span>
+              <button onClick={() => setShareError(null)} className="text-red-500 font-bold text-xs shrink-0">✕</button>
+            </div>
+          )}
           {!isEditing ? (
             <div className="grid gap-6">
               {/* Photos at top for quick view */}
@@ -527,6 +540,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                         </button>
                     </div>
                 </div>
+                {gpsError && (
+                  <p className="text-xs text-red-600 dark:text-red-400 font-medium -mt-1">{gpsError}</p>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                     <label className="grid gap-0.5">
@@ -625,16 +641,23 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                           className="w-full h-full" 
                         />
 
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); removePhoto(x.id); }} 
-                          disabled={busy}
-                          className="absolute top-1 right-1 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95 z-20 border-2 border-white"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
-                        </button>
+                        {confirmingRemoveId === x.id ? (
+                          <div className="absolute top-1 right-1 flex gap-1 z-20" onClick={(e) => e.stopPropagation()}>
+                            <button onClick={() => removePhoto(x.id)} disabled={busy} className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold shadow-lg">Del</button>
+                            <button onClick={() => setConfirmingRemoveId(null)} className="bg-gray-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold shadow-lg">No</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmingRemoveId(x.id); }}
+                            disabled={busy}
+                            className="absolute top-1 right-1 bg-red-600 text-white w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-lg hover:scale-110 active:scale-95 z-20 border-2 border-white"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        )}
                         <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
                           <span className="truncate flex-1">{x.filename}</span>
                           {x.media.photoType && (
@@ -661,9 +684,17 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               </div>
 
               <div className="flex gap-4 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700 justify-between items-center">
-                <button onClick={del} disabled={busy} className="text-red-600 hover:text-red-800 text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                  Delete Find
-                </button>
+                {!confirmingDelete ? (
+                  <button onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-red-600 hover:text-red-800 text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                    Delete Find
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-600 dark:text-red-400 font-bold">Delete this find?</span>
+                    <button onClick={del} disabled={busy} className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold">Yes</button>
+                    <button onClick={() => setConfirmingDelete(false)} className="text-gray-500 dark:text-gray-400 px-3 py-1 rounded-lg text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Cancel</button>
+                  </div>
+                )}
 
                 <div className="flex gap-3">
                   <button onClick={() => setIsEditing(false)} disabled={busy} className="px-4 py-2 rounded-xl text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors font-bold text-sm">Cancel</button>

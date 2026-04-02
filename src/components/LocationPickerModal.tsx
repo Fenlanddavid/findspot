@@ -24,11 +24,13 @@ export function LocationPickerModal(props: {
     const [showLidar, setShowLidar] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
 
     async function handleSearch(e: React.FormEvent) {
         e.preventDefault();
         if (!searchQuery.trim()) return;
         setIsSearching(true);
+        setSearchError(null);
         try {
             const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
             const data = await resp.json();
@@ -45,7 +47,7 @@ export function LocationPickerModal(props: {
                     markerRef.current.setLngLat([newLon, newLat]);
                 }
             } else {
-                alert("Location not found.");
+                setSearchError("Location not found.");
             }
         } catch (err) {
             console.error("Search failed:", err);
@@ -243,13 +245,13 @@ export function LocationPickerModal(props: {
           
           <div className="absolute top-2 left-2 z-10 flex flex-col gap-2 max-w-[calc(100%-80px)]">
             <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-900/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
-                <input 
+                <input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search address..."
                     className="bg-transparent text-xs font-bold px-2 py-1 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
                 />
-                <button 
+                <button
                     type="submit"
                     disabled={isSearching}
                     className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
@@ -257,6 +259,9 @@ export function LocationPickerModal(props: {
                     {isSearching ? "..." : "🔍"}
                 </button>
             </form>
+            {searchError && (
+              <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-900/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
+            )}
 
             <div className="flex gap-1 bg-white/90 dark:bg-gray-900/90 p-1 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 w-fit">
                 <button 

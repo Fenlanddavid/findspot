@@ -38,15 +38,9 @@ export async function shareElementAsImage(element: HTMLElement, filename: string
       a.download = `${filename}.png`;
       a.click();
       URL.revokeObjectURL(url);
-      
-      if (!navigator.share) {
-        alert('Sharing not supported on this browser. Image downloaded instead.');
-      } else {
-        alert('Could not share file directly. Image downloaded instead.');
-      }
     }
   } catch (error) {
     console.error('Sharing failed:', error);
-    alert('Failed to generate or share image.');
+    throw error;
   }
 }

@@ -19,11 +19,14 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("satellite");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
     if (!searchQuery.trim()) return;
     setIsSearching(true);
+    setSearchError(null);
     try {
       const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
       const data = await resp.json();
@@ -33,7 +36,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
           mapRef.current.flyTo({ center: [parseFloat(lon), parseFloat(lat)], zoom: 16 });
         }
       } else {
-        alert("Location not found.");
+        setSearchError("Location not found.");
       }
     } catch (err) {
       console.error("Search failed:", err);
@@ -193,11 +196,6 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   }, [points]);
 
   function handleSave() {
-    if (points.length < 3) {
-      alert("Please plot at least 3 points to define a field boundary.");
-      return;
-    }
-    
     const geojson = {
       type: "Polygon",
       coordinates: [[...points, points[0]]]
@@ -210,7 +208,8 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   }
 
   function clear() {
-    if (confirm("Clear all points?")) setPoints([]);
+    setPoints([]);
+    setConfirmingClear(false);
   }
 
   return (
@@ -225,13 +224,13 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
           
           <div className="absolute top-4 left-4 flex flex-col gap-2 z-10 max-w-[calc(100%-100px)]">
             <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
-              <input 
+              <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search area..."
                 className="bg-transparent text-xs font-bold px-2 py-1 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
               />
-              <button 
+              <button
                 type="submit"
                 disabled={isSearching}
                 className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
@@ -239,6 +238,9 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
                 {isSearching ? "..." : "🔍"}
               </button>
             </form>
+            {searchError && (
+              <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
+            )}
             <button 
               onClick={() => setMapStyle(prev => prev === "streets" ? "satellite" : "streets")}
               className="w-fit bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-lg shadow-md text-[10px] font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all uppercase"
@@ -248,20 +250,28 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
           </div>
 
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-            <button 
+            <button
               onClick={undo}
               disabled={points.length === 0}
               className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
             >
               ↩ Undo Point
             </button>
-            <button 
-              onClick={clear}
-              disabled={points.length === 0}
-              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
-            >
-              🗑️ Clear
-            </button>
+            {!confirmingClear ? (
+              <button
+                onClick={() => setConfirmingClear(true)}
+                disabled={points.length === 0}
+                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+              >
+                🗑️ Clear
+              </button>
+            ) : (
+              <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur flex items-center gap-1 px-2 py-1 rounded-xl shadow-lg border border-red-200 dark:border-red-800">
+                <span className="text-[10px] font-bold text-red-600">Clear all?</span>
+                <button onClick={clear} className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">Yes</button>
+                <button onClick={() => setConfirmingClear(false)} className="text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">No</button>
+              </div>
+            )}
           </div>
         </div>
 

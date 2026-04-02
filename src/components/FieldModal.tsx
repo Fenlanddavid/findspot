@@ -21,17 +21,19 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
   const [boundary, setBoundary] = useState<any | null>(field?.boundary ?? null);
   const [isPickingBoundary, setIsPickingBoundary] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSave() {
     if (!name.trim()) {
-      alert("Please enter a field name.");
+      setError("Please enter a field name.");
       return;
     }
     if (!boundary) {
-      alert("Please define a field boundary.");
+      setError("Please define a field boundary.");
       return;
     }
 
+    setError(null);
     setSaving(true);
     try {
       const now = new Date().toISOString();
@@ -55,7 +57,7 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
       }
       onSaved(id);
     } catch (e: any) {
-      alert("Save failed: " + e.message);
+      setError("Save failed: " + e.message);
     } finally {
       setSaving(false);
     }
@@ -95,7 +97,10 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
           />
         </label>
 
-        <button 
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3 text-sm text-red-700 dark:text-red-300 font-medium">{error}</div>
+        )}
+        <button
           onClick={handleSave}
           disabled={saving || !name.trim() || !boundary}
           className="bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all disabled:opacity-50"
