@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import * as turf from '@turf/turf';
 import { useNavigate } from 'react-router-dom';
 import { toOSGridRef } from '../services/gps';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -208,6 +209,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   } | null>(null);
   const [scanConfidence, setScanConfidence] = useState<'High Probability' | 'Developing Signal' | 'Low Confidence' | null>(null);
   const [monumentPoints, setMonumentPoints] = useState<[number, number][]>([]);
+  const [historicMode, setHistoricMode] = useState(false);
+  const [historicStripExpanded, setHistoricStripExpanded] = useState(false);
+  const [historicLayerToggles, setHistoricLayerToggles] = useState({ lidar: false, os1930: false, os1880: false });
+  const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
+  const [mapClickLabel, setMapClickLabel] = useState<string | null>(null);
+  const clickLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigate = useNavigate();
 
@@ -234,6 +241,22 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     setPasFinds([]);
     setPlaceSignals([]);
     setPotentialScore(null);
+    setHistoricRoutes([]);
+    setHistoricMode(false);
+    setHistoricStripExpanded(false);
+    setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
+    setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
+    setMapClickLabel(null);
+    if (mapRef.current) {
+        const rSrc = mapRef.current.getSource('historic-routes') as maplibregl.GeoJSONSource;
+        if (rSrc) rSrc.setData({ type: 'FeatureCollection', features: [] });
+        const aimSrc = mapRef.current.getSource('aim-monuments') as maplibregl.GeoJSONSource;
+        if (aimSrc) aimSrc.setData({ type: 'FeatureCollection', features: [] });
+        const cSrc = mapRef.current.getSource('corridors') as maplibregl.GeoJSONSource;
+        if (cSrc) cSrc.setData({ type: 'FeatureCollection', features: [] });
+        const xSrc = mapRef.current.getSource('crossings') as maplibregl.GeoJSONSource;
+        if (xSrc) xSrc.setData({ type: 'FeatureCollection', features: [] });
+    }
     setSystemLog(["SYSTEM CLEARED. Ready for new scan."]);
   };
 
@@ -242,131 +265,156 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         addLog("ERROR: Map engine not initialized.");
         return;
     }
-    
-    const center = mapRef.current.getCenter();
-    const bounds = mapRef.current.getBounds();
+
+    const map = mapRef.current;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
+
+    if (zoom < 10) {
+        addLog("ZOOM IN: Historic scan works best at zoom 10+. Pan to your target area.");
+        return;
+    }
+
+    const bounds = map.getBounds();
     setLoadingPAS(true);
     addLog(`INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
+    // Bounding box: use viewport but cap to ~5km radius to keep queries fast
+    const maxDelta = 0.045; // ~5km
+    const latBuffer = 0.009;
+    const lonBuffer = 0.015;
+    const west  = Number(Math.max(center.lng - maxDelta, Math.min(bounds.getWest(),  center.lng - lonBuffer)).toFixed(6));
+    const south = Number(Math.max(center.lat - maxDelta, Math.min(bounds.getSouth(), center.lat - latBuffer)).toFixed(6));
+    const east  = Number(Math.min(center.lng + maxDelta, Math.max(bounds.getEast(),  center.lng + lonBuffer)).toFixed(6));
+    const north = Number(Math.min(center.lat + maxDelta, Math.max(bounds.getNorth(), center.lat + latBuffer)).toFixed(6));
+
     try {
-        // Calculate a buffered bounding box (min 1km) to ensure we fetch data even when zoomed in tight
-        const latBuffer = 0.009; // approx 1km
-        const lonBuffer = 0.015; // approx 1km at UK latitudes
-        
-        const west = Number(Math.min(bounds.getWest(), center.lng - lonBuffer).toFixed(6));
-        const south = Number(Math.min(bounds.getSouth(), center.lat - latBuffer).toFixed(6));
-        const east = Number(Math.max(bounds.getEast(), center.lng + lonBuffer).toFixed(6));
-        const north = Number(Math.max(bounds.getNorth(), center.lat + latBuffer).toFixed(6));
+        addLog("STAGE: Running parallel data fetch...");
 
-        // 1. REVERSE GEOCODING (Parish & County)
-        try {
-            addLog("STAGE: Geocoding Location...");
-            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}`);
-            const geoData = await geoRes.json();
-            if (geoData && geoData.address) {
-                const parish = geoData.address.parish || geoData.address.village || geoData.address.town || "Unknown Parish";
-                const county = geoData.address.county || geoData.address.state_district || "Unknown County";
-                
-                // Calculate 4-figure OS Grid Reference
-                const fullGrid = toOSGridRef(center.lat, center.lng);
-                const parts = fullGrid.split(' ');
-                const fourFigure = parts.length === 3 ? `${parts[0]} ${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}` : fullGrid;
-                
-                addLog(`LOCATION: ${parish}, ${county} [${fourFigure}]`);
-            }
-        } catch (e) { console.error("Reverse Geocoding Failed", e); }
+        // Build all query strings up front
+        const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${center.lat}&lon=${center.lng}`;
+        const etymologyQuery = `[out:json][timeout:20];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east});node["standing_remains"](${south},${west},${north},${east});way["standing_remains"](${south},${west},${north},${east}););out center;`;
+        const heritageQuery = `[out:json][timeout:20];(node["historic"](around:2000,${center.lat},${center.lng});way["historic"](around:2000,${center.lat},${center.lng});node["heritage"](around:2000,${center.lat},${center.lng});way["heritage"](around:2000,${center.lat},${center.lng});node["archaeological_site"](around:2000,${center.lat},${center.lng});way["archaeological_site"](around:2000,${center.lat},${center.lng});node["standing_remains"](around:2000,${center.lat},${center.lng});way["standing_remains"](around:2000,${center.lat},${center.lng}););out center;`;
+        const routeQuery = `[out:json][timeout:20];(way["historic"="roman_road"](around:2000,${center.lat},${center.lng});way["roman_road"="yes"](around:2000,${center.lat},${center.lng});way["historic"="trackway"](around:2000,${center.lat},${center.lng});way["holloway"="yes"](around:2000,${center.lat},${center.lng}););out geom;`;
+        const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+        const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
+        const overpassBase = `https://overpass-api.de/api/interpreter?data=`;
 
-        // 2. ETYMOLOGY ENGINE (Place Names)
+        // Fire everything in parallel
+        const [geoData, etymData, osmData, nhleData, aimData, routeData] = await Promise.all([
+            fetch(nominatimUrl).then(r => r.json()).catch(() => null),
+            fetch(overpassBase + encodeURIComponent(etymologyQuery)).then(r => r.json()).catch(() => null),
+            fetch(overpassBase + encodeURIComponent(heritageQuery)).then(r => r.json()).catch(() => null),
+            fetch(nhleUrl).then(r => r.json()).catch(() => ({ features: [] })),
+            fetch(aimUrl).then(r => r.json()).catch(() => ({ features: [] })),
+            historicRoutes.length === 0
+                ? fetch(overpassBase + encodeURIComponent(routeQuery)).then(r => r.json()).catch(() => null)
+                : Promise.resolve(null),
+        ]);
+
+        // 1. Location
+        if (geoData?.address) {
+            const parish = geoData.address.parish || geoData.address.village || geoData.address.town || "Unknown Parish";
+            const county = geoData.address.county || geoData.address.state_district || "Unknown County";
+            const fullGrid = toOSGridRef(center.lat, center.lng);
+            const parts = fullGrid.split(' ');
+            const fourFigure = parts.length === 3 ? `${parts[0]} ${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}` : fullGrid;
+            addLog(`LOCATION: ${parish}, ${county} [${fourFigure}]`);
+        }
+
+        // 2. Etymology signals
         let discoveredSignals: PlaceSignal[] = [];
-        try {
-            addLog("STAGE: Searching Etymological Signals...");
-            const placeQuery = `[out:json][timeout:25];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east});node["standing_remains"](${south},${west},${north},${east});way["standing_remains"](${south},${west},${north},${east}););out center;`;
-            const pRes = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(placeQuery)}`);
-            const pData = await pRes.json();
-            
-            if (pData && pData.elements) {
-                const signals: PlaceSignal[] = [];
-                pData.elements.forEach((el: any) => {
-                    const name = el.tags?.name || "";
-                    if (!name) return;
-
-                    const lat = el.lat || el.center?.lat;
-                    const lon = el.lon || el.center?.lon;
-                    if (!lat || !lon) return;
-
-                    ETYMOLOGY_SIGNALS.forEach(sig => {
-                        if (name.toLowerCase().includes(sig.pattern.toLowerCase())) {
-                            // Robust type mapping - use the first available descriptive tag value
-                            const typeValue = el.tags?.historic || el.tags?.heritage || el.tags?.place || el.tags?.natural || el.tags?.landuse || el.tags?.standing_remains || "Location";
-                            
-                            signals.push({
-                                name: name,
-                                meaning: sig.meaning,
-                                distance: getDistancePAS(center.lat, center.lng, lat, lon),
-                                period: sig.period,
-                                confidence: sig.confidence,
-                                type: String(typeValue)
-                            });
-                        }
-                    });
-                });
-                discoveredSignals = signals.sort((a, b) => b.confidence - a.confidence);
-                setPlaceSignals(discoveredSignals);
-                if (discoveredSignals.length > 0) addLog(`SUCCESS: ${discoveredSignals.length} etymological signals detected.`);
-            }
-        } catch (e) { console.error("Etymology Engine Failed", e); }
-
-        // 3. HERITAGE SCAN (OSM Heritage)
-        addLog("STAGE: Querying Heritage Engine...");
-        // Expanded Overpass query with tightened radius (2000m) and more tags
-        const overpassQuery = `[out:json][timeout:30];(node["historic"](around:2000, ${center.lat}, ${center.lng});way["historic"](around:2000, ${center.lat}, ${center.lng});node["heritage"](around:2000, ${center.lat}, ${center.lng});way["heritage"](around:2000, ${center.lat}, ${center.lng});node["archaeological_site"](around:2000, ${center.lat}, ${center.lng});way["archaeological_site"](around:2000, ${center.lat}, ${center.lng});node["standing_remains"](around:2000, ${center.lat}, ${center.lng});way["standing_remains"](around:2000, ${center.lat}, ${center.lng}););out center;`;
-        
-        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
-        const data = await response.json();
-        
-        if (data && data.elements) {
-            const mappedFinds: PASFind[] = data.elements.map((el: any) => {
+        if (etymData?.elements) {
+            const signals: PlaceSignal[] = [];
+            etymData.elements.forEach((el: any) => {
+                const name = el.tags?.name || "";
+                if (!name) return;
                 const lat = el.lat || el.center?.lat;
                 const lon = el.lon || el.center?.lon;
-                
-                // Robust heritage type mapping
+                if (!lat || !lon) return;
+                ETYMOLOGY_SIGNALS.forEach(sig => {
+                    if (name.toLowerCase().includes(sig.pattern.toLowerCase())) {
+                        const typeValue = el.tags?.historic || el.tags?.heritage || el.tags?.place || el.tags?.natural || el.tags?.landuse || el.tags?.standing_remains || "Location";
+                        signals.push({ name, meaning: sig.meaning, distance: getDistancePAS(center.lat, center.lng, lat, lon), period: sig.period, confidence: sig.confidence, type: String(typeValue) });
+                    }
+                });
+            });
+            discoveredSignals = signals.sort((a, b) => b.confidence - a.confidence);
+            setPlaceSignals(discoveredSignals);
+            if (discoveredSignals.length > 0) addLog(`ETYMOLOGY: ${discoveredSignals.length} place-name signal${discoveredSignals.length !== 1 ? 's' : ''} detected.`);
+        }
+
+        // 3. OSM Heritage features
+        let mappedFinds: PASFind[] = [];
+        if (osmData?.elements) {
+            mappedFinds = osmData.elements.map((el: any) => {
+                const lat = el.lat || el.center?.lat;
+                const lon = el.lon || el.center?.lon;
+                if (!lat || !lon) return null;
                 const type = el.tags?.historic || el.tags?.archaeological_site || el.tags?.heritage || el.tags?.standing_remains || el.tags?.site_type || "Heritage Site";
                 const name = el.tags?.name;
-                
-                // Distance from center
                 const dist = getDistancePAS(center.lat, center.lng, lat, lon);
-                
-                // Filter distance: if outside viewport, must be within 2km
                 const inViewport = lat >= south && lat <= north && lon >= west && lon <= east;
                 if (!inViewport && dist > 2) return null;
-
                 const descriptiveType = name ? `${name} (${type})` : type;
-                
-                return {
-                    id: `OSM-${el.id}`,
-                    internalId: String(el.id),
-                    objectType: String(descriptiveType).charAt(0).toUpperCase() + String(descriptiveType).slice(1),
-                    broadperiod: el.tags?.period || "Unknown",
-                    county: "Local Area",
-                    workflow: "PAS",
-                    lat,
-                    lon,
-                    isApprox: false,
-                    osmType: el.type
-                };
-            }).filter((f: any) => f !== null && f.lat && f.lon);
-
+                return { id: `OSM-${el.id}`, internalId: String(el.id), objectType: String(descriptiveType).charAt(0).toUpperCase() + String(descriptiveType).slice(1), broadperiod: el.tags?.period || "Unknown", county: "Local Area", workflow: "PAS" as const, lat, lon, isApprox: false, osmType: el.type };
+            }).filter((f: any) => f !== null);
             setPasFinds(mappedFinds);
-            addLog(`SUCCESS: ${mappedFinds.length} heritage features identified within 2km.`);
-            
-            // Pass discoveredSignals directly to ensure we use the latest discovered data
-            calculatePotentialScore(mappedFinds, monumentPoints, discoveredSignals);
-        } else {
-            addLog("SCAN FINISHED: No heritage features found.");
-            calculatePotentialScore([], monumentPoints, discoveredSignals);
+            addLog(`HERITAGE: ${mappedFinds.length} OSM feature${mappedFinds.length !== 1 ? 's' : ''} found within 2km.`);
         }
+        calculatePotentialScore(mappedFinds, monumentPoints, discoveredSignals);
+
+        // 4. NHLE scheduled monuments
+        if (nhleData?.features?.length > 0) {
+            const mPoints: [number, number][] = nhleData.features.map((f: any) => {
+                if (f.geometry?.type === 'Point') return f.geometry.coordinates;
+                if (f.geometry?.type === 'Polygon') return f.geometry.coordinates[0][0];
+                if (f.geometry?.type === 'MultiPolygon') return f.geometry.coordinates[0][0][0];
+                return [0, 0];
+            });
+            setMonumentPoints(mPoints);
+            setHeritageCount(nhleData.features.length);
+            const mSrc = map.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
+            if (mSrc) mSrc.setData(nhleData);
+            addLog(`NHLE: ${nhleData.features.length} scheduled monument${nhleData.features.length !== 1 ? 's' : ''} found.`);
+        } else {
+            addLog("NHLE: No scheduled monuments in this area.");
+        }
+
+        // 5. AIM aerial archaeology
+        if (aimData?.features?.length > 0) {
+            const aimSrc = map.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
+            if (aimSrc) aimSrc.setData(aimData);
+            addLog(`AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`);
+        }
+
+        // 6. Historic routes (only if not already loaded)
+        if (routeData?.elements?.length > 0) {
+            const fetchedRoutes: HistoricRoute[] = routeData.elements
+                .filter((el: any) => el.geometry?.length >= 2)
+                .map((el: any) => {
+                    const geom: [number, number][] = el.geometry.map((g: any) => [g.lon, g.lat]);
+                    const lons = geom.map((g: [number,number]) => g[0]);
+                    const lats = geom.map((g: [number,number]) => g[1]);
+                    return {
+                        id: `route-${el.id}`,
+                        type: (el.tags.historic === 'roman_road' || el.tags.roman_road === 'yes') ? 'roman_road' as const : 'historic_trackway' as const,
+                        source: 'osm' as const,
+                        confidenceClass: 'B' as const,
+                        certaintyScore: 70,
+                        geometry: geom,
+                        bbox: [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as [[number,number],[number,number]],
+                        period: el.tags.historic === 'roman_road' ? 'roman' as const : 'unknown' as const
+                    };
+                });
+            setHistoricRoutes(fetchedRoutes);
+            if (fetchedRoutes.length > 0) addLog(`ROUTES: ${fetchedRoutes.length} historic route segment${fetchedRoutes.length !== 1 ? 's' : ''} found.`);
+        } else if (historicRoutes.length === 0) {
+            addLog("ROUTES: No historic routes found nearby.");
+        }
+
     } catch (e) {
-        addLog("HERITAGE SCAN FAILED (Overpass Timeout)");
+        addLog("HERITAGE SCAN FAILED.");
         console.error(e);
     } finally {
         setLoadingPAS(false);
@@ -468,13 +516,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
       container: mapContainerRef.current,
       style: {
         version: 8,
-        sources: { 
+        sources: {
             'osm': { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' },
-            'satellite': { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' }
+            'satellite': { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' },
+            'overlay-lidar': { type: 'raster', tiles: ['https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=Lidar_Composite_Hillshade_DTM_1m&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'], tileSize: 256, attribution: 'Environment Agency (OGL)' },
+            'overlay-os1930': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/api/nls/{z}/{x}/{y}.jpg'], tileSize: 256, minzoom: 6, maxzoom: 16, attribution: '&copy; National Library of Scotland' },
+            'overlay-os1880': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 15, attribution: '&copy; National Library of Scotland' }
         },
         layers: [
             { id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'none' : 'visible' } },
-            { id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'visible' : 'none' } }
+            { id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'visible' : 'none' } },
+            { id: 'overlay-lidar', type: 'raster', source: 'overlay-lidar', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.3, 'raster-brightness-max': 0.9, 'raster-fade-duration': 0 } },
+            { id: 'overlay-os1880', type: 'raster', source: 'overlay-os1880', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } },
+            { id: 'overlay-os1930', type: 'raster', source: 'overlay-os1930', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } }
         ]
       },
       center: [-2.0, 54.5],
@@ -486,6 +540,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         map.addSource('monuments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({ id: 'monuments-fill', type: 'fill', source: 'monuments', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.25 } });
         map.addLayer({ id: 'monuments-outline', type: 'line', source: 'monuments', paint: { 'line-color': '#ef4444', 'line-width': 3 } });
+
+        // AIM aerial archaeology polygons (orange — distinct from NHLE red)
+        map.addSource('aim-monuments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({ id: 'aim-fill', type: 'fill', source: 'aim-monuments', layout: { visibility: 'none' }, paint: { 'fill-color': '#f97316', 'fill-opacity': 0.2 } });
+        map.addLayer({ id: 'aim-outline', type: 'line', source: 'aim-monuments', layout: { visibility: 'none' }, paint: { 'line-color': '#f97316', 'line-width': 2, 'line-opacity': 0.8 } });
         
         map.addSource('hotspots-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
         map.addLayer({ 
@@ -549,6 +608,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             id: 'pas-circles',
             type: 'circle',
             source: 'pas-finds',
+            layout: { visibility: 'none' },
             paint: {
                 'circle-radius': 10,
                 'circle-color': '#3b82f6',
@@ -576,6 +636,78 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             }
         });
 
+        map.addSource('historic-routes', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        // Roman road casing (white contrast border)
+        map.addLayer({
+            id: 'historic-routes-roman-casing',
+            type: 'line',
+            source: 'historic-routes',
+            filter: ['==', ['get', 'type'], 'roman_road'],
+            layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.35 }
+        });
+        // Roman roads — solid blue, thick
+        map.addLayer({
+            id: 'historic-routes-roman',
+            type: 'line',
+            source: 'historic-routes',
+            filter: ['==', ['get', 'type'], 'roman_road'],
+            layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 0.97 }
+        });
+        // Trackway casing
+        map.addLayer({
+            id: 'historic-routes-trackway-casing',
+            type: 'line',
+            source: 'historic-routes',
+            filter: ['!=', ['get', 'type'], 'roman_road'],
+            layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.2 }
+        });
+        // Historic trackways — dashed lighter blue
+        map.addLayer({
+            id: 'historic-routes-trackway',
+            type: 'line',
+            source: 'historic-routes',
+            filter: ['!=', ['get', 'type'], 'roman_road'],
+            layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#93c5fd', 'line-width': 3, 'line-opacity': 0.95, 'line-dasharray': [5, 4] }
+        });
+
+        // Movement corridors — buffer zones around historic routes
+        map.addSource('corridors', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'corridors-fill',
+            type: 'fill',
+            source: 'corridors',
+            layout: { visibility: 'none' },
+            paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 }
+        });
+        map.addLayer({
+            id: 'corridors-outline',
+            type: 'line',
+            source: 'corridors',
+            layout: { visibility: 'none', 'line-join': 'round' },
+            paint: { 'line-color': ['get', 'color'], 'line-width': 1, 'line-opacity': 0.3, 'line-dasharray': [3, 3] }
+        });
+
+        // Route crossings — high-value intersection points
+        map.addSource('crossings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+            id: 'crossings-halo',
+            type: 'circle',
+            source: 'crossings',
+            layout: { visibility: 'none' },
+            paint: { 'circle-radius': 14, 'circle-color': '#f59e0b', 'circle-opacity': 0.25, 'circle-stroke-width': 0 }
+        });
+        map.addLayer({
+            id: 'crossings-circle',
+            type: 'circle',
+            source: 'crossings',
+            layout: { visibility: 'none' },
+            paint: { 'circle-radius': 6, 'circle-color': '#f59e0b', 'circle-opacity': 0.95, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
+        });
+
         map.on('click', 'hotspots-fill', (e) => {
             if (e.features?.[0]) {
                 setShowSuggestion(false);
@@ -598,6 +730,35 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         map.on('move', () => {
             const z = map.getZoom();
             setZoomWarning(z > 16.5);
+        });
+
+        // Historic layer click labels
+        const showLabel = (label: string) => {
+            if (clickLabelTimer.current) clearTimeout(clickLabelTimer.current);
+            setMapClickLabel(label);
+            clickLabelTimer.current = setTimeout(() => setMapClickLabel(null), 3000);
+        };
+        map.on('click', 'historic-routes-roman', () => showLabel('Roman Road'));
+        map.on('click', 'historic-routes-trackway', () => showLabel('Historic Trackway'));
+        map.on('click', 'corridors-fill', (e) => {
+            const type = e.features?.[0]?.properties?.type;
+            showLabel(type === 'roman_road' ? 'Roman Road Corridor' : 'Historic Trackway Corridor');
+        });
+        map.on('click', 'crossings-circle', (e) => {
+            const p = e.features?.[0]?.properties as any;
+            const a = p?.typeA === 'roman_road' ? 'Roman Road' : 'Trackway';
+            const b = p?.typeB === 'roman_road' ? 'Roman Road' : 'Trackway';
+            showLabel(`Route Crossing: ${a} × ${b}`);
+        });
+        map.on('click', 'monuments-fill', (e) => {
+            const name = e.features?.[0]?.properties?.Name;
+            showLabel(name ? `Scheduled Monument: ${name}` : 'Scheduled Monument');
+        });
+        map.on('click', 'aim-fill', (e) => {
+            const p = e.features?.[0]?.properties as any;
+            const type = p?.MONUMENT_TYPE || 'Aerial Monument';
+            const period = p?.PERIOD ? ` · ${p.PERIOD}` : '';
+            showLabel(`${type}${period}`);
         });
 
         setTimeout(() => map.resize(), 300);
@@ -690,6 +851,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   }, [isIntelOpen]);
 
   useEffect(() => {
+    if (historicMode && pasFinds.length === 0 && !loadingPAS) {
+        loadPASFinds();
+    }
+  }, [historicMode]);
+
+  useEffect(() => {
     if (mapRef.current) {
         // Map PAS points with a slight offset for identical coordinates to prevent stacking
         const coordGroups: { [key: string]: number } = {};
@@ -728,6 +895,120 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return () => { canceled = true; };
     }
   }, [pasFinds]);
+
+  // Sync historicRoutes state → route lines, movement corridors, crossing points
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const doUpdate = () => {
+        const map = mapRef.current!;
+
+        // 1. Route lines
+        const routeSrc = map.getSource('historic-routes') as maplibregl.GeoJSONSource;
+        if (routeSrc) {
+            routeSrc.setData({
+                type: 'FeatureCollection',
+                features: historicRoutes.map(r => ({
+                    type: 'Feature' as const,
+                    geometry: { type: 'LineString' as const, coordinates: r.geometry },
+                    properties: { type: r.type, id: r.id }
+                }))
+            });
+        }
+
+        if (historicRoutes.length === 0) {
+            const cSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
+            if (cSrc) cSrc.setData({ type: 'FeatureCollection', features: [] });
+            const xSrc = map.getSource('crossings') as maplibregl.GeoJSONSource;
+            if (xSrc) xSrc.setData({ type: 'FeatureCollection', features: [] });
+            return;
+        }
+
+        // 2. Movement corridors — buffer each route
+        const corridorFeatures: GeoJSON.Feature[] = [];
+        for (const r of historicRoutes) {
+            try {
+                const line = turf.lineString(r.geometry);
+                const bufferKm = r.type === 'roman_road' ? 0.3 : 0.15;
+                const color = r.type === 'roman_road' ? '#3b82f6' : '#93c5fd';
+                const buffered = turf.buffer(line, bufferKm, { units: 'kilometers' });
+                if (buffered) {
+                    buffered.properties = { routeId: r.id, type: r.type, color };
+                    corridorFeatures.push(buffered as GeoJSON.Feature);
+                }
+            } catch { /* skip malformed geometry */ }
+        }
+        const corridorSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
+        if (corridorSrc) corridorSrc.setData({ type: 'FeatureCollection', features: corridorFeatures });
+
+        // 3. Crossing detection — find intersections between all route pairs
+        const crossingFeatures: GeoJSON.Feature[] = [];
+        const seen = new Set<string>();
+        for (let i = 0; i < historicRoutes.length; i++) {
+            for (let j = i + 1; j < historicRoutes.length; j++) {
+                try {
+                    const a = turf.lineString(historicRoutes[i].geometry);
+                    const b = turf.lineString(historicRoutes[j].geometry);
+                    const intersects = turf.lineIntersect(a, b);
+                    for (const pt of intersects.features) {
+                        const key = pt.geometry.coordinates.map(c => c.toFixed(5)).join(',');
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        crossingFeatures.push({
+                            ...pt,
+                            properties: {
+                                typeA: historicRoutes[i].type,
+                                typeB: historicRoutes[j].type,
+                                label: `${historicRoutes[i].type === 'roman_road' ? 'Roman road' : 'Trackway'} × ${historicRoutes[j].type === 'roman_road' ? 'Roman road' : 'Trackway'}`
+                            }
+                        });
+                    }
+                } catch { /* skip */ }
+            }
+        }
+        const crossingSrc = map.getSource('crossings') as maplibregl.GeoJSONSource;
+        if (crossingSrc) crossingSrc.setData({ type: 'FeatureCollection', features: crossingFeatures });
+
+        if (crossingFeatures.length > 0) {
+            addLog(`CROSSINGS: ${crossingFeatures.length} route intersection${crossingFeatures.length !== 1 ? 's' : ''} detected — high-value targets.`);
+        }
+    };
+    if (mapRef.current.loaded()) doUpdate();
+    else mapRef.current.once('load', doUpdate);
+  }, [historicRoutes]);
+
+  // historicMode + historicLayerVisibility → toggle which map layers are visible
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const setViz = (id: string, show: boolean) => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none');
+    };
+    const h = historicMode;
+    const v = historicLayerVisibility;
+    setViz('pas-circles', h && v.monuments);
+    setViz('historic-routes-roman-casing', h && v.routes);
+    setViz('historic-routes-roman', h && v.routes);
+    setViz('historic-routes-trackway-casing', h && v.routes);
+    setViz('historic-routes-trackway', h && v.routes);
+    setViz('aim-fill', h && v.aim);
+    setViz('aim-outline', h && v.aim);
+    setViz('corridors-fill', h && v.corridors);
+    setViz('corridors-outline', h && v.corridors);
+    setViz('crossings-halo', h && v.crossings);
+    setViz('crossings-circle', h && v.crossings);
+    setViz('targets-circle', !h);
+    setViz('hotspots-outline', !h);
+    setViz('hotspots-fill', !h);
+  }, [historicMode, historicLayerVisibility]);
+
+  // overlay layer toggles (only active when historicMode is on)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (map.getLayer('overlay-lidar')) map.setLayoutProperty('overlay-lidar', 'visibility', (historicMode && historicLayerToggles.lidar) ? 'visible' : 'none');
+    if (map.getLayer('overlay-os1930')) map.setLayoutProperty('overlay-os1930', 'visibility', (historicMode && historicLayerToggles.os1930) ? 'visible' : 'none');
+    if (map.getLayer('overlay-os1880')) map.setLayoutProperty('overlay-os1880', 'visibility', (historicMode && historicLayerToggles.os1880) ? 'visible' : 'none');
+  }, [historicLayerToggles, historicMode]);
 
   // Sync monument points for score calculation
   useEffect(() => {
@@ -1571,12 +1852,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const tX_start = Math.floor(cX) - 1; // 3x3 grid centered on view
     const tY_start = Math.floor(cY) - 1;
 
+    clearScan();
     setAnalyzing(true);
     setScanStatus("Engine Initiating...");
-    setDetectedFeatures([]); // CLEAR PREVIOUS TARGETS
-    setHotspots([]); // Reset hotspots for the new scan area
-    setSelectedHotspotId(null); // Clear any active hotspot border
-    setSelectedId(null); // Clear active target selection
     addLog(`Engine Initiating (Fixed Z${scanZoom})...`);
 
     // Use visible bounds for HER to keep it fast
@@ -1671,6 +1949,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         try {
             const aRes = await fetch(aimUrl);
             aimGeoJSON = await aRes.json();
+            const aimSrc = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
+            if (aimSrc && aimGeoJSON.features?.length > 0) {
+                aimSrc.setData(aimGeoJSON as any);
+                addLog(`AIM: ${aimGeoJSON.features.length} aerial monument${aimGeoJSON.features.length !== 1 ? 's' : ''} mapped in this area.`);
+            }
         } catch (e) {}
 
         const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
@@ -1761,20 +2044,26 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
               {/* Left Side: Historic/Site Intel */}
               <div className="flex gap-2 items-center relative">
                   {/* Option 3: Ephemeral Instruction */}
-                  {!isIntelOpen && pasFinds.length === 0 && !loadingPAS && !potentialScore && (
+                  {!historicMode && pasFinds.length === 0 && !loadingPAS && !potentialScore && (
                       <div className="absolute bottom-full left-1 mb-1 pointer-events-none animate-pulse">
-                          <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Historic Scan</span>
+                          <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Historic</span>
                       </div>
                   )}
-                  <button 
+                  <button
                     onClick={() => {
-                        loadPASFinds();
-                        setIsIntelOpen(!isIntelOpen);
+                        if (!historicMode) {
+                            clearScan();
+                            setHistoricMode(true);
+                        } else {
+                            setHistoricMode(false);
+                            setHistoricStripExpanded(false);
+                            setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
+                        }
                     }}
                     className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${
-                        isIntelOpen ? 'bg-slate-700 text-white border-white/20' : 
-                        (pasFinds.length > 0 ? 'bg-red-600 text-white border-red-400 shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 
-                         'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]')
+                        historicMode
+                            ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40'
+                            : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'
                     } ${loadingPAS ? 'animate-pulse opacity-80' : ''}`}
                   >
                     {loadingPAS ? 'Scanning...' : 'Historic'}
@@ -1815,11 +2104,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             
             {/* Map Layer Toggle */}
             <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
-                <button 
+                <button
                     onClick={() => setIsSatellite(!isSatellite)}
                     className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${
-                        isSatellite 
-                        ? 'bg-emerald-500 border-white text-white' 
+                        isSatellite
+                        ? 'bg-emerald-500 border-white text-white'
                         : 'bg-slate-900/90 border-white/10 text-slate-300'
                     }`}
                 >
@@ -1840,12 +2129,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
             {/* Floating Alerts */}
             <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none w-[90%] max-w-sm">
-                {heritageCount > 0 && (
+                {mapClickLabel && (
+                    <div className="bg-slate-900/95 text-white px-4 py-1.5 rounded-full text-[9px] font-black tracking-widest uppercase shadow-2xl border border-blue-500/40">
+                        {mapClickLabel}
+                    </div>
+                )}
+                {heritageCount > 0 && !historicMode && (
                     <div className="bg-red-600 text-white px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20 animate-bounce">
                         ⛔ Scheduled Monument
                     </div>
                 )}
-                {zoomWarning && (
+                {zoomWarning && !historicLayerToggles.lidar && (
                     <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20">
                         ⚠️ MAX SCAN ZOOM
                     </div>
@@ -2094,6 +2388,206 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
             )}
 
+            {/* Historic Field Intelligence Banner — top of map, mobile */}
+            {historicMode && !isIntelOpen && (
+                <div className="absolute top-3 left-3 right-3 z-[90] lg:hidden pointer-events-auto">
+                    {historicStripExpanded ? (
+                        /* ── Expanded card ── */
+                        <div className="bg-black rounded-2xl border border-blue-500/30 shadow-2xl overflow-hidden">
+                            {/* Card header */}
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Field Intelligence</span>
+                                </div>
+                                <button
+                                    onClick={() => setHistoricStripExpanded(false)}
+                                    className="w-7 h-7 flex items-center justify-center bg-white/5 rounded-lg border border-white/10 text-white active:scale-90"
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                                </button>
+                            </div>
+
+                            <div className="p-4 space-y-4 max-h-[55vh] overflow-y-auto">
+
+                                {/* Map Overlays section */}
+                                <div>
+                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Map Overlays</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                                                historicLayerToggles.lidar
+                                                    ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]'
+                                                    : 'bg-white/5 border-white/10 text-slate-400'
+                                            }`}
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                            LiDAR
+                                        </button>
+                                        <button
+                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                                                historicLayerToggles.os1880
+                                                    ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_12px_rgba(245,158,11,0.4)]'
+                                                    : 'bg-white/5 border-white/10 text-slate-400'
+                                            }`}
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                            1880 OS
+                                        </button>
+                                        <button
+                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                                                historicLayerToggles.os1930
+                                                    ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_12px_rgba(249,115,22,0.4)]'
+                                                    : 'bg-white/5 border-white/10 text-slate-400'
+                                            }`}
+                                        >
+                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                            1930 OS
+                                        </button>
+                                    </div>
+                                    <p className="text-[7px] text-slate-600 mt-1.5 leading-tight">LiDAR: EA 1m DTM 2022 · 1880 OS: NLS 1885–1900 · 1930 OS: NLS 1920s–40s</p>
+                                </div>
+
+                                {/* Historic layer visibility toggles */}
+                                <div>
+                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Historic Layers</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { key: 'routes', label: 'Routes' },
+                                            { key: 'corridors', label: 'Corridors' },
+                                            { key: 'crossings', label: 'Crossings' },
+                                            { key: 'monuments', label: 'Monuments' },
+                                            { key: 'aim', label: 'AIM' },
+                                        ].map(({ key, label }) => (
+                                            <button
+                                                key={key}
+                                                onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))}
+                                                className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
+                                                    historicLayerVisibility[key as keyof typeof historicLayerVisibility]
+                                                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-300'
+                                                        : 'bg-white/5 border-white/10 text-slate-500'
+                                                }`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Routes found */}
+                                {(historicRoutes.length > 0) && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Routes Detected</p>
+                                        {historicRoutes.filter(r => r.type === 'roman_road').length > 0 && (
+                                            <div className="flex items-center gap-3 py-2 border-b border-white/5">
+                                                <div className="w-8 h-[3px] bg-blue-500 rounded-full shrink-0" />
+                                                <span className="text-[10px] font-black text-white uppercase flex-1">Roman road</span>
+                                                <span className="text-[9px] text-blue-400 font-black">{historicRoutes.filter(r => r.type === 'roman_road').length} seg.</span>
+                                            </div>
+                                        )}
+                                        {historicRoutes.filter(r => r.type !== 'roman_road').length > 0 && (
+                                            <div className="flex items-center gap-3 py-2">
+                                                <div className="w-8 border-t-2 border-dashed border-blue-300 shrink-0" />
+                                                <span className="text-[10px] font-black text-white uppercase flex-1">Historic trackway</span>
+                                                <span className="text-[9px] text-blue-300 font-black">{historicRoutes.filter(r => r.type !== 'roman_road').length} seg.</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Heritage sites */}
+                                {pasFinds.length > 0 && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Heritage Sites ({pasFinds.length})</p>
+                                        <div className="space-y-0">
+                                            {pasFinds.slice(0, 5).map(f => (
+                                                <div
+                                                    key={f.id}
+                                                    className="flex items-center gap-3 py-2 border-b border-white/5 active:bg-white/5"
+                                                    onClick={() => { mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); setHistoricStripExpanded(false); }}
+                                                >
+                                                    <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                                                    <span className="text-[10px] font-bold text-slate-200 truncate flex-1">{f.objectType}</span>
+                                                    <span className="text-[8px] text-slate-500 shrink-0">{f.broadperiod}</span>
+                                                </div>
+                                            ))}
+                                            {pasFinds.length > 5 && (
+                                                <p className="text-[8px] text-slate-500 text-center font-bold uppercase tracking-widest py-1.5">+{pasFinds.length - 5} more</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Place signals */}
+                                {placeSignals.length > 0 && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-2">Place Signals</p>
+                                        {placeSignals.slice(0, 2).map((s, i) => (
+                                            <div key={i} className="flex items-center gap-2 py-1.5 border-b border-white/5">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                                                <span className="text-[9px] font-bold text-slate-300 flex-1">"{s.name}"</span>
+                                                <span className="text-[8px] text-slate-500">{s.meaning}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={() => { setIsIntelOpen(true); setHistoricStripExpanded(false); }}
+                                    className="w-full py-2.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[9px] font-black uppercase tracking-widest rounded-xl active:bg-blue-500/20"
+                                >
+                                    Full Intel View
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        /* ── Collapsed bar ── */
+                        <div
+                            className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-blue-500/25 shadow-xl active:scale-[0.98] cursor-pointer"
+                            onClick={() => setHistoricStripExpanded(true)}
+                        >
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                            <span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.15em] shrink-0">Historic</span>
+                            <span className="text-[9px] text-slate-400 truncate text-left flex-1 min-w-0">
+                                {loadingPAS ? 'Scanning...' : (
+                                    [
+                                        historicRoutes.filter(r => r.type === 'roman_road').length > 0 ? 'Roman road' : null,
+                                        historicRoutes.filter(r => r.type !== 'roman_road').length > 0 ? 'Trackway' : null,
+                                        pasFinds.length > 0 ? `${pasFinds.length} site${pasFinds.length !== 1 ? 's' : ''}` : null,
+                                        placeSignals.length > 0 ? `"${placeSignals[0]?.name}"` : null,
+                                    ].filter(Boolean).join(' · ') || 'No features found nearby'
+                                )}
+                            </span>
+                            <button
+                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar })); }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                LiDAR
+                            </button>
+                            <button
+                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 })); }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                1880 OS
+                            </button>
+                            <button
+                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 })); }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                1930 OS
+                            </button>
+                            <svg className="shrink-0 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Mobile Site Intel HUD Overlay */}
             {isIntelOpen && (
                 <div className="absolute inset-0 z-[105] lg:hidden bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex flex-col">
@@ -2321,14 +2815,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             <div className="hidden lg:block p-6 border-b border-white/10 bg-blue-500/5">
                 <div className="flex justify-between items-baseline mb-4">
                     <h2 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Historic Site Intelligence</h2>
-                    <button 
-                        onClick={loadPASFinds}
+                    <button
+                        onClick={() => { clearScan(); setHistoricMode(true); }}
                         disabled={loadingPAS}
                         className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border transition-all ${
-                            loadingPAS ? 'bg-slate-800 text-slate-500 border-white/5' : 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500 hover:text-white'
+                            loadingPAS ? 'bg-slate-800 text-slate-500 border-white/5' :
+                            historicMode ? 'bg-amber-500 text-black border-amber-300' :
+                            'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500 hover:text-white'
                         }`}
                     >
-                        {loadingPAS ? 'SYNCING...' : 'SCAN AREA'}
+                        {loadingPAS ? 'SYNCING...' : historicMode ? 'ACTIVE' : 'SCAN AREA'}
                     </button>
                 </div>
 

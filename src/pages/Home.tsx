@@ -161,9 +161,9 @@ export default function Home(props: {
               </button>
             )}
             {finds2026Stats.silver > 0 && (
-              <button onClick={() => props.goFindsWithFilter("material=Silver")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-gray-50 dark:bg-gray-700/40 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 hover:border-gray-500 transition-colors shrink-0">
-                <span className="text-sm font-black text-gray-600 dark:text-gray-300">{finds2026Stats.silver}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Silver</span>
+              <button onClick={() => props.goFindsWithFilter("material=Silver")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-slate-100 dark:bg-slate-400/10 border border-blue-200 dark:border-blue-400/30 rounded-lg px-3 py-1.5 hover:border-blue-300 transition-colors shrink-0 shadow-[0_0_8px_rgba(148,163,184,0.3)]">
+                <span className="text-sm font-black text-slate-500 dark:text-slate-200">{finds2026Stats.silver}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Silver</span>
               </button>
             )}
             {finds2026Stats.hammered > 0 && (

@@ -136,10 +136,16 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
   try {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
-      const { data, ts } = JSON.parse(cached);
-      if (Date.now() - ts < CACHE_TTL) return data as T[];
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed?.data) && typeof parsed?.ts === 'number') {
+        if (Date.now() - parsed.ts < CACHE_TTL) return parsed.data as T[];
+      } else {
+        localStorage.removeItem(cacheKey);
+      }
     }
-  } catch {}
+  } catch {
+    localStorage.removeItem(cacheKey);
+  }
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), 8000);
