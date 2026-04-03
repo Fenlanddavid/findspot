@@ -523,7 +523,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             'osm': { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' },
             'satellite': { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' },
             'overlay-lidar': { type: 'raster', tiles: ['https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=Lidar_Composite_Hillshade_DTM_1m&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'], tileSize: 256, attribution: 'Environment Agency (OGL)' },
-            'overlay-os1930': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/api/nls/{z}/{x}/{y}.jpg'], tileSize: 256, minzoom: 6, maxzoom: 16, attribution: '&copy; National Library of Scotland' },
+            'overlay-os1930': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/os/6inchsecond/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 16, attribution: '&copy; National Library of Scotland' },
             'overlay-os1880': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 15, attribution: '&copy; National Library of Scotland' }
         },
         layers: [
@@ -2452,10 +2452,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             }`}
                                         >
                                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                            1930 OS
+                                            1888 OS
                                         </button>
                                     </div>
-                                    <p className="text-[7px] text-slate-600 mt-1.5 leading-tight">LiDAR: EA 1m DTM 2022 · 1880 OS: NLS 1885–1900 · 1930 OS: NLS 1920s–40s</p>
+                                    <p className="text-[7px] text-slate-600 mt-1.5 leading-tight">LiDAR: EA 1m DTM 2022 · 1880 OS: NLS 1885–1900 · 1888 OS: NLS 1888–1915</p>
                                 </div>
 
                                 {/* Historic layer visibility toggles */}
@@ -2587,7 +2587,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                1930 OS
+                                1888 OS
                             </button>
                             <svg className="shrink-0 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
