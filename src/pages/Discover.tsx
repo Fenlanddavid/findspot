@@ -66,7 +66,6 @@ const LOCAL_SUBMISSIONS_KEY = "fs_event_submissions";
 const LOCAL_CLUB_SUBMISSIONS_KEY = "fs_club_submissions";
 const EVENTS_CACHE_KEY = "fs_events_cache";
 const CLUBS_CACHE_KEY = "fs_clubs_cache";
-const GEOCODE_CACHE_KEY = "fs_geocode_cache";
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -167,50 +166,37 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
 // Resolve postcodes → lat/lon via postcodes.io (free, no key needed).
 // Items that already have lat+lon are left untouched.
 // Accepts full postcodes ("PE13 1AA") or outward codes ("PE13").
-// Successful lookups are cached in localStorage; cached values are used if the API fails.
 async function resolveCoordinates<T extends { lat?: number; lon?: number; postcode?: string }>(
   items: T[]
 ): Promise<T[]> {
   const unresolved = items.filter((i) => i.postcode && (i.lat == null || i.lon == null));
   if (unresolved.length === 0) return items;
 
-  let persistedCache: Record<string, { lat: number; lon: number } | null> = {};
-  try { persistedCache = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || "{}"); } catch {}
-
-  const sessionCache = new Map<string, { lat: number; lon: number } | null>();
-  const outcodes = [...new Set(unresolved.map((i) => i.postcode!.trim().toUpperCase().split(" ")[0]))];
+  const outcodeCache = new Map<string, { lat: number; lon: number } | null>();
 
   await Promise.all(
-    outcodes.map(async (outcode) => {
-      // Use persisted cache hit without network call
-      if (outcode in persistedCache) {
-        sessionCache.set(outcode, persistedCache[outcode]);
-        return;
-      }
+    unresolved.map(async (item) => {
+      const outcode = item.postcode!.trim().toUpperCase().split(" ")[0];
+      if (outcodeCache.has(outcode)) return;
       try {
         const res = await fetch(`https://api.postcodes.io/outcodes/${outcode}`);
         if (res.ok) {
           const json = await res.json();
-          const coords = json.result ? { lat: json.result.latitude, lon: json.result.longitude } : null;
-          sessionCache.set(outcode, coords);
-          persistedCache[outcode] = coords;
+          outcodeCache.set(outcode, json.result ? { lat: json.result.latitude, lon: json.result.longitude } : null);
         } else {
-          sessionCache.set(outcode, null);
+          outcodeCache.set(outcode, null);
         }
       } catch {
-        // API unavailable — leave sessionCache unset so fallback below applies
+        outcodeCache.set(outcode, null);
       }
     })
   );
-
-  try { localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(persistedCache)); } catch {}
 
   return items.map((item) => {
     if (item.lat != null && item.lon != null) return item;
     if (!item.postcode) return item;
     const outcode = item.postcode.trim().toUpperCase().split(" ")[0];
-    // sessionCache has API result; fall back to persistedCache if fetch failed
-    const coords = sessionCache.has(outcode) ? sessionCache.get(outcode)! : (persistedCache[outcode] ?? null);
+    const coords = outcodeCache.get(outcode);
     return coords ? { ...item, lat: coords.lat, lon: coords.lon } : item;
   });
 }
@@ -991,13 +977,8 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
   const [locationError, setLocationError] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
-  const [radius, setRadius] = useState<Radius>(() => {
-    const v = Number(localStorage.getItem("fs_discover_radius"));
-    return (RADIUS_OPTIONS as readonly number[]).includes(v) ? v as Radius : 25;
-  });
-  const [typeFilter, setTypeFilter] = useState<EventType | "all">(() => {
-    return (localStorage.getItem("fs_discover_type_filter") as EventType | "all") || "all";
-  });
+  const [radius, setRadius] = useState<Radius>(25);
+  const [typeFilter, setTypeFilter] = useState<EventType | "all">("all");
 
   const [remoteEvents, setRemoteEvents] = useState<DetectingEvent[]>([]);
   const [remoteClubs, setRemoteClubs] = useState<ClubListing[]>([]);
@@ -1035,9 +1016,6 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
     setUserLocation(null);
     setLocationError(false);
   }
-
-  useEffect(() => { localStorage.setItem("fs_discover_radius", String(radius)); }, [radius]);
-  useEffect(() => { localStorage.setItem("fs_discover_type_filter", typeFilter); }, [typeFilter]);
 
   // Fetch remote data on mount, resolving any postcode fields to lat/lon
   useEffect(() => {
@@ -1100,7 +1078,7 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
             ? haversineKm(userLocation.lat, userLocation.lon, club.lat, club.lon)
             : undefined,
       }))
-      .filter(({ distanceKm }) => !userLocation || distanceKm === undefined || distanceKm <= radiusKm)
+      .filter(({ distanceKm }) => !userLocation || (distanceKm !== undefined && distanceKm <= radiusKm))
       .sort((a, b) => {
         if (a.distanceKm !== undefined && b.distanceKm !== undefined)
           return a.distanceKm - b.distanceKm;
