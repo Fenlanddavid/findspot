@@ -136,6 +136,15 @@ export default function AllPermissions(props: { projectId: string }) {
                   <button onClick={() => navigate(`/permission/${l.id}`)} className="px-3 bg-gray-50 dark:bg-gray-800 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-[10px] font-bold py-2 rounded-lg transition-colors border border-gray-100 dark:border-gray-700 uppercase">
                     Details
                   </button>
+                  {l.lat && l.lon && (
+                    <button
+                      title="Open in Field Guide"
+                      onClick={() => navigate(`/fieldguide?lat=${l.lat}&lng=${l.lon}`)}
+                      className="px-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 hover:bg-sky-600 hover:text-white text-[10px] font-bold py-2 rounded-lg transition-colors border border-sky-100 dark:border-sky-900/50"
+                    >
+                      🗺
+                    </button>
+                  )}
                 </div>
               </div>
           ))}

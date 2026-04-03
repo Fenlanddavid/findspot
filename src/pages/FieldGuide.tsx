@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 're
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import * as turf from '@turf/turf';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toOSGridRef } from '../services/gps';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
@@ -217,6 +217,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
   const clickLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initLat = parseFloat(searchParams.get('lat') ?? '');
+  const initLng = parseFloat(searchParams.get('lng') ?? '');
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
 
@@ -760,6 +763,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             const period = p?.PERIOD ? ` · ${p.PERIOD}` : '';
             showLabel(`${type}${period}`);
         });
+
+        if (!isNaN(initLat) && !isNaN(initLng)) {
+            map.flyTo({ center: [initLng, initLat], zoom: 14 });
+        }
 
         setTimeout(() => map.resize(), 300);
     });

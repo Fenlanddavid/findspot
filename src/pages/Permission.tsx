@@ -909,7 +909,15 @@ export default function PermissionPage(props: {
                           <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border-2 flex items-center gap-2 font-black text-[10px] sm:text-sm whitespace-nowrap h-fit ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
                               {permissionGranted ? '✓ PERMISSION GRANTED' : '⚠️ NO PERMISSION'}
                           </div>
-                          <button 
+                          {lat && lon && (
+                            <button
+                              onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
+                              className="text-[10px] sm:text-xs font-black bg-white dark:bg-gray-800 border-2 border-sky-100 dark:border-sky-900 px-3 py-2 rounded-xl text-sky-600 dark:text-sky-400 hover:border-sky-500 hover:text-sky-500 transition-all flex items-center gap-1 shadow-sm h-fit"
+                            >
+                              🗺 Field Guide
+                            </button>
+                          )}
+                          <button
                               onClick={() => setAgreementModalOpen(true)}
                               className="text-[10px] sm:text-xs font-black bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 px-3 py-2 rounded-xl text-gray-600 dark:text-gray-400 hover:border-emerald-500 hover:text-emerald-600 transition-all flex items-center gap-1 shadow-sm h-fit"
                           >
