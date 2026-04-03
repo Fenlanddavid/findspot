@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal } from "./Modal";
 import { db, Find, Media } from "../db";
 import { generatePASDescription, calculateRecordingScore, getParishAndCounty } from "../services/pas";
@@ -24,16 +24,21 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
   const [score, setScore] = useState({ score: 0, reasons: [] as string[] });
   const [generating, setGenerating] = useState(false);
 
-  // Manage photo URLs centrally to avoid leaks and ensure they are ready for canvas
-  const photoUrls = useMemo(() => {
-    return photos.map(p => URL.createObjectURL(p.blob));
-  }, [photos]);
+  // Convert blobs to base64 data URLs — html2canvas cannot render blob: URLs
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
   useEffect(() => {
-    return () => {
-      photoUrls.forEach(url => URL.revokeObjectURL(url));
-    };
-  }, [photoUrls]);
+    let cancelled = false;
+    Promise.all(
+      photos.map(p => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(p.blob);
+      }))
+    ).then(urls => { if (!cancelled) setPhotoUrls(urls); });
+    return () => { cancelled = true; setPhotoUrls([]); };
+  }, [photos]);
 
   useEffect(() => {
     if (isOpen) {
@@ -94,8 +99,10 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
         const link = document.createElement("a");
         link.href = url;
         link.download = `PAS-Report-${find.findCode}.pdf`;
+        document.body.appendChild(link);
         link.click();
-        URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
     } catch (e) {
       console.error("PDF generation failed", e);

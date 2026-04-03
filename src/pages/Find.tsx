@@ -853,6 +853,15 @@ export default function FindPage(props: {
             />
             </label>
 
+            {form.acc !== null && form.acc > 15 && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-3 flex items-center gap-3 text-sm">
+                <span className="text-amber-500 text-base shrink-0">⚠</span>
+                <span className="text-amber-800 dark:text-amber-300">
+                  <span className="font-bold">Low GPS accuracy (±{Math.round(form.acc)}m).</span> Move to open ground and tap <em>Update Spot</em> for a better fix before saving.
+                </span>
+              </div>
+            )}
+
             <button
                 onClick={saveFind}
                 disabled={saving || !locationName.trim()}

@@ -189,12 +189,21 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             >
               <span className="text-sm leading-none">{draft.isFavorite ? '⭐' : '☆'}</span>
             </button>
-            <button 
+            <button
               onClick={handleShare}
               disabled={busy}
               className="text-[10px] font-black text-white bg-emerald-600 px-2 py-1 rounded border border-emerald-700 transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm active:scale-95 disabled:opacity-50"
             >
-              <span className="text-[12px]">📤</span> Post Find
+              {busy ? (
+                <>
+                  <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
+                  </svg> Sharing…
+                </>
+              ) : (
+                <><span className="text-[12px]">📤</span> Post Find</>
+              )}
             </button>
             <button 
               onClick={() => setIsPASModalOpen(true)}

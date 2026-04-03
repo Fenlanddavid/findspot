@@ -38,11 +38,12 @@ export async function exportToCSV(): Promise<string> {
   const sessMap = new Map(sessions.map(s => [s.id, s]));
   
   const headers = [
-    "Find Code", "Object Type", "Coin Type", "Coin Denomination", "Period", "Material", "Completeness", 
+    "Find Code", "Object Type", "Coin Type", "Coin Denomination", "Period", "Material", "Completeness",
     "Weight (g)", "Width (mm)", "Decoration",
+    "Target ID", "Depth (cm)", "Date Range",
     "Permission Name", "Permission Type", "Landowner Name", "Landowner Phone", "Landowner Email", "Landowner Address",
-    "Latitude", "Longitude", "GPS Accuracy (m)", 
-    "Land Type", "Land Use", "Crop Type", "Is Stubble", 
+    "Latitude", "Longitude", "GPS Accuracy (m)",
+    "Land Type", "Land Use", "Crop Type", "Is Stubble",
     "Date Observed", "Detectorist", "NCMD No", "NCMD Expiry", "Find Notes", "Permission Notes"
   ];
 
@@ -60,6 +61,7 @@ export async function exportToCSV(): Promise<string> {
     return [
       s.findCode, s.objectType, s.coinType ?? "", s.coinDenomination ?? "", s.period, s.material, s.completeness,
       s.weightG ?? "", s.widthMm ?? "", s.decoration ?? "",
+      s.targetId ?? "", s.depthCm ?? "", s.dateRange ?? "",
       l?.name ?? "", l?.type ?? "individual", l?.landownerName ?? "", l?.landownerPhone ?? "", l?.landownerEmail ?? "", l?.landownerAddress ?? "",
       s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
