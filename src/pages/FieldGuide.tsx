@@ -154,7 +154,7 @@ interface Hotspot {
     number: number;
     score: number; // 0-100 (cap at 98)
     confidence: 'Low Confidence' | 'Developing Signal' | 'Strong Signal' | 'High Probability';
-    type: 'Settlement Edge' | 'Water Interaction' | 'Movement Corridor' | 'Raised Dry Point' | 'Field Activity Zone';
+    type: 'Likely Settlement Edge' | 'Water Interaction Zone' | 'Movement Corridor (Likely)' | 'Raised Dry Area (Likely)' | 'General Activity Zone';
     explanation: string[]; // Reasons why it stands out
     center: [number, number];
     bounds: [[number, number], [number, number]]; // [SW, NE]
@@ -1373,16 +1373,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             for (const p of cluster.points) { if (p.x >= centerBox.minX && p.x <= centerBox.maxX && p.y >= centerBox.minY && p.y <= centerBox.maxY) centerPixels++; }
                             const isHollow = centerPixels / (areaPx * 0.25) < 0.35 && areaPx > 100;
 
-                            if (isHollow && circularity > 0.45) cluster.type = "Ring Ditch / Henge";
-                            else if (isHollow) cluster.type = "Enclosure / Earthwork Foundation";
-                            else if (sourceType === 'hydrology' && ratio > 3.5 && cluster.polarity === 'Sunken') cluster.type = "Palaeochannel / Stream Bed";
-                            else if (sourceType.startsWith('satellite_')) cluster.type = "Vegetation Stress Anomaly";
-                            else if (ratio > 6.0) cluster.type = "Movement Corridor / Trackway";
-                            else if (ratio > 3.0) cluster.type = "Linear Ditch / Bank";
-                            else if (dens > 0.7 && ratio < 1.4) cluster.type = "Foundation / Building";
-                            else if (circularity > 0.65 && dens > 0.5) cluster.type = "Roundhouse / Burial Mound";
-                            else if (areaPx > 400) cluster.type = "Complex Earthwork System";
-                            else cluster.type = "Potential Anomaly";
+                            if (isHollow && circularity > 0.45) cluster.type = "Ring Feature (Possible Ditch or Enclosure)";
+                            else if (isHollow) cluster.type = "Enclosure Signal (Possible Earthwork)";
+                            else if (sourceType === 'hydrology' && ratio > 3.5 && cluster.polarity === 'Sunken') cluster.type = "Palaeochannel (Ancient Watercourse)";
+                            else if (sourceType.startsWith('satellite_')) cluster.type = "Vegetation Stress Signal";
+                            else if (ratio > 6.0) cluster.type = "Movement Signal (Possible Trackway)";
+                            else if (ratio > 3.0) cluster.type = "Linear Feature (Ditch or Bank Signal)";
+                            else if (dens > 0.7 && ratio < 1.4) cluster.type = "Structural Signal (Possible Building Remains)";
+                            else if (circularity > 0.65 && dens > 0.5) cluster.type = "Circular Feature (Possible Structure or Mound)";
+                            else if (areaPx > 400) cluster.type = "Complex Earthwork Signal";
+                            else cluster.type = "Subsurface Anomaly (Unclassified)";
 
                             const confidenceVal = (dens * 0.3) + (circularity * 0.3) + (Math.min(areaPx/600, 1) * 0.4);
                             cluster.confidence = confidenceVal > 0.6 ? 'High' : (confidenceVal > 0.35 ? 'Medium' : 'Subtle');
@@ -1484,7 +1484,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                   
                   // Vector Stitching Upgrade
                   if (canStitch && dist > thresholdM) {
-                      m.type = "Stitched Linear System";
+                      m.type = "Linear Pattern Anomaly";
                       // Confidence decay if distance is large
                       m.confidence = dist > 45 ? 'Medium' : 'High';
                   }
@@ -1506,11 +1506,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                   m.findPotential = Math.min(96, m.findPotential + (c.findPotential * 0.4 * getWeight(c.source)));
                   
                   if (c.source === 'hydrology') {
-                      m.type = "Palaeochannel / Ancient Waterway";
+                      m.type = "Ancient Watercourse Signal";
                   }
 
                   if (m.sources.includes('satellite_summer') && !m.sources.includes('satellite_spring')) {
-                      m.type = "Temporal Cropmark (Drought Stress)";
+                      m.type = "Cropmark Signal (Drought Response)";
                       m.findPotential = Math.min(96, m.findPotential + 15);
                   }
 
@@ -1529,7 +1529,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
               }
           }
           if (!found) {
-              const initialType = c.source === 'satellite_summer' ? "Temporal Cropmark (Potential)" : c.type;
+              const initialType = c.source === 'satellite_summer' ? "Cropmark Signal (Drought Response)" : c.type;
               merged.push({ ...c, type: initialType, sources: [c.source], persistenceScore: 25, rescanCount: 1 });
           }
       }
@@ -1812,9 +1812,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
            if (confidence === 'Strong Signal' && behaviour < 5 && context < 5) confidence = 'Developing Signal';
            if (confidence === 'High Probability' && behaviour < 8) confidence = 'Strong Signal';
 
-           let type: Hotspot['type'] = 'Field Activity Zone';
-           if (hasHydrology && isRaised) type = 'Raised Dry Point';
-           else if (members.some(m => m.type.includes('Corridor'))) type = 'Movement Corridor';
+           let type: Hotspot['type'] = 'General Activity Zone';
+           if (hasHydrology && isRaised) type = 'Raised Dry Area (Likely)';
+           else if (members.some(m => m.type.includes('Corridor'))) type = 'Movement Corridor (Likely)';
 
           // Bounding Box calculation
           let minLon = members[0].center[0], maxLon = members[0].center[0];
@@ -2024,13 +2024,43 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     setScanStatus("");
   };
 
+  const HOTSPOT_INTERPRETATION: Record<string, string> = {
+    'Likely Settlement Edge': 'Signals suggest activity along a settlement boundary',
+    'Water Interaction Zone': 'Signals suggest activity linked to nearby water',
+    'Movement Corridor (Likely)': 'Signals suggest past movement through this area',
+    'Raised Dry Area (Likely)': 'Slight elevation may indicate favourable settlement or use',
+    'General Activity Zone': 'Multiple weak signals suggest dispersed activity',
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
       <header className="bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md">
-          {/* Top Row: Title & Search Toggle */}
-          <div className="flex justify-between items-center px-4 py-2 border-b border-white/5">
+          {/* Top Row: Overlay Toggles & Search Toggle */}
+          <div className="flex justify-between items-center px-4 py-2 pb-3 border-b border-white/5">
               {!isSearchOpen ? (
-                  <p className="m-0 text-[10px] font-black text-emerald-500 tracking-[0.1em] uppercase whitespace-nowrap">MULTISPECTRAL TERRAIN SCAN</p>
+                  <div className="flex items-center gap-2">
+                      <button
+                          onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar })); }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                      >
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                          LiDAR
+                      </button>
+                      <button
+                          onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 })); }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                      >
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                          1880 OS
+                      </button>
+                      <button
+                          onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 })); }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                      >
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                          1888 OS
+                      </button>
+                  </div>
               ) : (
                   <form onSubmit={searchLocation} className="flex gap-2 flex-1 mr-2">
                       <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search place..." className="bg-black/40 border border-white/10 text-white px-3 py-1 rounded-lg flex-1 text-xs outline-none focus:ring-1 focus:ring-emerald-500" />
@@ -2198,7 +2228,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         }`}>
                             <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-2">Hotspot</h3>
+                                    <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-1">Hotspot</h3>
+                                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wide mb-1">{h.type}</p>
+                                    <p className="text-[9px] text-slate-400 italic mb-2 leading-tight">{HOTSPOT_INTERPRETATION[h.type]}</p>
                                     <div className="flex items-center gap-2">
                                         <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${
                                             h.score >= 80 ? 'bg-amber-600 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)]' : 
@@ -2260,6 +2292,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <span className="text-[10px] font-black text-emerald-400">+{h.metrics.convergence + h.metrics.behaviour}</span>
                                 </div>
                             </div>
+                            <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     ))}
                 </div>
@@ -2291,7 +2324,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             
                             <div className="grid grid-cols-2 gap-3 mb-4">
                                 <div className="bg-black/20 p-2 rounded-xl flex flex-col items-center justify-center">
-                                    <span className="block text-[8px] uppercase font-bold opacity-70 mb-2">Detection Spectrum</span>
+                                    <span className="block text-[8px] uppercase font-bold opacity-70 mb-2">Signal Sources</span>
                                     <div className="flex flex-col gap-1 w-full px-1">
                                         {[
                                             { ids: ['terrain', 'terrain_global'], label: 'Lidar' },
@@ -2314,7 +2347,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 <div className="flex flex-col gap-2">
                                     <div className="bg-black/20 p-2 rounded-xl">
                                         <span className="block text-[8px] uppercase font-bold opacity-70">Confidence</span>
-                                        <span className="text-[10px] font-black uppercase tracking-widest">{f.confidence}</span>
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Confidence: {f.confidence}</span>
                                     </div>
                                     <div className={`p-2 rounded-xl border ${
                                         (f.persistenceScore || 0) > 70 ? 'bg-emerald-500/20 border-emerald-400' :
@@ -2386,10 +2419,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                     <span className="text-[10px] font-black text-white">{Math.round(f.findPotential)}</span>
                                 </div>
+                                <p className="text-[7px] text-white/40 italic text-right">relative score</p>
 
                             </div>
 
                             {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
+                            <p className="text-center text-[7px] text-white/60 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     ))}
                 </div>
@@ -2416,47 +2451,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
 
                             <div className="p-4 space-y-4 max-h-[55vh] overflow-y-auto">
-
-                                {/* Map Overlays section */}
-                                <div>
-                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Map Overlays</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-                                                historicLayerToggles.lidar
-                                                    ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]'
-                                                    : 'bg-white/5 border-white/10 text-slate-400'
-                                            }`}
-                                        >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                            LiDAR
-                                        </button>
-                                        <button
-                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-                                                historicLayerToggles.os1880
-                                                    ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_12px_rgba(245,158,11,0.4)]'
-                                                    : 'bg-white/5 border-white/10 text-slate-400'
-                                            }`}
-                                        >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                            1880 OS
-                                        </button>
-                                        <button
-                                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${
-                                                historicLayerToggles.os1930
-                                                    ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_12px_rgba(249,115,22,0.4)]'
-                                                    : 'bg-white/5 border-white/10 text-slate-400'
-                                            }`}
-                                        >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                            1888 OS
-                                        </button>
-                                    </div>
-                                    <p className="text-[7px] text-slate-600 mt-1.5 leading-tight">LiDAR: EA 1m DTM 2022 · 1880 OS: NLS 1885–1900 · 1888 OS: NLS 1888–1915</p>
-                                </div>
 
                                 {/* Historic layer visibility toggles */}
                                 <div>
@@ -2569,25 +2563,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 )}
                             </span>
                             <button
-                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar })); }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                                onClick={e => {
+                                    e.stopPropagation();
+                                    const allOn = Object.values(historicLayerVisibility).every(v => v);
+                                    const next = !allOn;
+                                    setHistoricLayerVisibility({ routes: next, corridors: next, crossings: next, monuments: next, aim: next });
+                                }}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${Object.values(historicLayerVisibility).every(v => v) ? 'bg-blue-500 border-blue-300 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR
-                            </button>
-                            <button
-                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 })); }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                1880 OS
-                            </button>
-                            <button
-                                onClick={e => { e.stopPropagation(); setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 })); }}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                1888 OS
+                                Overlays
                             </button>
                             <svg className="shrink-0 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                         </div>
@@ -2882,6 +2866,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <div className="flex justify-between items-start mb-3">
                                 <div>
                                     <h3 className={`text-xs font-black uppercase tracking-tight ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>Hotspot</h3>
+                                    <p className="text-[9px] font-black text-emerald-400 uppercase tracking-wide mt-0.5">{h.type}</p>
+                                    <p className="text-[8px] text-slate-500 italic leading-tight mt-0.5">{HOTSPOT_INTERPRETATION[h.type]}</p>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
                                     <div className="flex items-center gap-2">
@@ -2910,6 +2896,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                 ))}
                             </div>
+                            <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     )) : (
                         <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical hotspots defined.</p>
@@ -3022,10 +3009,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                         <div className="flex justify-between items-center mt-0.5">
                             <span className={`text-[10px] font-bold uppercase ${selectedId === f.id ? 'text-white/80' : 'text-slate-500'}`}>Confidence:</span>
-                            <span className={`text-[10px] font-black ${selectedId === f.id ? 'text-white' : (f.sources.length >= 3 ? 'text-amber-400' : f.source === 'terrain' ? 'text-emerald-400' : 'text-sky-400')}`}>{f.confidence}</span>
+                            <span className={`text-[10px] font-black ${selectedId === f.id ? 'text-white' : (f.sources.length >= 3 ? 'text-amber-400' : f.source === 'terrain' ? 'text-emerald-400' : 'text-sky-400')}`}>Confidence: {f.confidence}</span>
                         </div>
-                        
+
                         {f.isProtected && <div className="mt-3 p-2 bg-white/20 rounded-lg text-[8px] font-black text-white uppercase tracking-widest text-center">⚠️ Protected Monument</div>}
+                        <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                     </div>
                 ))}
             </div>
