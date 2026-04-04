@@ -46,6 +46,7 @@ type FormState = {
   detector: string;
   targetId: string;
   depthCm: string;
+  dateRange: string;
   storageLocation: string;
   notes: string;
 };
@@ -74,6 +75,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     detector: "",
     targetId: "",
     depthCm: "",
+    dateRange: "",
     storageLocation: "",
     notes: "",
   };
@@ -288,6 +290,7 @@ export default function FindPage(props: {
         decoration: form.decoration.trim(),
         completeness: form.completeness,
         findContext: form.findContext.trim(),
+        dateRange: form.dateRange.trim() || undefined,
         storageLocation: form.storageLocation.trim(),
         notes: form.notes.trim(),
         isPending: false,
@@ -647,6 +650,16 @@ export default function FindPage(props: {
                 </select>
             </label>
             </div>
+
+            <label className="block">
+                <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Date / Date Range</div>
+                <input
+                    value={form.dateRange}
+                    onChange={(e) => update({ dateRange: e.target.value })}
+                    placeholder="e.g. AD 60, 1300 BC, c.1350–1400, 43–410 AD"
+                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                />
+            </label>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <label className="block">

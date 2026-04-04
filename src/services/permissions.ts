@@ -7,6 +7,7 @@ export type EnrichedPermission = Permission & {
   tracks: Track[];
   sessionCount: number;
   lastSessionDate: string | null;
+  findCount: number;
 };
 
 /**
@@ -40,6 +41,13 @@ export async function enrichPermissions(
   for (const s of allSessions) {
     if (!sessionsByPermission.has(s.permissionId)) sessionsByPermission.set(s.permissionId, []);
     sessionsByPermission.get(s.permissionId)!.push(s);
+  }
+
+  // Group finds by permission
+  const findsByPermission = new Map<string, typeof allFinds>();
+  for (const f of allFinds) {
+    if (!findsByPermission.has(f.permissionId)) findsByPermission.set(f.permissionId, []);
+    findsByPermission.get(f.permissionId)!.push(f);
   }
 
   // Most recent find per permission for coordinate fallback
@@ -100,15 +108,19 @@ export async function enrichPermissions(
       }
     }
 
-    return { 
-      ...p, 
-      lat, 
-      lon, 
-      fields, 
-      cumulativePercent, 
+    const permissionFinds = findsByPermission.get(p.id) ?? [];
+    const findCount = permissionFinds.filter(f => !f.isPending).length;
+
+    return {
+      ...p,
+      lat,
+      lon,
+      fields,
+      cumulativePercent,
       tracks: permissionTracks,
       sessionCount: sessions.length,
-      lastSessionDate
+      lastSessionDate,
+      findCount
     };
   });
 }

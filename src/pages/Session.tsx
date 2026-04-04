@@ -6,6 +6,7 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
+import FieldReportModal from "../components/FieldReportModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
@@ -13,29 +14,38 @@ import { TrackingOverlay } from "../components/TrackingOverlay";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-function SessionSummary({ 
-  coverage, 
-  findsCount, 
-  bestZone, 
+function SessionSummary({
+  coverage,
+  findsCount,
+  durationMins,
   totalTime,
-  onClose 
-}: { 
-  coverage: number, 
-  findsCount: number, 
-  bestZone: string, 
+  onClose,
+  onFieldReport,
+}: {
+  coverage: number,
+  findsCount: number,
+  durationMins: number | null,
   totalTime: string | null,
-  onClose: () => void 
+  onClose: () => void,
+  onFieldReport: () => void,
 }) {
+  // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
+  let fourthStat: { label: string; value: string } | null = null;
+  if (coverage > 0) {
+    fourthStat = { label: "Field Detected", value: `${Math.round(coverage)}%` };
+  } else if (durationMins && durationMins > 0 && findsCount > 0) {
+    const rate = (findsCount / durationMins) * 60;
+    fourthStat = { label: "Find Rate", value: `${rate.toFixed(1)}/hr` };
+  } else if (findsCount >= 5) {
+    fourthStat = { label: "Result", value: "Cracking!" };
+  } else if (findsCount > 0) {
+    fourthStat = { label: "Result", value: "Good hunt" };
+  }
+
   return (
       <Modal title="Session Complete" onClose={onClose}>
           <div className="flex flex-col gap-6 py-2">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {coverage > 0 && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Coverage</span>
-                        <span className="text-sm font-black text-emerald-600">{Math.round(coverage)}%</span>
-                    </div>
-                  )}
                   <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
                       <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Finds</span>
                       <span className="text-sm font-black text-emerald-600">{findsCount}</span>
@@ -46,15 +56,23 @@ function SessionSummary({
                         <span className="text-sm font-black text-emerald-600">{totalTime}</span>
                     </div>
                   )}
-                  <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1 overflow-hidden">
-                      <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Best Zone</span>
-                      <span className="text-[9px] font-black text-emerald-600 truncate uppercase mt-0.5">{bestZone}</span>
-                  </div>
+                  {fourthStat && (
+                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">{fourthStat.label}</span>
+                        <span className="text-sm font-black text-emerald-600">{fourthStat.value}</span>
+                    </div>
+                  )}
               </div>
 
-              <button 
+              <button
+                  onClick={onFieldReport}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+              >
+                  Generate Field Report
+              </button>
+              <button
                   onClick={onClose}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px]"
+                  className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 rounded-xl transition-all uppercase tracking-widest text-[10px]"
               >
                   Close & Finish
               </button>
@@ -104,7 +122,9 @@ export default function SessionPage(props: {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
 
   const [showSummary, setShowSummary] = useState(false);
-  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, bestZone: string, totalTime: string | null }>({ coverage: 0, findsCount: 0, bestZone: "None", totalTime: null });
+  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null });
+  const [showFieldReport, setShowFieldReport] = useState(false);
+  const [keyNotes, setKeyNotes] = useState<string[]>([]);
 
   const permission = useLiveQuery(
     async () => (permissionId ? db.permissions.get(permissionId) : (sessionId ? db.sessions.get(sessionId).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
@@ -357,6 +377,7 @@ export default function SessionPage(props: {
           setIsStubble(s.isStubble);
           setNotes(s.notes);
           setIsFinished(!!s.isFinished);
+          setKeyNotes(s.keyNotes ?? []);
         }
         setLoading(false);
       }).catch(err => {
@@ -447,6 +468,7 @@ export default function SessionPage(props: {
         isStubble,
         notes,
         isFinished,
+        keyNotes,
         updatedAt: now,
       };
 
@@ -508,44 +530,17 @@ export default function SessionPage(props: {
     }
     
     const count = await db.finds.where("sessionId").equals(sessionId).count();
-    
-    // Determine Best Zone
-    let bestZoneName = "General Area";
-    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
-    if (sessionFinds.length > 0) {
-        const fieldCounts = new Map<string, number>();
-        sessionFinds.forEach(f => {
-            if (f.fieldId) {
-                fieldCounts.set(f.fieldId, (fieldCounts.get(f.fieldId) || 0) + 1);
-            }
-        });
-        
-        if (fieldCounts.size > 0) {
-            let maxCount = -1;
-            let bestFieldId = "";
-            fieldCounts.forEach((c, id) => {
-                if (c > maxCount) {
-                    maxCount = c;
-                    bestFieldId = id;
-                }
-            });
-            const bField = await db.fields.get(bestFieldId);
-            if (bField) bestZoneName = bField.name;
-        } else if (selectedField) {
-            bestZoneName = selectedField.name;
-        } else if (permission) {
-            bestZoneName = permission.name;
-        }
-    }
 
     // Duration calculation - use startTime if available
     let durationStr: string | null = null;
+    let durationMins: number | null = null;
     const s = await db.sessions.get(sessionId);
     const startT = s?.startTime ? new Date(s.startTime).getTime() : null;
-    
+
     if (startT) {
         const ms = now.getTime() - startT;
         const mins = Math.floor(ms / 60000);
+        durationMins = mins;
         const hrs = Math.floor(mins / 60);
         if (hrs > 0) durationStr = `${hrs}h ${mins % 60}m`;
         else durationStr = `${mins}m`;
@@ -555,10 +550,11 @@ export default function SessionPage(props: {
             .flatMap(t => t.points || [])
             .filter(p => !!p && typeof p.timestamp === 'number')
             .sort((a, b) => a.timestamp - b.timestamp);
-            
+
         if (allPoints.length > 1) {
             const ms = allPoints[allPoints.length - 1].timestamp - allPoints[0].timestamp;
             const mins = Math.floor(ms / 60000);
+            durationMins = mins;
             const hrs = Math.floor(mins / 60);
             if (hrs > 0) durationStr = `${hrs}h ${mins % 60}m`;
             else durationStr = `${mins}m`;
@@ -568,7 +564,7 @@ export default function SessionPage(props: {
     setSummaryData({
         coverage: finalCoverage,
         findsCount: count,
-        bestZone: bestZoneName,
+        durationMins,
         totalTime: durationStr
     });
     
@@ -673,7 +669,13 @@ export default function SessionPage(props: {
                                     <span className="text-xl">🔒</span>
                                     <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
                                 </div>
-                                <button 
+                                <button
+                                    onClick={() => setShowFieldReport(true)}
+                                    className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                >
+                                    Field Report
+                                </button>
+                                <button
                                     onClick={async () => {
                                         if (sessionId && confirm("Re-open this session?")) {
                                             await db.sessions.update(sessionId, { isFinished: false });
@@ -921,12 +923,19 @@ export default function SessionPage(props: {
       </div>
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
-        <SessionSummary 
-          coverage={summaryData.coverage} 
-          findsCount={summaryData.findsCount} 
-          bestZone={summaryData.bestZone} 
+        <SessionSummary
+          coverage={summaryData.coverage}
+          findsCount={summaryData.findsCount}
+          durationMins={summaryData.durationMins}
           totalTime={summaryData.totalTime}
-          onClose={() => nav(permission ? `/permission/${permission.id}` : "/")} 
+          onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
+          onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}
+        />
+      )}
+      {showFieldReport && (
+        <FieldReportModal
+          sessionId={sessionId}
+          onClose={() => setShowFieldReport(false)}
         />
       )}
       <TrackingOverlay 

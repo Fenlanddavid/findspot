@@ -88,11 +88,10 @@ export default function AllPermissions(props: { projectId: string }) {
                         </div>
                     )}
                   </div>
-                  {l.permissionGranted ? (
-                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter shrink-0">✓ OK</span>
-                  ) : (
-                    <span className="bg-red-50 text-red-700 border border-red-100 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-tighter shrink-0">⚠️ NO</span>
-                  )}
+                  <span className="flex flex-col items-center bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded shrink-0">
+                    <span className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">{l.findCount}</span>
+                    <span className="text-[7px] font-black uppercase tracking-tighter text-gray-400 leading-none mt-0.5">finds</span>
+                  </span>
                 </div>
 
                 {/* Satellite Preview with Progress Overlay */}
