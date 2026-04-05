@@ -2292,7 +2292,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <span className="text-[10px] font-black text-emerald-400">+{h.metrics.convergence + h.metrics.behaviour}</span>
                                 </div>
                             </div>
-                            <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                            <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     ))}
                 </div>
@@ -2424,7 +2424,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
 
                             {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
-                            <p className="text-center text-[7px] text-white/60 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                            <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     ))}
                 </div>
@@ -2896,7 +2896,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                 ))}
                             </div>
-                            <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                            <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     )) : (
                         <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical hotspots defined.</p>
@@ -3013,7 +3013,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
 
                         {f.isProtected && <div className="mt-3 p-2 bg-white/20 rounded-lg text-[8px] font-black text-white uppercase tracking-widest text-center">⚠️ Protected Monument</div>}
-                        <p className="text-center text-[7px] text-slate-400 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                        <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                     </div>
                 ))}
             </div>

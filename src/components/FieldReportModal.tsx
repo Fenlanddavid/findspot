@@ -323,8 +323,24 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     const allNotes = customNote.trim() ? [...keyNotes, customNote.trim()] : keyNotes;
     await saveKeyNotes(allNotes);
 
-    const canvas = await html2canvas(reportRef.current!, {
-      scale: 2,
+    const reportEl = reportRef.current!;
+    const SCALE = 2;
+
+    // Measure protected blocks (map, find rows, sections) before capturing.
+    // If the natural page-end falls inside a block, we snap back to its start
+    // so nothing is split mid-way through — regardless of how tall the block is.
+    const containerTop = reportEl.getBoundingClientRect().top;
+    type Block = { start: number; end: number };
+    const blocks: Block[] = [];
+    reportEl.querySelectorAll("[data-pdf-block]").forEach(el => {
+      const rect = el.getBoundingClientRect();
+      const start = Math.round((rect.top - containerTop) * SCALE);
+      const end   = Math.round((rect.bottom - containerTop) * SCALE);
+      if (start > 10) blocks.push({ start, end });
+    });
+
+    const canvas = await html2canvas(reportEl, {
+      scale: SCALE,
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
@@ -337,18 +353,31 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     const printW = pageW - margin * 2;
     const pageCanvasH = Math.floor((pageH - margin * 2) / printW * canvas.width);
 
+    const findSliceEnd = (sliceStart: number): number => {
+      const naturalEnd = Math.min(sliceStart + pageCanvasH, canvas.height);
+      // If the natural cut lands inside a protected block, snap to the block's start
+      // so the block is pushed intact onto the next page.
+      for (const { start, end } of blocks) {
+        if (start > sliceStart && start < naturalEnd && end > naturalEnd) {
+          return start;
+        }
+      }
+      return naturalEnd;
+    };
+
     let srcYOffset = 0;
     let pageCount = 0;
     while (srcYOffset < canvas.height) {
       if (pageCount > 0) pdf.addPage();
-      const sliceH = Math.min(pageCanvasH, canvas.height - srcYOffset);
+      const sliceEnd = findSliceEnd(srcYOffset);
+      const sliceH = sliceEnd - srcYOffset;
       const sliceCanvas = document.createElement("canvas");
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = sliceH;
       sliceCanvas.getContext("2d")!.drawImage(canvas, 0, -srcYOffset);
       const sliceDisplayH = (sliceH / canvas.width) * printW;
       pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceDisplayH);
-      srcYOffset += sliceH;
+      srcYOffset = sliceEnd;
       pageCount++;
     }
 
@@ -505,7 +534,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
             {/* Combined map */}
             {hasMap && (
-              <div>
+              <div data-pdf-block>
                 <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 6 }}>
                   GPS Track &amp; Find Locations
                 </div>
@@ -536,7 +565,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                     const hasGps = !!(find.lat && find.lon);
                     const detail = toFarmerDetail(find);
                     return (
-                      <div key={find.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", background: i % 2 === 0 ? "#f9fafb" : "#ffffff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
+                      <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", background: i % 2 === 0 ? "#f9fafb" : "#ffffff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
                         {/* Number badge */}
                         <div style={{
                           width: 22, height: 22, borderRadius: "50%", background: hasGps ? "#059669" : "#9ca3af",
@@ -571,7 +600,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
             {/* Site Conduct Summary */}
             {(keyNotes.length > 0 || scrapCount > 0 || customNote.trim()) && (
-              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "14px 16px" }}>
+              <div data-pdf-block style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "14px 16px" }}>
                 <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#6b7280", marginBottom: 8 }}>Site Conduct Summary</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {keyNotes.map(note => (
@@ -597,7 +626,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             )}
 
             {/* Compliance */}
-            <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
+            <div data-pdf-block style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
               All activity conducted in accordance with the Code of Practice for Responsible Metal Detecting in England and Wales. All finds recorded and reported as required.
             </div>
 
