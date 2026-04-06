@@ -142,10 +142,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const fields = useLiveQuery(() => db.fields.where("projectId").equals(projectId).toArray()) || [];
 
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
-    void navigate;
+
+    // Clear lat/lng from the URL after the map uses them so the PWA
+    // doesn't restore the same fly-to on next launch.
+    useEffect(() => {
+        if (!isNaN(initLat) && !isNaN(initLng)) {
+            setSearchParams({}, { replace: true });
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const addLog = (msg: string) => dispatch({ type: 'ADD_LOG', msg });
 
@@ -154,6 +161,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const isMountedRef = useRef(true);
     const pasAbortRef = useRef<AbortController | null>(null);
     const scanAbortRef = useRef<AbortController | null>(null);
+    const scanSessionIdRef = useRef(0);
+    const pasSessionIdRef = useRef(0);
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
@@ -219,6 +228,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         const bounds = map.getBounds();
         setLoadingPAS(true);
+        const pasSessionId = ++pasSessionIdRef.current;
         addLog(`INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
         const maxDelta = 0.045;
@@ -248,7 +258,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     : Promise.resolve(null),
             ]);
 
-            if (pasSignal.aborted || !isMountedRef.current) return;
+            if (pasSessionId !== pasSessionIdRef.current || pasSignal.aborted || !isMountedRef.current) return;
 
             // 1. Location
             if (geoData?.address) {
@@ -354,10 +364,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             }
 
         } catch (e) {
-            addLog("HERITAGE SCAN FAILED.");
+            if (pasSessionId === pasSessionIdRef.current) addLog("HERITAGE SCAN FAILED.");
             console.error(e);
         } finally {
-            setLoadingPAS(false);
+            if (pasSessionId === pasSessionIdRef.current) setLoadingPAS(false);
         }
     };
 
@@ -423,6 +433,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const scanAbort = new AbortController();
         scanAbortRef.current = scanAbort;
         const { signal: scanSignal } = scanAbort;
+        const sessionId = ++scanSessionIdRef.current;
+        const scanStart = Date.now();
 
         dispatch({ type: 'SCAN_START' });
         addLog(`Engine Initiating (Fixed Z${scanZoom})...`);
@@ -452,7 +464,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         try {
             const [assetsGeoJSON, terrainHits, terrainGlobalHits, slopeHits, hydroHits, springHits, summerHits] = await Promise.all([herPromise, terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask]);
 
-            if (scanSignal.aborted || !isMountedRef.current) return;
+            if (sessionId !== scanSessionIdRef.current || scanSignal.aborted || !isMountedRef.current) return;
 
             dispatch({ type: 'SET_SCAN_STATUS', status: "Locking Coordinates..." });
             dispatch({ type: 'SET_HERITAGE_COUNT', count: assetsGeoJSON.features?.length || 0 });
@@ -493,8 +505,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             };
                         });
                     dispatch({ type: 'SET_HISTORIC_ROUTES', routes });
-                } else { routes = historicRoutes; }
-            } catch { routes = historicRoutes; }
+                } else { routes = []; }
+            } catch { addLog('Routes: service unavailable, continuing without.'); routes = []; }
 
             dispatch({ type: 'SET_SCAN_STATUS', status: "Deep Signal Audit..." });
             const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
@@ -507,7 +519,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     aimSrc.setData(aimGeoJSON as unknown as GeoJSON.FeatureCollection);
                     addLog(`AIM: ${aimGeoJSON.features.length} aerial monument${aimGeoJSON.features.length !== 1 ? 's' : ''} mapped in this area.`);
                 }
-            } catch { /* ignore AIM failure */ }
+            } catch { addLog('AIM: service unavailable, continuing without.'); }
+            if (sessionId !== scanSessionIdRef.current || scanSignal.aborted || !isMountedRef.current) return;
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
             const merged = findConsensus(rawCombined);
@@ -581,7 +594,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
-            const tacticalHotspots = generateHotspots(contextualized, pasFinds, mPoints, targetPeriod, permissions, fields, routes);
+            // Build scanContext from locally-fetched data so hotspot/scoring
+            // calculations never depend on potentially-stale React state.
+            const scanContext = { center, mPoints, routes, permissions, fields };
+            const tacticalHotspots = generateHotspots(contextualized, pasFinds, scanContext.mPoints, targetPeriod, scanContext.permissions, scanContext.fields, scanContext.routes);
+
+            if (sessionId !== scanSessionIdRef.current || !isMountedRef.current) return;
             dispatch({ type: 'SCAN_SUCCESS', features: contextualized, hotspots: tacticalHotspots });
 
             if (!hasScanned && tacticalHotspots.length > 0) {
@@ -590,9 +608,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 dispatch({ type: 'SET_SELECTED_HOTSPOT', id: tacticalHotspots[0].id });
                 mapRef.current?.fitBounds(tacticalHotspots[0].bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
             }
-            addLog(`Scan Complete. ${tacticalHotspots.length} Hotspots identified.`);
+            const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
+            addLog(`Live scan complete in ${duration}s. ${tacticalHotspots.length} hotspot${tacticalHotspots.length !== 1 ? 's' : ''} identified.`);
         } catch (e) {
-            addLog("Engine Error."); console.error(e);
+            if (sessionId !== scanSessionIdRef.current) return;
+            addLog("Engine error — scan could not complete."); console.error(e);
             if (isMountedRef.current) dispatch({ type: 'SCAN_FAIL' });
         }
     };
