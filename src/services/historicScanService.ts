@@ -82,10 +82,35 @@ export interface NominatimResponse {
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
-const OVERPASS_BASE = 'https://overpass-api.de/api/interpreter?data=';
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 
 function isAbortError(e: unknown): boolean {
     return e instanceof DOMException && e.name === 'AbortError';
+}
+
+// POST is the recommended approach for Overpass — avoids URL length limits
+// and is more reliably accepted across all Overpass instances.
+async function overpassFetch(query: string, signal?: AbortSignal): Promise<OverpassResponse | null> {
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), 15000);
+    try {
+        const combined = AbortSignal.any
+            ? AbortSignal.any([timeout.signal, ...(signal ? [signal] : [])])
+            : timeout.signal;
+        const res = await fetch(OVERPASS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'data=' + encodeURIComponent(query),
+            signal: combined,
+        });
+        if (!res.ok) return null;
+        return await res.json() as OverpassResponse;
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**
@@ -116,14 +141,8 @@ export async function fetchEtymologySignals(
     east: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    try {
-        const query = `[out:json][timeout:20];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east});node["standing_remains"](${south},${west},${north},${east});way["standing_remains"](${south},${west},${north},${east}););out center;`;
-        const res = await fetch(OVERPASS_BASE + encodeURIComponent(query), { signal });
-        return await res.json() as OverpassResponse;
-    } catch (e) {
-        if (isAbortError(e)) throw e;
-        return null;
-    }
+    const query = `[out:json][timeout:25];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east}););out center;`;
+    return overpassFetch(query, signal);
 }
 
 /**
@@ -134,14 +153,8 @@ export async function fetchHeritageFeatures(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    try {
-        const query = `[out:json][timeout:20];(node["historic"](around:2000,${lat},${lng});way["historic"](around:2000,${lat},${lng});node["heritage"](around:2000,${lat},${lng});way["heritage"](around:2000,${lat},${lng});node["archaeological_site"](around:2000,${lat},${lng});way["archaeological_site"](around:2000,${lat},${lng});node["standing_remains"](around:2000,${lat},${lng});way["standing_remains"](around:2000,${lat},${lng}););out center;`;
-        const res = await fetch(OVERPASS_BASE + encodeURIComponent(query), { signal });
-        return await res.json() as OverpassResponse;
-    } catch (e) {
-        if (isAbortError(e)) throw e;
-        return null;
-    }
+    const query = `[out:json][timeout:25];(node["historic"](around:2000,${lat},${lng});way["historic"](around:2000,${lat},${lng});node["heritage"](around:2000,${lat},${lng});way["heritage"](around:2000,${lat},${lng}););out center;`;
+    return overpassFetch(query, signal);
 }
 
 /**
@@ -192,14 +205,8 @@ export async function fetchHistoricRoutes(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    try {
-        const query = `[out:json][timeout:20];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng}););out geom;`;
-        const res = await fetch(OVERPASS_BASE + encodeURIComponent(query), { signal });
-        return await res.json() as OverpassResponse;
-    } catch (e) {
-        if (isAbortError(e)) throw e;
-        return null;
-    }
+    const query = `[out:json][timeout:25];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng}););out geom;`;
+    return overpassFetch(query, signal);
 }
 
 /**
@@ -210,12 +217,6 @@ export async function fetchScanRoutes(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    try {
-        const query = `[out:json][timeout:30];(way["historic"="roman_road"](around:1000, ${lat}, ${lng});way["roman_road"="yes"](around:1000, ${lat}, ${lng});way["name"~"Roman Road",i](around:1000, ${lat}, ${lng});way["historic"="trackway"](around:1000, ${lat}, ${lng});way["holloway"="yes"](around:1000, ${lat}, ${lng});way["highway"="track"]["historic"="yes"](around:1000, ${lat}, ${lng}););out geom;`;
-        const res = await fetch(OVERPASS_BASE + encodeURIComponent(query), { signal });
-        return await res.json() as OverpassResponse;
-    } catch (e) {
-        if (isAbortError(e)) throw e;
-        return null;
-    }
+    const query = `[out:json][timeout:25];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng}););out geom;`;
+    return overpassFetch(query, signal);
 }

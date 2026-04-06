@@ -22,8 +22,14 @@ import { usePotentialScore } from '../hooks/usePotentialScore';
 
 // ─── Scan state managed by reducer ───────────────────────────────────────────
 
+type ScanPhase = 'idle' | 'terrain' | 'historic' | 'complete';
+type HotspotVersion = 'terrain' | 'enhanced' | null;
+
 interface ScanState {
     analyzing: boolean;
+    scanPhase: ScanPhase;
+    hotspotVersion: HotspotVersion;
+    terrainClusters: Cluster[];
     detectedFeatures: Cluster[];
     hotspots: Hotspot[];
     selectedId: string | null;
@@ -50,10 +56,14 @@ type ScanAction =
     | { type: 'SET_SHOW_SUGGESTION'; value: boolean }
     | { type: 'SET_HERITAGE_COUNT'; count: number }
     | { type: 'SET_MONUMENT_POINTS'; points: [number, number][] }
-    | { type: 'SET_HISTORIC_ROUTES'; routes: HistoricRoute[] };
+    | { type: 'SET_HISTORIC_ROUTES'; routes: HistoricRoute[] }
+    | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] };
 
 const initialScanState: ScanState = {
     analyzing: false,
+    scanPhase: 'idle',
+    hotspotVersion: null,
+    terrainClusters: [],
     detectedFeatures: [],
     hotspots: [],
     selectedId: null,
@@ -70,11 +80,13 @@ const initialScanState: ScanState = {
 function scanReducer(state: ScanState, action: ScanAction): ScanState {
     switch (action.type) {
         case 'SCAN_START':
-            return { ...state, analyzing: true, scanStatus: "Engine Initiating..." };
+            return { ...state, analyzing: true, scanPhase: 'terrain', hotspotVersion: null, terrainClusters: [], scanStatus: "Engine Initiating..." };
         case 'SCAN_SUCCESS':
-            return { ...state, analyzing: false, scanStatus: "", detectedFeatures: action.features, hotspots: action.hotspots };
+            return { ...state, analyzing: false, scanPhase: 'terrain', hotspotVersion: 'terrain', scanStatus: "", terrainClusters: action.features, detectedFeatures: action.features, hotspots: action.hotspots };
         case 'SCAN_FAIL':
-            return { ...state, analyzing: false, scanStatus: "" };
+            return { ...state, analyzing: false, scanPhase: 'idle', scanStatus: "" };
+        case 'HISTORIC_ENHANCE':
+            return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
         case 'CLEAR_SCAN':
             return {
                 ...initialScanState,
@@ -110,7 +122,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Reducer-managed scan state
     const [scanState, dispatch] = useReducer(scanReducer, initialScanState);
     const {
-        analyzing, detectedFeatures, hotspots, selectedId, selectedHotspotId,
+        analyzing, scanPhase, hotspotVersion, terrainClusters,
+        detectedFeatures, hotspots, selectedId, selectedHotspotId,
         hasScanned, showSuggestion, scanStatus, systemLog,
         heritageCount, monumentPoints, historicRoutes,
     } = scanState;
@@ -163,6 +176,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const scanAbortRef = useRef<AbortController | null>(null);
     const scanSessionIdRef = useRef(0);
     const pasSessionIdRef = useRef(0);
+    const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
@@ -229,6 +243,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const bounds = map.getBounds();
         setLoadingPAS(true);
         const pasSessionId = ++pasSessionIdRef.current;
+        dispatch({ type: 'SET_SCAN_STATUS', status: "Loading Historic Data..." });
         addLog(`INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
 
         const maxDelta = 0.045;
@@ -245,7 +260,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             pasAbortRef.current = pasAbort;
             const { signal: pasSignal } = pasAbort;
 
-            addLog("STAGE: Running parallel data fetch...");
+            addLog("STAGE: Fetching location, heritage, monuments and routes...");
 
             const [geoData, etymData, osmData, nhleData, aimData, routeData] = await Promise.all([
                 fetchLocationLabel(center.lat, center.lng, pasSignal),
@@ -259,6 +274,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             ]);
 
             if (pasSessionId !== pasSessionIdRef.current || pasSignal.aborted || !isMountedRef.current) return;
+
+            if (!geoData)  addLog("LOCATION: Service unavailable.");
+            if (!etymData) addLog("ETYMOLOGY: Service unavailable.");
+            if (!osmData)  addLog("HERITAGE: Service unavailable.");
 
             // 1. Location
             if (geoData?.address) {
@@ -339,8 +358,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             }
 
             // 6. Historic routes (only if not already loaded)
+            let fetchedRoutes: HistoricRoute[] = [];
             if (routeData && routeData.elements && routeData.elements.length > 0) {
-                const fetchedRoutes: HistoricRoute[] = routeData.elements
+                fetchedRoutes = routeData.elements
                     .filter((el: OverpassElement) => el.geometry && el.geometry.length >= 2)
                     .map((el: OverpassElement) => {
                         const geom: [number, number][] = (el.geometry || []).map(g => [g.lon, g.lat] as [number, number]);
@@ -363,11 +383,41 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 addLog("ROUTES: No historic routes found nearby.");
             }
 
+            // ── Regenerate hotspots with historic context ──────────────────────
+            // Only runs if terrain scan has completed and user hasn't moved away.
+            if (pasSessionId === pasSessionIdRef.current && terrainClusters.length > 0) {
+                const scanCenter = terrainScanCenterRef.current;
+                const drifted = scanCenter
+                    ? (() => {
+                        const R = 6371000;
+                        const dLat = (center.lat - scanCenter.lat) * Math.PI / 180;
+                        const dLng = (center.lng - scanCenter.lng) * Math.PI / 180;
+                        const a = Math.sin(dLat / 2) ** 2 + Math.cos(scanCenter.lat * Math.PI / 180) * Math.cos(center.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+                        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) > 1000;
+                    })()
+                    : false;
+
+                if (!drifted) {
+                    addLog("Historic data integrated — refining targets...");
+                    const routesForHotspots = fetchedRoutes.length > 0 ? fetchedRoutes : historicRoutes;
+                    const enhancedHotspots = generateHotspots(terrainClusters, mappedFinds, mPoints, targetPeriod, permissions, fields, routesForHotspots);
+                    dispatch({ type: 'HISTORIC_ENHANCE', hotspots: enhancedHotspots });
+                    const sourceCount = mappedFinds.length + discoveredSignals.length + mPoints.length;
+                    addLog(`Historic scan complete — ${sourceCount} source${sourceCount !== 1 ? 's' : ''} integrated.`);
+                } else {
+                    addLog("HISTORIC: Map moved during scan — hotspot update skipped.");
+                }
+            }
+
         } catch (e) {
             if (pasSessionId === pasSessionIdRef.current) addLog("HERITAGE SCAN FAILED.");
             console.error(e);
         } finally {
-            if (pasSessionId === pasSessionIdRef.current) setLoadingPAS(false);
+            // Always clear loading state — session guard only on reducer dispatch
+            setLoadingPAS(false);
+            if (pasSessionId === pasSessionIdRef.current) {
+                dispatch({ type: 'SET_SCAN_STATUS', status: "" });
+            }
         }
     };
 
@@ -381,11 +431,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }, [selectedId]);
 
     useEffect(() => {
-        if (isIntelOpen && pasFinds.length === 0 && !loadingPAS) loadPASFinds();
+        if (isIntelOpen && !loadingPAS) loadPASFinds();
     }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        if (historicMode && pasFinds.length === 0 && !loadingPAS) loadPASFinds();
+        if (historicMode && !loadingPAS) loadPASFinds();
     }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useLayoutEffect(() => {
@@ -600,6 +650,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             const tacticalHotspots = generateHotspots(contextualized, pasFinds, scanContext.mPoints, targetPeriod, scanContext.permissions, scanContext.fields, scanContext.routes);
 
             if (sessionId !== scanSessionIdRef.current || !isMountedRef.current) return;
+            terrainScanCenterRef.current = { lat: center.lat, lng: center.lng };
             dispatch({ type: 'SCAN_SUCCESS', features: contextualized, hotspots: tacticalHotspots });
 
             if (!hasScanned && tacticalHotspots.length > 0) {
@@ -609,7 +660,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 mapRef.current?.fitBounds(tacticalHotspots[0].bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
             }
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
-            addLog(`Live scan complete in ${duration}s. ${tacticalHotspots.length} hotspot${tacticalHotspots.length !== 1 ? 's' : ''} identified.`);
+            addLog(`Terrain scan complete in ${duration}s — ${contextualized.length} signal${contextualized.length !== 1 ? 's' : ''} detected, ${tacticalHotspots.length} target${tacticalHotspots.length !== 1 ? 's' : ''} identified.`);
+
+            // Automatically kick off the historic phase to enhance hotspots
+            loadPASFinds();
         } catch (e) {
             if (sessionId !== scanSessionIdRef.current) return;
             addLog("Engine error — scan could not complete."); console.error(e);
@@ -767,7 +821,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         <div className="absolute top-4 left-4 z-[100] lg:hidden pointer-events-none flex flex-col gap-2">
                             <div className="bg-slate-900/90 text-emerald-400 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl border border-emerald-500/30 backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2">
                                 <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                Hotspot detected
+                                {hotspotVersion === 'enhanced' ? 'Enhanced Target' : 'Terrain Target'}
                             </div>
                             <div className="flex flex-col gap-2 pointer-events-auto max-h-[40vh] overflow-y-auto scrollbar-hide pb-4">
                                 {hotspots.slice(0, 3).map(h => (
@@ -1223,7 +1277,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     <div className="p-6 border-b border-white/5 shrink-0 overflow-y-auto max-h-[40%] scrollbar-hide">
                         <div className="flex justify-between items-baseline mb-4">
-                            <h2 className="text-sm font-black text-white uppercase tracking-tighter">Strategic Hotspots</h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-sm font-black text-white uppercase tracking-tighter">Strategic Hotspots</h2>
+                                {hotspotVersion && (
+                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${hotspotVersion === 'enhanced' ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' : 'text-slate-400 border-slate-500/40 bg-slate-500/10'}`}>
+                                        {hotspotVersion === 'enhanced' ? 'Enhanced' : 'Terrain Only'}
+                                    </span>
+                                )}
+                            </div>
                             {selectedHotspotId && <button onClick={() => dispatch({ type: 'SET_SELECTED_HOTSPOT', id: null })} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
                         </div>
                         <div className="flex flex-col gap-4">
