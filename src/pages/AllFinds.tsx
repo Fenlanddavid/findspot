@@ -93,7 +93,25 @@ export default function AllFinds(props: { projectId: string }) {
             id: 'finds-points',
             type: 'circle',
             source: 'finds',
-            paint: { 'circle-radius': 7, 'circle-color': '#10b981', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' }
+            paint: {
+                'circle-radius': 7,
+                'circle-color': ['match', ['get', 'category'],
+                    'coin',          '#10b981',
+                    'Prehistoric',   '#a16207',
+                    'Bronze Age',    '#c2410c',
+                    'Iron Age',      '#b91c1c',
+                    'Celtic',        '#15803d',
+                    'Roman',         '#f59e0b',
+                    'Anglo-Saxon',   '#ea580c',
+                    'Early Medieval','#2563eb',
+                    'Medieval',      '#7c3aed',
+                    'Post-medieval', '#db2777',
+                    'Modern',        '#0891b2',
+                    '#9ca3af'
+                ],
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#fff'
+            }
         });
         map.on('click', 'finds-points', (e) => {
             if (e.features?.[0]) setOpenFindId(e.features[0].properties?.id);
@@ -123,7 +141,10 @@ export default function AllFinds(props: { projectId: string }) {
             features: finds.filter(f => f.lat && f.lon).map(f => ({
                 type: 'Feature',
                 geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
-                properties: { id: f.id }
+                properties: {
+                    id: f.id,
+                    category: (f.objectType || '').toLowerCase().includes('coin') ? 'coin' : (f.period || 'Unknown')
+                }
             }))
         });
     }
