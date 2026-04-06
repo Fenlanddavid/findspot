@@ -1,223 +1,196 @@
-import React, { useState, useReducer, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { toOSGridRef } from '../services/gps';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
+import { useTerrainScan, TerrainScanResult } from '../hooks/useTerrainScan';
+import { useHistoricScan } from '../hooks/useHistoricScan';
 
 import {
     Cluster, PASFind, PlaceSignal, HistoricRoute, Hotspot,
-    ETYMOLOGY_SIGNALS, HOTSPOT_INTERPRETATION
+    HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
-import {
-    fetchLocationLabel, fetchEtymologySignals, fetchHeritageFeatures,
-    fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes, fetchScanRoutes,
-    OverpassElement
-} from '../services/historicScanService';
-import { scanDataSource } from '../utils/terrainEngine';
-import { findConsensus, analyzeContext, suppressDisturbance, generateHotspots, getDistance } from '../utils/fieldGuideAnalysis';
 import { usePotentialScore } from '../hooks/usePotentialScore';
+import { NHLEResponse, AIMResponse } from '../services/historicScanService';
+import { SCAN_CONFIG } from '../utils/scanConfig';
+import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
 
-// ─── Scan state managed by reducer ───────────────────────────────────────────
+// ─── Engine state (reducer) ───────────────────────────────────────────────────
 
-type ScanPhase = 'idle' | 'terrain' | 'historic' | 'complete';
+type ScanPhase    = 'idle' | 'terrain' | 'historic' | 'complete';
 type HotspotVersion = 'terrain' | 'enhanced' | null;
 
-interface ScanState {
-    analyzing: boolean;
-    scanPhase: ScanPhase;
-    hotspotVersion: HotspotVersion;
-    terrainClusters: Cluster[];
+interface EngineState {
+    analyzing:        boolean;
+    scanPhase:        ScanPhase;
+    hotspotVersion:   HotspotVersion;
+    terrainClusters:  Cluster[];
     detectedFeatures: Cluster[];
-    hotspots: Hotspot[];
-    selectedId: string | null;
-    selectedHotspotId: string | null;
-    hasScanned: boolean;
-    showSuggestion: boolean;
-    scanStatus: string;
-    systemLog: string[];
-    heritageCount: number;
-    monumentPoints: [number, number][];
-    historicRoutes: HistoricRoute[];
+    hotspots:         Hotspot[];
+    hasScanned:       boolean;
+    heritageCount:    number;
+    monumentPoints:   [number, number][];
+    historicRoutes:   HistoricRoute[];
 }
 
-type ScanAction =
+type EngineAction =
     | { type: 'SCAN_START' }
-    | { type: 'SCAN_SUCCESS'; features: Cluster[]; hotspots: Hotspot[] }
+    | { type: 'SCAN_SUCCESS'; features: Cluster[]; hotspots: Hotspot[]; monumentPoints: [number, number][]; routes: HistoricRoute[]; heritageCount: number }
     | { type: 'SCAN_FAIL' }
-    | { type: 'CLEAR_SCAN' }
-    | { type: 'SET_SELECTED_FEATURE'; id: string | null }
-    | { type: 'SET_SELECTED_HOTSPOT'; id: string | null }
-    | { type: 'SET_SCAN_STATUS'; status: string }
-    | { type: 'ADD_LOG'; msg: string }
+    | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] }
     | { type: 'SET_HAS_SCANNED' }
-    | { type: 'SET_SHOW_SUGGESTION'; value: boolean }
-    | { type: 'SET_HERITAGE_COUNT'; count: number }
-    | { type: 'SET_MONUMENT_POINTS'; points: [number, number][] }
-    | { type: 'SET_HISTORIC_ROUTES'; routes: HistoricRoute[] }
-    | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] };
+    | { type: 'CLEAR_SCAN' };
 
-const initialScanState: ScanState = {
-    analyzing: false,
-    scanPhase: 'idle',
-    hotspotVersion: null,
-    terrainClusters: [],
+const initialEngineState: EngineState = {
+    analyzing:        false,
+    scanPhase:        'idle',
+    hotspotVersion:   null,
+    terrainClusters:  [],
     detectedFeatures: [],
-    hotspots: [],
-    selectedId: null,
-    selectedHotspotId: null,
-    hasScanned: false,
-    showSuggestion: false,
-    scanStatus: "",
-    systemLog: ["SYSTEM READY. Execute Scan."],
-    heritageCount: 0,
-    monumentPoints: [],
-    historicRoutes: [],
+    hotspots:         [],
+    hasScanned:       false,
+    heritageCount:    0,
+    monumentPoints:   [],
+    historicRoutes:   [],
 };
 
-function scanReducer(state: ScanState, action: ScanAction): ScanState {
+function engineReducer(state: EngineState, action: EngineAction): EngineState {
     switch (action.type) {
         case 'SCAN_START':
-            return { ...state, analyzing: true, scanPhase: 'terrain', hotspotVersion: null, terrainClusters: [], scanStatus: "Engine Initiating..." };
+            return { ...state, analyzing: true, scanPhase: 'terrain', hotspotVersion: null, terrainClusters: [] };
         case 'SCAN_SUCCESS':
-            return { ...state, analyzing: false, scanPhase: 'terrain', hotspotVersion: 'terrain', scanStatus: "", terrainClusters: action.features, detectedFeatures: action.features, hotspots: action.hotspots };
+            return {
+                ...state, analyzing: false, scanPhase: 'terrain', hotspotVersion: 'terrain',
+                terrainClusters: action.features, detectedFeatures: action.features, hotspots: action.hotspots,
+                monumentPoints: action.monumentPoints, historicRoutes: action.routes, heritageCount: action.heritageCount,
+            };
         case 'SCAN_FAIL':
-            return { ...state, analyzing: false, scanPhase: 'idle', scanStatus: "" };
+            return { ...state, analyzing: false, scanPhase: 'idle' };
         case 'HISTORIC_ENHANCE':
             return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
-        case 'CLEAR_SCAN':
-            return {
-                ...initialScanState,
-                systemLog: ["SYSTEM CLEARED. Ready for new scan."],
-            };
-        case 'SET_SELECTED_FEATURE':
-            return { ...state, selectedId: action.id };
-        case 'SET_SELECTED_HOTSPOT':
-            return { ...state, selectedHotspotId: action.id };
-        case 'SET_SCAN_STATUS':
-            return { ...state, scanStatus: action.status };
-        case 'ADD_LOG':
-            return { ...state, systemLog: [...state.systemLog, `> ${action.msg}`] };
         case 'SET_HAS_SCANNED':
             return { ...state, hasScanned: true };
-        case 'SET_SHOW_SUGGESTION':
-            return { ...state, showSuggestion: action.value };
-        case 'SET_HERITAGE_COUNT':
-            return { ...state, heritageCount: action.count };
-        case 'SET_MONUMENT_POINTS':
-            return { ...state, monumentPoints: action.points };
-        case 'SET_HISTORIC_ROUTES':
-            return { ...state, historicRoutes: action.routes };
+        case 'CLEAR_SCAN':
+            return { ...initialEngineState };
         default:
             return state;
     }
 }
 
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FieldGuide({ projectId }: { projectId: string }) {
-    // Reducer-managed scan state
-    const [scanState, dispatch] = useReducer(scanReducer, initialScanState);
+    // Engine state
+    const [engineState, dispatch] = useReducer(engineReducer, initialEngineState);
     const {
-        analyzing, scanPhase, hotspotVersion, terrainClusters,
-        detectedFeatures, hotspots, selectedId, selectedHotspotId,
-        hasScanned, showSuggestion, scanStatus, systemLog,
+        analyzing, hotspotVersion, terrainClusters,
+        detectedFeatures, hotspots, hasScanned,
         heritageCount, monumentPoints, historicRoutes,
-    } = scanState;
+    } = engineState;
 
-    // Independent UI toggles (not scan-related)
-    const [isSatellite, setIsSatellite] = useState(false);
-    const [zoomWarning, setZoomWarning] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [isIntelOpen, setIsIntelOpen] = useState(false);
-    const [targetPeriod, setTargetPeriod] = useState<'All' | 'Bronze Age' | 'Roman' | 'Medieval'>('All');
-    const [isLocating, setIsLocating] = useState(false);
-    const [historicMode, setHistoricMode] = useState(false);
-    const [historicStripExpanded, setHistoricStripExpanded] = useState(false);
-    const [historicLayerToggles, setHistoricLayerToggles] = useState({ lidar: false, os1930: false, os1880: false });
+    // UI state
+    const [selectedId,             setSelectedId]             = useState<string | null>(null);
+    const [selectedHotspotId,      setSelectedHotspotId]      = useState<string | null>(null);
+    const [showSuggestion,         setShowSuggestion]         = useState(false);
+    const [scanStatus,             setScanStatus]             = useState('');
+    const [systemLog,              setSystemLog]              = useState<LogEntry[]>([makeLog('SYSTEM READY. Execute Scan.')]);
+    const [zoomWarning,            setZoomWarning]            = useState(false);
+    const [isSatellite,            setIsSatellite]            = useState(false);
+    const [searchQuery,            setSearchQuery]            = useState('');
+    const [isSearchOpen,           setIsSearchOpen]           = useState(false);
+    const [isIntelOpen,            setIsIntelOpen]            = useState(false);
+    const [targetPeriod,           setTargetPeriod]           = useState<'All' | 'Bronze Age' | 'Roman' | 'Medieval'>('All');
+    const [isLocating,             setIsLocating]             = useState(false);
+    const [historicMode,           setHistoricMode]           = useState(false);
+    const [historicStripExpanded,  setHistoricStripExpanded]  = useState(false);
+    const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
-    const [mapClickLabel, setMapClickLabel] = useState<string | null>(null);
+    const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
 
-    // PAS & intel state
-    const [pasFinds, setPasFinds] = useState<PASFind[]>([]);
+    // PAS / intel state
+    const [pasFinds,        setPasFinds]        = useState<PASFind[]>([]);
     const [selectedPASFind, setSelectedPASFind] = useState<PASFind | null>(null);
-    const [loadingPAS, setLoadingPAS] = useState(false);
-    const [placeSignals, setPlaceSignals] = useState<PlaceSignal[]>([]);
+    const [placeSignals,    setPlaceSignals]    = useState<PlaceSignal[]>([]);
+
+    // Terrain scan centre — for drift guard in historic phase
+    const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+
+    // Refs for after-terrain NHLE/AIM data (avoids re-fetch in auto historic phase)
+    const lastNhleRef = useRef<NHLEResponse | null>(null);
+    const lastAimRef  = useRef<AIMResponse  | null>(null);
 
     // Scoring hook
     const { potentialScore, scanConfidence, setPotentialScore, setScanConfidence, calculatePotentialScore } = usePotentialScore();
 
-    const permissions = useLiveQuery(() => db.permissions.where("projectId").equals(projectId).toArray()) || [];
-    const fields = useLiveQuery(() => db.fields.where("projectId").equals(projectId).toArray()) || [];
+    const permissions = useLiveQuery(() => db.permissions.where('projectId').equals(projectId).toArray()) || [];
+    const fields      = useLiveQuery(() => db.fields.where('projectId').equals(projectId).toArray()) || [];
 
-    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
 
-    // Clear lat/lng from the URL after the map uses them so the PWA
-    // doesn't restore the same fly-to on next launch.
+    // Clear lat/lng from the URL after the map uses them
     useEffect(() => {
-        if (!isNaN(initLat) && !isNaN(initLng)) {
-            setSearchParams({}, { replace: true });
-        }
+        if (!isNaN(initLat) && !isNaN(initLng)) setSearchParams({}, { replace: true });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const addLog = (msg: string) => dispatch({ type: 'ADD_LOG', msg });
+    // ─── Logging ─────────────────────────────────────────────────────────────
+
+    const addLog = useCallback((msg: string, source?: LogSource, level?: LogLevel) => {
+        setSystemLog(prev => [...prev, makeLog(msg, source, level)]);
+    }, []);
 
     const logContainerRef = useRef<HTMLDivElement>(null);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const isMountedRef = useRef(true);
-    const pasAbortRef = useRef<AbortController | null>(null);
-    const scanAbortRef = useRef<AbortController | null>(null);
-    const scanSessionIdRef = useRef(0);
-    const pasSessionIdRef = useRef(0);
-    const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+    const scrollRef       = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }, [systemLog]);
+
+    // ─── Scan hooks ───────────────────────────────────────────────────────────
+
+    const { runTerrainScan, cancelTerrain, isTerrainScanning } = useTerrainScan({
+        onLog:          addLog,
+        onStatusChange: setScanStatus,
+    });
+
+    const { runHistoricScan, cancelHistoric, isHistoricScanning } = useHistoricScan({
+        onLog:          addLog,
+        onStatusChange: setScanStatus,
+    });
+
+    // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
         isSatellite, historicMode, historicLayerVisibility, historicLayerToggles,
         initLat, initLng,
         callbacks: {
-            onFeatureClick:  (id) => dispatch({ type: 'SET_SELECTED_FEATURE', id }),
-            onHotspotClick:  (id) => { dispatch({ type: 'SET_SHOW_SUGGESTION', value: false }); dispatch({ type: 'SET_SELECTED_HOTSPOT', id }); },
-            onDeselect:      ()   => { dispatch({ type: 'SET_SHOW_SUGGESTION', value: false }); dispatch({ type: 'SET_SELECTED_HOTSPOT', id: null }); dispatch({ type: 'SET_SELECTED_FEATURE', id: null }); },
-            onDragStart:     ()   => dispatch({ type: 'SET_SHOW_SUGGESTION', value: false }),
-            onZoomChange:    (z)  => setZoomWarning(z > 16.5),
-            onSetClickLabel: (l)  => setMapClickLabel(l),
-            onPASFindLog:    (msg) => addLog(msg),
-            onPASFindSelect: (f)  => setSelectedPASFind(f),
-            onCrossingsLog:  (msg) => addLog(msg),
+            onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
+            onHotspotClick:  (id)  => { setShowSuggestion(false); setSelectedHotspotId(id); },
+            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); },
+            onDragStart:     ()    => setShowSuggestion(false),
+            onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
+            onSetClickLabel: (l)   => setMapClickLabel(l),
+            onPASFindLog:    (msg) => addLog(msg, 'historic'),
+            onPASFindSelect: (f)   => setSelectedPASFind(f),
+            onCrossingsLog:  (msg) => addLog(msg, 'historic'),
         },
     });
 
-    // Simple Haversine distance in km
-    const getDistancePAS = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    };
-
-    useEffect(() => {
-        isMountedRef.current = true;
-        return () => { isMountedRef.current = false; };
-    }, []);
-
     // ─── Clear / Reset ────────────────────────────────────────────────────────
 
-    const clearScan = () => {
-        pasAbortRef.current?.abort();
-        scanAbortRef.current?.abort();
+    const clearScan = useCallback(() => {
+        cancelTerrain();
+        cancelHistoric();
         dispatch({ type: 'CLEAR_SCAN' });
+        setSelectedId(null);
+        setSelectedHotspotId(null);
+        setShowSuggestion(false);
+        setScanStatus('');
+        setSystemLog([makeLog('SYSTEM CLEARED. Ready for new scan.')]);
         setPasFinds([]);
         setPlaceSignals([]);
         setPotentialScore(null);
@@ -227,201 +200,146 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
         setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
         setMapClickLabel(null);
+        terrainScanCenterRef.current = null;
+        lastNhleRef.current = null;
+        lastAimRef.current  = null;
         clearMapSources();
+    }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
+
+    // ─── Map source helpers ───────────────────────────────────────────────────
+
+    const applyNhleToMap = (nhleData: NHLEResponse) => {
+        const src = mapRef.current?.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
+        if (src) src.setData(nhleData as unknown as GeoJSON.FeatureCollection);
     };
 
-    // ─── Heritage / PAS scan ──────────────────────────────────────────────────
+    const applyAimToMap = (aimData: AIMResponse) => {
+        if (!aimData.features?.length) return;
+        const src = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
+        if (src) src.setData(aimData as unknown as GeoJSON.FeatureCollection);
+    };
 
-    const loadPASFinds = async () => {
-        if (!mapRef.current) { addLog("ERROR: Map engine not initialized."); return; }
-        const map = mapRef.current;
-        const center = map.getCenter();
-        const zoom = map.getZoom();
+    // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
 
-        if (zoom < 10) { addLog("ZOOM IN: Historic scan works best at zoom 10+. Pan to your target area."); return; }
+    const runHistoricPhase = useCallback(async (
+        tClusters:     Cluster[],
+        mPoints:       [number, number][],
+        routes:        HistoricRoute[],
+        nhleData:      NHLEResponse | null,
+        aimData:       AIMResponse  | null,
+        scanCenter:    { lat: number; lng: number } | null,
+    ) => {
+        const result = await runHistoricScan({
+            mapRef,
+            terrainClusters:      tClusters,
+            terrainScanCenter:    scanCenter,
+            existingRoutes:       routes,
+            existingMonumentPoints: mPoints,
+            existingNhleData:     nhleData,
+            existingAimData:      aimData,
+            permissions,
+            fields,
+            targetPeriod,
+        });
 
-        const bounds = map.getBounds();
-        setLoadingPAS(true);
-        const pasSessionId = ++pasSessionIdRef.current;
-        dispatch({ type: 'SET_SCAN_STATUS', status: "Loading Historic Data..." });
-        addLog(`INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`);
+        if (!result) return;
 
-        const maxDelta = 0.045;
-        const latBuffer = 0.009;
-        const lonBuffer = 0.015;
-        const west  = Number(Math.max(center.lng - maxDelta, Math.min(bounds.getWest(),  center.lng - lonBuffer)).toFixed(6));
-        const south = Number(Math.max(center.lat - maxDelta, Math.min(bounds.getSouth(), center.lat - latBuffer)).toFixed(6));
-        const east  = Number(Math.min(center.lng + maxDelta, Math.max(bounds.getEast(),  center.lng + lonBuffer)).toFixed(6));
-        const north = Number(Math.min(center.lat + maxDelta, Math.max(bounds.getNorth(), center.lat + latBuffer)).toFixed(6));
+        // If fresh NHLE/AIM data was fetched (standalone mode), push to map
+        if (result.nhleData) applyNhleToMap(result.nhleData);
+        if (result.aimData)  applyAimToMap(result.aimData);
 
-        try {
-            pasAbortRef.current?.abort();
-            const pasAbort = new AbortController();
-            pasAbortRef.current = pasAbort;
-            const { signal: pasSignal } = pasAbort;
+        setPasFinds(result.pasFinds);
+        setPlaceSignals(result.placeSignals);
+        calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
-            addLog("STAGE: Fetching location, heritage, monuments and routes...");
-
-            const [geoData, etymData, osmData, nhleData, aimData, routeData] = await Promise.all([
-                fetchLocationLabel(center.lat, center.lng, pasSignal),
-                fetchEtymologySignals(south, west, north, east, pasSignal),
-                fetchHeritageFeatures(center.lat, center.lng, pasSignal),
-                fetchScheduledMonuments(west, south, east, north, pasSignal),
-                fetchAIMData(west, south, east, north, pasSignal),
-                historicRoutes.length === 0
-                    ? fetchHistoricRoutes(center.lat, center.lng, pasSignal)
-                    : Promise.resolve(null),
-            ]);
-
-            if (pasSessionId !== pasSessionIdRef.current || pasSignal.aborted || !isMountedRef.current) return;
-
-            if (!geoData)  addLog("LOCATION: Service unavailable.");
-            if (!etymData) addLog("ETYMOLOGY: Service unavailable.");
-            if (!osmData)  addLog("HERITAGE: Service unavailable.");
-
-            // 1. Location
-            if (geoData?.address) {
-                const parish = geoData.address.parish || geoData.address.village || geoData.address.town || "Unknown Parish";
-                const county = geoData.address.county || geoData.address.state_district || "Unknown County";
-                const fullGrid = toOSGridRef(center.lat, center.lng);
-                const parts = fullGrid.split(' ');
-                const fourFigure = parts.length === 3 ? `${parts[0]} ${parts[1].substring(0, 2)}${parts[2].substring(0, 2)}` : fullGrid;
-                addLog(`LOCATION: ${parish}, ${county} [${fourFigure}]`);
-            }
-
-            // 2. Etymology signals
-            let discoveredSignals: PlaceSignal[] = [];
-            if (etymData?.elements) {
-                const signals: PlaceSignal[] = [];
-                etymData.elements.forEach((el: OverpassElement) => {
-                    const name = el.tags?.name || "";
-                    if (!name) return;
-                    const lat = el.lat || el.center?.lat;
-                    const lon = el.lon || el.center?.lon;
-                    if (!lat || !lon) return;
-                    ETYMOLOGY_SIGNALS.forEach(sig => {
-                        if (name.toLowerCase().includes(sig.pattern.toLowerCase())) {
-                            const typeValue = el.tags?.historic || el.tags?.heritage || el.tags?.place || el.tags?.natural || el.tags?.landuse || el.tags?.standing_remains || "Location";
-                            signals.push({ name, meaning: sig.meaning, distance: getDistancePAS(center.lat, center.lng, lat, lon), period: sig.period, confidence: sig.confidence, type: String(typeValue) });
-                        }
-                    });
-                });
-                discoveredSignals = signals.sort((a, b) => b.confidence - a.confidence);
-                setPlaceSignals(discoveredSignals);
-                if (discoveredSignals.length > 0) addLog(`ETYMOLOGY: ${discoveredSignals.length} place-name signal${discoveredSignals.length !== 1 ? 's' : ''} detected.`);
-            }
-
-            // 3. OSM Heritage features
-            let mappedFinds: PASFind[] = [];
-            if (osmData?.elements) {
-                mappedFinds = osmData.elements.map((el: OverpassElement) => {
-                    const lat = el.lat || el.center?.lat;
-                    const lon = el.lon || el.center?.lon;
-                    if (!lat || !lon) return null;
-                    const type = el.tags?.historic || el.tags?.archaeological_site || el.tags?.heritage || el.tags?.standing_remains || el.tags?.site_type || "Heritage Site";
-                    const name = el.tags?.name;
-                    const dist = getDistancePAS(center.lat, center.lng, lat, lon);
-                    const inViewport = lat >= south && lat <= north && lon >= west && lon <= east;
-                    if (!inViewport && dist > 2) return null;
-                    const descriptiveType = name ? `${name} (${type})` : type;
-                    return { id: `OSM-${el.id}`, internalId: String(el.id), objectType: String(descriptiveType).charAt(0).toUpperCase() + String(descriptiveType).slice(1), broadperiod: el.tags?.period || "Unknown", county: "Local Area", workflow: "PAS" as const, lat, lon, isApprox: false, osmType: el.type };
-                }).filter((f: PASFind | null) => f !== null) as PASFind[];
-                setPasFinds(mappedFinds);
-                addLog(`HERITAGE: ${mappedFinds.length} OSM feature${mappedFinds.length !== 1 ? 's' : ''} found within 2km.`);
-            }
-
-            // 4. NHLE scheduled monuments
-            let mPoints: [number, number][] = [];
-            if (nhleData?.features?.length > 0) {
-                mPoints = nhleData.features.map(f => {
-                    if (f.geometry?.type === 'Point') return f.geometry.coordinates as [number, number];
-                    if (f.geometry?.type === 'Polygon') return (f.geometry.coordinates as number[][][])[0][0] as [number, number];
-                    if (f.geometry?.type === 'MultiPolygon') return (f.geometry.coordinates as number[][][][])[0][0][0] as [number, number];
-                    return [0, 0] as [number, number];
-                });
-                dispatch({ type: 'SET_MONUMENT_POINTS', points: mPoints });
-                dispatch({ type: 'SET_HERITAGE_COUNT', count: nhleData.features.length });
-                const mSrc = map.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
-                if (mSrc) mSrc.setData(nhleData as unknown as GeoJSON.FeatureCollection);
-                addLog(`NHLE: ${nhleData.features.length} scheduled monument${nhleData.features.length !== 1 ? 's' : ''} found.`);
-            } else {
-                addLog("NHLE: No scheduled monuments in this area.");
-            }
-
-            calculatePotentialScore(mappedFinds, mPoints, discoveredSignals, center.lat, center.lng);
-
-            // 5. AIM aerial archaeology
-            if (aimData?.features?.length > 0) {
-                const aimSrc = map.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
-                if (aimSrc) aimSrc.setData(aimData as unknown as GeoJSON.FeatureCollection);
-                addLog(`AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`);
-            }
-
-            // 6. Historic routes (only if not already loaded)
-            let fetchedRoutes: HistoricRoute[] = [];
-            if (routeData && routeData.elements && routeData.elements.length > 0) {
-                fetchedRoutes = routeData.elements
-                    .filter((el: OverpassElement) => el.geometry && el.geometry.length >= 2)
-                    .map((el: OverpassElement) => {
-                        const geom: [number, number][] = (el.geometry || []).map(g => [g.lon, g.lat] as [number, number]);
-                        const lons = geom.map(g => g[0]);
-                        const lats = geom.map(g => g[1]);
-                        return {
-                            id: `route-${el.id}`,
-                            type: (el.tags?.historic === 'roman_road' || el.tags?.roman_road === 'yes') ? 'roman_road' as const : 'historic_trackway' as const,
-                            source: 'osm' as const,
-                            confidenceClass: 'B' as const,
-                            certaintyScore: 70,
-                            geometry: geom,
-                            bbox: [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as [[number,number],[number,number]],
-                            period: el.tags?.historic === 'roman_road' ? 'roman' as const : 'unknown' as const
-                        };
-                    });
-                dispatch({ type: 'SET_HISTORIC_ROUTES', routes: fetchedRoutes });
-                if (fetchedRoutes.length > 0) addLog(`ROUTES: ${fetchedRoutes.length} historic route segment${fetchedRoutes.length !== 1 ? 's' : ''} found.`);
-            } else if (historicRoutes.length === 0) {
-                addLog("ROUTES: No historic routes found nearby.");
-            }
-
-            // ── Regenerate hotspots with historic context ──────────────────────
-            // Only runs if terrain scan has completed and user hasn't moved away.
-            if (pasSessionId === pasSessionIdRef.current && terrainClusters.length > 0) {
-                const scanCenter = terrainScanCenterRef.current;
-                const drifted = scanCenter
-                    ? (() => {
-                        const R = 6371000;
-                        const dLat = (center.lat - scanCenter.lat) * Math.PI / 180;
-                        const dLng = (center.lng - scanCenter.lng) * Math.PI / 180;
-                        const a = Math.sin(dLat / 2) ** 2 + Math.cos(scanCenter.lat * Math.PI / 180) * Math.cos(center.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-                        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) > 1000;
-                    })()
-                    : false;
-
-                if (!drifted) {
-                    addLog("Historic data integrated — refining targets...");
-                    const routesForHotspots = fetchedRoutes.length > 0 ? fetchedRoutes : historicRoutes;
-                    const enhancedHotspots = generateHotspots(terrainClusters, mappedFinds, mPoints, targetPeriod, permissions, fields, routesForHotspots);
-                    dispatch({ type: 'HISTORIC_ENHANCE', hotspots: enhancedHotspots });
-                    const sourceCount = mappedFinds.length + discoveredSignals.length + mPoints.length;
-                    addLog(`Historic scan complete — ${sourceCount} source${sourceCount !== 1 ? 's' : ''} integrated.`);
-                } else {
-                    addLog("HISTORIC: Map moved during scan — hotspot update skipped.");
-                }
-            }
-
-        } catch (e) {
-            if (pasSessionId === pasSessionIdRef.current) addLog("HERITAGE SCAN FAILED.");
-            console.error(e);
-        } finally {
-            // Always clear loading state — session guard only on reducer dispatch
-            setLoadingPAS(false);
-            if (pasSessionId === pasSessionIdRef.current) {
-                dispatch({ type: 'SET_SCAN_STATUS', status: "" });
-            }
+        if (!result.drifted && result.enhancedHotspots.length > 0) {
+            dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
         }
+    }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ─── Main terrain scan ────────────────────────────────────────────────────
+
+    const executeScan = async () => {
+        if (!mapRef.current || analyzing) return;
+
+        clearScan();
+        dispatch({ type: 'SCAN_START' });
+        addLog('> Engine Initiating (Fixed Z16)...', 'terrain');
+
+        const result = await runTerrainScan({ mapRef, permissions, fields, targetPeriod });
+
+        if (!result) {
+            dispatch({ type: 'SCAN_FAIL' });
+            return;
+        }
+
+        // Push NHLE and AIM data to map sources
+        applyNhleToMap(result.nhleData);
+        applyAimToMap(result.aimData);
+
+        // Store for auto historic phase (skip re-fetch)
+        lastNhleRef.current = result.nhleData;
+        lastAimRef.current  = result.aimData;
+
+        dispatch({
+            type: 'SCAN_SUCCESS',
+            features:       result.detectedFeatures,
+            hotspots:       result.hotspots,
+            monumentPoints: result.monumentPoints,
+            routes:         result.routes,
+            heritageCount:  result.heritageCount,
+        });
+
+        // First-scan auto-zoom to top hotspot
+        if (!hasScanned && result.hotspots.length > 0) {
+            setShowSuggestion(true);
+            setSelectedHotspotId(result.hotspots[0].id);
+            mapRef.current?.fitBounds(result.hotspots[0].bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
+            dispatch({ type: 'SET_HAS_SCANNED' });
+        }
+
+        terrainScanCenterRef.current = {
+            lat: mapRef.current!.getCenter().lat,
+            lng: mapRef.current!.getCenter().lng,
+        };
+
+        // Auto-trigger historic phase — passes terrain data through to skip re-fetch
+        await runHistoricPhase(
+            result.terrainClusters,
+            result.monumentPoints,
+            result.routes,
+            result.nhleData,
+            result.aimData,
+            terrainScanCenterRef.current,
+        );
     };
 
-    // ─── Scroll, intel, card-scroll effects ──────────────────────────────────
+    // ─── Standalone historic scan (Intel drawer / Historic button) ────────────
+
+    const loadStandaloneHistoric = useCallback(async () => {
+        if (!mapRef.current || isHistoricScanning) return;
+        // Standalone: no existing NHLE/AIM (re-fetch), but reuse any routes already loaded
+        await runHistoricPhase(
+            terrainClusters,
+            monumentPoints,
+            historicRoutes,
+            null,  // re-fetch NHLE
+            null,  // re-fetch AIM
+            terrainScanCenterRef.current,
+        );
+    }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase]);
+
+    // ─── Auto-trigger effects ─────────────────────────────────────────────────
+
+    useEffect(() => {
+        if (isIntelOpen && !isHistoricScanning) loadStandaloneHistoric();
+    }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (historicMode && !isHistoricScanning) loadStandaloneHistoric();
+    }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ─── Scroll on feature select ─────────────────────────────────────────────
 
     useEffect(() => {
         if (selectedId) {
@@ -430,18 +348,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         }
     }, [selectedId]);
 
-    useEffect(() => {
-        if (isIntelOpen && !loadingPAS) loadPASFinds();
-    }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useEffect(() => {
-        if (historicMode && !loadingPAS) loadPASFinds();
-    }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    useLayoutEffect(() => {
-        if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }, [systemLog]);
-
     // ─── GPS / search ─────────────────────────────────────────────────────────
 
     const findMe = () => {
@@ -449,8 +355,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setIsLocating(true);
         navigator.geolocation.getCurrentPosition(
             (pos) => { setIsLocating(false); mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 }); },
-            (err) => { setIsLocating(false); console.error("GPS Error:", err); },
-            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            (err) => { setIsLocating(false); console.error('GPS Error:', err); },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
         );
     };
 
@@ -458,231 +364,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         e.preventDefault();
         if (!searchQuery) return;
         try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+            const res  = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
             const data = await res.json();
             if (data[0]) { mapRef.current?.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 16 }); setIsSearchOpen(false); }
-        } catch { addLog("Search failed."); }
+        } catch { addLog('> Search failed.', 'system', 'warn'); }
     };
 
-    // ─── Main terrain scan ────────────────────────────────────────────────────
+    // ─── Derived convenience aliases ──────────────────────────────────────────
 
-    const executeScan = async () => {
-        if (!mapRef.current || analyzing) return;
-
-        const scanZoom = 16;
-        const bounds = mapRef.current.getBounds();
-        const n = Math.pow(2, scanZoom);
-        const center = mapRef.current.getCenter();
-        const cX = (center.lng + 180) / 360 * n;
-        const cY = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
-        const tX_start = Math.floor(cX) - 1;
-        const tY_start = Math.floor(cY) - 1;
-
-        clearScan();
-        scanAbortRef.current?.abort();
-        const scanAbort = new AbortController();
-        scanAbortRef.current = scanAbort;
-        const { signal: scanSignal } = scanAbort;
-        const sessionId = ++scanSessionIdRef.current;
-        const scanStart = Date.now();
-
-        dispatch({ type: 'SCAN_START' });
-        addLog(`Engine Initiating (Fixed Z${scanZoom})...`);
-
-        const qWest = bounds.getWest();
-        const qSouth = bounds.getSouth();
-        const qEast = bounds.getEast();
-        const qNorth = bounds.getNorth();
-
-        const herUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-
-        const herPromise = fetch(herUrl, { signal: scanSignal }).then(r => r.json()).catch(() => ({ features: [] }));
-        const routePromise = fetchScanRoutes(center.lat, center.lng, scanSignal);
-
-        dispatch({ type: 'SET_SCAN_STATUS', status: "Scanning Terrain..." });
-        const terrainTask = scanDataSource('terrain', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-        const terrainGlobalTask = scanDataSource('terrain_global', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-        const slopeTask = scanDataSource('slope', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-
-        dispatch({ type: 'SET_SCAN_STATUS', status: "Scanning Hydrology..." });
-        const hydroTask = scanDataSource('hydrology', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-
-        dispatch({ type: 'SET_SCAN_STATUS', status: "Spectral Sampling..." });
-        const springTask = scanDataSource('satellite_spring', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-        const summerTask = scanDataSource('satellite_summer', scanZoom, tX_start, tY_start, bounds, n, { features: [] });
-
-        try {
-            const [assetsGeoJSON, terrainHits, terrainGlobalHits, slopeHits, hydroHits, springHits, summerHits] = await Promise.all([herPromise, terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask]);
-
-            if (sessionId !== scanSessionIdRef.current || scanSignal.aborted || !isMountedRef.current) return;
-
-            dispatch({ type: 'SET_SCAN_STATUS', status: "Locking Coordinates..." });
-            dispatch({ type: 'SET_HERITAGE_COUNT', count: assetsGeoJSON.features?.length || 0 });
-            const mPoints: [number, number][] = (assetsGeoJSON.features || []).map((f: { geometry: { type: string; coordinates: number[] | number[][][] | number[][][][] } }) => {
-                if (f.geometry.type === 'Point') return f.geometry.coordinates as [number, number];
-                if (f.geometry.type === 'Polygon') return (f.geometry.coordinates as number[][][])[0][0] as [number, number];
-                if (f.geometry.type === 'MultiPolygon') return (f.geometry.coordinates as number[][][][])[0][0][0] as [number, number];
-                return [0, 0] as [number, number];
-            });
-            dispatch({ type: 'SET_MONUMENT_POINTS', points: mPoints });
-            if (mapRef.current?.getSource('monuments')) {
-                (mapRef.current.getSource('monuments') as maplibregl.GeoJSONSource).setData(assetsGeoJSON as GeoJSON.FeatureCollection);
-            }
-
-            dispatch({ type: 'SET_SCAN_STATUS', status: "Syncing Routes..." });
-            let routes: HistoricRoute[] = [];
-            try {
-                const timeoutPromise = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-                const rData = await Promise.race([routePromise, timeoutPromise]);
-
-                if (rData && rData.elements) {
-                    routes = rData.elements
-                        .filter((el: OverpassElement) => el.geometry && el.geometry.length >= 2)
-                        .map((el: OverpassElement) => {
-                            const geom = (el.geometry || []).map(g => [g.lon, g.lat] as [number, number]);
-                            const lons = geom.map(g => g[0]);
-                            const lats = geom.map(g => g[1]);
-                            return {
-                                id: `route-${el.id}`,
-                                type: (el.tags?.historic === 'roman_road' || el.tags?.roman_road === 'yes' || (el.tags?.name && el.tags.name.toLowerCase().includes('roman road'))) ? 'roman_road' as const :
-                                      el.tags?.holloway === 'yes' ? 'holloway' as const : 'historic_trackway' as const,
-                                source: 'osm' as const,
-                                confidenceClass: 'B' as const,
-                                certaintyScore: 70,
-                                geometry: geom,
-                                bbox: [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as [[number,number],[number,number]],
-                                period: (el.tags?.historic === 'roman_road' || el.tags?.roman_road === 'yes') ? 'roman' as const : 'unknown' as const
-                            };
-                        });
-                    dispatch({ type: 'SET_HISTORIC_ROUTES', routes });
-                } else { routes = []; }
-            } catch { addLog('Routes: service unavailable, continuing without.'); routes = []; }
-
-            dispatch({ type: 'SET_SCAN_STATUS', status: "Deep Signal Audit..." });
-            const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
-            let aimGeoJSON: { type: string; features: Array<{ geometry: { type: string; coordinates: unknown }; properties: { MONUMENT_TYPE?: string; PERIOD?: string; EVIDENCE_1?: string } }> } = { type: 'FeatureCollection', features: [] };
-            try {
-                const aRes = await fetch(aimUrl, { signal: scanSignal });
-                aimGeoJSON = await aRes.json();
-                const aimSrc = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
-                if (aimSrc && aimGeoJSON.features?.length > 0) {
-                    aimSrc.setData(aimGeoJSON as unknown as GeoJSON.FeatureCollection);
-                    addLog(`AIM: ${aimGeoJSON.features.length} aerial monument${aimGeoJSON.features.length !== 1 ? 's' : ''} mapped in this area.`);
-                }
-            } catch { addLog('AIM: service unavailable, continuing without.'); }
-            if (sessionId !== scanSessionIdRef.current || scanSignal.aborted || !isMountedRef.current) return;
-
-            const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
-            const merged = findConsensus(rawCombined);
-
-            const newScanResults = merged.map(c => {
-                for (const aim of aimGeoJSON.features) {
-                    const aimProps = aim.properties;
-                    const coords = aim.geometry?.coordinates;
-                    if (!coords) continue;
-                    let isMatch = false;
-                    if (aim.geometry.type === 'Polygon' || aim.geometry.type === 'MultiPolygon') {
-                        const rings = aim.geometry.type === 'Polygon' ? [coords as number[][][]] : coords as number[][][][];
-                        for (const ring of rings) {
-                            if (isPointInPolygon(c.center[1], c.center[0], ring as number[][][])) { isMatch = true; break; }
-                        }
-                    } else if (aim.geometry.type === 'Point' && getDistance(c.center, coords as [number, number]) < 50) isMatch = true;
-
-                    if (isMatch) {
-                        if (!c.sources.includes('historic')) c.sources.push('historic');
-                        c.aimInfo = { type: String(aimProps.MONUMENT_TYPE || ''), period: String(aimProps.PERIOD || ''), evidence: String(aimProps.EVIDENCE_1 || '') };
-                        c.confidence = 'High';
-                        c.findPotential = 96;
-                        break;
-                    }
-                }
-                return c;
-            });
-
-            const updatedFeatures: Cluster[] = [];
-            newScanResults.forEach(newHit => {
-                let anchored = false;
-                for (let i = 0; i < updatedFeatures.length; i++) {
-                    if (getDistance(newHit.center, updatedFeatures[i].center) < 15) {
-                        newHit.sources.forEach(s => { if (!updatedFeatures[i].sources.includes(s)) updatedFeatures[i].sources.push(s); });
-                        updatedFeatures[i].confidence = newHit.confidence === 'High' ? 'High' : updatedFeatures[i].confidence;
-                        anchored = true;
-                        break;
-                    }
-                }
-                if (!anchored) updatedFeatures.push(newHit);
-            });
-
-            // Mark clusters that fall inside scheduled monument (NHLE) boundaries.
-            // assetsGeoJSON was fetched in parallel so couldn't be passed to scanDataSource —
-            // apply the protection flag here instead.
-            for (const cluster of updatedFeatures) {
-                const [lon, lat] = cluster.center;
-                for (const asset of (assetsGeoJSON as { features: Array<{ geometry?: { type: string; coordinates: unknown }; properties?: { Name?: string } }> }).features) {
-                    if (!asset.geometry) continue;
-                    if (asset.geometry.type === 'Polygon') {
-                        if (isPointInPolygon(lat, lon, asset.geometry.coordinates as number[][][])) {
-                            cluster.isProtected = true;
-                            cluster.monumentName = asset.properties?.Name;
-                            break;
-                        }
-                    } else if (asset.geometry.type === 'MultiPolygon') {
-                        for (const poly of asset.geometry.coordinates as number[][][][]) {
-                            if (isPointInPolygon(lat, lon, poly)) {
-                                cluster.isProtected = true;
-                                cluster.monumentName = asset.properties?.Name;
-                                break;
-                            }
-                        }
-                        if (cluster.isProtected) break;
-                    }
-                }
-            }
-
-            const suppressed = suppressDisturbance(updatedFeatures);
-            const contextualized = analyzeContext(suppressed, routes)
-                .sort((a, b) => b.findPotential - a.findPotential)
-                .map((c, i) => ({ ...c, number: i + 1 }));
-
-            // Build scanContext from locally-fetched data so hotspot/scoring
-            // calculations never depend on potentially-stale React state.
-            const scanContext = { center, mPoints, routes, permissions, fields };
-            const tacticalHotspots = generateHotspots(contextualized, pasFinds, scanContext.mPoints, targetPeriod, scanContext.permissions, scanContext.fields, scanContext.routes);
-
-            if (sessionId !== scanSessionIdRef.current || !isMountedRef.current) return;
-            terrainScanCenterRef.current = { lat: center.lat, lng: center.lng };
-            dispatch({ type: 'SCAN_SUCCESS', features: contextualized, hotspots: tacticalHotspots });
-
-            if (!hasScanned && tacticalHotspots.length > 0) {
-                dispatch({ type: 'SET_HAS_SCANNED' });
-                dispatch({ type: 'SET_SHOW_SUGGESTION', value: true });
-                dispatch({ type: 'SET_SELECTED_HOTSPOT', id: tacticalHotspots[0].id });
-                mapRef.current?.fitBounds(tacticalHotspots[0].bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
-            }
-            const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
-            addLog(`Terrain scan complete in ${duration}s — ${contextualized.length} signal${contextualized.length !== 1 ? 's' : ''} detected, ${tacticalHotspots.length} target${tacticalHotspots.length !== 1 ? 's' : ''} identified.`);
-
-            // Automatically kick off the historic phase to enhance hotspots
-            loadPASFinds();
-        } catch (e) {
-            if (sessionId !== scanSessionIdRef.current) return;
-            addLog("Engine error — scan could not complete."); console.error(e);
-            if (isMountedRef.current) dispatch({ type: 'SCAN_FAIL' });
-        }
-    };
-
-    // ─── Inline helper (used in executeScan) ─────────────────────────────────
-
-    function isPointInPolygon(lat: number, lon: number, rings: number[][][]): boolean {
-        let inside = false;
-        for (const ring of rings) {
-            for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-                const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
-                if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
-            }
-        }
-        return inside;
-    }
+    // loadingPAS used in JSX — maps to historic scan in-progress flag
+    const loadingPAS = isHistoricScanning;
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -759,8 +450,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50">
                             {isLocating ? '...' : 'GPS'}
                         </button>
-                        <button onClick={executeScan} disabled={analyzing} title="Scan area locked to Z16 for precision" className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
-                            {analyzing ? '...' : 'Scan'}
+                        <button onClick={executeScan} disabled={analyzing || isTerrainScanning} title="Scan area locked to Z16 for precision" className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
+                            {analyzing || isTerrainScanning ? '...' : 'Scan'}
                         </button>
                     </div>
                 </div>
@@ -808,7 +499,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 ⚠️ MAX SCAN ZOOM
                             </div>
                         )}
-                        {analyzing && (
+                        {(analyzing || isTerrainScanning) && (
                             <div className="bg-slate-900/90 text-emerald-400 px-6 py-3 rounded-2xl text-[10px] font-black tracking-[0.2em] uppercase shadow-2xl border border-emerald-500/50 animate-pulse flex items-center gap-3 backdrop-blur-xl">
                                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
                                 {scanStatus || 'Scanning Terrain...'}
@@ -828,8 +519,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <button
                                         key={h.id}
                                         onClick={() => {
-                                            dispatch({ type: 'SET_SHOW_SUGGESTION', value: false });
-                                            dispatch({ type: 'SET_SELECTED_HOTSPOT', id: h.id === selectedHotspotId ? null : h.id });
+                                            setShowSuggestion(false);
+                                            setSelectedHotspotId(h.id === selectedHotspotId ? null : h.id);
                                             if (h.id !== selectedHotspotId) mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                         }}
                                         className={`w-14 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 flex-shrink-0 ${selectedHotspotId === h.id ? 'bg-emerald-500 border-white text-white shadow-[0_0_20px_rgba(16,185,129,0.5)]' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
@@ -863,7 +554,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <div className="flex items-center gap-4">
                                             {showSuggestion && <span className="text-emerald-400 text-[10px] font-black animate-pulse tracking-widest">DETECT HERE</span>}
                                             <span className="text-xl font-black text-white/90">{h.score}%</span>
-                                            <button onClick={() => dispatch({ type: 'SET_SELECTED_HOTSPOT', id: null })} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
+                                            <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                             </button>
                                         </div>
@@ -905,7 +596,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <div className="w-6 h-6 bg-black/20 rounded-lg flex items-center justify-center text-[10px] font-black">{f.number}</div>
                                             <h3 className="text-xs font-black uppercase tracking-tight">{f.type}</h3>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); dispatch({ type: 'SET_SELECTED_FEATURE', id: null }); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
+                                        <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                         </button>
                                     </div>
@@ -1124,7 +815,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <div className="w-1 h-3 bg-blue-500" /> Historic Period Profile
                                         </h3>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || "Unknown"; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
+                                            {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
                                                 <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
                                                     <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
                                                     <span className="text-sm font-black text-blue-400">{count}</span>
@@ -1285,15 +976,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </span>
                                 )}
                             </div>
-                            {selectedHotspotId && <button onClick={() => dispatch({ type: 'SET_SELECTED_HOTSPOT', id: null })} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
+                            {selectedHotspotId && <button onClick={() => setSelectedHotspotId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
                         </div>
                         <div className="flex flex-col gap-4">
                             {hotspots.length > 0 ? hotspots.map(h => (
                                 <div
                                     key={h.id}
                                     onClick={() => {
-                                        dispatch({ type: 'SET_SHOW_SUGGESTION', value: false });
-                                        dispatch({ type: 'SET_SELECTED_HOTSPOT', id: h.id });
+                                        setShowSuggestion(false);
+                                        setSelectedHotspotId(h.id);
                                         mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                     }}
                                     className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : h.score >= 80 ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : h.score >= 45 ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
@@ -1338,7 +1029,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <h2 className="text-sm font-black text-white uppercase tracking-tighter">Site Report</h2>
                             <p className="text-[10px] text-slate-500 font-bold uppercase">{detectedFeatures.length} Signals Locked</p>
                         </div>
-                        {selectedId && <button onClick={() => dispatch({ type: 'SET_SELECTED_FEATURE', id: null })} className="text-[10px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Reset</button>}
+                        {selectedId && <button onClick={() => setSelectedId(null)} className="text-[10px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Reset</button>}
                     </div>
 
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 scrollbar-hide space-y-4">
@@ -1346,7 +1037,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <div
                                 key={f.id}
                                 id={`card-${f.id}`}
-                                onClick={() => { dispatch({ type: 'SET_SELECTED_FEATURE', id: f.id }); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
                                 className={`p-5 rounded-2xl cursor-pointer transition-all border ${selectedId === f.id ? (f.sources.length >= 3 ? 'bg-amber-600 border-white shadow-[0_0_25px_rgba(217,119,6,0.6)]' : f.sources.includes('hydrology') ? 'bg-blue-600 border-white shadow-[0_0_25px_rgba(37,99,235,0.5)]' : f.source === 'terrain' ? 'bg-emerald-500 border-white shadow-[0_0_25px_rgba(16,185,129,0.5)]' : f.source === 'historic' ? 'bg-slate-700 border-white shadow-[0_0_25px_rgba(255,255,255,0.2)]' : 'bg-sky-500 border-white shadow-[0_0_25px_rgba(59,130,246,0.5)]') : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
                             >
                                 <div className="flex justify-between items-center mb-3">
@@ -1393,9 +1084,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         ))}
                     </div>
 
+                    {/* System Log */}
                     <div className="h-24 bg-black/40 border-t border-white/5 p-4 overflow-y-auto shrink-0" ref={logContainerRef}>
-                        <div className="font-mono text-[9px] text-emerald-500/70 leading-relaxed uppercase tracking-tighter">
-                            {systemLog.map((l, i) => <div key={i} className="mb-1">{l}</div>)}
+                        <div className="font-mono text-[9px] leading-relaxed uppercase tracking-tighter">
+                            {systemLog.map((l, i) => (
+                                <div
+                                    key={i}
+                                    className={`mb-1 ${l.level === 'error' ? 'text-red-400/80' : l.level === 'warn' ? 'text-amber-400/80' : l.source === 'historic' ? 'text-blue-400/70' : 'text-emerald-500/70'}`}
+                                >
+                                    {l.message}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>

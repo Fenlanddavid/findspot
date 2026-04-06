@@ -210,6 +210,32 @@ export async function fetchHistoricRoutes(
 }
 
 /**
+ * Parse raw Overpass way elements into typed HistoricRoute objects.
+ * Used by both terrain and historic scan to avoid duplicated parsing logic.
+ */
+export function parseOverpassRoutes(elements: OverpassElement[]): import('../pages/fieldGuideTypes').HistoricRoute[] {
+    return elements
+        .filter(el => el.geometry && el.geometry.length >= 2)
+        .map(el => {
+            const geom: [number, number][] = (el.geometry || []).map(g => [g.lon, g.lat]);
+            const lons = geom.map(g => g[0]);
+            const lats = geom.map(g => g[1]);
+            const isRoman = el.tags?.historic === 'roman_road' || el.tags?.roman_road === 'yes' ||
+                !!(el.tags?.name && el.tags.name.toLowerCase().includes('roman road'));
+            return {
+                id:              `route-${el.id}`,
+                type:            isRoman ? 'roman_road' as const : el.tags?.holloway === 'yes' ? 'holloway' as const : 'historic_trackway' as const,
+                source:          'osm' as const,
+                confidenceClass: 'B' as const,
+                certaintyScore:  70,
+                geometry:        geom,
+                bbox:            [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as [[number,number],[number,number]],
+                period:          isRoman ? 'roman' as const : 'unknown' as const,
+            };
+        });
+}
+
+/**
  * Overpass query for historic routes used during executeScan (wider search, 1km radius).
  */
 export async function fetchScanRoutes(

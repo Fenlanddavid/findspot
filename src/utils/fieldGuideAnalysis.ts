@@ -1,8 +1,104 @@
 // ─── Pure analysis functions: consensus merging, context analysis,
-//     disturbance suppression, hotspot generation ────────────────────────────
-// Moved verbatim from FieldGuide.tsx — logic is intentionally unchanged.
+//     disturbance suppression, hotspot generation, asset enrichment ──────────
 
 import { Cluster, Hotspot, PASFind, HistoricRoute } from '../pages/fieldGuideTypes';
+
+// ─── Polygon hit test (used by NHLE protection and AIM enrichment) ────────────
+
+export function isPointInPolygon(lat: number, lon: number, rings: number[][][]): boolean {
+    let inside = false;
+    for (const ring of rings) {
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+            if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+        }
+    }
+    return inside;
+}
+
+// ─── Kilometre-scale distance (for historic scan proximity checks) ────────────
+
+export function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── NHLE protection marking ──────────────────────────────────────────────────
+// Marks clusters that fall inside a Scheduled Monument boundary as protected.
+// Must run after all terrain tiles have resolved (assetsGeoJSON is fetched in parallel).
+
+type NHLELike = {
+    features: Array<{ geometry?: { type: string; coordinates: unknown }; properties?: { Name?: string } }>;
+};
+
+export function applyNHLEProtection(clusters: Cluster[], nhleData: NHLELike): Cluster[] {
+    for (const cluster of clusters) {
+        const [lon, lat] = cluster.center;
+        for (const asset of nhleData.features) {
+            if (!asset.geometry) continue;
+            if (asset.geometry.type === 'Polygon') {
+                if (isPointInPolygon(lat, lon, asset.geometry.coordinates as number[][][])) {
+                    cluster.isProtected = true;
+                    cluster.monumentName = asset.properties?.Name;
+                    break;
+                }
+            } else if (asset.geometry.type === 'MultiPolygon') {
+                for (const poly of asset.geometry.coordinates as number[][][][]) {
+                    if (isPointInPolygon(lat, lon, poly)) {
+                        cluster.isProtected = true;
+                        cluster.monumentName = asset.properties?.Name;
+                        break;
+                    }
+                }
+                if (cluster.isProtected) break;
+            }
+        }
+    }
+    return clusters;
+}
+
+// ─── AIM aerial archaeology enrichment ───────────────────────────────────────
+// Tags clusters that fall within AIM monument polygons with aimInfo metadata.
+
+type AIMLike = {
+    features: Array<{
+        geometry?: { type: string; coordinates: unknown };
+        properties?: { MONUMENT_TYPE?: string; PERIOD?: string; EVIDENCE_1?: string };
+    }>;
+};
+
+export function applyAIMEnrichment(clusters: Cluster[], aimData: AIMLike): Cluster[] {
+    return clusters.map(c => {
+        for (const aim of aimData.features) {
+            const coords = aim.geometry?.coordinates;
+            if (!coords) continue;
+            let isMatch = false;
+            if (aim.geometry!.type === 'Polygon' || aim.geometry!.type === 'MultiPolygon') {
+                const rings = aim.geometry!.type === 'Polygon' ? [coords as number[][][]] : coords as number[][][][];
+                for (const ring of rings) {
+                    if (isPointInPolygon(c.center[1], c.center[0], ring as number[][][])) { isMatch = true; break; }
+                }
+            } else if (aim.geometry!.type === 'Point' && getDistance(c.center, coords as [number, number]) < 50) {
+                isMatch = true;
+            }
+            if (isMatch) {
+                if (!c.sources.includes('historic')) c.sources.push('historic');
+                c.aimInfo = {
+                    type:     String(aim.properties?.MONUMENT_TYPE || ''),
+                    period:   String(aim.properties?.PERIOD || ''),
+                    evidence: String(aim.properties?.EVIDENCE_1 || ''),
+                };
+                c.confidence   = 'High';
+                c.findPotential = 96;
+                break;
+            }
+        }
+        return c;
+    });
+}
 
 // ─── Distance helpers ─────────────────────────────────────────────────────────
 
