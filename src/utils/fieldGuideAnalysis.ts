@@ -341,9 +341,22 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
                 Math.abs((c.bearing || 0) - (n.bearing || 0)) < 3 &&
                 n.metrics.ratio > 3.0,
             );
-            if (ridgeFurrowNeighbors.length >= 3) {
+            if (ridgeFurrowNeighbors.length >= 2) {
                 risk   = 'High';
                 reason = "Ridge-and-Furrow Pattern (Agricultural)";
+            }
+        }
+
+        // Thin-line downgrade: very narrow high-ratio features are likely noise
+        // (faint plough scars, hedgerow shadows) — flag as Medium disturbance risk.
+        if (risk === 'Low' && c.metrics!.ratio > 5.0 && c.metrics!.density < 0.25) {
+            const minAxis = Math.min(
+                (c.maxX ?? 0) - (c.minX ?? 0) + 1,
+                (c.maxY ?? 0) - (c.minY ?? 0) + 1,
+            );
+            if (minAxis < 5) {
+                risk   = 'Medium';
+                reason = "Thin Linear (Possible Noise or Modern Feature)";
             }
         }
 

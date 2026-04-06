@@ -222,7 +222,7 @@ export async function scanDataSource(
             for (let x = 15; x < stitchSize - 15; x++) {
                 const val = tierRidgeMap[y*stitchSize + x];
                 const isSlopeIntensity = sourceType === 'slope' && processed[y*stitchSize + x] < 0.4;
-                const isHydrology = sourceType === 'hydrology' && tierLapMap[y*stitchSize + x] > 0.12;
+                const isHydrology = sourceType === 'hydrology' && tierLapMap[y*stitchSize + x] > 0.16;
 
                 if (val > threshold || isSlopeIntensity || isHydrology) {
                     for (let dy = -tier.dilation; dy <= tier.dilation; dy++) {
@@ -255,6 +255,7 @@ export async function scanDataSource(
                     const w = (cluster.maxX - cluster.minX) + 1, h = (cluster.maxY - cluster.minY) + 1;
                     const areaPx = cluster.points.length, dens = areaPx / (w * h);
                     const ratio = Math.max(w/h, h/w);
+                    const minAxis = Math.min(w, h);
 
                     if (areaPx > tier.minSize && (sourceType.startsWith('terrain') || sourceType === 'slope' || sourceType === 'hydrology' || (dens > (config.minSolidity ?? 0.32)) || (ratio > (config.minLinearity ?? 4.2)))) {
                         let sumX = 0, sumY = 0;
@@ -315,18 +316,31 @@ export async function scanDataSource(
                             for (const p of cluster.points) { if (p.x >= centerBox.minX && p.x <= centerBox.maxX && p.y >= centerBox.minY && p.y <= centerBox.maxY) centerPixels++; }
                             const isHollow = centerPixels / (areaPx * 0.25) < 0.35 && areaPx > 100;
 
-                            if (isHollow && circularity > 0.45) cluster.type = "Ring Feature (Possible Ditch or Enclosure)";
-                            else if (isHollow) cluster.type = "Enclosure Signal (Possible Earthwork)";
-                            else if (sourceType === 'hydrology' && ratio > 3.5 && cluster.polarity === 'Sunken') cluster.type = "Palaeochannel (Ancient Watercourse)";
+                            // Edge suppression: skip tiny clusters near tile edges; penalise larger ones
+                            const edgeMargin = 18;
+                            const nearEdge = cluster.minX < edgeMargin || cluster.maxX > stitchSize - edgeMargin ||
+                                             cluster.minY < edgeMargin || cluster.maxY > stitchSize - edgeMargin;
+                            if (nearEdge && areaPx < 150) continue;
+
+                            if (isHollow && circularity > 0.55 && areaPx > 150) cluster.type = "Ring Feature (Possible Ditch or Enclosure)";
+                            else if (isHollow && areaPx > 80) cluster.type = "Enclosure Signal (Possible Earthwork)";
+                            else if (sourceType === 'hydrology' && ratio > 3.5 && cluster.polarity === 'Sunken' && minAxis >= 8) cluster.type = "Palaeochannel (Ancient Watercourse)";
                             else if (sourceType.startsWith('satellite_')) cluster.type = "Vegetation Stress Signal";
-                            else if (ratio > 6.0) cluster.type = "Movement Signal (Possible Trackway)";
+                            else if (ratio > 6.0 && minAxis >= 4) cluster.type = "Movement Signal (Possible Trackway)";
                             else if (ratio > 3.0) cluster.type = "Linear Feature (Ditch or Bank Signal)";
-                            else if (dens > 0.7 && ratio < 1.4) cluster.type = "Structural Signal (Possible Building Remains)";
-                            else if (circularity > 0.65 && dens > 0.5) cluster.type = "Circular Feature (Possible Structure or Mound)";
+                            else if (dens > 0.75 && ratio < 1.4 && areaPx > 80) cluster.type = "Structural Signal (Possible Building Remains)";
+                            else if (circularity > 0.72 && dens > 0.55 && areaPx > 60) cluster.type = "Circular Feature (Possible Structure or Mound)";
                             else if (areaPx > 400) cluster.type = "Complex Earthwork Signal";
                             else cluster.type = "Subsurface Anomaly (Unclassified)";
 
-                            const confidenceVal = (dens * 0.3) + (circularity * 0.3) + (Math.min(areaPx/600, 1) * 0.4);
+                            let confidenceVal = (dens * 0.3) + (circularity * 0.3) + (Math.min(areaPx/600, 1) * 0.4);
+                            // Source-specific confidence adjustments
+                            if (sourceType === 'terrain' || sourceType === 'terrain_global') confidenceVal = Math.min(1, confidenceVal + 0.05);
+                            else if (sourceType === 'hydrology') confidenceVal = Math.min(1, confidenceVal + 0.03);
+                            else if (sourceType.startsWith('satellite_')) confidenceVal = Math.max(0, confidenceVal - 0.05);
+                            else if (sourceType === 'slope') confidenceVal = Math.max(0, confidenceVal - 0.03);
+                            if (nearEdge) confidenceVal = Math.max(0, confidenceVal - 0.08);
+
                             cluster.confidence = confidenceVal > 0.6 ? 'High' : (confidenceVal > 0.35 ? 'Medium' : 'Subtle');
                             cluster.findPotential = Math.min(96, Math.round((confidenceVal * 100)));
                             cluster.metrics = { circularity, density: dens, ratio, area: areaPx };

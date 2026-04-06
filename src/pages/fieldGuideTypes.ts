@@ -139,17 +139,17 @@ export const SCAN_PROFILE = {
     },
     HYDROLOGY: {
         threshold: 0.22,
-        minSize: 500,
+        minSize: 650,
         dilation: 2,
         minSolidity: 0.10,
         minLinearity: 5.5
     },
     AERIAL: {
         threshold: 0.22,
-        minSize: 120,
+        minSize: 160,
         dilation: 3,
-        minSolidity: 0.30,
-        minLinearity: 4.0
+        minSolidity: 0.36,
+        minLinearity: 4.5
     },
     HISTORIC: {
         threshold: 0.10,
