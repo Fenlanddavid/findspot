@@ -6,7 +6,6 @@ import { toOSGridRef } from '../services/gps';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
-import { getCached, setCached } from '../utils/scanCache';
 
 import {
     Cluster, PASFind, PlaceSignal, HistoricRoute, Hotspot,
@@ -414,48 +413,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const bounds = mapRef.current.getBounds();
         const n = Math.pow(2, scanZoom);
         const center = mapRef.current.getCenter();
-
         const cX = (center.lng + 180) / 360 * n;
         const cY = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
         const tX_start = Math.floor(cX) - 1;
         const tY_start = Math.floor(cY) - 1;
-
-        // ── Cache check — skip image processing if we have a recent result ──────
-        const cached = getCached(center.lat, center.lng, scanZoom);
-        if (cached) {
-            clearScan();
-            dispatch({ type: 'SCAN_START' });
-            addLog('Cache hit — reusing recent scan. Refreshing context data...');
-            try {
-                const qWestC = bounds.getWest(), qSouthC = bounds.getSouth(), qEastC = bounds.getEast(), qNorthC = bounds.getNorth();
-                const herUrlC = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWestC},${qSouthC},${qEastC},${qNorthC}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-                const assetsC = await fetch(herUrlC).then(r => r.json()).catch(() => ({ features: [] }));
-                const mPointsC: [number, number][] = (assetsC.features || []).map((f: { geometry: { type: string; coordinates: unknown } }) => {
-                    if (f.geometry.type === 'Point') return f.geometry.coordinates as [number, number];
-                    if (f.geometry.type === 'Polygon') return (f.geometry.coordinates as number[][][])[0][0] as [number, number];
-                    if (f.geometry.type === 'MultiPolygon') return (f.geometry.coordinates as number[][][][])[0][0][0] as [number, number];
-                    return [0, 0] as [number, number];
-                });
-                dispatch({ type: 'SET_MONUMENT_POINTS', points: mPointsC });
-                dispatch({ type: 'SET_HERITAGE_COUNT', count: assetsC.features?.length || 0 });
-                if (mapRef.current?.getSource('monuments')) {
-                    (mapRef.current.getSource('monuments') as maplibregl.GeoJSONSource).setData(assetsC as GeoJSON.FeatureCollection);
-                }
-                const tacticalCached = generateHotspots(cached, pasFinds, mPointsC, targetPeriod, permissions, fields, historicRoutes);
-                dispatch({ type: 'SCAN_SUCCESS', features: cached, hotspots: tacticalCached });
-                if (!hasScanned && tacticalCached.length > 0) {
-                    dispatch({ type: 'SET_HAS_SCANNED' });
-                    dispatch({ type: 'SET_SHOW_SUGGESTION', value: true });
-                    dispatch({ type: 'SET_SELECTED_HOTSPOT', id: tacticalCached[0].id });
-                    mapRef.current?.fitBounds(tacticalCached[0].bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
-                }
-                addLog(`Scan Complete (cached). ${tacticalCached.length} Hotspots identified.`);
-            } catch (e) {
-                addLog('Cache replay failed — running full scan.');
-                // fall through to full scan below
-            }
-            if (isMountedRef.current && !analyzing) return;
-        }
 
         clearScan();
         scanAbortRef.current?.abort();
@@ -621,7 +582,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
             const tacticalHotspots = generateHotspots(contextualized, pasFinds, mPoints, targetPeriod, permissions, fields, routes);
-            setCached(center.lat, center.lng, scanZoom, contextualized);
             dispatch({ type: 'SCAN_SUCCESS', features: contextualized, hotspots: tacticalHotspots });
 
             if (!hasScanned && tacticalHotspots.length > 0) {
