@@ -51,15 +51,12 @@ export default function AllFinds(props: { projectId: string }) {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const lastPos = useRef<{ center: [number, number]; zoom: number } | null>(null);
   const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
-  const [showLidar, setShowLidar] = useState(false);
-
   useEffect(() => {
     db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
-    db.settings.get("searchShowLidar").then(s => s && setShowLidar(!!s.value));
   }, []);
 
   // Create/destroy the map only when entering/leaving map view.
-  // Style and LIDAR are toggled in a separate effect to preserve pan/zoom state.
+  // Style is toggled in a separate effect to preserve pan/zoom state.
   useEffect(() => {
     if (viewMode !== 'map' || !mapDivRef.current) return;
 
@@ -73,12 +70,10 @@ export default function AllFinds(props: { projectId: string }) {
         sources: {
           osm: { type: "raster", tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256 },
           satellite: { type: "raster", tiles: ["https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"], tileSize: 256 },
-          lidar: { type: "raster", tiles: ["https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}"], tileSize: 256 },
         },
         layers: [
           { id: "osm-layer", type: "raster", source: "osm", layout: { visibility: "visible" } },
           { id: "satellite-layer", type: "raster", source: "satellite", layout: { visibility: "none" } },
-          { id: "lidar-layer", type: "raster", source: "lidar", layout: { visibility: "none" }, paint: { "raster-contrast": 0.2, "raster-opacity": 0.6 } },
         ],
       } as any,
       center,
@@ -103,6 +98,8 @@ export default function AllFinds(props: { projectId: string }) {
         map.on('click', 'finds-points', (e) => {
             if (e.features?.[0]) setOpenFindId(e.features[0].properties?.id);
         });
+        map.on('mouseenter', 'finds-points', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'finds-points', () => { map.getCanvas().style.cursor = ''; });
     });
 
     mapRef.current = map;
@@ -114,18 +111,9 @@ export default function AllFinds(props: { projectId: string }) {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     const isStreets = mapStyleMode === "streets";
-    map.setLayoutProperty("osm-layer", "visibility", isStreets && !showLidar ? "visible" : "none");
-    map.setLayoutProperty("satellite-layer", "visibility", !isStreets && !showLidar ? "visible" : "none");
-    map.setLayoutProperty("lidar-layer", "visibility", showLidar ? "visible" : "none");
-    // Show the base map underneath LiDAR at reduced opacity
-    if (showLidar) {
-      map.setLayoutProperty(isStreets ? "osm-layer" : "satellite-layer", "visibility", "visible");
-      map.setPaintProperty(isStreets ? "osm-layer" : "satellite-layer", "raster-opacity", 0.4);
-    } else {
-      map.setPaintProperty("osm-layer", "raster-opacity", 1.0);
-      map.setPaintProperty("satellite-layer", "raster-opacity", 1.0);
-    }
-  }, [mapStyleMode, showLidar]);
+    map.setLayoutProperty("osm-layer", "visibility", isStreets ? "visible" : "none");
+    map.setLayoutProperty("satellite-layer", "visibility", !isStreets ? "visible" : "none");
+  }, [mapStyleMode]);
 
   useEffect(() => {
     if (mapRef.current && mapRef.current.getSource('finds') && finds) {
@@ -143,14 +131,34 @@ export default function AllFinds(props: { projectId: string }) {
 
   // --- RENDER HELPERS ---
   const findIds = useMemo(() => finds?.map(s => s.id) ?? [], [finds]);
+
+  // Stats are computed from all finds (ignoring type/period/material filters) so the counts stay stable as filter shortcuts
+  const allFindsForStats = useLiveQuery(
+    async () => {
+      let results = await db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
+      return results.filter(s => {
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          return (s.objectType || "").toLowerCase().includes(q) ||
+                 (s.findCode || "").toLowerCase().includes(q) ||
+                 (s.notes || "").toLowerCase().includes(q) ||
+                 (s.period || "").toLowerCase().includes(q) ||
+                 (s.material || "").toLowerCase().includes(q) ||
+                 (s.coinType || "").toLowerCase().includes(q);
+        }
+        return true;
+      });
+    },
+    [props.projectId, searchQuery]
+  );
   const stats = useMemo(() => {
-    if (!finds) return null;
+    if (!allFindsForStats) return null;
     return {
-      total: finds.length,
-      coins: finds.filter(f => f.objectType.toLowerCase().includes("coin")).length,
-      roman: finds.filter(f => f.period === "Roman").length,
+      total: allFindsForStats.length,
+      coins: allFindsForStats.filter(f => f.objectType.toLowerCase().includes("coin")).length,
+      roman: allFindsForStats.filter(f => f.period === "Roman").length,
     };
-  }, [finds]);
+  }, [allFindsForStats]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
@@ -186,18 +194,27 @@ export default function AllFinds(props: { projectId: string }) {
 
       {stats && stats.total > 0 && (
         <div className="flex gap-3 mb-4 flex-wrap">
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
-            <div className="text-lg font-black text-gray-800 dark:text-gray-100">{stats.total}</div>
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Finds</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
-            <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">{stats.coins}</div>
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Coins</div>
-          </div>
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2 text-center shadow-sm">
-            <div className="text-lg font-black text-amber-600 dark:text-amber-400">{stats.roman}</div>
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Roman</div>
-          </div>
+          <button
+            onClick={() => { const p = new URLSearchParams(searchParams); p.delete('type'); p.delete('period'); setSearchParams(p); }}
+            className={`rounded-xl px-4 py-2 text-center shadow-sm border transition-colors ${!filterType && !filterPeriod ? 'bg-gray-800 dark:bg-gray-100 border-gray-700 dark:border-gray-300' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}
+          >
+            <div className={`text-lg font-black ${!filterType && !filterPeriod ? 'text-white dark:text-gray-800' : 'text-gray-800 dark:text-gray-100'}`}>{stats.total}</div>
+            <div className={`text-[9px] font-black uppercase tracking-widest ${!filterType && !filterPeriod ? 'text-gray-300 dark:text-gray-500' : 'text-gray-400'}`}>Finds</div>
+          </button>
+          <button
+            onClick={() => { const p = new URLSearchParams(searchParams); if (filterType === 'coin') { p.delete('type'); } else { p.set('type', 'coin'); p.delete('period'); } setSearchParams(p); }}
+            className={`rounded-xl px-4 py-2 text-center shadow-sm border transition-colors ${filterType === 'coin' ? 'bg-emerald-600 border-emerald-500' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700'}`}
+          >
+            <div className={`text-lg font-black ${filterType === 'coin' ? 'text-white' : 'text-emerald-600 dark:text-emerald-400'}`}>{stats.coins}</div>
+            <div className={`text-[9px] font-black uppercase tracking-widest ${filterType === 'coin' ? 'text-emerald-100' : 'text-gray-400'}`}>Coins</div>
+          </button>
+          <button
+            onClick={() => { const p = new URLSearchParams(searchParams); if (filterPeriod === 'Roman') { p.delete('period'); } else { p.set('period', 'Roman'); p.delete('type'); } setSearchParams(p); }}
+            className={`rounded-xl px-4 py-2 text-center shadow-sm border transition-colors ${filterPeriod === 'Roman' ? 'bg-amber-500 border-amber-400' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-700'}`}
+          >
+            <div className={`text-lg font-black ${filterPeriod === 'Roman' ? 'text-white' : 'text-amber-600 dark:text-amber-400'}`}>{stats.roman}</div>
+            <div className={`text-[9px] font-black uppercase tracking-widest ${filterPeriod === 'Roman' ? 'text-amber-100' : 'text-gray-400'}`}>Roman</div>
+          </button>
         </div>
       )}
 
@@ -228,9 +245,6 @@ export default function AllFinds(props: { projectId: string }) {
             <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
                 <button onClick={() => { const m = mapStyleMode === 'streets' ? 'satellite' : 'streets'; setMapStyleMode(m); db.settings.put({ key: "searchMapStyle", value: m }); }} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest">
                     {mapStyleMode === 'streets' ? 'Satellite' : 'Streets'}
-                </button>
-                <button onClick={() => { const l = !showLidar; setShowLidar(l); db.settings.put({ key: "searchShowLidar", value: l }); }} className={`px-4 py-2 rounded-xl shadow-lg border text-[10px] font-black uppercase tracking-widest transition-colors ${showLidar ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'}`}>
-                    LIDAR {showLidar ? 'ON' : 'OFF'}
                 </button>
             </div>
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase tracking-widest border border-white/10">
