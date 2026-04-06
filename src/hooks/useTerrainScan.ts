@@ -13,13 +13,27 @@ import {
 } from '../services/historicScanService';
 import { scanDataSource } from '../utils/terrainEngine';
 import {
-    findConsensus, analyzeContext, suppressDisturbance, generateHotspots,
+    findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
 } from '../utils/fieldGuideAnalysis';
+import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * The formalised handoff from terrain scan to historic phase.
+ * nhleData / aimData are null when running historic standalone (trigger re-fetch).
+ */
+export interface ScanContext {
+    terrainClusters:  Cluster[];
+    monumentPoints:   [number, number][];
+    routes:           HistoricRoute[];
+    nhleData:         NHLEResponse | null;
+    aimData:          AIMResponse  | null;
+    scanCenter:       { lat: number; lng: number } | null;
+}
 
 export interface TerrainScanResult {
     terrainClusters:  Cluster[];
@@ -191,8 +205,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
-            // Initial (terrain-only) hotspots — no PAS finds at this stage
-            const hotspots = generateHotspots(contextualized, [], monumentPoints, params.targetPeriod, params.permissions, params.fields, routes);
+            // Initial (terrain-only) hotspots — historic enrichment follows in the historic phase
+            const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} target${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');

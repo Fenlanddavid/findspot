@@ -237,7 +237,7 @@ export async function scanDataSource(
             for (let x = 0; x < stitchSize; x++) {
                 const idx = y * stitchSize + x;
                 if (featureMap[idx] === 1 && visited[idx] === 0 && globalVisited[idx] === 0) {
-                    const cluster: Cluster = { id: Math.random().toString(36).substring(7), points: [], minX: x, maxX: x, minY: y, maxY: y, type: "Anomaly", score: 0, number: 0, isProtected: false, confidence: 'Medium', findPotential: 0, center: [0, 0], source: sourceType, sources: [sourceType], polarity: 'Unknown', scaleTier: tier.label as Cluster['scaleTier'] };
+                    const cluster: Cluster = { id: `${sourceType}-${tier.label}-${x}-${y}`, points: [], minX: x, maxX: x, minY: y, maxY: y, type: "Anomaly", score: 0, number: 0, isProtected: false, confidence: 'Medium', findPotential: 0, center: [0, 0], source: sourceType, sources: [sourceType], polarity: 'Unknown', scaleTier: tier.label as Cluster['scaleTier'] };
                     const queue: [number, number][] = [[x, y]]; visited[idx] = 1; globalVisited[idx] = 1;
                     let sumLap = 0;
                     while (queue.length > 0) {

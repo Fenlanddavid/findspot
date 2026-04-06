@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
-import { useTerrainScan, TerrainScanResult } from '../hooks/useTerrainScan';
+import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
 
 import {
@@ -13,7 +13,6 @@ import {
     HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
 import { usePotentialScore } from '../hooks/usePotentialScore';
-import { NHLEResponse, AIMResponse } from '../services/historicScanService';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
 
@@ -117,10 +116,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Terrain scan centre — for drift guard in historic phase
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
 
-    // Refs for after-terrain NHLE/AIM data (avoids re-fetch in auto historic phase)
-    const lastNhleRef = useRef<NHLEResponse | null>(null);
-    const lastAimRef  = useRef<AIMResponse  | null>(null);
-
     // Scoring hook
     const { potentialScore, scanConfidence, setPotentialScore, setScanConfidence, calculatePotentialScore } = usePotentialScore();
 
@@ -201,42 +196,28 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
         setMapClickLabel(null);
         terrainScanCenterRef.current = null;
-        lastNhleRef.current = null;
-        lastAimRef.current  = null;
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
 
     // ─── Map source helpers ───────────────────────────────────────────────────
 
-    const applyNhleToMap = (nhleData: NHLEResponse) => {
+    const applyNhleToMap = (data: { features: unknown[] }) => {
         const src = mapRef.current?.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
-        if (src) src.setData(nhleData as unknown as GeoJSON.FeatureCollection);
+        if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
     };
 
-    const applyAimToMap = (aimData: AIMResponse) => {
-        if (!aimData.features?.length) return;
+    const applyAimToMap = (data: { features: unknown[] }) => {
+        if (!data.features?.length) return;
         const src = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
-        if (src) src.setData(aimData as unknown as GeoJSON.FeatureCollection);
+        if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
     };
 
     // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
 
-    const runHistoricPhase = useCallback(async (
-        tClusters:     Cluster[],
-        mPoints:       [number, number][],
-        routes:        HistoricRoute[],
-        nhleData:      NHLEResponse | null,
-        aimData:       AIMResponse  | null,
-        scanCenter:    { lat: number; lng: number } | null,
-    ) => {
+    const runHistoricPhase = useCallback(async (context: ScanContext) => {
         const result = await runHistoricScan({
             mapRef,
-            terrainClusters:      tClusters,
-            terrainScanCenter:    scanCenter,
-            existingRoutes:       routes,
-            existingMonumentPoints: mPoints,
-            existingNhleData:     nhleData,
-            existingAimData:      aimData,
+            ...context,
             permissions,
             fields,
             targetPeriod,
@@ -253,6 +234,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
         if (!result.drifted && result.enhancedHotspots.length > 0) {
+            setSelectedHotspotId(null);   // dismiss the terrain-phase selection; user chooses from enhanced list
+            setShowSuggestion(false);
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
         }
     }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -277,10 +260,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         applyNhleToMap(result.nhleData);
         applyAimToMap(result.aimData);
 
-        // Store for auto historic phase (skip re-fetch)
-        lastNhleRef.current = result.nhleData;
-        lastAimRef.current  = result.aimData;
-
         dispatch({
             type: 'SCAN_SUCCESS',
             features:       result.detectedFeatures,
@@ -298,35 +277,37 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             dispatch({ type: 'SET_HAS_SCANNED' });
         }
 
-        terrainScanCenterRef.current = {
+        const scanCenter = {
             lat: mapRef.current!.getCenter().lat,
             lng: mapRef.current!.getCenter().lng,
         };
+        terrainScanCenterRef.current = scanCenter;
 
-        // Auto-trigger historic phase — passes terrain data through to skip re-fetch
-        await runHistoricPhase(
-            result.terrainClusters,
-            result.monumentPoints,
-            result.routes,
-            result.nhleData,
-            result.aimData,
-            terrainScanCenterRef.current,
-        );
+        // Auto-trigger historic phase — passes ScanContext to skip NHLE/AIM re-fetch
+        const context: ScanContext = {
+            terrainClusters: result.terrainClusters,
+            monumentPoints:  result.monumentPoints,
+            routes:          result.routes,
+            nhleData:        result.nhleData,
+            aimData:         result.aimData,
+            scanCenter,
+        };
+        await runHistoricPhase(context);
     };
 
     // ─── Standalone historic scan (Intel drawer / Historic button) ────────────
 
     const loadStandaloneHistoric = useCallback(async () => {
         if (!mapRef.current || isHistoricScanning) return;
-        // Standalone: no existing NHLE/AIM (re-fetch), but reuse any routes already loaded
-        await runHistoricPhase(
+        // Standalone: re-fetch NHLE/AIM, reuse any routes already loaded
+        await runHistoricPhase({
             terrainClusters,
             monumentPoints,
-            historicRoutes,
-            null,  // re-fetch NHLE
-            null,  // re-fetch AIM
-            terrainScanCenterRef.current,
-        );
+            routes:     historicRoutes,
+            nhleData:   null,
+            aimData:    null,
+            scanCenter: terrainScanCenterRef.current,
+        });
     }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase]);
 
     // ─── Auto-trigger effects ─────────────────────────────────────────────────

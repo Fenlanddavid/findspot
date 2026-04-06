@@ -17,24 +17,20 @@ import {
     fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
     parseOverpassRoutes,
 } from '../services/historicScanService';
-import { generateHotspots, getDistanceKm } from '../utils/fieldGuideAnalysis';
+import { getDistanceKm, getDriftMetres } from '../utils/fieldGuideAnalysis';
+import { enhanceHotspotsWithHistoric, buildTerrainHotspots } from '../utils/hotspotEngine';
+import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface HistoricScanOptions {
-    mapRef:               React.RefObject<maplibregl.Map | null>;
-    terrainClusters:      Cluster[];
-    terrainScanCenter:    { lat: number; lng: number } | null;
-    existingRoutes:       HistoricRoute[];
-    existingMonumentPoints: [number, number][];
-    existingNhleData:     NHLEResponse | null;  // null → re-fetch
-    existingAimData:      AIMResponse  | null;  // null → re-fetch
-    permissions:          unknown[];
-    fields:               unknown[];
-    targetPeriod:         string;
+export interface HistoricScanOptions extends ScanContext {
+    mapRef:       React.RefObject<maplibregl.Map | null>;
+    permissions:  unknown[];
+    fields:       unknown[];
+    targetPeriod: string;
 }
 
 export interface HistoricScanResult {
@@ -115,13 +111,13 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 fetchLocationLabel(center.lat, center.lng, signal),
                 fetchEtymologySignals(south, west, north, east, signal),
                 fetchHeritageFeatures(center.lat, center.lng, signal),
-                opts.existingNhleData
+                opts.nhleData
                     ? Promise.resolve(null)
                     : fetchScheduledMonuments(west, south, east, north, signal),
-                opts.existingAimData
+                opts.aimData
                     ? Promise.resolve(null)
                     : fetchAIMData(west, south, east, north, signal),
-                opts.existingRoutes.length === 0
+                opts.routes.length === 0
                     ? fetchHistoricRoutes(center.lat, center.lng, signal)
                     : Promise.resolve(null),
             ]);
@@ -202,8 +198,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             }
 
             // 4. NHLE (fresh fetch or pass-through from terrain scan)
-            const nhleData = opts.existingNhleData ?? nhleRaw ?? { features: [] };
-            let monumentPoints = opts.existingMonumentPoints;
+            const nhleData = opts.nhleData ?? nhleRaw ?? { features: [] };
+            let monumentPoints = opts.monumentPoints;
             let heritageCount  = monumentPoints.length;
 
             if (nhleRaw) {
@@ -220,33 +216,34 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             }
 
             // 5. AIM (fresh fetch or pass-through from terrain scan)
-            const aimData = opts.existingAimData ?? aimRaw ?? { features: [] };
+            const aimData = opts.aimData ?? aimRaw ?? { features: [] };
             if (aimRaw && aimRaw.features?.length > 0) {
                 onLog(`> AIM: ${aimRaw.features.length} aerial monument${aimRaw.features.length !== 1 ? 's' : ''} mapped.`, 'historic');
             }
 
             // 6. Routes (fresh fetch or pass-through from terrain scan)
-            let routes = opts.existingRoutes;
-            if (!opts.existingRoutes.length && routeRaw?.elements?.length) {
+            let routes = opts.routes;
+            if (!opts.routes.length && routeRaw?.elements?.length) {
                 routes = parseOverpassRoutes(routeRaw.elements);
             }
 
-            // ── Drift guard ───────────────────────────────────────────────────
-            const drifted = opts.terrainScanCenter
-                ? getDistanceKm(
-                    opts.terrainScanCenter.lat, opts.terrainScanCenter.lng,
-                    center.lat, center.lng,
-                  ) * 1000 > SCAN_CONFIG.DRIFT_THRESHOLD_M
-                : false;
+            // ── Drift guard (uses shared utility) ────────────────────────────
+            const driftM  = getDriftMetres(opts.scanCenter, { lat: center.lat, lng: center.lng });
+            const drifted = driftM > SCAN_CONFIG.DRIFT_THRESHOLD_M;
 
             // ── Hotspot enhancement ───────────────────────────────────────────
             let enhancedHotspots: Hotspot[] = [];
             if (!drifted) {
                 onLog('> Historic data integrated — refining targets...', 'historic');
-                enhancedHotspots = generateHotspots(
-                    opts.terrainClusters, pasFinds, monumentPoints,
-                    opts.targetPeriod, opts.permissions, opts.fields, routes,
+
+                // Stage 1: re-run terrain scoring with historic routes + monument suppression
+                const terrainHotspots = buildTerrainHotspots(opts.terrainClusters, routes, monumentPoints);
+
+                // Stage 2: additive historic enrichment (finds, monuments, place signals)
+                enhancedHotspots = enhanceHotspotsWithHistoric(
+                    terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod,
                 );
+
                 const sourceCount = pasFinds.length + placeSignals.length + monumentPoints.length;
                 onLog(`> Historic scan complete — ${sourceCount} source${sourceCount !== 1 ? 's' : ''} integrated.`, 'historic');
             } else {
