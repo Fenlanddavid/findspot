@@ -139,6 +139,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             });
             const heritageCount = nhleData.features?.length ?? 0;
             if (heritageCount > 0) onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} in scan area.`, 'terrain');
+            const aerialHitCount = springHits.length + summerHits.length;
+            if (aerialHitCount > 0) onLog(`> Aerial: ${aerialHitCount} spectral signal${aerialHitCount !== 1 ? 's' : ''} detected.`, 'terrain');
+            else onLog('> Aerial: no spectral signals detected (Wayback tiles may not cover this area).', 'terrain', 'warn');
 
             // Routes (with timeout)
             onStatusChange("Syncing Routes...");

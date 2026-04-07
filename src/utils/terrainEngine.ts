@@ -2,6 +2,7 @@
 // Moved verbatim from FieldGuide.tsx — logic is intentionally unchanged.
 
 import { Cluster, SCAN_PROFILE } from '../pages/fieldGuideTypes';
+import { resolveWaybackIds, waybackTileUrl } from './waybackService';
 
 type SourceType = 'terrain' | 'satellite' | 'historic' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
 
@@ -54,8 +55,8 @@ export async function scanDataSource(
                 else if (sourceType === 'slope') url = `https://environment.data.gov.uk/image/rest/services/SURVEY/LIDAR_Composite_DTM_1m_2022_Slope/ImageServer/tile/${zoom}/${ty}/${tx}`;
                 else if (sourceType === 'hydrology') url = `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`;
                 else if (sourceType === 'satellite') url = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
-                else if (sourceType === 'satellite_spring') url = `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/43321/${zoom}/${ty}/${tx}`;
-                else if (sourceType === 'satellite_summer') url = `https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/45236/${zoom}/${ty}/${tx}`;
+                else if (sourceType === 'satellite_spring') url = waybackTileUrl(wayback!.spring, zoom, ty, tx);
+                else if (sourceType === 'satellite_summer') url = waybackTileUrl(wayback!.summer, zoom, ty, tx);
 
                 promises.push(new Promise<void>((resolve) => {
                     const img = new Image();
@@ -83,6 +84,10 @@ export async function scanDataSource(
                             fallbackImg.src = `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/${zoom}/${ty}/${tx}`;
                         } else if (sourceType === 'slope' || sourceType === 'hydrology') {
                             fallbackImg.src = `https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/${zoom}/${ty}/${tx}`;
+                        } else if (sourceType === 'satellite_spring' || sourceType === 'satellite_summer') {
+                            // Wayback tiles failed — fall back to standard World Imagery so ExG
+                            // processing still runs rather than producing zero results silently
+                            fallbackImg.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
                         } else {
                             clearTimeout(timer); resolve();
                         }
@@ -94,6 +99,11 @@ export async function scanDataSource(
         await Promise.all(promises);
         return successCount > 0;
     };
+
+    // Resolve Wayback IDs once before tile loading — catalog is session-cached
+    const wayback = (sourceType === 'satellite_spring' || sourceType === 'satellite_summer')
+        ? await resolveWaybackIds()
+        : null;
 
     const loaded = await loadTiles();
     if (!loaded) return [];
