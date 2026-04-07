@@ -188,9 +188,9 @@ export async function scanDataSource(
                   (sourceType === 'historic' ? SCAN_PROFILE.HISTORIC : SCAN_PROFILE.AERIAL)));
 
     const TIERS = [
-        { label: 'Micro', step: 1, minSize: config.minSize, dilation: config.dilation, threshMult: 1.1 },
-        { label: 'Structural', step: 3, minSize: config.minSize * 5, dilation: config.dilation + 1, threshMult: 1.0 },
-        { label: 'Enclosure', step: 8, minSize: config.minSize * 15, dilation: config.dilation + 2, threshMult: 0.9 }
+        { label: 'Micro',      step: 1, minSize: config.minSize,       dilation: config.dilation,     threshMult: 1.1, edgeMargin: 20, edgeSizeThreshold: 150, edgePenalty: 0.10 },
+        { label: 'Structural', step: 3, minSize: config.minSize * 5,   dilation: config.dilation + 1, threshMult: 1.0, edgeMargin: 14, edgeSizeThreshold: 80,  edgePenalty: 0.06 },
+        { label: 'Enclosure',  step: 8, minSize: config.minSize * 15,  dilation: config.dilation + 2, threshMult: 0.9, edgeMargin: 8,  edgeSizeThreshold: 0,   edgePenalty: 0.03 }
     ];
 
     const allClusters: Cluster[] = [];
@@ -217,16 +217,34 @@ export async function scanDataSource(
         }
 
         const threshold = tierMaxRidge * config.threshold * tier.threshMult;
-        const featureMap = new Uint8Array(stitchSize * stitchSize);
+
+        // Feature map stores normalised ridge strength (0..1) instead of binary 1.
+        // Dilated neighbours inherit the triggering pixel's strength; overlapping dilations
+        // keep the maximum so strong-signal cores propagate correctly.
+        const featureMap = new Float32Array(stitchSize * stitchSize);
         for (let y = 15; y < stitchSize - 15; y++) {
             for (let x = 15; x < stitchSize - 15; x++) {
                 const val = tierRidgeMap[y*stitchSize + x];
+                const lapVal = tierLapMap[y*stitchSize + x];
                 const isSlopeIntensity = sourceType === 'slope' && processed[y*stitchSize + x] < 0.4;
-                const isHydrology = sourceType === 'hydrology' && tierLapMap[y*stitchSize + x] > 0.16;
+                // Hydrology pixel trigger tightened: 0.16 → 0.20
+                const isHydrology = sourceType === 'hydrology' && lapVal > 0.20;
 
-                if (val > threshold || isSlopeIntensity || isHydrology) {
+                let strength = 0;
+                if (val > threshold) {
+                    strength = tierMaxRidge > 0 ? val / tierMaxRidge : 1.0;
+                } else if (isSlopeIntensity) {
+                    strength = (0.4 - processed[y*stitchSize + x]) / 0.4;
+                } else if (isHydrology) {
+                    strength = Math.min(1.0, (lapVal - 0.20) / 0.30 + 0.4);
+                }
+
+                if (strength > 0) {
                     for (let dy = -tier.dilation; dy <= tier.dilation; dy++) {
-                        for (let dx = -tier.dilation; dx <= tier.dilation; dx++) featureMap[(y+dy)*stitchSize + (x+dx)] = 1;
+                        for (let dx = -tier.dilation; dx <= tier.dilation; dx++) {
+                            const fi = (y+dy)*stitchSize + (x+dx);
+                            if (featureMap[fi] < strength) featureMap[fi] = strength;
+                        }
                     }
                 }
             }
@@ -236,18 +254,54 @@ export async function scanDataSource(
         for (let y = 0; y < stitchSize; y++) {
             for (let x = 0; x < stitchSize; x++) {
                 const idx = y * stitchSize + x;
-                if (featureMap[idx] === 1 && visited[idx] === 0 && globalVisited[idx] === 0) {
+                if (featureMap[idx] > 0 && visited[idx] === 0 && globalVisited[idx] === 0) {
                     const cluster: Cluster = { id: `${sourceType}-${tier.label}-${x}-${y}`, points: [], minX: x, maxX: x, minY: y, maxY: y, type: "Anomaly", score: 0, number: 0, isProtected: false, confidence: 'Medium', findPotential: 0, center: [0, 0], source: sourceType, sources: [sourceType], polarity: 'Unknown', scaleTier: tier.label as Cluster['scaleTier'] };
-                    const queue: [number, number][] = [[x, y]]; visited[idx] = 1; globalVisited[idx] = 1;
+
+                    // BFS with index pointer (O(1) dequeue) instead of shift() (O(n))
+                    let head = 0;
+                    const queue: [number, number][] = [[x, y]];
+                    visited[idx] = 1; globalVisited[idx] = 1;
+
+                    // Accumulators
                     let sumLap = 0;
-                    while (queue.length > 0) {
-                        const [cx, cy] = queue.shift()!; cluster.points.push({x: cx, y: cy});
-                        sumLap += tierLapMap[cy * stitchSize + cx];
+                    let sumRidge = 0;
+                    let sumX = 0, sumY = 0;
+                    let sumX2 = 0, sumY2 = 0, sumXY = 0;
+                    // Directional consistency via circular mean of doubled gradient angles
+                    // Sample every 4th pixel to keep overhead low
+                    let sumSin = 0, sumCos = 0, dirSamples = 0, dirCounter = 0;
+
+                    while (head < queue.length) {
+                        const [cx, cy] = queue[head++];
+                        cluster.points.push({x: cx, y: cy});
+
+                        const lapV = tierLapMap[cy * stitchSize + cx];
+                        sumLap   += lapV;
+                        sumRidge += featureMap[cy * stitchSize + cx];
+                        sumX     += cx; sumY += cy;
+                        sumX2    += cx * cx; sumY2 += cy * cy; sumXY += cx * cy;
+
+                        // Gradient direction sample for directional consistency
+                        if (dirCounter % 4 === 0 && cx > 0 && cx < stitchSize - 1 && cy > 0 && cy < stitchSize - 1) {
+                            const dz_dx = (processed[cy*stitchSize + (cx+1)] - processed[cy*stitchSize + (cx-1)]) / 2;
+                            const dz_dy = (processed[(cy+1)*stitchSize + cx] - processed[(cy-1)*stitchSize + cx]) / 2;
+                            // Double the angle to collapse 180° ambiguity (axial data)
+                            const angle2 = 2 * Math.atan2(dz_dy, dz_dx);
+                            sumCos += Math.cos(angle2);
+                            sumSin += Math.sin(angle2);
+                            dirSamples++;
+                        }
+                        dirCounter++;
+
                         cluster.minX = Math.min(cluster.minX, cx); cluster.maxX = Math.max(cluster.maxX, cx);
                         cluster.minY = Math.min(cluster.minY, cy); cluster.maxY = Math.max(cluster.maxY, cy);
+
                         for (const [nx, ny] of [[cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]]) {
                             if (nx >= 0 && nx < stitchSize && ny >= 0 && ny < stitchSize) {
-                                const nidx = ny * stitchSize + nx; if (featureMap[nidx] === 1 && visited[nidx] === 0) { visited[nidx] = 1; globalVisited[nidx] = 1; queue.push([nx, ny]); }
+                                const nidx = ny * stitchSize + nx;
+                                if (featureMap[nidx] > 0 && visited[nidx] === 0) {
+                                    visited[nidx] = 1; globalVisited[nidx] = 1; queue.push([nx, ny]);
+                                }
                             }
                         }
                     }
@@ -258,8 +312,7 @@ export async function scanDataSource(
                     const minAxis = Math.min(w, h);
 
                     if (areaPx > tier.minSize && (sourceType.startsWith('terrain') || sourceType === 'slope' || sourceType === 'hydrology' || (dens > (config.minSolidity ?? 0.32)) || (ratio > (config.minLinearity ?? 4.2)))) {
-                        let sumX = 0, sumY = 0;
-                        for (const p of cluster.points) { sumX += p.x; sumY += p.y; }
+                        // Centroid from accumulated sums (no separate loop needed)
                         const midX = sumX / areaPx;
                         const midY = sumY / areaPx;
 
@@ -268,6 +321,26 @@ export async function scanDataSource(
                         const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * yNorm))) - Math.PI / 2);
                         cluster.center = [lon, lat];
                         cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
+
+                        // Mean ridge strength across the cluster (weighted feature signal)
+                        const meanRidgeStrength = sumRidge / areaPx;
+
+                        // Directional consistency score: 0 = chaotic, 1 = perfectly aligned
+                        const dirConsistency = dirSamples > 0
+                            ? Math.sqrt(sumCos * sumCos + sumSin * sumSin) / dirSamples
+                            : 0;
+
+                        // PCA-based principal axis bearing — fixes the bounding-box diagonal bug.
+                        // Uses the covariance tensor of pixel positions; valid only for elongated features.
+                        let bearing = 0;
+                        if (ratio > 2.5) {
+                            const mX = midX, mY = midY;
+                            const covXX = sumX2 / areaPx - mX * mX;
+                            const covYY = sumY2 / areaPx - mY * mY;
+                            const covXY = sumXY / areaPx - mX * mY;
+                            bearing = 0.5 * Math.atan2(2 * covXY, covXX - covYY) * (180 / Math.PI);
+                        }
+                        cluster.bearing = bearing;
 
                         if (sourceType.startsWith('terrain')) {
                             const ix = Math.floor(midX), iy = Math.floor(midY);
@@ -304,10 +377,6 @@ export async function scanDataSource(
                             }
                             const perimeterPx = (w * 2) + (h * 2), circularity = (4 * Math.PI * areaPx) / Math.pow(perimeterPx, 2);
 
-                            let bearing = 0;
-                            if (ratio > 2.5) bearing = Math.atan2(cluster.maxY - cluster.minY, cluster.maxX - cluster.minX) * (180 / Math.PI);
-                            cluster.bearing = bearing;
-
                             const centerBox = {
                                 minX: Math.floor(cluster.minX + w * 0.25), maxX: Math.floor(cluster.maxX - w * 0.25),
                                 minY: Math.floor(cluster.minY + h * 0.25), maxY: Math.floor(cluster.maxY - h * 0.25)
@@ -316,34 +385,49 @@ export async function scanDataSource(
                             for (const p of cluster.points) { if (p.x >= centerBox.minX && p.x <= centerBox.maxX && p.y >= centerBox.minY && p.y <= centerBox.maxY) centerPixels++; }
                             const isHollow = centerPixels / (areaPx * 0.25) < 0.35 && areaPx > 100;
 
-                            // Edge suppression: skip tiny clusters near tile edges; penalise larger ones
-                            const edgeMargin = 18;
-                            const nearEdge = cluster.minX < edgeMargin || cluster.maxX > stitchSize - edgeMargin ||
-                                             cluster.minY < edgeMargin || cluster.maxY > stitchSize - edgeMargin;
-                            if (nearEdge && areaPx < 150) continue;
+                            // Tier-aware edge suppression: Micro is most aggressive, Enclosure most tolerant
+                            const nearEdge = cluster.minX < tier.edgeMargin || cluster.maxX > stitchSize - tier.edgeMargin ||
+                                             cluster.minY < tier.edgeMargin || cluster.maxY > stitchSize - tier.edgeMargin;
+                            if (nearEdge && areaPx < tier.edgeSizeThreshold) continue;
+
+                            // Classification
+                            // Movement Signal requires directional consistency — prevents drains and tractor lines
+                            // from qualifying on aspect ratio alone. minAxis raised 4→6 to drop very thin noise.
+                            const isMovement = ratio > 6.0 && minAxis >= 6 && dirConsistency > 0.35;
+                            // Palaeochannel: tightened ratio 3.5→4.0 and added density floor to require solid elongated shape
+                            const isPalaeo = sourceType === 'hydrology' && ratio > 4.0 && cluster.polarity === 'Sunken' && minAxis >= 8 && dens > 0.25;
 
                             if (isHollow && circularity > 0.55 && areaPx > 150) cluster.type = "Ring Feature (Possible Ditch or Enclosure)";
                             else if (isHollow && areaPx > 80) cluster.type = "Enclosure Signal (Possible Earthwork)";
-                            else if (sourceType === 'hydrology' && ratio > 3.5 && cluster.polarity === 'Sunken' && minAxis >= 8) cluster.type = "Palaeochannel (Ancient Watercourse)";
+                            else if (isPalaeo) cluster.type = "Palaeochannel (Ancient Watercourse)";
                             else if (sourceType.startsWith('satellite_')) cluster.type = "Vegetation Stress Signal";
-                            else if (ratio > 6.0 && minAxis >= 4) cluster.type = "Movement Signal (Possible Trackway)";
+                            else if (isMovement) cluster.type = "Movement Signal (Possible Trackway)";
                             else if (ratio > 3.0) cluster.type = "Linear Feature (Ditch or Bank Signal)";
                             else if (dens > 0.75 && ratio < 1.4 && areaPx > 80) cluster.type = "Structural Signal (Possible Building Remains)";
                             else if (circularity > 0.72 && dens > 0.55 && areaPx > 60) cluster.type = "Circular Feature (Possible Structure or Mound)";
                             else if (areaPx > 400) cluster.type = "Complex Earthwork Signal";
                             else cluster.type = "Subsurface Anomaly (Unclassified)";
 
-                            let confidenceVal = (dens * 0.3) + (circularity * 0.3) + (Math.min(areaPx/600, 1) * 0.4);
-                            // Source-specific confidence adjustments
-                            if (sourceType === 'terrain' || sourceType === 'terrain_global') confidenceVal = Math.min(1, confidenceVal + 0.05);
-                            else if (sourceType === 'hydrology') confidenceVal = Math.min(1, confidenceVal + 0.03);
-                            else if (sourceType.startsWith('satellite_')) confidenceVal = Math.max(0, confidenceVal - 0.05);
-                            else if (sourceType === 'slope') confidenceVal = Math.max(0, confidenceVal - 0.03);
-                            if (nearEdge) confidenceVal = Math.max(0, confidenceVal - 0.08);
+                            // Confidence — four components: shape density, circularity, size, and ridge strength.
+                            // Ridge strength replaces the old pure-shape formula, giving better separation
+                            // between weak noise and genuine features.
+                            let confidenceVal = (dens * 0.22) + (circularity * 0.22) + (Math.min(areaPx / 600, 1) * 0.26) + (meanRidgeStrength * 0.30);
+
+                            // Source reliability — widened gaps to better reflect real trustworthiness
+                            if (sourceType === 'terrain' || sourceType === 'terrain_global') confidenceVal = Math.min(1, confidenceVal + 0.08);
+                            else if (sourceType === 'hydrology') confidenceVal = Math.min(1, confidenceVal + 0.04);
+                            else if (sourceType.startsWith('satellite_')) confidenceVal = Math.max(0, confidenceVal - 0.08);
+                            else if (sourceType === 'slope') confidenceVal = Math.max(0, confidenceVal - 0.05);
+
+                            // Directional inconsistency penalty for elongated features
+                            if (ratio > 3.0 && dirConsistency < 0.25) confidenceVal = Math.max(0, confidenceVal - 0.06);
+
+                            // Tier-aware edge penalty
+                            if (nearEdge) confidenceVal = Math.max(0, confidenceVal - tier.edgePenalty);
 
                             cluster.confidence = confidenceVal > 0.6 ? 'High' : (confidenceVal > 0.35 ? 'Medium' : 'Subtle');
                             cluster.findPotential = Math.min(96, Math.round((confidenceVal * 100)));
-                            cluster.metrics = { circularity, density: dens, ratio, area: areaPx };
+                            cluster.metrics = { circularity, density: dens, ratio, area: areaPx, ridgeStrength: meanRidgeStrength, dirConsistency };
                             allClusters.push(cluster);
                         }
                     }
@@ -351,5 +435,32 @@ export async function scanDataSource(
             }
         }
     }
+    // ── Multi-scale agreement (Refinement 2) ──────────────────────────────────
+    // Features detected at multiple scale tiers are more likely genuine.
+    // Noise typically appears at only one tier; real archaeology persists across scales.
+    // Threshold in degree space: ~0.0004° ≈ 30–45m at UK latitudes — enough to catch
+    // centroid drift between Micro and coarser tiers on the same feature.
+    const MULTI_SCALE_DIST = 0.0004;
+    for (const c of allClusters) {
+        const agreedTiers = new Set<string>([c.scaleTier ?? '']);
+        for (const other of allClusters) {
+            if (other === c || other.scaleTier === c.scaleTier) continue;
+            const dx = c.center[0] - other.center[0];
+            const dy = c.center[1] - other.center[1];
+            if (Math.sqrt(dx * dx + dy * dy) < MULTI_SCALE_DIST) {
+                agreedTiers.add(other.scaleTier ?? '');
+            }
+        }
+        if (agreedTiers.size >= 2) {
+            c.multiScale = true;
+            c.multiScaleLevel = agreedTiers.size;
+            // Small, controlled boost — reinforces already good signals, does not rescue weak ones
+            const boost = agreedTiers.size >= 3 ? 8 : 5;
+            c.findPotential = Math.min(96, c.findPotential + boost);
+            if      (c.findPotential > 60) c.confidence = 'High';
+            else if (c.findPotential > 35) c.confidence = 'Medium';
+        }
+    }
+
     return allClusters;
 }

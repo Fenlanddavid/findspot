@@ -87,6 +87,21 @@ export function buildTerrainHotspots(
             }
         }
 
+        // ── Hydrology + terrain depression agreement (Refinement 3) ──────────
+        // The existing LiDAR+Hydrology correlation covers basic co-location (+5).
+        // This checks whether BOTH independently identify a depression (Sunken polarity),
+        // which is a much stronger indicator of a real palaeochannel or hollow.
+        if (hasHydrology && hasLidar) {
+            const hydroSunken  = members.some(m => m.source === 'hydrology' && m.polarity === 'Sunken');
+            const terrainSunken = members.some(m => (m.source === 'terrain' || m.source === 'terrain_global') && m.polarity === 'Sunken');
+            if (hydroSunken && terrainSunken) {
+                anomaly += 5;
+                explanation.push('Hydrology + terrain depression agreement');
+            } else if (hydroSunken || terrainSunken) {
+                anomaly += 2;
+            }
+        }
+
         // ── Route scoring ─────────────────────────────────────────────────────
         let routeScore = 0;
         const routeReasons: string[] = [];

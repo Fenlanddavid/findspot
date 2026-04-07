@@ -22,7 +22,9 @@ export interface Cluster {
     disturbanceReason?: string;
     aspect?: number;
     relativeElevation?: 'Ridge' | 'Hollow' | 'Slope' | 'Flat';
-    metrics?: { circularity: number; density: number; ratio: number; area: number };
+    metrics?: { circularity: number; density: number; ratio: number; area: number; ridgeStrength?: number; dirConsistency?: number };
+    multiScale?: boolean;
+    multiScaleLevel?: number;
     explanationLines?: string[];
     isHighConfidenceCrossing?: boolean;
 }
