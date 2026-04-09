@@ -124,7 +124,7 @@ export function getDistance(c1: [number, number], c2: [number, number]): number 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function getFlatDistanceSq(p1: [number, number], p2: [number, number]): number {
+function _getFlatDistanceSq(p1: [number, number], p2: [number, number]): number {
     const dx = (p1[0] - p2[0]) * Math.cos(p1[1] * Math.PI / 180);
     const dy = p1[1] - p2[1];
     return (dx * dx + dy * dy) * 12346344456;
@@ -167,8 +167,6 @@ export function getDistanceToLine(
     return Math.sqrt(minDistSq);
 }
 
-// Keep unused export to avoid linting issues with helpers that are only used internally
-void getFlatDistanceSq;
 
 // ─── Consensus merging ────────────────────────────────────────────────────────
 

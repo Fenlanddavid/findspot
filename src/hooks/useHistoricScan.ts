@@ -7,7 +7,7 @@
 // When running standalone (Intel drawer, Historic button without terrain), all
 // data is fetched fresh.
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 
 import { Cluster, Hotspot, HistoricFind, PlaceSignal, HistoricRoute, ETYMOLOGY_SIGNALS } from '../pages/fieldGuideTypes';
@@ -59,7 +59,10 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
     const abortRef  = useRef<AbortController | null>(null);
     const mountedRef = useRef(true);
 
-    useState(() => { mountedRef.current = true; });
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const cancelScan = useCallback(() => {
         tokenRef.current = null;

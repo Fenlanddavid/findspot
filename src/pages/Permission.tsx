@@ -32,7 +32,8 @@ export default function PermissionPage(props: {
   const isEdit = !!id;
 
   const [name, setName] = useState("");
-  const [type, setType] = useState<Permission["type"]>((searchParams.get("type") as any) || "individual");
+  const typeParam = searchParams.get("type");
+  const [type, setType] = useState<Permission["type"]>(typeParam === "rally" ? "rally" : "individual");
   const [collector, setCollector] = useState("");
   const [observedAt, setObservedAt] = useState(new Date().toISOString().slice(0, 16));
   const [lat, setLat] = useState<number | null>(null);

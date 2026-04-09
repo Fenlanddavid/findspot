@@ -42,7 +42,7 @@ export async function exportToCSV(): Promise<string> {
     "Weight (g)", "Width (mm)", "Decoration",
     "Target ID", "Depth (cm)", "Date Range",
     "Permission Name", "Permission Type", "Landowner Name", "Landowner Phone", "Landowner Email", "Landowner Address",
-    "Latitude", "Longitude", "GPS Accuracy (m)",
+    "Latitude", "Longitude", "GPS Accuracy (m)", "OS Grid Ref", "What3Words",
     "Land Type", "Land Use", "Crop Type", "Is Stubble",
     "Date Observed", "Detectorist", "NCMD No", "NCMD Expiry", "Find Notes", "Permission Notes"
   ];
@@ -63,14 +63,14 @@ export async function exportToCSV(): Promise<string> {
       s.weightG ?? "", s.widthMm ?? "", s.decoration ?? "",
       s.targetId ?? "", s.depthCm ?? "", s.dateRange ?? "",
       l?.name ?? "", l?.type ?? "individual", l?.landownerName ?? "", l?.landownerPhone ?? "", l?.landownerEmail ?? "", l?.landownerAddress ?? "",
-      s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
+      s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "", s.osGridRef ?? "", s.w3w ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
       sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
       l?.collector ?? "", ncmdNumber, ncmdExpiry, sNotes, lNotes
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
   });
 
-  return [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  return "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
 }
 
 export async function importData(json: string) {

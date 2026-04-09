@@ -3,7 +3,7 @@
 // cluster merging → hotspot generation. Returns a stable runTerrainScan()
 // function that resolves with the full scan result, or null if cancelled.
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 
 import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
@@ -66,8 +66,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
     const abortRef = useRef<AbortController | null>(null);
     const mountedRef = useRef(true);
 
-    // Track mount state for safe setState calls
-    useState(() => { mountedRef.current = true; });
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => { mountedRef.current = false; };
+    }, []);
 
     const cancelScan = useCallback(() => {
         tokenRef.current = null;
@@ -132,10 +134,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             }
 
             // Monument points for later use
-            const monumentPoints: [number, number][] = (nhleData.features || []).map(f => {
-                if (f.geometry.type === 'Point')        return f.geometry.coordinates as [number, number];
-                if (f.geometry.type === 'Polygon')      return (f.geometry.coordinates as number[][][])[0][0] as [number, number];
-                return (f.geometry.coordinates as number[][][][])[0][0][0] as [number, number];
+            const monumentPoints: [number, number][] = (nhleData.features || []).flatMap(f => {
+                if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
+                if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
+                return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
             });
             const heritageCount = nhleData.features?.length ?? 0;
             if (heritageCount > 0) onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} in scan area.`, 'terrain');
