@@ -9,7 +9,7 @@ import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
 
 import {
-    Cluster, PASFind, PlaceSignal, HistoricRoute, Hotspot,
+    Cluster, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
     HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
 import { usePotentialScore } from '../hooks/usePotentialScore';
@@ -78,6 +78,18 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
     }
 }
 
+// ─── Hotspot display helpers ──────────────────────────────────────────────────
+
+// Returns a short signal descriptor shown beneath "General Activity Zone" so
+// the fallback classification still communicates something meaningful.
+function getSupportingSignal(explanation: string[]): string | null {
+    if (explanation.some(e => e.includes('Hydrology') && e.includes('LiDAR'))) return 'Terrain + Hydrology';
+    if (explanation.some(e => e.includes('Hydrology'))) return 'Hydrology Signal';
+    if (explanation.some(e => e.includes('LiDAR'))) return 'Terrain Signal';
+    if (explanation.some(e => e.includes('Spectral'))) return 'Spectral Signal';
+    return null;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FieldGuide({ projectId }: { projectId: string }) {
@@ -109,8 +121,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
 
     // PAS / intel state
-    const [pasFinds,        setPasFinds]        = useState<PASFind[]>([]);
-    const [selectedPASFind, setSelectedPASFind] = useState<PASFind | null>(null);
+    const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
+    const [selectedPASFind, setSelectedPASFind] = useState<HistoricFind | null>(null);
     const [placeSignals,    setPlaceSignals]    = useState<PlaceSignal[]>([]);
 
     // Terrain scan centre — for drift guard in historic phase
@@ -519,34 +531,41 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             {hotspots.filter(h => h.id === selectedHotspotId).map(h => (
                                 <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl backdrop-blur-xl transition-all ${h.score >= 80 ? 'bg-slate-900/95 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : h.score >= 45 ? 'bg-slate-900/95 border-emerald-500/50' : 'bg-slate-900/95 border-white/20'}`}>
                                     <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <h3 className="text-lg font-black uppercase tracking-tight leading-none mb-1">Hotspot</h3>
-                                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-wide mb-1">{h.type}</p>
-                                            <p className="text-[9px] text-slate-400 italic mb-2 leading-tight">{HOTSPOT_INTERPRETATION[h.type]}</p>
-                                            <div className="flex items-center gap-2">
-                                                <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${h.score >= 80 ? 'bg-amber-600 text-white shadow-[0_0_10px_rgba(217,119,6,0.3)]' : h.score >= 65 ? 'bg-orange-600 text-white' : h.score >= 45 ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                                                    {h.score >= 80 ? 'High Probability' : h.score >= 65 ? 'Strong Signal' : h.score >= 45 ? 'Developing Signal' : 'Possible Anomaly'}
-                                                </div>
-                                                <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-white text-black' : 'bg-black/20 text-white/80'}`}>
+                                        <div className="flex-1 min-w-0 pr-3">
+                                            <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1">Hotspot {h.number}</p>
+                                            <h3 className="text-base font-black text-white uppercase tracking-tight leading-tight mb-0.5">{h.classification}</h3>
+                                            {h.classification === 'General Activity Zone' && getSupportingSignal(h.explanation) && (
+                                                <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
+                                                    {getSupportingSignal(h.explanation)}
+                                                </p>
+                                            )}
+                                            <p className="text-[10px] font-medium text-white/80 mb-2.5 leading-tight">{h.classificationReason}</p>
+                                            <div className="flex items-center flex-wrap gap-1.5">
+                                                <div className={`px-2.5 py-1 rounded text-[8px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]' : h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>
                                                     {h.confidence}
                                                 </div>
+                                                <div className="px-2 py-0.5 rounded text-[8px] font-bold tracking-widest bg-white/8 text-white/40">
+                                                    Score {h.score}
+                                                </div>
+                                                {h.secondaryTag && (
+                                                    <div className="px-2 py-0.5 rounded text-[8px] font-bold text-amber-300/80 border border-amber-500/20 bg-amber-500/5">
+                                                        {h.secondaryTag}
+                                                    </div>
+                                                )}
+                                                {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest">DETECT HERE</span>}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-4">
-                                            {showSuggestion && <span className="text-emerald-400 text-[10px] font-black animate-pulse tracking-widest">DETECT HERE</span>}
-                                            <span className="text-xl font-black text-white/90">{h.score}%</span>
-                                            <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                            </button>
-                                        </div>
+                                        <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        </button>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-4 animate-pulse">
                                             <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
                                         </div>
                                     )}
-                                    <div className="bg-black/20 rounded-2xl p-4 mb-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-white/60 mb-3">Why this area stands out:</p>
+                                    <div className="bg-black/20 rounded-2xl p-4 mb-3">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-3">What the engine is seeing:</p>
                                         <div className="space-y-2">
                                             {h.explanation.map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
@@ -556,12 +575,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div className="bg-white/10 p-2 rounded-xl text-center"><span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Anomaly</span><span className="text-[10px] font-black">{h.metrics.anomaly}</span></div>
-                                        <div className="bg-white/10 p-2 rounded-xl text-center"><span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Context</span><span className="text-[10px] font-black">{h.metrics.context}</span></div>
-                                        <div className="bg-white/10 p-2 rounded-xl text-center"><span className="block text-[7px] uppercase font-bold opacity-60 mb-0.5">Bonus</span><span className="text-[10px] font-black text-emerald-400">+{h.metrics.convergence + h.metrics.behaviour}</span></div>
-                                    </div>
-                                    <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                    {h.suggestedFocus && (
+                                        <div className="flex items-center gap-2 px-1 mb-3">
+                                            <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
+                                            <p className="text-[10px] leading-tight">
+                                                <span className="font-black text-emerald-500/60 uppercase tracking-widest">Focus: </span>
+                                                <span className="font-bold text-emerald-300">{h.suggestedFocus}</span>
+                                            </p>
+                                        </div>
+                                    )}
+                                    <p className="text-center text-[7px] text-white/40 italic">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             ))}
                         </div>
@@ -970,18 +993,28 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     }}
                                     className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : h.score >= 80 ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : h.score >= 45 ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
                                 >
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <h3 className={`text-xs font-black uppercase tracking-tight ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>Hotspot</h3>
-                                            <p className="text-[9px] font-black text-emerald-400 uppercase tracking-wide mt-0.5">{h.type}</p>
-                                            <p className="text-[8px] text-slate-500 italic leading-tight mt-0.5">{HOTSPOT_INTERPRETATION[h.type]}</p>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1">
-                                            <div className="flex items-center gap-2">
+                                    <div className="mb-3">
+                                        <div className="flex justify-between items-start mb-0.5">
+                                            <h3 className={`text-[10px] font-black uppercase tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{h.classification}</h3>
+                                            <div className="flex items-center gap-1.5 flex-shrink-0">
                                                 {showSuggestion && h.number === 1 && <span className="text-[7px] font-black text-emerald-400 animate-pulse tracking-widest">DETECT HERE</span>}
-                                                <span className="text-[10px] font-black text-emerald-500 tracking-tight">{h.score}%</span>
+                                                <span className="text-[9px] font-black text-white/40 tracking-tight">{h.score}%</span>
                                             </div>
-                                            <div className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>{h.confidence}</div>
+                                        </div>
+                                        {h.classification === 'General Activity Zone' && getSupportingSignal(h.explanation) && (
+                                            <p className="text-[7px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
+                                                {getSupportingSignal(h.explanation)}
+                                            </p>
+                                        )}
+                                        <p className="text-[8px] font-medium text-white/70 leading-tight mb-2">{h.classificationReason}</p>
+                                        <div className="flex items-center flex-wrap gap-1">
+                                            <div className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>{h.confidence}</div>
+                                            <span className="text-[7px] font-bold text-white/30 ml-0.5">{h.score}%</span>
+                                            {h.secondaryTag && (
+                                                <div className="px-1.5 py-0.5 rounded text-[7px] font-bold text-amber-300/70 border border-amber-500/20 ml-0.5">
+                                                    {h.secondaryTag}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
@@ -990,6 +1023,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="space-y-1.5 mt-3">
+                                        <p className="text-[7px] font-black uppercase tracking-widest text-white/30 mb-1.5">What the engine is seeing:</p>
                                         {h.explanation.map((reason, idx) => (
                                             <div key={idx} className="flex items-center gap-2">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
@@ -997,7 +1031,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             </div>
                                         ))}
                                     </div>
-                                    <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                    {h.suggestedFocus && (
+                                        <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+                                            <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
+                                            <p className="text-[9px] leading-tight">
+                                                <span className="font-black text-emerald-500/50 uppercase tracking-widest">Focus: </span>
+                                                <span className="font-bold text-emerald-300/80">{h.suggestedFocus}</span>
+                                            </p>
+                                        </div>
+                                    )}
+                                    <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             )) : (
                                 <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical hotspots defined.</p>

@@ -1,6 +1,6 @@
 // ─── Hook: potential score calculation ───────────────────────────────────────
 import { useState } from 'react';
-import { PASFind, PlaceSignal } from '../pages/fieldGuideTypes';
+import { HistoricFind, PlaceSignal } from '../pages/fieldGuideTypes';
 
 export interface PotentialScore {
     score: number;
@@ -28,7 +28,7 @@ export function usePotentialScore() {
     const [scanConfidence, setScanConfidence] = useState<'High Probability' | 'Developing Signal' | 'Low Confidence' | null>(null);
 
     const calculatePotentialScore = (
-        pas: PASFind[],
+        pas: HistoricFind[],
         monuments: [number, number][],
         signals: PlaceSignal[],
         centerLat: number,

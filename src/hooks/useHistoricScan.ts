@@ -10,7 +10,7 @@
 import { useRef, useState, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 
-import { Cluster, Hotspot, PASFind, PlaceSignal, HistoricRoute, ETYMOLOGY_SIGNALS } from '../pages/fieldGuideTypes';
+import { Cluster, Hotspot, HistoricFind, PlaceSignal, HistoricRoute, ETYMOLOGY_SIGNALS } from '../pages/fieldGuideTypes';
 import {
     NHLEResponse, AIMResponse, OverpassElement,
     fetchLocationLabel, fetchEtymologySignals, fetchHeritageFeatures,
@@ -34,7 +34,7 @@ export interface HistoricScanOptions extends ScanContext {
 }
 
 export interface HistoricScanResult {
-    pasFinds:        PASFind[];
+    pasFinds:        HistoricFind[];
     placeSignals:    PlaceSignal[];
     monumentPoints:  [number, number][];
     heritageCount:   number;
@@ -170,7 +170,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             }
 
             // 3. OSM heritage features
-            let pasFinds: PASFind[] = [];
+            let pasFinds: HistoricFind[] = [];
             if (osmData?.elements) {
                 pasFinds = osmData.elements.map((el: OverpassElement) => {
                     const lat = el.lat || el.center?.lat;
@@ -193,7 +193,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         isApprox:   false,
                         osmType:    el.type,
                     };
-                }).filter(Boolean) as PASFind[];
+                }).filter(Boolean) as HistoricFind[];
                 onLog(`> HERITAGE: ${pasFinds.length} OSM feature${pasFinds.length !== 1 ? 's' : ''} found within 2km.`, 'historic');
             }
 

@@ -29,7 +29,7 @@ export interface Cluster {
     isHighConfidenceCrossing?: boolean;
 }
 
-export interface PASFind {
+export interface HistoricFind {
     id: string;
     internalId: string;
     objectType: string;
@@ -62,23 +62,38 @@ export interface HistoricRoute {
     period?: "roman" | "medieval" | "post-medieval" | "unknown";
 }
 
+export type HotspotClassification =
+    | 'Crossing Point Candidate'
+    | 'Junction / Convergence Zone'
+    | 'Settlement Edge Candidate'
+    | 'Wetland Margin Activity Zone'
+    | 'Route-Side Activity Zone'
+    | 'Terrain Structure Candidate'
+    | 'Spectral Activity Candidate'
+    | 'General Activity Zone';
+
 export interface Hotspot {
     id: string;
     number: number;
     score: number;
     confidence: 'Low Confidence' | 'Developing Signal' | 'Strong Signal' | 'High Probability';
     type: 'Likely Settlement Edge' | 'Water Interaction Zone' | 'Movement Corridor (Likely)' | 'Raised Dry Area (Likely)' | 'General Activity Zone';
+    classification:       HotspotClassification;
+    classificationReason: string;
+    secondaryTag?:        string;
+    suggestedFocus?:      string;
     explanation: string[];
     center: [number, number];
     bounds: [[number, number], [number, number]];
     memberIds: string[];
     isHighConfidenceCrossing?: boolean;
     metrics: {
-        anomaly: number;
-        context: number;
+        anomaly:     number;
+        context:     number;
         convergence: number;
-        behaviour: number;
-        penalty: number;
+        behaviour:   number;
+        penalty:     number;
+        signalCount: number;
     };
 }
 

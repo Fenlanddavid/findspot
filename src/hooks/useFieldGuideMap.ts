@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
-import { Cluster, Hotspot, PASFind, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Cluster, Hotspot, HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ type MapCallbacks = {
     onZoomChange: (z: number) => void;
     onSetClickLabel: (label: string | null) => void;
     onPASFindLog: (msg: string) => void;
-    onPASFindSelect: (find: PASFind) => void;
+    onPASFindSelect: (find: HistoricFind) => void;
     onCrossingsLog: (msg: string) => void;
 };
 
@@ -46,7 +46,7 @@ export type UseFieldGuideMapOptions = {
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
-    pasFinds: PASFind[];
+    pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
     // Layer visibility drivers
     isSatellite: boolean;
