@@ -182,19 +182,32 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         title={<>Find: <span className="font-mono text-gray-400 dark:text-gray-500 font-normal">{draft.findCode}</span></>}
         headerActions={!isEditing ? (
           <>
-            {/* Star — minimal glass icon */}
+            {/* Star — minimal glass circle */}
             <button
               onClick={toggleFavorite}
-              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/60 dark:bg-white/[0.06] border border-gray-100 dark:border-white/10 backdrop-blur-sm shadow-sm transition-all duration-[120ms] hover:scale-110 active:scale-95"
+              className="shrink-0 flex items-center justify-center rounded-full transition-all duration-[140ms] active:scale-95"
+              style={{
+                width: 34, height: 34,
+                background: draft.isFavorite ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${draft.isFavorite ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.06)'}`,
+                boxShadow: draft.isFavorite ? '0 0 10px rgba(16,185,129,0.22)' : 'none',
+              }}
+              onMouseEnter={e => { if (!draft.isFavorite) e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+              onMouseLeave={e => { if (!draft.isFavorite) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
               title={draft.isFavorite ? "Remove from Finds Box" : "Add to Finds Box"}
             >
-              <span className={`text-sm leading-none ${draft.isFavorite ? '' : 'opacity-30'}`}>{draft.isFavorite ? '⭐' : '☆'}</span>
+              <span className={`text-sm leading-none ${draft.isFavorite ? '' : 'opacity-40'}`}>{draft.isFavorite ? '⭐' : '☆'}</span>
             </button>
-            {/* Share — PRIMARY */}
+            {/* Share — PRIMARY pill */}
             <button
               onClick={handleShare}
               disabled={busy}
-              className="text-[10px] font-black text-white bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 px-3 py-1 rounded-lg border border-emerald-600/50 transition-all duration-[140ms] uppercase tracking-widest flex items-center gap-1 shadow-[0_0_12px_rgba(16,185,129,0.3)] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
+              className="shrink-0 text-[11px] font-semibold text-white rounded-full transition-all duration-[140ms] flex items-center gap-1.5 hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
+              style={{
+                padding: '6px 14px',
+                background: 'linear-gradient(180deg, #10b981, #059669)',
+                boxShadow: '0 4px 12px rgba(16,185,129,0.25)',
+              }}
             >
               {busy ? (
                 <>
@@ -205,24 +218,24 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 </>
               ) : 'Share'}
             </button>
-            {/* PAS Report — SECONDARY outlined */}
+            {/* PAS Report — inline text action */}
             <button
               onClick={() => setIsPASModalOpen(true)}
-              className="text-[10px] font-black text-gray-600 dark:text-gray-300 bg-transparent px-3 py-1 rounded-lg border border-gray-200 dark:border-white/15 hover:border-gray-300 dark:hover:border-white/25 transition-all duration-[140ms] uppercase tracking-widest hover:-translate-y-px active:scale-[0.97]"
+              className="shrink-0 text-[13px] font-medium text-gray-500 dark:text-white/70 hover:text-gray-800 dark:hover:text-white transition-colors duration-[140ms] active:opacity-50"
             >
               PAS Report
             </button>
-            {/* Edit — GHOST */}
+            {/* Edit — inline text action */}
             <button
               onClick={() => setIsEditing(true)}
-              className="text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 px-1.5 py-1 transition-all duration-[140ms] uppercase tracking-widest hover:-translate-y-px active:scale-[0.97]"
+              className="shrink-0 text-[13px] font-medium text-gray-500 dark:text-white/70 hover:text-gray-800 dark:hover:text-white transition-colors duration-[140ms] active:opacity-50"
             >
               Edit
             </button>
           </>
         ) : undefined}
       >
-        <div className="no-print grid gap-6 max-h-[80vh] overflow-y-auto pr-1">
+        <div className="no-print grid gap-6 pr-1">
           {shareError && (
             <div className="mb-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex items-center justify-between gap-3">
               <span className="text-xs text-red-700 dark:text-red-300 font-medium">{shareError}</span>
