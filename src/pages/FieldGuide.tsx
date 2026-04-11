@@ -10,11 +10,49 @@ import { useHistoricScan } from '../hooks/useHistoricScan';
 
 import {
     Cluster, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
-    HOTSPOT_INTERPRETATION,
+    HotspotClassification, HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
+
+// ─── Hotspot display helpers ──────────────────────────────────────────────────
+
+// Potential tier: externally-visible label replacing raw numeric score.
+// Keeps the internal 0–96 range intact; only the presentation changes.
+function getPotentialTier(score: number): string {
+    if (score > 80) return 'High Potential';
+    if (score > 60) return 'Strong Potential';
+    if (score > 35) return 'Moderate Potential';
+    return 'Low Potential';
+}
+
+// Short form for space-constrained elements (tray buttons etc.)
+function getPotentialTierShort(score: number): string {
+    if (score > 80) return 'HIGH';
+    if (score > 60) return 'STRG';
+    if (score > 35) return 'MOD';
+    return 'LOW';
+}
+
+// Human-readable titles that replace engine classification labels in the UI.
+// The underlying classification value is preserved for all logic — only the
+// display string changes, so nothing breaks if we adjust these later.
+const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
+    'Crossing Point Candidate':    'Crossing Point',
+    'Junction / Convergence Zone': 'Route Junction',
+    'Settlement Edge Candidate':   'Settlement Edge',
+    'Wetland Margin Activity Zone':'Wetland Margin',
+    'Route-Side Activity Zone':    'Movement Corridor',
+    'Terrain Structure Candidate': 'Structural Feature',
+    'Spectral Activity Candidate': 'Cropmark Signal',
+    'Lowland Activity Zone':       'Lowland Activity',
+    'Raised Activity Area':        'Raised Activity',
+    'Route-Influenced Area':       'Route-Influenced Area',
+    'Cropmark Activity Zone':      'Cropmark Activity',
+    'Multi-Signal Activity Zone':  'Multi-Signal Activity',
+    'General Activity Zone':       'Activity Zone',
+};
 
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
 
@@ -527,33 +565,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Mobile Hotspot Card Popup */}
                     {selectedHotspotId && !historicMode && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {hotspots.filter(h => h.id === selectedHotspotId).map(h => (
-                                <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl backdrop-blur-xl transition-all ${h.score >= 80 ? 'bg-slate-900/95 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : h.score >= 45 ? 'bg-slate-900/95 border-emerald-500/50' : 'bg-slate-900/95 border-white/20'}`}>
+                                <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl transition-all ${h.confidence === 'High Probability' ? 'bg-slate-900 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : h.confidence === 'Strong Signal' ? 'bg-slate-900 border-emerald-500/50' : 'bg-slate-900 border-white/20'}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex-1 min-w-0 pr-3">
                                             <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1">Hotspot {h.number}</p>
-                                            <h3 className="text-base font-black text-white uppercase tracking-tight leading-tight mb-0.5">{h.classification}</h3>
-                                            {h.classification === 'General Activity Zone' && getSupportingSignal(h.explanation) && (
-                                                <p className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
-                                                    {getSupportingSignal(h.explanation)}
-                                                </p>
-                                            )}
-                                            <p className="text-[10px] font-medium text-white/80 mb-2.5 leading-tight">{h.classificationReason}</p>
-                                            <div className="flex items-center flex-wrap gap-1.5">
-                                                <div className={`px-2.5 py-1 rounded text-[8px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.4)]' : h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                                                    {h.confidence}
-                                                </div>
-                                                <div className="px-2 py-0.5 rounded text-[8px] font-bold tracking-widest bg-white/8 text-white/40">
-                                                    Score {h.score}
-                                                </div>
-                                                {h.secondaryTag && (
-                                                    <div className="px-2 py-0.5 rounded text-[8px] font-bold text-amber-300/80 border border-amber-500/20 bg-amber-500/5">
-                                                        {h.secondaryTag}
-                                                    </div>
-                                                )}
-                                                {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest">DETECT HERE</span>}
-                                            </div>
+                                            <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{HOTSPOT_TITLES[h.classification]}</h3>
+                                            <p className="text-[10px] text-white/50 mb-2 leading-tight">{h.classificationReason}</p>
+                                            <p className="text-[11px] font-medium leading-snug">
+                                                <span className={h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/60' : 'text-white/40'}>{getPotentialTier(h.score)}</span>
+                                                <span className="text-white/20 mx-1">·</span>
+                                                <span className={h.confidence === 'High Probability' ? 'text-amber-300/70' : h.confidence === 'Strong Signal' ? 'text-emerald-300/70' : 'text-white/40'}>{h.confidence}</span>
+                                                {h.secondaryTag && <><span className="text-white/20 mx-1.5">·</span><span className="text-amber-300/60">{h.secondaryTag}</span></>}
+                                            </p>
+                                            {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest mt-1.5 block">DETECT HERE</span>}
                                         </div>
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -564,10 +590,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
                                         </div>
                                     )}
-                                    <div className="bg-black/20 rounded-2xl p-4 mb-3">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-3">What the engine is seeing:</p>
+                                    <div className="border-t border-white/8 pt-3 mb-3">
+                                        <p className="text-[8px] font-medium text-white/30 mb-2.5">What the data shows</p>
                                         <div className="space-y-2">
-                                            {h.explanation.map((reason, idx) => (
+                                            {h.explanation.slice(0, 3).map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
                                                     <p className="text-xs font-bold text-white leading-tight flex-1">{reason}</p>
@@ -576,15 +602,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     </div>
                                     {h.suggestedFocus && (
-                                        <div className="flex items-center gap-2 px-1 mb-3">
-                                            <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
-                                            <p className="text-[10px] leading-tight">
-                                                <span className="font-black text-emerald-500/60 uppercase tracking-widest">Focus: </span>
-                                                <span className="font-bold text-emerald-300">{h.suggestedFocus}</span>
-                                            </p>
+                                        <div className="mt-3 pt-3 border-t border-emerald-500/15">
+                                            <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus Area</p>
+                                            <p className="text-[11px] font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                         </div>
                                     )}
-                                    <p className="text-center text-[7px] text-white/40 italic">Highlights historic activity — not guaranteed finds.</p>
+                                    <p className="text-center text-[7px] text-white/40 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             ))}
                         </div>
@@ -592,7 +615,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Mobile Target Card Popup */}
                     {selectedId && !selectedHotspotId && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {detectedFeatures.filter(f => f.id === selectedId).map(f => (
                                 <div key={f.id} className={`p-4 rounded-2xl border shadow-2xl transition-all ${f.sources.length >= 3 ? 'bg-amber-600 border-yellow-300 text-white shadow-[0_0_30px_rgba(217,119,6,0.5)]' : f.sources.includes('hydrology') ? 'bg-blue-600 border-white text-white' : f.source === 'terrain' ? 'bg-emerald-500 border-white text-white' : f.source === 'historic' ? 'bg-slate-700 border-white text-white' : 'bg-sky-500 border-white text-white'}`}>
                                     <div className="flex justify-between items-center mb-2">
@@ -991,31 +1014,23 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         setSelectedHotspotId(h.id);
                                         mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                     }}
-                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : h.score >= 80 ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : h.score >= 45 ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
+                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : h.confidence === 'High Probability' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : h.confidence === 'Strong Signal' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
                                 >
                                     <div className="mb-3">
                                         <div className="flex justify-between items-start mb-0.5">
-                                            <h3 className={`text-[10px] font-black uppercase tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{h.classification}</h3>
+                                            <h3 className={`text-[10px] font-black tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{HOTSPOT_TITLES[h.classification]}</h3>
                                             <div className="flex items-center gap-1.5 flex-shrink-0">
                                                 {showSuggestion && h.number === 1 && <span className="text-[7px] font-black text-emerald-400 animate-pulse tracking-widest">DETECT HERE</span>}
-                                                <span className="text-[9px] font-black text-white/40 tracking-tight">{h.score}%</span>
+                                                <span className={`text-[8px] font-black tracking-tight ${h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/50' : 'text-slate-500'}`}>{getPotentialTierShort(h.score)}</span>
                                             </div>
                                         </div>
-                                        {h.classification === 'General Activity Zone' && getSupportingSignal(h.explanation) && (
-                                            <p className="text-[7px] font-bold text-emerald-400 uppercase tracking-widest mb-1">
-                                                {getSupportingSignal(h.explanation)}
-                                            </p>
-                                        )}
-                                        <p className="text-[8px] font-medium text-white/70 leading-tight mb-2">{h.classificationReason}</p>
-                                        <div className="flex items-center flex-wrap gap-1">
-                                            <div className={`px-2 py-0.5 rounded text-[7px] font-black uppercase tracking-widest ${h.confidence === 'High Probability' ? 'bg-amber-500 text-black shadow-[0_0_10px_rgba(245,158,11,0.5)]' : h.confidence === 'Strong Signal' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>{h.confidence}</div>
-                                            <span className="text-[7px] font-bold text-white/30 ml-0.5">{h.score}%</span>
-                                            {h.secondaryTag && (
-                                                <div className="px-1.5 py-0.5 rounded text-[7px] font-bold text-amber-300/70 border border-amber-500/20 ml-0.5">
-                                                    {h.secondaryTag}
-                                                </div>
-                                            )}
-                                        </div>
+                                        <p className="text-[9px] text-white/45 mb-1.5 leading-tight">{h.classificationReason}</p>
+                                        <p className="text-[10px] font-medium leading-snug mb-2">
+                                            <span className={h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/60' : 'text-white/40'}>{getPotentialTier(h.score)}</span>
+                                            <span className="text-white/20 mx-1">·</span>
+                                            <span className={h.confidence === 'High Probability' ? 'text-amber-300/70' : h.confidence === 'Strong Signal' ? 'text-emerald-300/70' : 'text-white/40'}>{h.confidence}</span>
+                                            {h.secondaryTag && <><span className="text-white/20 mx-1.5">·</span><span className="text-amber-300/60">{h.secondaryTag}</span></>}
+                                        </p>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-3 animate-pulse">
@@ -1023,8 +1038,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="space-y-1.5 mt-3">
-                                        <p className="text-[7px] font-black uppercase tracking-widest text-white/30 mb-1.5">What the engine is seeing:</p>
-                                        {h.explanation.map((reason, idx) => (
+                                        <p className="text-[7px] font-medium text-white/25 mb-1.5">What the data shows</p>
+                                        {h.explanation.slice(0, 3).map((reason, idx) => (
                                             <div key={idx} className="flex items-center gap-2">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
                                                 <p className="text-[10px] font-bold text-slate-300 leading-tight">{reason}</p>

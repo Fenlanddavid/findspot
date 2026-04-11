@@ -168,6 +168,59 @@ export function getDistanceToLine(
 }
 
 
+// ─── Scoring helpers ──────────────────────────────────────────────────────────
+
+// Anti-inflation logistic boost: converts currentScore to raw space, adds boost,
+// re-compresses. Each additional boost yields diminishing returns as scores
+// approach 100, making "High potential" actually mean something.
+function boostScore(base: number, boost: number): number {
+    if (base <= 0) return Math.min(96, 100 * (1 - Math.exp(-boost / 100)));
+    const raw = -Math.log(Math.max(0.001, 1 - Math.min(0.999, base / 100))) * 100;
+    return Math.min(96, 100 * (1 - Math.exp(-(raw + boost) / 100)));
+}
+
+// Source weights for confidence scoring — quality over count.
+// Historic source gets the highest weight; satellite_spring is the weakest.
+const SOURCE_WEIGHTS: Record<string, number> = {
+    terrain:          1.0,
+    terrain_global:   0.9,
+    hydrology:        0.9,
+    satellite_summer: 0.8,
+    satellite_spring: 0.7,
+    historic:         1.2,
+};
+
+// ─── Route bearing ────────────────────────────────────────────────────────────
+
+// Approximate route bearing from first → last geometry vertex.
+// Used to populate Cluster.routeAlignment for movement corridor analysis.
+function computeRouteBearing(geometry: [number, number][]): number {
+    if (geometry.length < 2) return 0;
+    const [lon1, lat1] = geometry[0];
+    const [lon2, lat2] = geometry[geometry.length - 1];
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const lat1R = lat1 * Math.PI / 180;
+    const lat2R = lat2 * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2R);
+    const x = Math.cos(lat1R) * Math.sin(lat2R) - Math.sin(lat1R) * Math.cos(lat2R) * Math.cos(dLon);
+    return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+
+// Shortest angular difference between two bearings (handles 0°/360° wrap).
+function bearingDiff(a: number, b: number): number {
+    const d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+}
+
+// Weight factor for non-roman route types. Reflects archaeological confidence:
+// established hollow ways and droveways > green lanes > suspected routes.
+export function getRouteTypeWeight(route: HistoricRoute): number {
+    if (route.type === 'historic_trackway' || route.type === 'holloway' || route.type === 'droveway') return 1.0;
+    if (route.type === 'green_lane')      return 0.7;
+    if (route.type === 'suspected_route') return 0.5;
+    return 0.6; // unknown / other
+}
+
 // ─── Consensus merging ────────────────────────────────────────────────────────
 
 export function findConsensus(rawClusters: Cluster[]): Cluster[] {
@@ -207,19 +260,20 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
                 if (c.source === 'terrain') m.center = [c.center[0], c.center[1]];
                 else m.center = [(m.center[0] + c.center[0]) / 2, (m.center[1] + c.center[1]) / 2];
 
-                m.findPotential = Math.min(96, m.findPotential + (c.findPotential * 0.4 * getWeight(c.source)));
+                m.findPotential = boostScore(m.findPotential, c.findPotential * 0.4 * getWeight(c.source));
 
                 if (c.source === 'hydrology') {
                     m.type = "Ancient Watercourse Signal";
                 }
 
-                if (m.sources.includes('satellite_summer') && !m.sources.includes('satellite_spring')) {
-                    m.type = "Cropmark Signal (Drought Response)";
-                    m.findPotential = Math.min(96, m.findPotential + 15);
-                }
+                // Weighted confidence: quality > count — historic + terrain = high trust,
+                // satellite-only stays lower even with multiple spring/summer passes.
+                const weightedConf = m.sources.reduce((acc, s) => acc + (SOURCE_WEIGHTS[s] ?? 0.5), 0);
+                if (weightedConf >= 2.5) m.confidence = 'High';
+                else if (weightedConf >= 1.5) m.confidence = 'Medium';
 
-                if (m.sources.length >= 3) m.confidence = 'High';
-                else if (m.sources.length >= 2 && m.confidence === 'Subtle') m.confidence = 'Medium';
+                // Track merge count for persistence scoring (applied post-loop)
+                m.rescanCount = (m.rescanCount || 1) + 1;
 
                 let score = (m.sources.length * 15);
                 if (m.sources.includes('terrain') && m.sources.includes('terrain_global')) score += 10;
@@ -236,6 +290,44 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
             merged.push({ ...c, type: initialType, sources: [c.source], persistenceScore: 25, rescanCount: 1 });
         }
     }
+
+    // ── Post-processing: confidence explanations + temporal + persistence ────────
+    // Applied once per merged cluster, after all merging is complete, so the
+    // satellite_summer bonus and temporal agreement bonus cannot double-stack.
+    for (const m of merged) {
+        if (!m.explanationLines) m.explanationLines = [];
+
+        // Confidence explanation: surface the reason behind the quality label
+        // so the output layer can show "why this signal is trusted".
+        if (m.confidence === 'High' && m.sources.includes('historic')) {
+            m.explanationLines.push('Historic data overlaps terrain signal');
+        } else if (m.confidence === 'High' || m.confidence === 'Medium') {
+            if (m.sources.length >= 2) m.explanationLines.push('Multiple independent sources agree');
+        }
+
+        const hasSummer = m.sources.includes('satellite_summer');
+        const hasSpring = m.sources.includes('satellite_spring');
+
+        if (hasSummer && hasSpring) {
+            // Multi-season agreement: strong archaeological signal — both summer
+            // drought stress and spring moisture response detected independently.
+            m.findPotential = boostScore(m.findPotential, 17);
+            m.explanationLines.push('Multi-season cropmark agreement');
+            m.type = 'Cropmark Signal (Drought Response)';
+        } else if (hasSummer) {
+            // Summer-only: useful but single-season
+            m.findPotential = boostScore(m.findPotential, 15);
+            m.type = 'Cropmark Signal (Drought Response)';
+        }
+
+        // Persistence: repeated detection across scan passes = verified signal
+        if ((m.rescanCount || 0) >= 3) {
+            m.findPotential = boostScore(m.findPotential, 10);
+            m.confidence = 'High';
+            m.explanationLines.push('Repeated detection across scans');
+        }
+    }
+
     return merged;
 }
 
@@ -249,6 +341,24 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
         const c = results[i];
         if (!c.explanationLines) c.explanationLines = [];
 
+        // Feature scale classification — area-based, independent of scan tier.
+        // Used for UI grouping and interpretation context.
+        if (c.metrics) {
+            if (c.metrics.area < 200)       c.scale = 'Micro';
+            else if (c.metrics.area < 1000) c.scale = 'Local';
+            else                             c.scale = 'Landscape';
+        }
+
+        // Role-based interpretation — moves from classification to meaning.
+        // Enables enhanced contextLabels when combined with route/landscape context.
+        if (c.type.includes('Roundhouse') || c.type.includes('Foundation') || c.type.includes('Settlement')) {
+            c.role = 'Domestic Core';
+        } else if (c.type.includes('Enclosure') || c.type.includes('Ring') || c.type.includes('Barrow')) {
+            c.role = 'Boundary';
+        } else if (c.type.includes('Linear') || c.type.includes('Corridor')) {
+            c.role = 'Access / Division';
+        }
+
         const neighbors = results.filter(n => n.id !== c.id && getDistance(c.center, n.center) < proximityM);
 
         if (neighbors.length >= 2) {
@@ -258,10 +368,10 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
 
             if (enclosures.length > 0 && houses.length > 0) {
                 c.contextLabel = "Enclosed Settlement / Farmstead";
-                c.findPotential = Math.min(96, c.findPotential + 10);
+                c.findPotential = boostScore(c.findPotential, 10);
             } else if (houses.length >= 2) {
                 c.contextLabel = "Habitation Cluster / Settlement Nucleus";
-                c.findPotential = Math.min(96, c.findPotential + 5);
+                c.findPotential = boostScore(c.findPotential, 5);
             } else if (ditches.length >= 2) {
                 c.contextLabel = "Organized Field System / Celtic Fields";
             }
@@ -271,16 +381,20 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
         for (const route of routes) {
             const dist = getDistanceToLine(c.center, route.geometry, route.bbox);
             if (route.type === 'roman_road' && dist < 150) {
-                c.findPotential = Math.min(96, c.findPotential + 12);
+                c.findPotential = boostScore(c.findPotential, 12);
                 c.explanationLines.push("Roman road proximity");
                 if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) {
                     c.explanationLines.push("LiDAR relief agrees with movement corridor");
                 }
                 hasRouteProximity = true;
+                if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
+                c.isOnCorridor = true;
             } else if (dist < 100) {
-                c.findPotential = Math.min(96, c.findPotential + 7);
+                c.findPotential = boostScore(c.findPotential, 7 * getRouteTypeWeight(route));
                 c.explanationLines.push("Historic route proximity");
                 hasRouteProximity = true;
+                if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
+                c.isOnCorridor = true;
             }
         }
 
@@ -292,7 +406,28 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
         if (c.polarity === 'Raised' && hasRouteProximity) {
             c.explanationLines.push("Strong route-to-terrain relationship");
         }
+
+        // Role + corridor context → richer interpretation
+        if (c.role === 'Access / Division' && hasRouteProximity) {
+            c.contextLabel = "Primary Access Route into Settlement";
+        }
     }
+
+    // ── Second pass: cluster linking by route alignment ───────────────────────
+    // Connects clusters that share the same movement corridor (same bearing ±10°,
+    // within 200m). Enables flow visualisation and settlement structure mapping.
+    // Run after the first pass so routeAlignment is set on all clusters.
+    for (const c of results) {
+        if (c.routeAlignment === undefined) continue;
+        const aligned = results.filter(n =>
+            n.id !== c.id &&
+            n.routeAlignment !== undefined &&
+            bearingDiff(c.routeAlignment!, n.routeAlignment!) <= 10 &&
+            getDistance(c.center, n.center) <= 200,
+        );
+        if (aligned.length > 0) c.linkedClusterIds = aligned.map(n => n.id);
+    }
+
     return results;
 }
 
@@ -376,7 +511,11 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         if (risk !== 'Low') {
             c.disturbanceRisk = risk;
             c.disturbanceReason = reason;
-            c.findPotential = Math.max(5, c.findPotential - (risk === 'High' ? 60 : 30));
+            // Proportional penalty: preserves signal in heavily-worked landscapes.
+            // A High-risk cluster at 60 becomes 36 (not 0 as flat −60 would give),
+            // so disturbance flags downgrade rather than delete useful signals.
+            const penaltyFactor = risk === 'High' ? 0.4 : 0.2;
+            c.findPotential = Math.max(5, Math.round(c.findPotential * (1 - penaltyFactor)));
         } else {
             c.disturbanceRisk = 'Low';
         }

@@ -6,7 +6,7 @@
 // generateHotspots is the combined entry point kept for call-site compatibility.
 
 import { Cluster, Hotspot, HotspotClassification, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
-import { getDistance, getDistanceToLine, getDistanceKm } from './fieldGuideAnalysis';
+import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight } from './fieldGuideAnalysis';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,
@@ -31,15 +31,15 @@ function evaluateHotspotConfidence(params: {
     let confidence: Hotspot['confidence'] = 'Low Confidence';
     if      (score > 80 && hasStrongAgreement)   confidence = 'High Probability';
     else if (score > 60 && hasModerateAgreement) confidence = 'Strong Signal';
-    else if (score > 35)                         confidence = 'Developing Signal';
+    else if (score > 35)                         confidence = 'Emerging Signal';
 
     // Downgrade checks: strong route/hydrology context is required to hold
     // upper labels — pure score is not enough.
-    if (confidence === 'Strong Signal'    && behaviour < 5 && context < 5 && convergence < 5) confidence = 'Developing Signal';
+    if (confidence === 'Strong Signal'    && behaviour < 5 && context < 5 && convergence < 5) confidence = 'Emerging Signal';
     if (confidence === 'High Probability' && behaviour < 8 && convergence < 8)                confidence = 'Strong Signal';
 
     // Upgrade: strong convergence evidence can lift a borderline Developing Signal.
-    if (confidence === 'Developing Signal' && convergence >= 10 && score > 30) confidence = 'Strong Signal';
+    if (confidence === 'Emerging Signal' && convergence >= 10 && score > 30) confidence = 'Strong Signal';
 
     return confidence;
 }
@@ -53,16 +53,23 @@ const EXPLANATION_PRIORITY: [string, number][] = [
     ['Near Roman',                        90],
     ['Likely Roman',                      90],
     ['Hydrology + terrain depression',    80],
+    ['Multi-season cropmark agreement',   75],
     ['LiDAR + Hydrology',                 70],
     ['Island effect',                     70],
+    ['Repeated detection across scans',   68],
     ['Historic river crossing',           65],
     ['Historic crossing',                 65],
     ['Route junction',                    60],
     ['Near historic route convergence',   60],
     ['LiDAR + Spectral',                  55],
     ['IGNORE:',                           50],  // below positive signals; still visible but does not crowd them out
+    ['Settlement structure',              48],
     ['Reliable LiDAR',                    45],
+    ['Access route into settlement',      45],
+    ['Historic data overlaps',            44],
     ['Spectral vegetation',               40],
+    ['Field system indicators',           38],
+    ['Multiple independent sources',      36],
     ['Raised dry footing',                35],
     ['Strategic dry point',               35],
     ['Historic movement corridor',        25],
@@ -115,6 +122,7 @@ interface ClassifyContext {
     context:                number;
     convergence:            number;
     behaviour:              number;
+    signalCount:            number;
 }
 
 function classifyHotspot(ctx: ClassifyContext): {
@@ -126,56 +134,57 @@ function classifyHotspot(ctx: ClassifyContext): {
     if (ctx.isHighConfidenceCrossing && ctx.convergence >= 10 && ctx.hasHydrology) {
         return {
             classification: 'Crossing Point Candidate',
-            reason:         'Hydrology, route proximity, and strong convergence suggest a likely crossing location.',
+            reason:         'Route and water signals converge here',
             secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
         };
     }
 
     // 2. Junction / Convergence Zone — multiple routes meeting without dominant crossing identity
-    if (ctx.convergence >= 8 && ctx.routeCount >= 2) {
+    // P2: convergence threshold 8 → 6
+    if (ctx.convergence >= 6 && ctx.routeCount >= 2) {
         return {
             classification: 'Junction / Convergence Zone',
-            reason:         'Multiple route influences converge at this location.',
+            reason:         'Multiple routes converge here',
             secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
         };
     }
 
     // 3. Settlement Edge Candidate — raised LiDAR anomaly with meaningful context.
-    // Requires behaviour OR convergence >= 4 so purely topographic bumps without
-    // any route or landscape activity logic don't over-trigger this class.
-    if (ctx.anomaly >= 15 && ctx.context >= 8 && ctx.isRaised && ctx.hasLidar &&
+    // P2: anomaly 15 → 12. P3 lean: context 8 → 6 so hotspots leaning toward
+    // settlement edge are classified as such; confidence provides the honesty layer.
+    if (ctx.anomaly >= 12 && ctx.context >= 6 && ctx.isRaised && ctx.hasLidar &&
         (ctx.behaviour >= 4 || ctx.convergence >= 4)) {
         return {
             classification: 'Settlement Edge Candidate',
-            reason:         'Raised topography with strong LiDAR signal and good context suggest practical settlement edge conditions.',
+            reason:         'Raised LiDAR anomaly in landscape context',
             secondaryTag:   ctx.hasHydrology ? 'Water margin setting' : undefined,
         };
     }
 
     // 4. Wetland Margin Activity Zone — raised dry island in wet context, no dominant junction
-    if (ctx.hasHydrology && ctx.isRaised && ctx.context >= 8 && ctx.convergence < 8) {
+    if (ctx.hasHydrology && ctx.isRaised && ctx.context >= 8 && ctx.convergence < 6) {
         return {
             classification: 'Wetland Margin Activity Zone',
-            reason:         'Dry elevated ground beside wetter terrain — a practical margin for repeated activity.',
+            reason:         'Dry elevated ground beside wetter terrain',
         };
     }
 
     // 5. Route-Side Activity Zone — route-led but not a junction or crossing
-    if (ctx.behaviour >= 8 && (ctx.hasRomanProximity || ctx.hasHistProximity) && ctx.convergence < 8) {
+    // P2: behaviour threshold 8 → 6
+    if (ctx.behaviour >= 6 && (ctx.hasRomanProximity || ctx.hasHistProximity) && ctx.convergence < 6) {
         return {
             classification: 'Route-Side Activity Zone',
-            reason:         'Activity clustering beside a movement corridor without dominant crossing or junction identity.',
+            reason:         'Signals cluster alongside a movement corridor',
             secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
         };
     }
 
     // 6. Terrain Structure Candidate — LiDAR anomaly without route or hydrology reinforcement.
-    // Requires context >= 4 as a landscape stabiliser so minor relief noise or
-    // isolated bumps do not trigger a structural interpretation on anomaly alone.
-    if (ctx.hasLidar && ctx.anomaly >= 15 && ctx.context >= 4 && !ctx.hasHydrology && ctx.behaviour < 8) {
+    // P2: anomaly 15 → 12, behaviour guard 8 → 6
+    if (ctx.hasLidar && ctx.anomaly >= 12 && ctx.context >= 4 && !ctx.hasHydrology && ctx.behaviour < 6) {
         return {
             classification: 'Terrain Structure Candidate',
-            reason:         'Relief-defined feature with structural potential — possible bank, platform, or enclosure form.',
+            reason:         'Distinct structural relief detected in LiDAR',
         };
     }
 
@@ -183,14 +192,59 @@ function classifyHotspot(ctx: ClassifyContext): {
     if (ctx.satelliteIsPrimary && !ctx.hasLidar) {
         return {
             classification: 'Spectral Activity Candidate',
-            reason:         'Potential cropmark or vegetation response. No LiDAR confirmation — treat as candidate for field assessment.',
+            reason:         'Cropmark or vegetation response — field verification recommended',
         };
     }
 
-    // 8. General Activity Zone — fallback
+    // ── Contextual fallbacks (P1) ─────────────────────────────────────────────
+    // Replace the generic single fallback with signal-derived labels so outputs
+    // feel distinct and meaningful even when primary thresholds are not met.
+
+    // 8. Lowland Activity Zone — hydrology present but below Wetland Margin threshold
+    if (ctx.hasHydrology && ctx.convergence < 6) {
+        return {
+            classification: 'Lowland Activity Zone',
+            reason:         'Hydrological signal near water',
+        };
+    }
+
+    // 9. Raised Activity Area — elevated terrain without strong structural signal
+    if (ctx.isRaised) {
+        return {
+            classification: 'Raised Activity Area',
+            reason:         'Slightly elevated ground favoured for settlement or use',
+        };
+    }
+
+    // 10. Route-Influenced Area — route nearby but below route-side threshold
+    if (ctx.hasRomanProximity || ctx.hasHistProximity) {
+        return {
+            classification: 'Route-Influenced Area',
+            reason:         'Route proximity with activity signal clustering nearby',
+            secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
+        };
+    }
+
+    // 11. Cropmark Activity Zone — satellite signal present without exclusive spectral trigger
+    if (ctx.hasSatellite && !ctx.hasLidar) {
+        return {
+            classification: 'Cropmark Activity Zone',
+            reason:         'Spectral signal alongside other sources detected',
+        };
+    }
+
+    // 12. Multi-Signal Activity Zone — multiple weak signals from different sources
+    if (ctx.signalCount >= 2) {
+        return {
+            classification: 'Multi-Signal Activity Zone',
+            reason:         'Mixed signals from multiple independent sources',
+        };
+    }
+
+    // 13. General Activity Zone — ultimate fallback
     return {
         classification: 'General Activity Zone',
-        reason:         'Multiple signals suggest activity but no dominant landscape identity has been identified.',
+        reason:         'Multiple independent signals detected',
     };
 }
 
@@ -327,6 +381,40 @@ export function buildTerrainHotspots(
             }
         }
 
+        // ── Temporal agreement (multi-season satellite) ───────────────────────────
+        // Cluster-level boosts were applied in findConsensus; this captures the
+        // hotspot-level signal so it appears in output and gets a score contribution.
+        // For satellite-primary mode the base scoring already accounts for dual
+        // season (+3 extra); only the supporting-LiDAR case adds anomaly here.
+        if (sources.has('satellite_summer') && sources.has('satellite_spring')) {
+            if (!satelliteIsPrimary) anomaly += 4;
+            explanation.push('Multi-season cropmark agreement');
+        }
+
+        // ── Persistence (verified signal via repeat detection) ────────────────────
+        if (members.some(m => (m.rescanCount || 0) >= 3)) {
+            context += 3;
+            explanation.push('Repeated detection across scans');
+        }
+
+        // ── Context labels from cluster analysis ──────────────────────────────────
+        // analyzeContext runs before buildTerrainHotspots in the pipeline, so
+        // contextLabel and role are fully populated by the time we reach here.
+        const memberContextLabels = members.map(m => m.contextLabel).filter(Boolean) as string[];
+        if (memberContextLabels.some(l =>
+            l === 'Enclosed Settlement / Farmstead' || l === 'Habitation Cluster / Settlement Nucleus',
+        )) {
+            context += 5;
+            explanation.push('Settlement structure indicators');
+        }
+        if (memberContextLabels.some(l => l === 'Primary Access Route into Settlement')) {
+            behaviour += 3;
+            explanation.push('Access route into settlement detected');
+        }
+        if (memberContextLabels.some(l => l === 'Organized Field System / Celtic Fields')) {
+            explanation.push('Field system indicators');
+        }
+
         // ── Route scoring ─────────────────────────────────────────────────────
         // Base proximity → behaviour.
         // Junction / crossing / convergence bonuses → convergence metric,
@@ -344,9 +432,11 @@ export function buildTerrainHotspots(
                 else if (dist < 250)  { routeScore += 6; hasRomanProximity = true; routeCount++; }
                 else if (dist < 500)  { routeScore += 3; hasRomanProximity = true; routeCount++; }
             } else {
-                if (dist < 75)        { routeScore += 5; hasHistProximity = true; routeCount++; }
-                else if (dist < 200)  { routeScore += 3; hasHistProximity = true; routeCount++; }
-                else if (dist < 400)  { routeScore += 1; hasHistProximity = true; routeCount++; }
+                // Route type hierarchy: trackways/holloways > green lanes > suspected routes
+                const tw = getRouteTypeWeight(route);
+                if (dist < 75)        { routeScore += Math.round(5 * tw); hasHistProximity = true; routeCount++; }
+                else if (dist < 200)  { routeScore += Math.round(3 * tw); hasHistProximity = true; routeCount++; }
+                else if (dist < 400)  { routeScore += Math.round(1 * tw); hasHistProximity = true; routeCount++; }
             }
         }
 
@@ -416,6 +506,7 @@ export function buildTerrainHotspots(
             hasRomanProximity, hasHistProximity,
             routeCount, isHighConfidenceCrossing,
             anomaly, context, convergence, behaviour,
+            signalCount: sources.size,
         });
 
         // ── Suggested focus ───────────────────────────────────────────────────
@@ -425,14 +516,19 @@ export function buildTerrainHotspots(
         // from a map shape. No engine terminology, no invisible signals.
         // If no clear visible guidance exists, leave undefined — show nothing.
         let suggestedFocus: string | undefined;
-        if (classification === 'Crossing Point Candidate') {
-            suggestedFocus = 'Focus where the route meets the water';
+        const hasRouteAlignment = members.some(m => m.routeAlignment !== undefined);
+        if (isHighConfidenceCrossing) {
+            suggestedFocus = 'Check crossing point';
         } else if (classification === 'Junction / Convergence Zone') {
             suggestedFocus = 'Focus where the routes meet';
+        } else if (hasRouteAlignment || classification === 'Route-Side Activity Zone') {
+            suggestedFocus = 'Follow movement line';
+        } else if (hasHydrology && members.some(m => m.polarity === 'Sunken')) {
+            suggestedFocus = 'Focus along lowest ground';
         } else if (hasHydrology && isRaised) {
             suggestedFocus = 'Focus on the dry edge beside wetter ground';
-        } else if (hasHydrology && members.some(m => m.polarity === 'Sunken')) {
-            suggestedFocus = 'Focus along the lowest part of the ground';
+        } else if (isRaised) {
+            suggestedFocus = 'Target highest ground edge';
         } else if (hasRomanProximity) {
             suggestedFocus = 'Focus along the Roman road edge';
         } else if (hasHistProximity) {

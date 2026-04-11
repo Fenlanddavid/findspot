@@ -27,6 +27,11 @@ export interface Cluster {
     multiScaleLevel?: number;
     explanationLines?: string[];
     isHighConfidenceCrossing?: boolean;
+    role?: string;
+    routeAlignment?: number;
+    isOnCorridor?: boolean;
+    linkedClusterIds?: string[];
+    scale?: 'Micro' | 'Local' | 'Landscape';
 }
 
 export interface HistoricFind {
@@ -70,13 +75,18 @@ export type HotspotClassification =
     | 'Route-Side Activity Zone'
     | 'Terrain Structure Candidate'
     | 'Spectral Activity Candidate'
+    | 'Lowland Activity Zone'
+    | 'Raised Activity Area'
+    | 'Route-Influenced Area'
+    | 'Cropmark Activity Zone'
+    | 'Multi-Signal Activity Zone'
     | 'General Activity Zone';
 
 export interface Hotspot {
     id: string;
     number: number;
     score: number;
-    confidence: 'Low Confidence' | 'Developing Signal' | 'Strong Signal' | 'High Probability';
+    confidence: 'Low Confidence' | 'Emerging Signal' | 'Strong Signal' | 'High Probability';
     type: 'Likely Settlement Edge' | 'Water Interaction Zone' | 'Movement Corridor (Likely)' | 'Raised Dry Area (Likely)' | 'General Activity Zone';
     classification:       HotspotClassification;
     classificationReason: string;
@@ -179,10 +189,10 @@ export const SCAN_PROFILE = {
 
 // ─── Score / label helpers ────────────────────────────────────────────────────
 
-export function getConfidenceLabel(score: number): 'Low Confidence' | 'Developing Signal' | 'Strong Signal' | 'High Probability' {
+export function getConfidenceLabel(score: number): 'Low Confidence' | 'Emerging Signal' | 'Strong Signal' | 'High Probability' {
     if (score > 80) return 'High Probability';
     if (score > 60) return 'Strong Signal';
-    if (score > 35) return 'Developing Signal';
+    if (score > 35) return 'Emerging Signal';
     return 'Low Confidence';
 }
 
