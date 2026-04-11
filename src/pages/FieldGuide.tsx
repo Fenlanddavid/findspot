@@ -591,7 +591,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="border-t border-white/8 pt-3 mb-3">
-                                        <p className="text-[8px] font-medium text-white/30 mb-2.5">What the data shows</p>
+                                        <p className="text-[8px] font-medium text-white/65 mb-2.5">What the data shows</p>
                                         <div className="space-y-2">
                                             {h.explanation.slice(0, 3).map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
@@ -607,7 +607,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <p className="text-[11px] font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                         </div>
                                     )}
-                                    <p className="text-center text-[7px] text-white/40 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                    <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             ))}
                         </div>
