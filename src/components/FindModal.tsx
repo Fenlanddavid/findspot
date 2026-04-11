@@ -179,20 +179,22 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     <>
       <Modal 
         onClose={props.onClose} 
-        title={`Find: ${draft.findCode}`}
+        title={<>Find: <span className="font-mono text-gray-400 dark:text-gray-500 font-normal">{draft.findCode}</span></>}
         headerActions={!isEditing ? (
-          <div className="flex gap-2 items-center">
-            <button 
+          <>
+            {/* Star — minimal glass icon */}
+            <button
               onClick={toggleFavorite}
-              className={`p-1.5 rounded-lg border transition-all ${draft.isFavorite ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-gray-50 border-gray-200 text-gray-400 hover:text-amber-500 hover:border-amber-200'}`}
+              className="w-7 h-7 flex items-center justify-center rounded-full bg-white/60 dark:bg-white/[0.06] border border-gray-100 dark:border-white/10 backdrop-blur-sm shadow-sm transition-all duration-[120ms] hover:scale-110 active:scale-95"
               title={draft.isFavorite ? "Remove from Finds Box" : "Add to Finds Box"}
             >
-              <span className="text-sm leading-none">{draft.isFavorite ? '⭐' : '☆'}</span>
+              <span className={`text-sm leading-none ${draft.isFavorite ? '' : 'opacity-30'}`}>{draft.isFavorite ? '⭐' : '☆'}</span>
             </button>
+            {/* Share — PRIMARY */}
             <button
               onClick={handleShare}
               disabled={busy}
-              className="text-[10px] font-black text-white bg-emerald-600 px-2 py-1 rounded border border-emerald-700 transition-all uppercase tracking-widest flex items-center gap-1 shadow-sm active:scale-95 disabled:opacity-50"
+              className="text-[10px] font-black text-white bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 px-3 py-1 rounded-lg border border-emerald-600/50 transition-all duration-[140ms] uppercase tracking-widest flex items-center gap-1 shadow-[0_0_12px_rgba(16,185,129,0.3)] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
             >
               {busy ? (
                 <>
@@ -201,23 +203,23 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
                   </svg> Sharing…
                 </>
-              ) : (
-                <><span className="text-[12px]">📤</span> Post Find</>
-              )}
+              ) : 'Share'}
             </button>
-            <button 
+            {/* PAS Report — SECONDARY outlined */}
+            <button
               onClick={() => setIsPASModalOpen(true)}
-              className="text-[10px] font-black text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-200 dark:border-blue-800 transition-all uppercase tracking-widest shadow-sm"
+              className="text-[10px] font-black text-gray-600 dark:text-gray-300 bg-transparent px-3 py-1 rounded-lg border border-gray-200 dark:border-white/15 hover:border-gray-300 dark:hover:border-white/25 transition-all duration-[140ms] uppercase tracking-widest hover:-translate-y-px active:scale-[0.97]"
             >
               PAS Report
             </button>
-            <button 
+            {/* Edit — GHOST */}
+            <button
               onClick={() => setIsEditing(true)}
-              className="text-[10px] font-black text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800 transition-all uppercase tracking-widest"
+              className="text-[10px] font-black text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 px-1.5 py-1 transition-all duration-[140ms] uppercase tracking-widest hover:-translate-y-px active:scale-[0.97]"
             >
-              Edit Details
+              Edit
             </button>
-          </div>
+          </>
         ) : undefined}
       >
         <div className="no-print grid gap-6 max-h-[80vh] overflow-y-auto pr-1">
@@ -229,80 +231,113 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
           )}
           {!isEditing ? (
             <div className="grid gap-6">
-              {/* Photos at top for quick view */}
+              {/* Photos */}
               {imageUrls.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {imageUrls.map((x) => (
-                    <div key={x.id} className="relative border-2 border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden aspect-square shadow-sm cursor-pointer group" onClick={() => setCalibratingMedia({ media: x.media, url: x.url })}>
-                      <ScaledImage 
-                        media={x.media} 
-                        imgClassName="object-cover" 
-                        className="w-full h-full" 
-                      />
-                      <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
-                        <span className="truncate flex-1">{x.filename}</span>
-                        {x.media.photoType && (
-                          <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType?.startsWith('photo') ? 'bg-emerald-100 text-emerald-800' : x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {x.media.photoType === 'photo1' ? 'Photo 1' : 
-                             x.media.photoType === 'photo2' ? 'Photo 2' : 
-                             x.media.photoType === 'photo3' ? 'Photo 3' : 
-                             x.media.photoType === 'photo4' ? 'Photo 4' : 
-                             x.media.photoType === 'in-situ' ? 'Photo 1' : 
-                             x.media.photoType === 'cleaned' ? 'Photo 2' : 
+                    <div
+                      key={x.id}
+                      className="relative rounded-2xl overflow-hidden aspect-square shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.22)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.5)] hover:-translate-y-[2px] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.6)] transition-all duration-[160ms] cursor-pointer group"
+                      onClick={() => setCalibratingMedia({ media: x.media, url: x.url })}
+                    >
+                      <ScaledImage media={x.media} imgClassName="object-cover" className="w-full h-full" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-[160ms]" />
+                      {x.media.photoType && (
+                        <div className="absolute bottom-0 inset-x-0 z-10 flex justify-end p-2">
+                          <span className="px-3 py-[3px] rounded-full text-[10px] font-semibold bg-black/50 backdrop-blur-[6px] text-white shadow">
+                            {x.media.photoType === 'photo1' ? 'Photo 1' :
+                             x.media.photoType === 'photo2' ? 'Photo 2' :
+                             x.media.photoType === 'photo3' ? 'Photo 3' :
+                             x.media.photoType === 'photo4' ? 'Photo 4' :
+                             x.media.photoType === 'in-situ' ? 'In Situ' :
+                             x.media.photoType === 'cleaned' ? 'Cleaned' :
                              x.media.photoType}
                           </span>
-                        )}
-                      </div>
-                      <div className={`absolute inset-0 bg-emerald-600/20 transition-opacity flex items-center justify-center z-10 opacity-0 group-hover:opacity-100`}>
-                          <span className="bg-white dark:bg-gray-800 text-[10px] font-bold px-2 py-1 rounded-full shadow-sm">
-                            {x.media.pxPerMm ? 'Rescale' : 'Set Scale'}
-                          </span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-[160ms]">
+                        <span className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md">
+                          {x.media.pxPerMm ? 'Rescale' : 'Set Scale'}
+                        </span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 opacity-40 italic text-sm bg-gray-50 dark:bg-gray-900 rounded-xl border-2 border-dashed border-gray-100 dark:border-gray-800">
+                <div className="text-center py-6 opacity-30 italic text-sm bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
                   No photos attached.
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-6">
-                <DetailItem label="Object Type" value={draft.objectType} />
-                {draft.coinType && <DetailItem label="Coin Type" value={draft.coinType} />}
-                {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
-                {draft.ruler && <DetailItem label="Ruler" value={draft.ruler} />}
-                {draft.dateRange && <DetailItem label="Date Range" value={draft.dateRange} />}
-                <DetailItem label="Period" value={draft.period} />
-                <DetailItem label="Material" value={draft.material} />
-                <DetailItem label="PAS ID" value={draft.pasId} />
-                <DetailItem label="Weight (g)" value={draft.weightG} />
-                <DetailItem label="Width (mm)" value={draft.widthMm} />
-                <DetailItem label="Height (mm)" value={draft.heightMm} />
-                <DetailItem label="Depth (mm)" value={draft.depthMm} />
-                <DetailItem label="Completeness" value={draft.completeness} />
-                <DetailItem label="Decoration" value={draft.decoration} />
-                <DetailItem label="Detector" value={draft.detector} />
-                <DetailItem label="Target ID" value={draft.targetId} />
-                <DetailItem label="Depth (cm)" value={draft.depthCm} />
+              {/* Find Details panel */}
+              <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.04] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
+                {/* Accent line */}
+                <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
+                <span className="text-[11px] font-semibold uppercase tracking-[1px] text-emerald-500/60 dark:text-emerald-400/60 block mb-4">Find Details</span>
+
+                {/* PRIMARY — headline identification */}
+                <div className="mb-5">
+                  {draft.objectType && (
+                    <p className="text-[22px] font-semibold text-gray-900 dark:text-gray-50 leading-[1.1] m-0">{draft.objectType}</p>
+                  )}
+                  {draft.period && (
+                    <p className="text-base font-medium text-gray-500/75 dark:text-gray-400/75 m-0 mt-1.5">{draft.period}</p>
+                  )}
+                  {draft.dateRange && (
+                    <p className="text-[13px] font-mono text-gray-400/60 dark:text-gray-500/60 m-0 mt-1">{draft.dateRange}</p>
+                  )}
+                </div>
+
+                {/* SECONDARY — key scan fields */}
+                {(draft.material || draft.completeness || draft.detector || draft.decoration) && (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-[14px] mb-5">
+                    <DetailItem label="Material" value={draft.material} />
+                    <DetailItem label="Completeness" value={draft.completeness} />
+                    <DetailItem label="Detector" value={draft.detector} />
+                    <DetailItem label="Decoration" value={draft.decoration} />
+                  </div>
+                )}
+
+                {/* TERTIARY — supplementary fields */}
+                {(draft.coinType || draft.coinDenomination || draft.ruler || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
+                  <>
+                    <div className="border-t border-gray-100 dark:border-white/[0.05] my-4" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
+                      {draft.coinType && <DetailItem label="Coin Type" value={draft.coinType} />}
+                      {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
+                      {draft.ruler && <DetailItem label="Ruler" value={draft.ruler} />}
+                      <DetailItem label="PAS ID" value={draft.pasId} />
+                      <DetailItem label="Weight (g)" value={draft.weightG} />
+                      <DetailItem label="Width (mm)" value={draft.widthMm} />
+                      <DetailItem label="Height (mm)" value={draft.heightMm} />
+                      <DetailItem label="Depth (mm)" value={draft.depthMm} />
+                      <DetailItem label="Depth (cm)" value={draft.depthCm} />
+                      <DetailItem label="Target ID" value={draft.targetId} />
+                    </div>
+                  </>
+                )}
               </div>
 
+              {/* Notes panel */}
               {draft.notes && (
-                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 block mb-1">Notes</span>
+                <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.03] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
+                  <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-gray-300/40 dark:via-white/[0.06] to-transparent" />
+                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-gray-400/60 dark:text-gray-500/80 block mb-2">Notes</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap m-0 font-medium leading-relaxed">{draft.notes}</p>
                 </div>
               )}
 
-              <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 grid grid-cols-2 gap-4">
-                <div className="col-span-2 flex justify-between items-center mb-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Findspot Location</span>
+              {/* Location panel */}
+              <div className="bg-gradient-to-b from-emerald-50/40 to-transparent dark:from-emerald-900/[0.12] dark:to-transparent border border-emerald-100 dark:border-emerald-900/30 rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)] grid grid-cols-2 gap-[14px]">
+                <div className="col-span-2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent mb-1" />
+                <div className="col-span-2 flex justify-between items-center">
+                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
                   {draft.lat && draft.lon && (
-                    <button 
-                        onClick={() => window.open(`https://www.google.com/maps?q=${draft.lat},${draft.lon}`, "_blank")}
-                        className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
+                    <button
+                      onClick={() => window.open(`https://www.google.com/maps?q=${draft.lat},${draft.lon}`, "_blank")}
+                      className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-all duration-[140ms] hover:-translate-y-px flex items-center gap-1"
                     >
-                        Maps ↗
+                      Maps ↗
                     </button>
                   )}
                 </div>
@@ -314,10 +349,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   </div>
                 )}
               </div>
-              
-              <div className="flex justify-end pt-2">
-                <button onClick={props.onClose} className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-6 py-2 rounded-xl font-bold transition-all text-sm">Close</button>
-              </div>
+
             </div>
           ) : (
             <>
@@ -765,8 +797,8 @@ function DetailItem({ label, value, mono = false }: { label: string; value: stri
   if (value === null || value === undefined || value === "") return null;
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">{label}</span>
-      <span className={`text-sm font-bold text-gray-800 dark:text-gray-100 ${mono ? 'font-mono' : ''}`}>{value}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-[0.6px] text-gray-400/50 dark:text-gray-500/80">{label}</span>
+      <span className={`text-[15px] font-medium text-gray-800 dark:text-gray-200 leading-snug ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );
 }
