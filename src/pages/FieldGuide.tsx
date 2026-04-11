@@ -579,6 +579,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 <span className={h.confidence === 'High Probability' ? 'text-amber-300/70' : h.confidence === 'Strong Signal' ? 'text-emerald-300/70' : 'text-white/40'}>{h.confidence}</span>
                                                 {h.secondaryTag && <><span className="text-white/20 mx-1.5">·</span><span className="text-amber-300/60">{h.secondaryTag}</span></>}
                                             </p>
+                                            {(h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
+                                                <div className="flex items-center gap-2.5 flex-wrap mt-1.5">
+                                                    {h.isOnCorridor && <span className="text-[8px] font-bold text-emerald-500/50 uppercase tracking-widest">On corridor</span>}
+                                                    {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">{h.linkedCount} linked</span>}
+                                                </div>
+                                            )}
                                             {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest mt-1.5 block">DETECT HERE</span>}
                                         </div>
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">

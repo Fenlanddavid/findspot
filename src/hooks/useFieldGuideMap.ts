@@ -22,6 +22,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'corridors-outline',               visibleWhen: s => s.historicMode && s.visibility.corridors },
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
+    { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
     { id: 'targets-circle',                  visibleWhen: s => !s.historicMode },
     { id: 'hotspots-outline',                visibleWhen: s => !s.historicMode },
     { id: 'hotspots-fill',                   visibleWhen: s => !s.historicMode },
@@ -126,6 +127,13 @@ export function useFieldGuideMap({
             map.addLayer({
                 id: 'hotspots-fill', type: 'fill', source: 'hotspots-overlay',
                 paint: { 'fill-color': ['case', ['>=', ['get', 'score'], 80], '#f59e0b', ['>=', ['get', 'score'], 45], '#10b981', '#3b82f6'], 'fill-opacity': 0.15 },
+            });
+
+            map.addSource('cluster-links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: 'cluster-links-line', type: 'line', source: 'cluster-links',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#34d399', 'line-width': 1, 'line-opacity': 0.3, 'line-dasharray': [3, 4] },
             });
 
             map.addSource('targets', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -270,6 +278,33 @@ export function useFieldGuideMap({
         } as GeoJSON.FeatureCollection);
     }, [detectedFeatures]);
 
+    // ── Cluster link lines ────────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const source = map.getSource('cluster-links') as maplibregl.GeoJSONSource;
+        if (!source) return;
+        const idToCenter = new Map(detectedFeatures.map(f => [f.id, f.center]));
+        const seen = new Set<string>();
+        const features: GeoJSON.Feature[] = [];
+        for (const f of detectedFeatures) {
+            if (!f.linkedClusterIds?.length) continue;
+            for (const linkedId of f.linkedClusterIds) {
+                const key = [f.id, linkedId].sort().join('|');
+                if (seen.has(key)) continue;
+                seen.add(key);
+                const target = idToCenter.get(linkedId);
+                if (!target) continue;
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: [f.center, target] },
+                    properties: {},
+                } as GeoJSON.Feature);
+            }
+        }
+        source.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
+    }, [detectedFeatures]);
+
     // ── PAS finds source ──────────────────────────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
@@ -394,7 +429,7 @@ export function useFieldGuideMap({
     const clearMapSources = () => {
         const map = mapRef.current;
         if (!map) return;
-        const sources = ['monuments', 'targets', 'historic-routes', 'aim-monuments', 'corridors', 'crossings'];
+        const sources = ['monuments', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'crossings'];
         sources.forEach(id => {
             const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
             if (src) src.setData({ type: 'FeatureCollection', features: [] });

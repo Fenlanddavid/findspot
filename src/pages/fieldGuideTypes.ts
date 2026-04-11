@@ -97,6 +97,10 @@ export interface Hotspot {
     bounds: [[number, number], [number, number]];
     memberIds: string[];
     isHighConfidenceCrossing?: boolean;
+    role?: string;
+    scale?: 'Micro' | 'Local' | 'Landscape';
+    isOnCorridor?: boolean;
+    linkedCount?: number;
     metrics: {
         anomaly:     number;
         context:     number;

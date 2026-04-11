@@ -560,6 +560,10 @@ export function buildTerrainHotspots(
             bounds:               [[minLon - 0.0004, minLat - 0.0004], [maxLon + 0.0004, maxLat + 0.0004]],
             memberIds:            members.map(m => m.id),
             isHighConfidenceCrossing,
+            role:        members.find(m => m.role)?.role,
+            scale:       members.find(m => m.scale)?.scale,
+            isOnCorridor: members.some(m => m.isOnCorridor),
+            linkedCount: (() => { const ids = new Set<string>(); members.forEach(m => (m.linkedClusterIds ?? []).forEach(id => ids.add(id))); return ids.size; })(),
             metrics:              { anomaly, context, convergence, behaviour, penalty, signalCount },
         });
     }
