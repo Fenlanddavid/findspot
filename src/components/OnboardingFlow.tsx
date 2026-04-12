@@ -14,7 +14,7 @@ const FLAG = 'fs_onboarding_done';
 const FORCED_THIS_LOAD = !!localStorage.getItem('fs_onboarding_force');
 if (FORCED_THIS_LOAD) localStorage.removeItem('fs_onboarding_force');
 
-type Step = 'welcome' | 'choose' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'done';
+type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'done';
 
 export default function OnboardingFlow() {
     // Fast sync check — avoids any flash for returning users
@@ -137,6 +137,20 @@ export default function OnboardingFlow() {
 
                         <div className="space-y-3">
                             <button
+                                onClick={() => setStep('install')}
+                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl">📲</span>
+                                    <div>
+                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Install the app</p>
+                                        <p className="text-[11px] text-white/40 mt-0.5">Add FindSpot to your home screen</p>
+                                    </div>
+                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                                </div>
+                            </button>
+
+                            <button
                                 onClick={() => setStep('finds')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
                             >
@@ -194,6 +208,49 @@ export default function OnboardingFlow() {
                         </div>
 
                         <button onClick={() => setStep('welcome')} className="mt-6 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                            Back
+                        </button>
+                        {skipBtn}
+                    </>
+                )}
+
+                {/* ── Step 3E: Install ─────────────────────────────────────── */}
+                {step === 'install' && (
+                    <>
+                        {dots(2)}
+                        <div className="mb-6">
+                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Install FindSpot</h2>
+                            <p className="text-[13px] text-white/60 leading-relaxed mb-4">
+                                FindSpot is a Progressive Web App — no app store needed. Add it to your home screen for the best experience.
+                            </p>
+
+                            <div className="space-y-2.5 mb-4">
+                                <div className="bg-white/5 rounded-2xl px-4 py-3">
+                                    <p className="text-[12px] font-black text-white mb-1">iPhone / iPad</p>
+                                    <p className="text-[11px] text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Safari</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">Share button</span> (the box with an arrow pointing up), then tap <span className="text-white/70 font-bold">Add to Home Screen</span>. Must be Safari — Chrome on iOS won't work.</p>
+                                </div>
+                                <div className="bg-white/5 rounded-2xl px-4 py-3">
+                                    <p className="text-[12px] font-black text-white mb-1">Android</p>
+                                    <p className="text-[11px] text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">three-dot menu</span>, then tap <span className="text-white/70 font-bold">Add to Home Screen</span> or <span className="text-white/70 font-bold">Install App</span>. A prompt may also appear automatically at the bottom of the screen.</p>
+                                </div>
+
+                            </div>
+
+                            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl px-4 py-3">
+                                <p className="text-[12px] text-emerald-300/90 leading-relaxed">
+                                    Once installed, FindSpot opens in its own window with a home screen icon — just like a native app. Core features work without an internet connection.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setStep('choose')}
+                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
+                        >
+                            Got it — what's next?
+                        </button>
+
+                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
