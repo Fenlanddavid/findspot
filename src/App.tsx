@@ -12,6 +12,7 @@ import PermissionPage from "./pages/Permission";
 import FindPage from "./pages/Find";
 import Settings from "./pages/Settings";
 import GlobalActions from "./components/GlobalActions";
+import OnboardingFlow from "./components/OnboardingFlow";
 
 // Lazily loaded — heavy pages (map, PDF, turf)
 const SessionPage = React.lazy(() => import("./pages/Session"));
@@ -371,6 +372,7 @@ function Shell() {
       </main>
 
       <GlobalActions projectId={projectId} />
+      <OnboardingFlow />
     </div>
   );
 }

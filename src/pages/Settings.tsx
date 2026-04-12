@@ -354,11 +354,24 @@ export default function Settings() {
             
             <div className="p-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl text-center">
               <p className="text-sm text-gray-500 mb-0 italic">
-                All "FindSpot" data is stored exclusively in your browser's IndexedDB. 
+                All "FindSpot" data is stored exclusively in your browser's IndexedDB.
                 Using "Persistent Storage" helps ensure your finds and maps remain available offline.
               </p>
             </div>
           </div>
+        </section>
+
+        <section className="bg-amber-50 dark:bg-amber-900/20 p-5 rounded-2xl border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-black text-amber-700 dark:text-amber-400 mb-0.5">Quick Start Guide</h2>
+            <p className="text-xs text-amber-600/70 dark:text-amber-500/70">Walk through the app features again from the beginning.</p>
+          </div>
+          <button
+            onClick={() => { localStorage.removeItem('fs_onboarding_done'); localStorage.setItem('fs_onboarding_force', '1'); window.location.href = '/'; }}
+            className="shrink-0 text-xs font-black text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/60 border border-amber-300 dark:border-amber-700 px-3 py-2 rounded-lg transition-colors"
+          >
+            Show again →
+          </button>
         </section>
 
         <section className="bg-emerald-50 dark:bg-emerald-900/20 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
