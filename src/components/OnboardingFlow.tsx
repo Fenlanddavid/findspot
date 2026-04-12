@@ -186,7 +186,7 @@ export default function OnboardingFlow() {
                                     <span className="text-2xl">⚙️</span>
                                     <div>
                                         <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Set up your profile</p>
-                                        <p className="text-[11px] text-amber-400/70 mt-0.5">Recommended — other features depend on this</p>
+                                        <p className="text-[11px] text-white/40 mt-0.5">Recommended — other features depend on this</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -204,12 +204,12 @@ export default function OnboardingFlow() {
                 {step === 'finds' && (
                     <>
                         {dots(2)}
-                        <div className="mb-7">
+                        <div className="mb-5">
                             <h2 className="text-xl font-black text-white tracking-tight mb-3">Recording a find</h2>
-                            <p className="text-[13px] text-white/60 leading-relaxed mb-5">
+                            <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 The typical workflow in FindSpot is straightforward:
                             </p>
-                            <div className="flex items-center gap-0 mb-5">
+                            <div className="flex items-center gap-0 mb-4">
                                 {[
                                     { label: 'Permission', sub: 'Where you detect' },
                                     { label: 'Session', sub: 'Each visit out' },
@@ -226,8 +226,40 @@ export default function OnboardingFlow() {
                                     </React.Fragment>
                                 ))}
                             </div>
-                            <p className="text-[12px] text-white/40 leading-relaxed">
-                                You don't have to follow this exactly — you can record finds directly without a session. But linking everything up makes your records much more useful.
+
+                            <div className="space-y-2.5 mb-4">
+                                <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
+                                    <span className="text-base mt-0.5">📍</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">GPS location</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Capture your exact location when you dig. The app converts it to an OS grid reference automatically — no typing needed.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
+                                    <span className="text-base mt-0.5">🔍</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Object details</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Log object type, period, material, weight, and dimensions. Coin finds have extra fields for denomination and ruler.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
+                                    <span className="text-base mt-0.5">📸</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Photos</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Attach in-situ and cleaned photos. The app can generate a PAS recording sheet from your photos and details with one tap.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
+                                    <span className="text-base mt-0.5">⭐</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Favourites &amp; sharing</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Star your best finds to build a highlights gallery. Share any find as an image card directly from the find record.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-[11px] text-white/30 leading-relaxed">
+                                You don't have to follow the full workflow — finds can be recorded directly without a session. But linking everything up makes your records much more useful over time.
                             </p>
                         </div>
 
