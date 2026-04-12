@@ -15,6 +15,7 @@ import {
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
+import { buildInterpretation, getInterpretationLabel } from '../utils/hotspotInterpreter';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
+    const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
 
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
@@ -613,6 +615,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <p className="text-[11px] font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                         </div>
                                     )}
+                                    <div className="mt-3 pt-3 border-t border-white/8">
+                                        <span
+                                            onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
+                                            className="text-[10px] font-medium text-amber-400/60 hover:text-amber-400 transition-colors duration-150 cursor-pointer"
+                                        >
+                                            {expandedInterpretationId === h.id ? 'Hide explanation' : 'Explain this'}
+                                        </span>
+                                        {expandedInterpretationId === h.id && (() => {
+                                            const interp = buildInterpretation(h);
+                                            return (
+                                                <div className="mt-4 space-y-4 animate-in fade-in duration-200">
+                                                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
+                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.summary}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
+                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.reasoning}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
+                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.strategy}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
                                     <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             ))}
@@ -1061,6 +1091,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             </p>
                                         </div>
                                     )}
+                                    <div className="mt-2.5 pt-2.5 border-t border-white/5">
+                                        <span
+                                            onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
+                                            className="text-[9px] font-medium text-amber-400/60 hover:text-amber-400 transition-colors duration-150 cursor-pointer"
+                                        >
+                                            {expandedInterpretationId === h.id ? 'Hide explanation' : 'Explain this'}
+                                        </span>
+                                        {expandedInterpretationId === h.id && (() => {
+                                            const interp = buildInterpretation(h);
+                                            return (
+                                                <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
+                                                    <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                                    <div>
+                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
+                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.summary}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
+                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.reasoning}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
+                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.strategy}</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
                                     <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
                             )) : (
