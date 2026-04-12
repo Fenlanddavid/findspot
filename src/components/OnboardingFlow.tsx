@@ -32,18 +32,23 @@ export default function OnboardingFlow() {
         });
     }, []);
 
-    function dismiss() {
+    function markDone() {
         localStorage.setItem(FLAG, '1');
+    }
+
+    function dismiss() {
+        markDone();
         setVisible(false);
     }
 
     function go(destination: string) {
+        markDone(); // write flag immediately so re-opening app won't show onboarding again
         setPending(destination);
         setStep('done');
     }
 
     function leave() {
-        dismiss();
+        setVisible(false);
         nav(pendingDestination);
     }
 

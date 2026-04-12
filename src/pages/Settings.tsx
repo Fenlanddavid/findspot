@@ -367,7 +367,7 @@ export default function Settings() {
             <p className="text-xs text-amber-600/70 dark:text-amber-500/70">Walk through the app features again from the beginning.</p>
           </div>
           <button
-            onClick={() => { localStorage.removeItem('fs_onboarding_done'); localStorage.setItem('fs_onboarding_force', '1'); window.location.href = '/'; }}
+            onClick={() => { localStorage.removeItem('fs_onboarding_done'); localStorage.setItem('fs_onboarding_force', '1'); window.location.href = import.meta.env.BASE_URL; }}
             className="shrink-0 text-xs font-black text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/60 border border-amber-300 dark:border-amber-700 px-3 py-2 rounded-lg transition-colors"
           >
             Show again →
