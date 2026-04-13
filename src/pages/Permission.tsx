@@ -615,22 +615,21 @@ export default function PermissionPage(props: {
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 {isEdit && (
                     <>
-                        <button 
+                        <button
                             onClick={handlePrint}
-                            className="text-xs sm:text-sm font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all flex-1 sm:flex-none"
+                            className="text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex-1 sm:flex-none"
                         >
-                            Report
+                            📄 Report
                         </button>
-                        <button 
+                        <button
                             onClick={handleDelete}
                             disabled={saving}
-                            className="text-xs sm:text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
+                            className="text-xs sm:text-sm font-medium text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg border border-transparent hover:border-red-200 dark:hover:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
                         >
                             Delete
                         </button>
                     </>
                 )}
-                <button onClick={() => nav("/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Home</button>
             </div>
         </div>
 
@@ -640,9 +639,15 @@ export default function PermissionPage(props: {
             </div>
         )}
         {saved && (
-            <div className="border-2 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl shadow-sm font-medium flex gap-3 items-center justify-between">
-                <span>Land record saved.</span>
-                <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100">Dismiss</button>
+            <div className="border-2 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl shadow-sm flex gap-3 items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-lg shrink-0">✓</div>
+                    <div>
+                        <div className="font-black text-emerald-700 dark:text-emerald-300">Permission saved</div>
+                        <div className="text-xs opacity-70 font-medium mt-0.5">Ready to use with finds, sessions, and coverage</div>
+                    </div>
+                </div>
+                <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100 shrink-0">Dismiss</button>
             </div>
         )}
 
@@ -651,31 +656,42 @@ export default function PermissionPage(props: {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {isEditing ? (
                   <>
-                    <div className="flex flex-col sm:flex-row gap-2 p-1 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit">
-                        <button 
+                    <div className="flex items-center gap-3">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Permission Details</div>
+                      <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-1.5 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit border border-gray-200 dark:border-gray-800">
+                        <button
                             onClick={() => setType("individual")}
-                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${type === "individual" ? "bg-white dark:bg-gray-800 shadow-sm text-emerald-600" : "text-gray-500 hover:text-gray-700"}`}
+                            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${type === "individual" ? "bg-white dark:bg-gray-800 shadow-md text-emerald-600 ring-1 ring-emerald-200 dark:ring-emerald-800" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
                         >
-                            Individual Permission
+                            <span>👤</span> Individual Permission
                         </button>
-                        <button 
+                        <button
                             onClick={() => setType("rally")}
-                            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${type === "rally" ? "bg-white dark:bg-gray-800 shadow-sm text-teal-600" : "text-gray-500 hover:text-gray-700"}`}
+                            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${type === "rally" ? "bg-white dark:bg-gray-800 shadow-md text-teal-600 ring-1 ring-teal-200 dark:ring-teal-800" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
                         >
-                            Club/Rally Dig
+                            <span>🏕️</span> Club/Rally Dig
                         </button>
                     </div>
 
                     <label className="block">
-                    <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">{type === 'rally' ? 'Rally / Event Name' : 'Permission Name / Location'}</div>
-                    <input 
-                        value={name} 
-                        onChange={(e) => setName(e.target.value)} 
-                        placeholder={type === 'rally' ? "e.g., Weekend Rally, Club Dig North" : "e.g., Smith's Farm, North Field"} 
-                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                    <div className="mb-2 text-sm font-black text-gray-800 dark:text-gray-200">{type === 'rally' ? 'Rally / Event Name' : 'Permission Name / Location'}</div>
+                    <input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder={type === 'rally' ? "e.g., Weekend Rally, Club Dig North" : "e.g., Smith's Farm, North Field"}
+                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-base"
                     />
                     </label>
 
+                    <div className="flex flex-col gap-1 pt-2">
+                      <div className="flex items-center gap-3">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Landowner Details</div>
+                        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                      </div>
+                      <p className="text-[11px] text-gray-400 dark:text-gray-500">Keep a clear record of who granted access to this land.</p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <label className="block">
                             <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Landowner / Contact Name</div>
@@ -744,71 +760,103 @@ export default function PermissionPage(props: {
                         </label>
                     </div>
 
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Field Setup & Geometry</div>
+                      <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                    </div>
                     <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
-                        <div className="flex justify-between items-center flex-wrap gap-2">
-                            <div className="text-xs font-bold uppercase tracking-wider opacity-60 font-black">Field Geometry</div>
-                            <div className="flex gap-2">
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsPickingBoundary(true)} 
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all border ${boundary ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-100 dark:border-gray-800 hover:border-emerald-500 hover:text-emerald-600'}`}
-                                >
-                                    {boundary ? "📐 Boundary Set ✓" : "📐 Define Main Boundary"}
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsPickingLocation(true)} 
-                                    className="bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all hover:bg-emerald-600 hover:text-white"
-                                >
-                                    🗺️ Pick Center
-                                </button>
-                                <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2 whitespace-nowrap">
-                                    📍 {lat ? "GPS" : "Get GPS"}
-                                </button>
-                            </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsPickingBoundary(true)}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
+                            >
+                                <span>📐</span>
+                                <span>{boundary ? "Boundary Set ✓" : "Define Boundary"}</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsPickingLocation(true)}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 shadow-sm hover:border-emerald-400 hover:text-emerald-600 transition-all"
+                            >
+                                <span>🗺️</span>
+                                <span>Pick Centre</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={doGPS}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-600 shadow-sm transition-all"
+                            >
+                                <span>📍</span>
+                                <span>{lat ? "Refresh GPS" : "Get GPS"}</span>
+                            </button>
                         </div>
 
-                        {/* Field List inside Geometry box */}
+                        {!boundary && (!fields || fields.length === 0) && (
+                            <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                                <span className="shrink-0 mt-0.5">💡</span>
+                                <span>Set the boundary, then split it into sub-fields — one per field or pasture.</span>
+                            </div>
+                        )}
+
+                        {/* Sub-Fields inside Geometry box */}
                         {isEdit && (
-                            <div className="grid gap-2 border-t border-emerald-100 dark:border-emerald-800 pt-4">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
-                                    <button 
+                            <div className="grid gap-3 border-t-2 border-emerald-200/70 dark:border-emerald-700/50 pt-5 mt-1">
+                                <div className="flex justify-between items-start gap-3">
+                                    <div>
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
+                                        <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">Break larger permissions into manageable working areas.</p>
+                                    </div>
+                                    <button
                                         type="button"
                                         onClick={() => setIsAddingField(true)}
-                                        className="text-[9px] font-black bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 transition-colors uppercase"
+                                        className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
                                     >
-                                        + Add Field
+                                        + Add Sub-Field
                                     </button>
                                 </div>
                                 {fields && fields.length > 0 ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 gap-2">
                                         {fields.map((f) => (
-                                            <div key={f.id} className="flex items-center justify-between gap-3 bg-white/50 dark:bg-gray-800/50 border border-emerald-100 dark:border-emerald-800 p-2 rounded-lg shadow-sm">
-                                                <div className="min-w-0">
-                                                    <div className="font-bold text-[10px] truncate text-gray-800 dark:text-gray-100">{f.name}</div>
+                                            <div key={f.id} className="flex items-center gap-3 bg-white dark:bg-gray-800/80 border border-emerald-100 dark:border-emerald-800/60 px-3 py-2.5 rounded-xl shadow-sm">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
+                                                    <div className="text-[10px] mt-0.5 font-medium text-emerald-600/70 dark:text-emerald-400/70">
+                                                        {f.boundary ? "📐 Boundary mapped" : "No boundary yet"}
+                                                    </div>
                                                 </div>
-                                                <div className="flex gap-1">
-                                                    <button 
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <button
                                                         type="button"
                                                         onClick={() => setEditingFieldId(f.id)}
-                                                        className="text-[9px] font-bold text-emerald-600 hover:text-emerald-800 px-1.5 py-0.5 rounded hover:bg-white"
+                                                        className="text-[10px] font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700 transition-all"
                                                     >
                                                         Edit
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         type="button"
                                                         onClick={() => handleDeleteField(f.id)}
-                                                        className="text-[9px] font-bold text-red-600 hover:text-red-800 px-1.5 py-0.5 rounded hover:bg-white"
+                                                        className="text-[10px] font-bold text-red-400 hover:text-red-600 px-1.5 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
+                                                        title="Delete sub-field"
                                                     >
-                                                        Del
+                                                        ✕
                                                     </button>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-[10px] opacity-40 italic">No specific sub-fields defined.</p>
+                                    <div className="bg-white/60 dark:bg-gray-800/30 border border-dashed border-emerald-200 dark:border-emerald-700/50 rounded-xl p-5 text-center grid gap-2">
+                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">No sub-fields added yet.</p>
+                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-snug">Use sub-fields to split a large permission into manageable working areas.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddingField(true)}
+                                            className="mt-1 text-xs font-black text-emerald-600 hover:text-white hover:bg-emerald-600 px-4 py-2 rounded-lg border border-emerald-200 dark:border-emerald-700 transition-all mx-auto"
+                                        >
+                                            + Add Sub-Field
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -871,6 +919,10 @@ export default function PermissionPage(props: {
                         )}
                     </div>
 
+                    <div className="flex items-center gap-3 pt-2">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Additional Notes</div>
+                      <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                    </div>
                     <label className="block">
                     <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Land/Farm Notes</div>
                     <textarea 
@@ -1001,11 +1053,11 @@ export default function PermissionPage(props: {
                         <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
                             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Field Boundaries & Total Coverage</h4>
-                                    <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Includes tracking data from all {sessions?.length} sessions</p>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Permission Boundary & Coverage</h4>
+                                    <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Tracking data from all {sessions?.length} sessions</p>
                                 </div>
                                 <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
-                                    💡 Tap 'Show Gaps' on fields below to see coverage
+                                    💡 Tap 'Show Gaps' on sub-fields below
                                 </div>
                             </div>
                             
@@ -1016,49 +1068,61 @@ export default function PermissionPage(props: {
 
                             {/* Sub-Fields List in View Mode */}
                             {fields && fields.length > 0 && (
-                                <div className="mt-6 grid gap-3">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Sub-Fields / Areas</h4>
+                                <div className="mt-6 grid gap-4">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div>
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
+                                            <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-0.5 font-medium">Defined working areas within this permission</p>
+                                        </div>
+                                        <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full shrink-0">{fields.length}</span>
+                                    </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         {fields.map(f => (
-                                            <div key={f.id} className="bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-800 p-4 rounded-xl shadow-sm flex flex-col justify-between">
-                                                <div className="mb-3">
-                                                    <div className="flex justify-between items-start gap-2">
-                                                        <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
-                                                        <button 
+                                            <div key={f.id} className="bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-800/60 rounded-xl shadow-sm flex flex-col">
+                                                <div className="p-4 flex-1">
+                                                    <div className="flex justify-between items-start gap-2 mb-1.5">
+                                                        <div className="min-w-0">
+                                                            <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
+                                                            <div className="text-[10px] font-medium text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
+                                                                {f.boundary ? "📐 Boundary mapped" : "No boundary"}
+                                                            </div>
+                                                        </div>
+                                                        <button
                                                             onClick={() => {
                                                                 const next = new Set(shownFieldGapIds);
                                                                 if (next.has(f.id)) next.delete(f.id);
                                                                 else next.add(f.id);
                                                                 setShownFieldGapIds(next);
                                                             }}
-                                                            className={`text-[9px] font-black px-2 py-1 rounded border transition-all ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 border-orange-100 text-orange-700 hover:border-orange-400'}`}
+                                                            className={`text-[9px] font-black px-2.5 py-1.5 rounded-lg border transition-all shrink-0 ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900 text-orange-700 dark:text-orange-400 hover:border-orange-400'}`}
                                                         >
-                                                            {shownFieldGapIds.has(f.id) ? '🧭 GAPS ON' : '🧭 SHOW GAPS'}
+                                                            🧭 {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
                                                             {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
-                                                                <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}%</span>
+                                                                <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left</span>
                                                             )}
                                                         </button>
                                                     </div>
-                                                    {f.notes && <div className="text-[10px] opacity-60 line-clamp-2 mt-1 italic">{f.notes}</div>}
+                                                    {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic">{f.notes}</div>}
                                                 </div>
-                                                <div className="flex gap-2 border-t border-gray-100 dark:border-gray-800 pt-3">
-                                                    <button 
+                                                <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-4 py-2.5">
+                                                    <button
                                                         onClick={() => nav(`/session/new?permissionId=${id}&fieldId=${f.id}`)}
-                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded-lg transition-colors shadow-sm active:translate-y-0.5 transition-transform"
+                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded-lg transition-colors shadow-sm"
                                                     >
-                                                        START SESSION
+                                                        Start Session
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setEditingFieldId(f.id)}
-                                                        className="px-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[10px] font-bold text-gray-500 hover:text-emerald-600 rounded-lg transition-colors"
+                                                        className="px-3 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
                                                     >
-                                                        EDIT
+                                                        Edit
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleDeleteField(f.id)}
-                                                        className="px-2 bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900 text-[10px] font-bold text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
+                                                        className="py-2 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
+                                                        title="Delete sub-field"
                                                     >
-                                                        🗑️
+                                                        ✕
                                                     </button>
                                                 </div>
                                             </div>
@@ -1236,44 +1300,48 @@ export default function PermissionPage(props: {
                         </button>
 
                         {sessions && sessions.length > 0 ? (
-                            sessions.map((s: any) => (
-                                <button 
-                                    key={s.id} 
-                                    onClick={() => nav(`/session/${s.id}`)}
-                                    className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group overflow-hidden relative"
-                                >
-                                    {s.hasTracking && (
-                                        <div className="absolute top-0 right-0 bg-sky-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-bl uppercase tracking-widest">
-                                            GPS TRAIL
-                                        </div>
-                                    )}
-                                    
-                                    <div className="flex justify-between items-start mb-1">
-                                        <div className="flex flex-col gap-0.5 min-w-0">
-                                            <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
-                                                {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                                <span className={`text-[10px] font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
-                                                    📍 {s.fieldName || "No specific field"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        {s.findCount > 0 && (
-                                            <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg text-center min-w-[40px]">
-                                                <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 leading-none">{s.findCount}</div>
-                                                <div className="text-[7px] font-bold text-emerald-600 dark:text-emerald-500 uppercase leading-none mt-0.5">Finds</div>
-                                            </div>
-                                        )}
-                                    </div>
+                            <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
+                                <div className="grid gap-3">
+                                    {sessions.map((s: any) => (
+                                        <button
+                                            key={s.id}
+                                            onClick={() => nav(`/session/${s.id}`)}
+                                            className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group overflow-hidden relative"
+                                        >
+                                            {s.hasTracking && (
+                                                <div className="absolute top-0 right-0 bg-sky-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-bl uppercase tracking-widest">
+                                                    GPS TRAIL
+                                                </div>
+                                            )}
 
-                                    <div className="text-[10px] opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
-                                        <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
-                                        {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">⏱️ {formatDuration(s.durationMs)}</span>}
-                                    </div>
-                                </button>
-                            ))
+                                            <div className="flex justify-between items-start mb-1">
+                                                <div className="flex flex-col gap-0.5 min-w-0">
+                                                    <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
+                                                        {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className={`text-[10px] font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
+                                                            📍 {s.fieldName || "No specific field"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {s.findCount > 0 && (
+                                                    <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg text-center min-w-[40px]">
+                                                        <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 leading-none">{s.findCount}</div>
+                                                        <div className="text-[7px] font-bold text-emerald-600 dark:text-emerald-500 uppercase leading-none mt-0.5">Finds</div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="text-[10px] opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
+                                                <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
+                                                {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">⏱️ {formatDuration(s.durationMs)}</span>}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         ) : (
                             <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm">
                                 No sessions recorded yet.
