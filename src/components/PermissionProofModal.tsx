@@ -5,12 +5,13 @@ import Modal from "./Modal";
 interface Props {
   permission: Permission;
   agreementFile: Media | null;
+  insuranceProvider?: string;
   ncmdNumber: string;
   ncmdExpiry: string;
   onClose: () => void;
 }
 
-export default function PermissionProofModal({ permission, agreementFile, ncmdNumber, ncmdExpiry, onClose }: Props) {
+export default function PermissionProofModal({ permission, agreementFile, insuranceProvider, ncmdNumber, ncmdExpiry, onClose }: Props) {
   const insuranceExpired = ncmdExpiry && new Date(ncmdExpiry) < new Date();
   
   // Format dates for display
@@ -99,7 +100,7 @@ export default function PermissionProofModal({ permission, agreementFile, ncmdNu
                 </div>
                 <div className="flex justify-between items-center">
                   <div>
-                    <div className="text-[10px] font-bold text-teal-600 uppercase mb-0.5">NCMD Insurance</div>
+                    <div className="text-[10px] font-bold text-teal-600 uppercase mb-0.5">{insuranceProvider || 'Insurance'}</div>
                     <div className="text-sm font-bold dark:text-gray-300">#{ncmdNumber || "Not Set"}</div>
                   </div>
                   <div className="text-right">

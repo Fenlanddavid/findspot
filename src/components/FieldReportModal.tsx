@@ -28,6 +28,7 @@ interface ReportData {
   finds: Find[];             // sorted by createdAt ascending — index + 1 = find number
   tracks: Track[];
   detectoristName: string;
+  insuranceProvider: string;
   ncmdNumber: string;
   coveragePct: number | null;
 }
@@ -189,6 +190,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
         const tracks = await db.tracks.where("sessionId").equals(sessionId).toArray();
 
         const detectoristName = (await getSetting("detectorist", "")) as string;
+        const insuranceProvider = (await getSetting("insuranceProvider", "")) as string;
         const ncmdNumber = (await getSetting("ncmdNumber", "")) as string;
 
         const field = session.fieldId ? await db.fields.get(session.fieldId) : null;
@@ -202,7 +204,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
         }
 
         setKeyNotes(session.keyNotes ?? []);
-        setData({ session, permission, fieldName, boundary: boundary ?? null, finds: allFinds, tracks, detectoristName, ncmdNumber, coveragePct });
+        setData({ session, permission, fieldName, boundary: boundary ?? null, finds: allFinds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct });
       } catch (e: any) {
         setError(e.message || "Failed to load session data");
       } finally {
@@ -431,7 +433,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     return <Modal title="Field Report" onClose={onClose}><div className="py-8 text-center text-red-600">{error || "Unknown error"}</div></Modal>;
   }
 
-  const { session, permission, fieldName, finds, tracks, detectoristName, ncmdNumber, coveragePct } = data;
+  const { session, permission, fieldName, finds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct } = data;
   const summary = summariseFinds(finds);
   const duration = formatDuration(session.startTime, session.endTime, tracks);
   const sessionDate = new Date(session.date).toLocaleDateString("en-GB", {
@@ -493,7 +495,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             <div style={{ width: 48, height: 2, background: "rgba(255,255,255,0.25)", margin: "16px auto" }} />
             <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 2 }}>
               Conducted by <strong>{detectoristName || permission.collector || "Detectorist"}</strong>
-              {ncmdNumber && <span style={{ opacity: 0.7, fontSize: 11 }}> · NCMD No. {ncmdNumber}</span>}
+              {ncmdNumber && <span style={{ opacity: 0.7, fontSize: 11 }}> · {insuranceProvider || 'NCMD'} No. {ncmdNumber}</span>}
             </div>
             <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 14 }}>{sessionDate}</div>
             <div style={{ display: "inline-block", fontSize: 10, fontFamily: "sans-serif", letterSpacing: "0.06em", opacity: 0.6, background: "rgba(255,255,255,0.1)", borderRadius: 4, padding: "4px 12px", fontStyle: "italic" }}>

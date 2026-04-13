@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 export interface ModalProps {
   title: React.ReactNode;
@@ -9,6 +9,14 @@ export interface ModalProps {
 }
 
 export default function Modal(props: ModalProps) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [props.onClose]);
+
   if (props.fullScreen) {
     return (
       <div

@@ -37,8 +37,10 @@ export default function Settings() {
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
   const [email, setEmail] = useState("");
+  const [insuranceProvider, setInsuranceProvider] = useState("");
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
+  const [membershipCardImage, setMembershipCardImage] = useState<string | null>(null);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
   const [theme, setTheme] = useState("dark");
   const [detectors, setDetectors] = useState<string[]>([]);
@@ -54,8 +56,10 @@ export default function Settings() {
     isStoragePersistent().then(setPersistent);
     getSetting("detectorist", "").then(setDetectorist);
     getSetting("detectoristEmail", "").then(setEmail);
+    getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
+    getSetting("membershipCardImage", null).then(setMembershipCardImage);
     getSetting("lastBackupDate", null).then(setLastBackup);
     getSetting("theme", "dark").then(setTheme);
     getSetting("detectors", ["Minelab Equinox 800", "Nokta Legend"]).then(val => {
@@ -130,6 +134,7 @@ export default function Settings() {
   async function saveSettings() {
     await setSetting("detectorist", detectorist);
     await setSetting("detectoristEmail", email);
+    await setSetting("insuranceProvider", insuranceProvider);
     await setSetting("ncmdNumber", ncmdNumber);
     await setSetting("ncmdExpiry", ncmdExpiry);
     await setSetting("defaultDetector", defaultDetector);
@@ -272,27 +277,92 @@ export default function Settings() {
             </div>
             <p className="text-xs text-gray-500 mt-1 italic">These details will be used as the default for new records and included in your reports.</p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">NCMD Membership No.</label>
-                <input
-                  type="text"
-                  value={ncmdNumber}
-                  onChange={(e) => setNcmdNumber(e.target.value)}
-                  placeholder="e.g. 123456"
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+            <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Insurance Provider</label>
+                  <input
+                    type="text"
+                    value={insuranceProvider}
+                    onChange={(e) => setInsuranceProvider(e.target.value)}
+                    placeholder="e.g. NCMD, AMDS, club name..."
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Membership No.</label>
+                  <input
+                    type="text"
+                    value={ncmdNumber}
+                    onChange={(e) => setNcmdNumber(e.target.value)}
+                    placeholder="e.g. 123456"
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Insurance Expiry Date</label>
+                  <input
+                    type="date"
+                    value={ncmdExpiry}
+                    onChange={(e) => setNcmdExpiry(e.target.value)}
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
               </div>
+
               <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Insurance Expiry Date</label>
-                <input
-                  type="date"
-                  value={ncmdExpiry}
-                  onChange={(e) => setNcmdExpiry(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Membership Card</label>
+                {membershipCardImage ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={membershipCardImage}
+                      alt="Membership card"
+                      className="max-h-40 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm object-contain"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setMembershipCardImage(null);
+                        await setSetting("membershipCardImage", null);
+                      }}
+                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow transition-colors"
+                      title="Remove card image"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-3 cursor-pointer w-fit bg-gray-50 dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-600 hover:border-emerald-500 dark:hover:border-emerald-500 px-4 py-3 rounded-xl transition-colors group">
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-emerald-500 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span className="text-sm text-gray-500 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Upload photo or scan of card</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                          const dataUrl = ev.target?.result as string;
+                          setMembershipCardImage(dataUrl);
+                          await setSetting("membershipCardImage", dataUrl);
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                )}
               </div>
-              <p className="text-xs text-gray-500 mt-1 italic sm:col-span-2">Your National Council for Metal Detecting insurance details for landowner peace of mind.</p>
+
+              <p className="text-xs text-gray-500 italic">Your insurance details for landowner peace of mind. Stored locally on this device only.</p>
             </div>
 
             <button

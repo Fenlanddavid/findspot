@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Media } from "../db";
 import { ScaleBar } from "./ScaleBar";
 
@@ -26,19 +26,13 @@ export function ScaledImage({ media, className, imgClassName, showScale = true }
     };
   }, [media.blob]);
 
-  const updateScale = () => {
+  const updateScale = useCallback(() => {
     if (!imgRef.current || !media.pxPerMm) return;
 
     const { naturalWidth, naturalHeight, clientWidth, clientHeight } = imgRef.current;
-    
-    // Determine the scale factor applied to the image.
-    // If object-cover is used, the image is scaled to the larger of the two ratios.
-    // If no object-fit is used, or it's 'fill', it's just clientWidth/naturalWidth.
-    const style = window.getComputedStyle(imgRef.current);
-    const objectFit = style.objectFit;
+    const objectFit = window.getComputedStyle(imgRef.current).objectFit;
 
     let scale = clientWidth / naturalWidth;
-
     if (objectFit === "cover") {
       scale = Math.max(clientWidth / naturalWidth, clientHeight / naturalHeight);
     } else if (objectFit === "contain") {
@@ -46,13 +40,13 @@ export function ScaledImage({ media, className, imgClassName, showScale = true }
     }
 
     setDisplayPxPerMm(media.pxPerMm * scale);
-  };
+  }, [media.pxPerMm]);
 
   // Re-calculate on window resize
   useEffect(() => {
     window.addEventListener("resize", updateScale);
     return () => window.removeEventListener("resize", updateScale);
-  }, [media.pxPerMm]);
+  }, [updateScale]);
 
   return (
     <div className={`relative overflow-hidden ${className}`}>

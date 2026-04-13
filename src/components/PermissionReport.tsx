@@ -7,6 +7,7 @@ export function PermissionReport(props: {
   sessions: Session[];
   finds: Find[];
   media: Media[];
+  insuranceProvider?: string;
   ncmdNumber?: string;
   ncmdExpiry?: string;
   detectoristName?: string;
@@ -49,7 +50,7 @@ export function PermissionReport(props: {
           <div className="font-bold">{props.detectoristName || props.permission.collector}</div>
           {props.detectoristEmail && <div>{props.detectoristEmail}</div>}
           <div>Report Generated: {new Date().toLocaleDateString()}</div>
-          {props.ncmdNumber && <div>NCMD No: {props.ncmdNumber}</div>}
+          {props.ncmdNumber && <div>{props.insuranceProvider || 'Membership'} No: {props.ncmdNumber}</div>}
           {props.ncmdExpiry && <div>Insurance Exp: {new Date(props.ncmdExpiry).toLocaleDateString()}</div>}
           <div>FindSpot v0.1.0</div>
         </div>

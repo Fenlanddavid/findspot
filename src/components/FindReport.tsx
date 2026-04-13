@@ -7,12 +7,13 @@ export function FindReport(props: {
   media: Media[];
   permission?: Permission;
   session?: Session;
+  insuranceProvider?: string;
   ncmdNumber?: string;
   ncmdExpiry?: string;
   detectoristName?: string;
   detectoristEmail?: string;
 }) {
-  const { find, media, permission, session, ncmdNumber, ncmdExpiry, detectoristName, detectoristEmail } = props;
+  const { find, media, permission, session, insuranceProvider, ncmdNumber, ncmdExpiry, detectoristName, detectoristEmail } = props;
 
   return (
     <div className="bg-white text-black p-8 max-w-4xl mx-auto print:p-0 print:max-w-none report-container">
@@ -25,7 +26,7 @@ export function FindReport(props: {
           <div className="font-bold">{detectoristName || permission?.collector}</div>
           {detectoristEmail && <div>{detectoristEmail}</div>}
           <div>Report Generated: {new Date().toLocaleDateString()}</div>
-          {ncmdNumber && <div>NCMD No: {ncmdNumber}</div>}
+          {ncmdNumber && <div>{insuranceProvider || 'Membership'} No: {ncmdNumber}</div>}
           {ncmdExpiry && <div>Insurance Exp: {new Date(ncmdExpiry).toLocaleDateString()}</div>}
           <div>FindSpot v0.1.0</div>
         </div>

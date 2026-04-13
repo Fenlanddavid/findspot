@@ -32,11 +32,13 @@ export function ScaleCalibrationModal(props: { media: Media; url: string; onClos
     const scaleFactor = naturalWidth / displayWidth;
     
     const naturalDistPx = distPx * scaleFactor;
-    return naturalDistPx / parseFloat(mm);
+    const mmValue = parseFloat(mm);
+    if (!mmValue || mmValue <= 0 || !isFinite(mmValue)) return null;
+    return naturalDistPx / mmValue;
   }, [points, mm]);
 
   async function save() {
-    if (calculatedPxPerMm === null) return;
+    if (calculatedPxPerMm === null || !isFinite(calculatedPxPerMm) || calculatedPxPerMm <= 0) return;
     await db.media.update(props.media.id, { pxPerMm: calculatedPxPerMm, scalePresent: true });
     props.onClose();
   }

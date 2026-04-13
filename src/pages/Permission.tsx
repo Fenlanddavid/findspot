@@ -48,6 +48,7 @@ export default function PermissionPage(props: {
   const [landType, setLandType] = useState<Permission["landType"]>("arable");
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [validFrom, setValidFrom] = useState("");
+  const [insuranceProvider, setInsuranceProvider] = useState("");
   const [ncmdNumber, setNcmdNumber] = useState("");
   const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [detectoristName, setDetectoristName] = useState("");
@@ -421,6 +422,7 @@ export default function PermissionPage(props: {
   }, [showCoverage, coverageResult, fieldGapResults]);
 
   useEffect(() => {
+    getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("detectorist", "").then(setDetectoristName);
@@ -974,7 +976,7 @@ export default function PermissionPage(props: {
                                 <p className="font-bold text-gray-700 dark:text-gray-300">{collector || "Not set"}</p>
                                 {(ncmdNumber || ncmdExpiry) && (
                                     <div className="mt-1 text-[10px] font-bold text-emerald-600 flex flex-wrap gap-x-3">
-                                        {ncmdNumber && <span>NCMD: {ncmdNumber}</span>}
+                                        {ncmdNumber && <span>{insuranceProvider || 'Insurance'}: {ncmdNumber}</span>}
                                         {ncmdExpiry && <span>Exp: {new Date(ncmdExpiry).toLocaleDateString()}</span>}
                                     </div>
                                 )}
@@ -1291,6 +1293,7 @@ export default function PermissionPage(props: {
               sessions={sessions} 
               finds={finds} 
               media={allMedia} 
+              insuranceProvider={insuranceProvider}
               ncmdNumber={ncmdNumber}
               ncmdExpiry={ncmdExpiry}
               detectoristName={detectoristName}
@@ -1359,9 +1362,10 @@ export default function PermissionPage(props: {
       )}
 
       {proofModalOpen && currentPermission && (
-        <PermissionProofModal 
+        <PermissionProofModal
           permission={{...currentPermission, id: id!}}
           agreementFile={agreementFile || null}
+          insuranceProvider={insuranceProvider}
           ncmdNumber={ncmdNumber}
           ncmdExpiry={ncmdExpiry}
           onClose={() => setProofModalOpen(false)}

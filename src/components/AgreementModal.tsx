@@ -14,6 +14,7 @@ export function AgreementModal(props: {
 }) {
   const [detectoristName, setDetectoristName] = useState("");
   const [detectoristEmail, setDetectoristEmail] = useState("");
+  const [insuranceProvider, setInsuranceProvider] = useState("");
   const [ncmdNumber, setNcmdNumber] = useState("");
   
   const [landownerSignature, setLandownerSignature] = useState<string | null>(null);
@@ -27,6 +28,7 @@ export function AgreementModal(props: {
   useEffect(() => {
     getSetting("detectorist", "").then(setDetectoristName);
     getSetting("detectoristEmail", "").then(setDetectoristEmail);
+    getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
   }, []);
 
@@ -140,7 +142,7 @@ export function AgreementModal(props: {
 
               <p className="font-bold border-b border-gray-100 pb-1 mt-2" style={{ breakInside: "avoid" }}>Insurance & liability</p>
               <p style={{ breakInside: "avoid" }}>6. The Detectorist confirms they hold current Public/Third Party Liability Insurance and will provide proof on request. 
-                 <br/><strong>Insurer/body:</strong> {ncmdNumber ? "NCMD/FID" : "________________"} &nbsp;&nbsp; <strong>Policy/Member No:</strong> {ncmdNumber || "________________"}</p>
+                 <br/><strong>Insurer/body:</strong> {ncmdNumber ? (insuranceProvider || "NCMD/FID") : "________________"} &nbsp;&nbsp; <strong>Policy/Member No:</strong> {ncmdNumber || "________________"}</p>
               <p style={{ breakInside: "avoid" }}>7. The Detectorist accepts responsibility for their own safety and agrees to indemnify the Landowner against claims arising from the Detectorist’s activities, except where caused by the Landowner’s negligence.</p>
 
               <p className="font-bold border-b border-gray-100 pb-1 mt-2" style={{ breakInside: "avoid" }}>Finds: showing, recording, and confidentiality</p>

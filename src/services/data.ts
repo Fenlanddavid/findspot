@@ -44,9 +44,10 @@ export async function exportToCSV(): Promise<string> {
     "Permission Name", "Permission Type", "Landowner Name", "Landowner Phone", "Landowner Email", "Landowner Address",
     "Latitude", "Longitude", "GPS Accuracy (m)", "OS Grid Ref", "What3Words",
     "Land Type", "Land Use", "Crop Type", "Is Stubble",
-    "Date Observed", "Detectorist", "NCMD No", "NCMD Expiry", "Find Notes", "Permission Notes"
+    "Date Observed", "Detectorist", "Insurance Provider", "Membership No", "Insurance Expiry", "Find Notes", "Permission Notes"
   ];
 
+  const insuranceProvider = await getSetting("insuranceProvider", "");
   const ncmdNumber = await getSetting("ncmdNumber", "");
   const ncmdExpiry = await getSetting("ncmdExpiry", "");
 
@@ -66,7 +67,7 @@ export async function exportToCSV(): Promise<string> {
       s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "", s.osGridRef ?? "", s.w3w ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
       sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
-      l?.collector ?? "", ncmdNumber, ncmdExpiry, sNotes, lNotes
+      l?.collector ?? "", insuranceProvider, ncmdNumber, ncmdExpiry, sNotes, lNotes
     ].map(val => `"${String(val).replace(/"/g, '""')}"`);
   });
 
