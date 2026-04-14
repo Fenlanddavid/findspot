@@ -48,7 +48,7 @@ export default function AllPermissions(props: { projectId: string }) {
               placeholder="Search by name, landowner, or notes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-sm"
+              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 shadow-sm focus:ring-2 focus:ring-emerald-400/40 focus:border-emerald-400 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] outline-none transition-all text-sm"
             />
           </div>
           <button 
@@ -70,14 +70,14 @@ export default function AllPermissions(props: { projectId: string }) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {permissions.map((l) => (
-              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all flex flex-col h-full group relative overflow-hidden">
+              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => navigate(`/permission/${l.id}`)}>
                 {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
-                
+
                 {/* Header */}
                 <div className="flex justify-between items-start gap-3 mb-3">
                   <div className="min-w-0">
-                    <button 
-                        onClick={() => navigate(`/permission/${l.id}`)}
+                    <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }}
                         className="text-gray-900 dark:text-white truncate text-lg font-black group-hover:text-emerald-600 dark:group-hover:text-emerald-400 text-left transition-colors leading-tight"
                     >
                         {l.name || "(Unnamed)"}
@@ -88,36 +88,35 @@ export default function AllPermissions(props: { projectId: string }) {
                         </div>
                     )}
                   </div>
-                  <span className="flex flex-col items-center bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-2 py-0.5 rounded shrink-0">
-                    <span className="text-sm font-black text-gray-800 dark:text-gray-100 leading-none">{l.findCount}</span>
-                    <span className="text-[7px] font-black uppercase tracking-tighter text-gray-400 leading-none mt-0.5">finds</span>
+                  <span className="flex items-center gap-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
+                    <span className="text-[8px]">◈</span>{l.findCount} <span className="opacity-50">finds</span>
                   </span>
                 </div>
 
                 {/* Satellite Preview with Progress Overlay */}
-                <div className="relative aspect-video -mx-4 mb-4 cursor-pointer" onClick={() => navigate(`/permission/${l.id}`)}>
-                    <StaticMapPreview 
-                        lat={l.lat} 
-                        lon={l.lon} 
-                        boundary={l.boundary || (l as any).fields?.[0]?.boundary} 
+                <div className="relative aspect-video -mx-4 mb-4 overflow-hidden rounded-lg">
+                    <StaticMapPreview
+                        lat={l.lat}
+                        lon={l.lon}
+                        boundary={l.boundary || (l as any).fields?.[0]?.boundary}
                         tracks={(l as any).tracks}
-                        className="h-full w-full rounded-none" 
+                        className="h-full w-full rounded-none"
                     />
-                    
+
                     {(l as any).cumulativePercent !== null && (
                         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
-                            <div className={`px-2 py-1 rounded-lg backdrop-blur-md border shadow-lg flex flex-col items-center ${ (l as any).cumulativePercent < 90 ? 'bg-orange-600/80 border-orange-400 text-white' : 'bg-emerald-600/80 border-emerald-400 text-white'}`}>
-                                <span className="text-[7px] font-black uppercase leading-none opacity-80 mb-0.5">Undetected</span>
-                                <span className="text-xs font-black leading-none">{Math.round(100 - (l as any).cumulativePercent)}%</span>
+                            <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
+                                <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
+                                <span className={`text-[10px] font-black leading-none ${(l as any).cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - (l as any).cumulativePercent)}%</span>
                             </div>
                         </div>
                     )}
 
-                    <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-1.5 py-0.5 rounded text-[8px] font-mono text-white/80">
+                    <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm border border-white/20 px-1.5 py-0.5 rounded text-[8px] font-mono text-white/60">
                         {l.lat && l.lon ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
                     </div>
                 </div>
-                
+
                 <div className="grid gap-2 mb-4 flex-1">
                   {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">👤 {l.landownerName}</div>}
                   <div className="flex items-center justify-between">
@@ -127,19 +126,19 @@ export default function AllPermissions(props: { projectId: string }) {
                     {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
                   </div>
                 </div>
-                
-                <div className="pt-3 mt-auto border-t border-gray-100 dark:border-gray-700 flex gap-2 items-center">
-                  <button onClick={() => navigate(`/find?permissionId=${l.id}`)} className="flex-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-black py-2 rounded-lg hover:bg-emerald-600 hover:text-white transition-all border border-emerald-100 dark:border-emerald-900/50 uppercase tracking-wider">
+
+                <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/find?permissionId=${l.id}`); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-[10px] font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
                     Add find
                   </button>
-                  <button onClick={() => navigate(`/permission/${l.id}`)} className="px-3 bg-gray-50 dark:bg-gray-800 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 text-[10px] font-bold py-2 rounded-lg transition-colors border border-gray-100 dark:border-gray-700 uppercase">
-                    Details
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
+                    View
                   </button>
                   {l.lat && l.lon && (
                     <button
                       title="Open in Field Guide"
-                      onClick={() => navigate(`/fieldguide?lat=${l.lat}&lng=${l.lon}`)}
-                      className="px-3 bg-sky-50 dark:bg-sky-950/30 text-sky-600 dark:text-sky-400 hover:bg-sky-600 hover:text-white text-[10px] font-bold py-2 rounded-lg transition-colors border border-sky-100 dark:border-sky-900/50"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/fieldguide?lat=${l.lat}&lng=${l.lon}`); }}
+                      className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700"
                     >
                       🗺
                     </button>
