@@ -10,7 +10,7 @@ import { ScaledImage } from "./ScaledImage";
 import { getSetting } from "../services/data";
 import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
-import { shareElementAsImage } from "../services/share";
+import { shareElementAsImage, downloadShareCard } from "../services/share";
 import PASReportModal from "./PASReportModal";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
@@ -48,16 +48,28 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     setBusy(true);
     setShareError(null);
     try {
-      // Small delay to ensure everything is rendered
       await new Promise(r => setTimeout(r, 100));
-
       const filename = `findspot-${draft.findCode || 'find'}`;
       const title = `FindSpot: ${draft.objectType}`;
       const text = `Today's best find`;
-
       await shareElementAsImage(shareCardRef.current, filename, title, text);
     } catch (e: any) {
       setShareError(e.message || "Failed to generate share image");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDownloadCard() {
+    if (!shareCardRef.current || !draft) return;
+    setBusy(true);
+    setShareError(null);
+    try {
+      await new Promise(r => setTimeout(r, 100));
+      const filename = `findspot-${draft.findCode || 'find'}`;
+      await downloadShareCard(shareCardRef.current, filename);
+    } catch (e: any) {
+      setShareError(e.message || "Failed to save image");
     } finally {
       setBusy(false);
     }
@@ -217,6 +229,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   </svg> Sharing…
                 </>
               ) : 'Share'}
+            </button>
+            {/* Save to Photos — secondary pill */}
+            <button
+              onClick={handleDownloadCard}
+              disabled={busy}
+              title="Save card image to photos"
+              className="shrink-0 text-[11px] font-semibold text-white/80 rounded-full border border-white/15 bg-white/[0.04] transition-all duration-[140ms] flex items-center gap-1.5 px-3.5 py-1.5 hover:bg-white/[0.08] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
+            >
+              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 16l-4-4h2.5V4h3v8H16l-4 4z"/>
+                <path d="M4 18h16"/>
+              </svg>
+              Save
             </button>
             {/* PAS Report — inline text action */}
             <button
@@ -785,12 +810,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
       {/* Off-screen ShareCard for capture */}
       <div style={{ position: 'fixed', top: '-2000px', left: '-2000px', opacity: 0, pointerEvents: 'none' }}>
-          <ShareCard 
+          <ShareCard
             ref={shareCardRef}
             type={draft.isFavorite ? 'find-of-the-day' : 'find'}
             find={draft}
             permission={permission || undefined}
-            photoUrl={imageUrls[0]?.url}
+            photoUrlFront={imageUrls[0]?.url}
+            photoUrlBack={imageUrls[1]?.url}
           />
       </div>
 

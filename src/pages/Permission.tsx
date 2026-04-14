@@ -8,7 +8,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
-import { PermissionReport } from "../components/PermissionReport";
+import PermissionReportModal from "../components/PermissionReportModal";
 import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 import { BoundaryPickerModal } from "../components/BoundaryPickerModal";
@@ -78,6 +78,9 @@ export default function PermissionPage(props: {
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
+  const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
+  // null = closed; undefined = whole permission; string = specific fieldId
+  const [reportTarget, setReportTarget] = useState<string | undefined | null>(null);
 
   const fields = useLiveQuery(async () => {
     if (!id) return [];
@@ -584,10 +587,6 @@ export default function PermissionPage(props: {
     }
   }
 
-  function handlePrint() {
-    window.print();
-  }
-
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
   const currentPermission: Permission | null = id ? {
@@ -615,12 +614,58 @@ export default function PermissionPage(props: {
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 {isEdit && (
                     <>
-                        <button
-                            onClick={handlePrint}
-                            className="text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex-1 sm:flex-none"
-                        >
-                            📄 Report
-                        </button>
+                        {/* Landowner report dropdown */}
+                        <div className="relative flex-1 sm:flex-none">
+                            <button
+                                onClick={() => setReportDropdownOpen(v => !v)}
+                                className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 leading-tight"
+                            >
+                                <span className="flex flex-col items-start text-left">
+                                    <span>📄 Landowner</span>
+                                    <span>Report</span>
+                                </span>
+                                <svg className={`w-3 h-3 shrink-0 transition-transform ${reportDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+                            </button>
+                            {reportDropdownOpen && (
+                                <>
+                                <div className="fixed inset-0 z-40" onClick={() => setReportDropdownOpen(false)} />
+                                <div
+                                    className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-[220px]"
+                                >
+                                    <div className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
+                                        Landowner Report
+                                    </div>
+                                    <button
+                                        onClick={() => { setReportTarget(undefined); setReportDropdownOpen(false); }}
+                                        className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-2"
+                                    >
+                                        <span className="text-base">🗂️</span>
+                                        <div>
+                                            <div>All Finds</div>
+                                            <div className="text-[11px] font-normal text-gray-400">Entire permission</div>
+                                        </div>
+                                    </button>
+                                    {fields && fields.length > 0 && (
+                                        <>
+                                            <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700">
+                                                By Field
+                                            </div>
+                                            {fields.map(field => (
+                                                <button
+                                                    key={field.id}
+                                                    onClick={() => { setReportTarget(field.id); setReportDropdownOpen(false); }}
+                                                    className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-2"
+                                                >
+                                                    <span className="text-base">🌿</span>
+                                                    {field.name}
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                                </>
+                            )}
+                        </div>
                         <button
                             onClick={handleDelete}
                             disabled={saving}
@@ -1354,20 +1399,12 @@ export default function PermissionPage(props: {
       </div>
     </div>
 
-      {isEdit && currentPermission && finds && allMedia && sessions && (
-        <div className="hidden print:block">
-            <PermissionReport 
-              permission={currentPermission} 
-              sessions={sessions} 
-              finds={finds} 
-              media={allMedia} 
-              insuranceProvider={insuranceProvider}
-              ncmdNumber={ncmdNumber}
-              ncmdExpiry={ncmdExpiry}
-              detectoristName={detectoristName}
-              detectoristEmail={detectoristEmail}
-            />
-        </div>
+      {isEdit && id && reportTarget !== null && (
+        <PermissionReportModal
+          permissionId={id}
+          fieldId={reportTarget}
+          onClose={() => setReportTarget(null)}
+        />
       )}
 
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
