@@ -79,6 +79,7 @@ export default function PermissionPage(props: {
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
   const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
+  const [noPermTooltip, setNoPermTooltip] = useState(false);
   // null = closed; undefined = whole permission; string = specific fieldId
   const [reportTarget, setReportTarget] = useState<string | undefined | null>(null);
 
@@ -618,12 +619,9 @@ export default function PermissionPage(props: {
                         <div className="relative flex-1 sm:flex-none">
                             <button
                                 onClick={() => setReportDropdownOpen(v => !v)}
-                                className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5 leading-tight"
+                                className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5"
                             >
-                                <span className="flex flex-col items-start text-left">
-                                    <span>📄 Landowner</span>
-                                    <span>Report</span>
-                                </span>
+                                📄 Landowner Report
                                 <svg className={`w-3 h-3 shrink-0 transition-transform ${reportDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                             </button>
                             {reportDropdownOpen && (
@@ -998,31 +996,61 @@ export default function PermissionPage(props: {
                   </>
                 ) : (
                   <div className="grid gap-8">
-                    <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                        <div className="min-w-0 flex-1">
-                            <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${type === 'rally' ? 'bg-teal-100 text-teal-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                                {type === 'rally' ? 'Club/Rally Dig' : 'Individual Permission'}
+                    <div className="grid gap-3">
+                        {/* Row 1 — type badge left, finds count right (always same line) */}
+                        <div className="flex items-center justify-between gap-2">
+                            {/* Type badge with optional no-permission dot to its left */}
+                            <div className="flex items-center gap-2">
+                                {!permissionGranted && (
+                                    <div className="relative flex items-center">
+                                        <button
+                                            onClick={() => setNoPermTooltip(v => !v)}
+                                            className="relative flex items-center justify-center w-4 h-4"
+                                            aria-label="No permission confirmed"
+                                        >
+                                            <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-red-400 opacity-60" />
+                                            <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                                        </button>
+                                        {noPermTooltip && (
+                                            <>
+                                                <div className="fixed inset-0 z-40" onClick={() => setNoPermTooltip(false)} />
+                                                <div className="absolute left-6 top-1/2 -translate-y-1/2 z-50 bg-gray-900 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                                                    No permission confirmed
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                )}
+                                <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${type === 'rally' ? 'bg-teal-100 text-teal-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    {type === 'rally' ? 'Club/Rally Dig' : 'Individual Permission'}
+                                </span>
+                            </div>
+                            {/* Finds count right */}
+                            <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 dark:text-amber-400 whitespace-nowrap">
+                                <span className="text-[9px]">◈</span>
+                                {finds?.length ?? 0} {(finds?.length ?? 0) === 1 ? 'find' : 'finds'}
                             </span>
-                            <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 mt-2 break-words">{name}</h3>
                         </div>
-                        <div className="flex flex-wrap gap-2 items-center justify-end">
-                          <div className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl border-2 flex items-center gap-2 font-black text-[10px] sm:text-sm whitespace-nowrap h-fit ${permissionGranted ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-red-50 border-red-100 text-red-700'}`}>
-                              {permissionGranted ? '✓ PERMISSION GRANTED' : '⚠️ NO PERMISSION'}
-                          </div>
-                          {lat && lon && (
+
+                        {/* Row 2 — permission name */}
+                        <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words">{name}</h3>
+
+                        {/* Row 3 — action buttons */}
+                        <div className="flex flex-wrap gap-2 items-center">
+                            {lat && lon && (
+                                <button
+                                    onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
+                                    className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
+                                >
+                                    🗺 Field Guide
+                                </button>
+                            )}
                             <button
-                              onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
-                              className="text-[10px] sm:text-xs font-black bg-white dark:bg-gray-800 border-2 border-sky-100 dark:border-sky-900 px-3 py-2 rounded-xl text-sky-600 dark:text-sky-400 hover:border-sky-500 hover:text-sky-500 transition-all flex items-center gap-1 shadow-sm h-fit"
+                                onClick={() => setAgreementModalOpen(true)}
+                                className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                             >
-                              🗺 Field Guide
+                                🤝 {agreementId ? "Update Agreement" : "Generate Agreement"}
                             </button>
-                          )}
-                          <button
-                              onClick={() => setAgreementModalOpen(true)}
-                              className="text-[10px] sm:text-xs font-black bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 px-3 py-2 rounded-xl text-gray-600 dark:text-gray-400 hover:border-emerald-500 hover:text-emerald-600 transition-all flex items-center gap-1 shadow-sm h-fit"
-                          >
-                            🤝 {agreementId ? "Update Agreement" : "Generate Agreement"}
-                          </button>
                         </div>
                     </div>
 

@@ -176,7 +176,7 @@ export default function AllFinds(props: { projectId: string }) {
     if (!allFindsForStats) return null;
     return {
       total: allFindsForStats.length,
-      coins: allFindsForStats.filter(f => f.objectType.toLowerCase().includes("coin")).length,
+      coins: allFindsForStats.filter(f => (f.objectType || "").toLowerCase().includes("coin")).length,
       roman: allFindsForStats.filter(f => f.period === "Roman").length,
     };
   }, [allFindsForStats]);

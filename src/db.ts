@@ -1,7 +1,7 @@
 import Dexie, { Table } from "dexie";
 import { v4 as uuid } from "uuid";
 
-type GeoJSONPolygon = {
+export type GeoJSONPolygon = {
   type: "Polygon";
   coordinates: number[][][];
 };

@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { db, Find, Permission, Session, Track } from "../db";
+import { db, Find, GeoJSONPolygon, Permission, Session, Track } from "../db";
 import { Modal } from "./Modal";
 import { toFarmerLabel, toFarmerDetail, summariseFinds } from "../services/fieldReport";
 import { getSetting } from "../services/data";
@@ -23,7 +23,7 @@ interface ReportData {
   detectoristName: string;
   insuranceProvider: string;
   ncmdNumber: string;
-  boundary: any | null;
+  boundary: GeoJSONPolygon | null;
 }
 
 // ─── Numbered marker sprite ───────────────────────────────────────────────────
@@ -144,7 +144,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
         if (!permission) throw new Error("Permission not found");
 
         let scopeLabel = "All Fields";
-        let boundary: any | null = (permission as any).boundary ?? null;
+        let boundary: GeoJSONPolygon | null = permission.boundary ?? null;
 
         if (fieldId) {
           const field = await db.fields.get(fieldId);
@@ -290,7 +290,9 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
       const sliceCanvas = document.createElement("canvas");
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = sliceH;
-      sliceCanvas.getContext("2d")!.drawImage(canvas, 0, -srcYOffset);
+      const sliceCtx = sliceCanvas.getContext("2d");
+      if (!sliceCtx) throw new Error("Failed to get canvas context for PDF slice");
+      sliceCtx.drawImage(canvas, 0, -srcYOffset);
       const sliceDisplayH = (sliceH / canvas.width) * printW;
       pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceDisplayH);
       srcYOffset = sliceEnd;

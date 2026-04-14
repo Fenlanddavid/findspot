@@ -376,7 +376,9 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
       const sliceCanvas = document.createElement("canvas");
       sliceCanvas.width = canvas.width;
       sliceCanvas.height = sliceH;
-      sliceCanvas.getContext("2d")!.drawImage(canvas, 0, -srcYOffset);
+      const sliceCtx = sliceCanvas.getContext("2d");
+      if (!sliceCtx) throw new Error("Failed to get canvas context for PDF slice");
+      sliceCtx.drawImage(canvas, 0, -srcYOffset);
       const sliceDisplayH = (sliceH / canvas.width) * printW;
       pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceDisplayH);
       srcYOffset = sliceEnd;
