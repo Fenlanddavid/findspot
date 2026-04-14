@@ -102,10 +102,10 @@ export default function Home(props: {
   }, [findIds]);
 
   return (
-    <div className="grid gap-8 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
+    <div className="grid gap-7 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
       <button
         onClick={() => setPrivacyExpanded(v => !v)}
-        className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-50 hover:opacity-70 transition-opacity"
+        className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
       >
         <span className="text-xs shrink-0">🔒</span>
         {privacyExpanded ? (
@@ -117,11 +117,11 @@ export default function Home(props: {
         )}
       </button>
 
-      <div className="flex gap-3 flex-wrap">
-        <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-4 sm:px-6 py-2.5 rounded-xl font-bold shadow-sm transition-all flex items-center gap-2 transform hover:-translate-y-px active:translate-y-0 text-sm sm:text-base">
+      <div className="flex gap-2 flex-wrap mt-1">
+        <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white px-4 sm:px-6 py-2 rounded-xl font-semibold shadow transition-all duration-200 ease-out flex items-center gap-2 active:translate-y-0 text-sm sm:text-base">
             <span>📍</span> <span className="hidden xs:inline">New</span> Permission
         </button>
-        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
+        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gray-100/70 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
             <span>🏟️</span> Club/Rally
         </button>
       </div>
@@ -130,7 +130,7 @@ export default function Home(props: {
         <section className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 animate-in slide-in-from-top-4">
             <div className="flex justify-between items-center mb-3 px-1">
                 <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                    <span className="animate-pulse">🟠</span> {pendingFinds.length} Pending Finds
+                    <span className="animate-pulse opacity-80">🟠</span> {pendingFinds.length} Pending Finds
                 </h3>
                 <button onClick={() => props.goFindsWithFilter("filter=pending")} className="text-[10px] font-black uppercase text-amber-600 hover:underline">View Queue</button>
             </div>
@@ -206,10 +206,42 @@ export default function Home(props: {
             ))}
           </div>
           {(finds2026Stats.periodCounts.length + (finds2026Stats.gold > 0 ? 1 : 0) + (finds2026Stats.silver > 0 ? 1 : 0) + (finds2026Stats.hammered > 0 ? 1 : 0)) > 4 && (
-            <p className="text-[9px] text-gray-400 dark:text-gray-500 italic ml-1 mt-1">Scroll for more</p>
+            <p className="text-[9px] text-gray-400 dark:text-gray-500 italic ml-1 mt-1 opacity-40">Scroll for more</p>
           )}
         </section>
       )}
+
+      <div
+        className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-md hover:shadow-lg hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
+        onClick={props.goFieldGuide}
+      >
+        <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+          <defs>
+            <linearGradient id="fg-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#fcd34d" />
+              <stop offset="50%" stopColor="#fb923c" />
+              <stop offset="100%" stopColor="#f87171" />
+            </linearGradient>
+          </defs>
+          <circle cx="256" cy="256" r="180" stroke="url(#fg-card-grad)" strokeWidth="24" fill="none" />
+          <circle cx="256" cy="256" r="100" stroke="url(#fg-card-grad)" strokeWidth="22" fill="none" opacity="0.45" />
+          <circle cx="256" cy="256" r="40" fill="url(#fg-card-grad)" />
+          <rect x="244" y="40" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+          <rect x="244" y="402" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+          <rect x="40" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+          <rect x="402" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+        </svg>
+        <div className="flex-1 min-w-0">
+          <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
+          <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand your land. Start smarter.</div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
+          className="shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+        >
+          Open
+        </button>
+      </div>
 
       <section className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
@@ -225,7 +257,7 @@ export default function Home(props: {
                         placeholder="Search permissions..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white dark:bg-gray-800 border border-gray-150 dark:border-gray-700/60 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-400/50 focus:border-emerald-400 outline-none transition-all"
+                        className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-400/40 focus:border-emerald-400 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] outline-none transition-all"
                     />
                 </div>
                 <div className="text-sm text-gray-500 font-mono hidden sm:block whitespace-nowrap">{permissions?.length ?? 0} total</div>
@@ -255,7 +287,7 @@ export default function Home(props: {
         {permissions && permissions.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {permissions.map((l) => (
-              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-gray-300 dark:hover:border-gray-600 transition-all flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
+              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
                 {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
                 
                 {/* Header */}
@@ -273,13 +305,13 @@ export default function Home(props: {
                         </div>
                     )}
                   </div>
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap shrink-0 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-full">
-                    <span className="text-[9px]">◈</span>{l.findCount} <span className="text-[9px] opacity-60">finds</span>
+                  <span className="flex items-center gap-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
+                    <span className="text-[8px]">◈</span>{l.findCount} <span className="opacity-50">finds</span>
                   </span>
                 </div>
 
                 {/* Satellite Preview with Progress Overlay */}
-                <div className="relative aspect-video -mx-4 mb-4">
+                <div className="relative aspect-video -mx-4 mb-4 overflow-hidden rounded-lg">
                     <StaticMapPreview
                         lat={l.lat}
                         lon={l.lon}
@@ -291,7 +323,7 @@ export default function Home(props: {
                     {l.cumulativePercent !== null && (
                         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
                             <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
-                                <span className="text-[7px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
+                                <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
                                 <span className={`text-[10px] font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
                             </div>
                         </div>
@@ -312,11 +344,11 @@ export default function Home(props: {
                   </div>
                 </div>
                 
-                <div className="pt-3 mt-auto border-t border-gray-100 dark:border-gray-700 flex gap-2 items-center">
-                  <button onClick={(e) => { e.stopPropagation(); props.goFind(l.id); }} className="flex-1 bg-emerald-600 dark:bg-emerald-700 text-white text-[10px] font-black py-2 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 hover:scale-105 transition-all uppercase tracking-wider shadow-sm">
+                <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
+                  <button onClick={(e) => { e.stopPropagation(); props.goFind(l.id); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-[10px] font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
                     Add find
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-transparent text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 text-[10px] font-bold py-2 rounded-lg transition-colors border border-gray-100 dark:border-gray-700/50 uppercase">
+                  <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
                     View
                   </button>
                 </div>
@@ -339,7 +371,7 @@ export default function Home(props: {
             {recentFinds.slice(0, 3).map((s) => {
               const media = firstMediaMap?.get(s.id);
               return (
-                <div key={s.id} className="border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col h-full group cursor-pointer" onClick={() => setOpenFindId(s.id)}>
+                <div key={s.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-md hover:shadow-lg hover:-translate-y-[1px] transition-all duration-200 ease-out flex flex-col h-full group cursor-pointer" onClick={() => setOpenFindId(s.id)}>
                   <div className="aspect-square bg-gray-100 dark:bg-gray-900 relative">
                     {media ? (
                       <ScaledImage
@@ -360,7 +392,7 @@ export default function Home(props: {
                     <div className="font-bold text-gray-800 dark:text-gray-200 truncate leading-tight group-hover:text-emerald-600 transition-colors" title={s.objectType}>{s.objectType || "(Object TBD)"}</div>
                     <div className="opacity-60 text-[10px] mt-1.5 flex justify-between items-center">
                       <div className="flex gap-2">
-                        <span className="bg-gray-50 dark:bg-gray-900 px-1 rounded border border-gray-100 dark:border-gray-800 uppercase font-bold">{s.period}</span>
+                        <span className="bg-gray-50 dark:bg-gray-900 px-1 rounded border border-gray-200 dark:border-gray-700 uppercase font-bold">{s.period}</span>
                         {s.material !== "Other" && <span className="capitalize">{s.material}</span>}
                       </div>
                       <span className="opacity-60">{new Date(s.createdAt).toLocaleDateString()}</span>
