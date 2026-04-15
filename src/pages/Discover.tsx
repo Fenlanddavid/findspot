@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "../db";
 import { v4 as uuid } from "uuid";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -232,10 +235,12 @@ function saveLocalClubSubmission(c: ClubListing) {
 function EventCard({
   event,
   distanceKm,
+  going,
   onClick,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
+  going?: boolean;
   onClick: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi` : "";
@@ -244,7 +249,7 @@ function EventCard({
   return (
     <div
       onClick={onClick}
-      className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 cursor-pointer hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all group"
+      className={`bg-white dark:bg-gray-800 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all group ${going ? "border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-500" : "border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700"}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-black text-sm text-gray-900 dark:text-gray-100 leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
@@ -294,6 +299,11 @@ function EventCard({
         <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{location}</div>
       )}
       <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+        {going && (
+          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
+            ✓ Going
+          </span>
+        )}
         <span
           className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${verificationStyle(event.verificationStatus)}`}
         >
@@ -373,10 +383,12 @@ function EventDetailModal({
   event,
   distanceKm,
   onClose,
+  onRecordRally,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
   onClose: () => void;
+  onRecordRally: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi away` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
@@ -455,6 +467,12 @@ function EventDetailModal({
               Directions
             </a>
           )}
+          <button
+            onClick={onRecordRally}
+            className="flex-1 bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl transition-colors"
+          >
+            + Add to FindSpot
+          </button>
           <button
             onClick={onClose}
             className="px-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-[10px] font-black uppercase tracking-widest"
@@ -972,7 +990,8 @@ function SectionHeader({ children, accent }: { children: React.ReactNode; accent
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function Discover({ projectId: _projectId }: { projectId: string }) {
+export default function Discover({ projectId }: { projectId: string }) {
+  const nav = useNavigate();
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -993,6 +1012,12 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
   const [localClubs, setLocalClubs] = useState<ClubListing[]>([]);
   const [showAllClubs, setShowAllClubs] = useState(false);
   const [showAllEvents, setShowAllEvents] = useState(false);
+
+  // Build a Set of "name|date" keys for saved rally permissions so we can badge matching events
+  const savedRallyKeys = useLiveQuery(async () => {
+    const rallies = await db.permissions.where("projectId").equals(projectId).filter(p => p.type === "rally").toArray();
+    return new Set(rallies.map(r => `${r.name}|${r.validFrom ?? ""}`));
+  }, [projectId]) ?? new Set<string>();
 
   function requestLocation() {
     setLocating(true);
@@ -1235,7 +1260,7 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
           <>
             <div className="grid gap-3">
               {(showAllEvents ? processedEvents : processedEvents.slice(0, 4)).map(({ event, distanceKm }) => (
-                <EventCard key={event.id} event={event} distanceKm={distanceKm} onClick={() => setSelectedEvent(event)} />
+                <EventCard key={event.id} event={event} distanceKm={distanceKm} going={savedRallyKeys.has(`${event.title}|${event.startDate}`)} onClick={() => setSelectedEvent(event)} />
               ))}
             </div>
             {processedEvents.length > 4 && (
@@ -1260,6 +1285,19 @@ export default function Discover({ projectId: _projectId }: { projectId: string 
           event={selectedEvent}
           distanceKm={selectedEventDistance}
           onClose={() => setSelectedEvent(null)}
+          onRecordRally={() => {
+            const e = selectedEvent;
+            const params = new URLSearchParams({ type: "rally" });
+            if (e.title) params.set("name", e.title);
+            if (e.startDate) params.set("validFrom", e.startDate);
+            if (e.organiserName) params.set("landownerName", e.organiserName);
+            if (e.lat != null) params.set("lat", String(e.lat));
+            if (e.lon != null) params.set("lon", String(e.lon));
+            const location = [e.town, e.county].filter(Boolean).join(", ");
+            if (location) params.set("notes", location);
+            setSelectedEvent(null);
+            nav(`/permission?${params.toString()}`);
+          }}
         />
       )}
       {showSubmit && (

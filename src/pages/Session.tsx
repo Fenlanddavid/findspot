@@ -7,6 +7,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";
+import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
@@ -17,17 +18,25 @@ import "maplibre-gl/dist/maplibre-gl.css";
 function SessionSummary({
   coverage,
   findsCount,
+  pendingCount,
   durationMins,
   totalTime,
+  permissionId,
+  fieldId,
   onClose,
   onFieldReport,
+  onLandownerReport,
 }: {
   coverage: number,
   findsCount: number,
+  pendingCount: number,
   durationMins: number | null,
   totalTime: string | null,
+  permissionId: string | null,
+  fieldId: string | null,
   onClose: () => void,
   onFieldReport: () => void,
+  onLandownerReport: (forField: boolean) => void,
 }) {
   // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
   let fourthStat: { label: string; value: string } | null = null;
@@ -63,6 +72,35 @@ function SessionSummary({
                     </div>
                   )}
               </div>
+
+              {permissionId && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Landowner Report</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {pendingCount > 0
+                                ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. For the most complete report, finish those records first.`
+                                : "Generate a report to share with the landowner."}
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => onLandownerReport(false)}
+                            className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-700 dark:text-gray-300 font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                        >
+                            Whole Permission
+                        </button>
+                        {fieldId && (
+                            <button
+                                onClick={() => onLandownerReport(true)}
+                                className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-700 dark:text-gray-300 font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                            >
+                                This Field
+                            </button>
+                        )}
+                    </div>
+                </div>
+              )}
 
               <button
                   onClick={onFieldReport}
@@ -124,6 +162,8 @@ export default function SessionPage(props: {
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null });
   const [showFieldReport, setShowFieldReport] = useState(false);
+  const [showLandownerReport, setShowLandownerReport] = useState(false);
+  const [landownerReportForField, setLandownerReportForField] = useState(false);
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
 
   const permission = useLiveQuery(
@@ -926,16 +966,31 @@ export default function SessionPage(props: {
         <SessionSummary
           coverage={summaryData.coverage}
           findsCount={summaryData.findsCount}
+          pendingCount={finds?.filter(f => f.isPending).length ?? 0}
           durationMins={summaryData.durationMins}
           totalTime={summaryData.totalTime}
+          permissionId={permission?.id ?? null}
+          fieldId={fieldId}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
           onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}
+          onLandownerReport={(forField) => {
+            setLandownerReportForField(forField);
+            setShowSummary(false);
+            setShowLandownerReport(true);
+          }}
         />
       )}
       {showFieldReport && (
         <FieldReportModal
           sessionId={sessionId}
           onClose={() => setShowFieldReport(false)}
+        />
+      )}
+      {showLandownerReport && permission && (
+        <PermissionReportModal
+          permissionId={permission.id}
+          fieldId={landownerReportForField && fieldId ? fieldId : undefined}
+          onClose={() => setShowLandownerReport(false)}
         />
       )}
       <TrackingOverlay 

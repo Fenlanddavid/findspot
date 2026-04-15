@@ -460,6 +460,19 @@ export default function PermissionPage(props: {
       });
     } else {
       getSetting("detectorist", "").then(setCollector);
+      // Pre-fill from Discover → "Add to FindSpot" navigation
+      const prefillName = searchParams.get("name");
+      const prefillValidFrom = searchParams.get("validFrom");
+      const prefillLandownerName = searchParams.get("landownerName");
+      const prefillLat = searchParams.get("lat");
+      const prefillLon = searchParams.get("lon");
+      const prefillNotes = searchParams.get("notes");
+      if (prefillName) setName(prefillName);
+      if (prefillValidFrom) setValidFrom(prefillValidFrom);
+      if (prefillLandownerName) setLandownerName(prefillLandownerName);
+      if (prefillLat) setLat(parseFloat(prefillLat));
+      if (prefillLon) setLon(parseFloat(prefillLon));
+      if (prefillNotes) setNotes(prefillNotes);
     }
   }, [id]);
 
@@ -590,6 +603,8 @@ export default function PermissionPage(props: {
 
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
+  const isRally = type === 'rally';
+
   const currentPermission: Permission | null = id ? {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
     landownerName, landownerPhone, landownerEmail, landownerAddress,
@@ -602,7 +617,9 @@ export default function PermissionPage(props: {
       <div className="no-print grid gap-8 mt-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">{isEdit ? `Land/Permission Details` : "New Permission"}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
+                    {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
+                </h2>
                 {isEdit && !isEditing && (
                     <button 
                         onClick={() => setIsEditing(true)}
@@ -615,8 +632,8 @@ export default function PermissionPage(props: {
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 {isEdit && (
                     <>
-                        {/* Landowner report dropdown */}
-                        <div className="relative flex-1 sm:flex-none">
+                        {/* Landowner report dropdown — individual permissions only */}
+                        <div className={`relative flex-1 sm:flex-none ${isRally ? 'hidden' : ''}`}>
                             <button
                                 onClick={() => setReportDropdownOpen(v => !v)}
                                 className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5"
@@ -686,7 +703,7 @@ export default function PermissionPage(props: {
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-lg shrink-0">✓</div>
                     <div>
-                        <div className="font-black text-emerald-700 dark:text-emerald-300">Permission saved</div>
+                        <div className="font-black text-emerald-700 dark:text-emerald-300">{isRally ? "Rally saved" : "Permission saved"}</div>
                         <div className="text-xs opacity-70 font-medium mt-0.5">Ready to use with finds, sessions, and coverage</div>
                     </div>
                 </div>
@@ -700,7 +717,7 @@ export default function PermissionPage(props: {
                 {isEditing ? (
                   <>
                     <div className="flex items-center gap-3">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Permission Details</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Event Details" : "Permission Details"}</div>
                       <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-1.5 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit border border-gray-200 dark:border-gray-800">
@@ -728,102 +745,156 @@ export default function PermissionPage(props: {
                     />
                     </label>
 
-                    <div className="flex flex-col gap-1 pt-2">
-                      <div className="flex items-center gap-3">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Landowner Details</div>
-                        <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
-                      </div>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500">Keep a clear record of who granted access to this land.</p>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Landowner / Contact Name</div>
-                            <input 
-                                value={landownerName} 
-                                onChange={(e) => setLandownerName(e.target.value)} 
-                                placeholder="Full name" 
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                            />
-                        </label>
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Phone Number</div>
-                            <input 
-                                value={landownerPhone} 
-                                onChange={(e) => setLandownerPhone(e.target.value)} 
-                                placeholder="e.g., 07123 456789" 
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                            />
-                        </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Email Address</div>
-                            <input 
-                                type="email"
-                                value={landownerEmail} 
-                                onChange={(e) => setLandownerEmail(e.target.value)} 
-                                placeholder="landowner@example.com" 
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                            />
-                        </label>
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Postal Address</div>
-                            <input 
-                                value={landownerAddress} 
-                                onChange={(e) => setLandownerAddress(e.target.value)} 
-                                placeholder="Farm address, postcode..." 
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                            />
-                        </label>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Detectorist (Default)</div>
-                            <input 
-                                value={collector} 
-                                onChange={(e) => setCollector(e.target.value)} 
-                                placeholder="Name or initials" 
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                            />
-                        </label>
-
-                        <label className="block">
-                            <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Land Type</div>
-                            <select 
-                                value={landType} 
-                                onChange={(e) => setLandType(e.target.value as any)}
-                                className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none font-medium"
-                            >
-                            {landTypes.map((t) => (
-                                <option key={t} value={t}>{t}</option>
-                            ))}
-                            </select>
-                        </label>
-                    </div>
+                    {isRally ? (
+                      <>
+                        <div className="flex flex-col gap-1 pt-2">
+                          <div className="flex items-center gap-3">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Organiser & Event</div>
+                            <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                          </div>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500">Record the event details so you can log finds against it later.</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Organiser / Contact Name</div>
+                                <input
+                                    value={landownerName}
+                                    onChange={(e) => setLandownerName(e.target.value)}
+                                    placeholder="Club name or organiser"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Event Date</div>
+                                <input
+                                    type="date"
+                                    value={validFrom}
+                                    onChange={(e) => setValidFrom(e.target.value)}
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Contact Phone</div>
+                                <input
+                                    value={landownerPhone}
+                                    onChange={(e) => setLandownerPhone(e.target.value)}
+                                    placeholder="e.g., 07123 456789"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Contact Email</div>
+                                <input
+                                    type="email"
+                                    value={landownerEmail}
+                                    onChange={(e) => setLandownerEmail(e.target.value)}
+                                    placeholder="organiser@example.com"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-col gap-1 pt-2">
+                          <div className="flex items-center gap-3">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Landowner Details</div>
+                            <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
+                          </div>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500">Keep a clear record of who granted access to this land.</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Landowner / Contact Name</div>
+                                <input
+                                    value={landownerName}
+                                    onChange={(e) => setLandownerName(e.target.value)}
+                                    placeholder="Full name"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Phone Number</div>
+                                <input
+                                    value={landownerPhone}
+                                    onChange={(e) => setLandownerPhone(e.target.value)}
+                                    placeholder="e.g., 07123 456789"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Email Address</div>
+                                <input
+                                    type="email"
+                                    value={landownerEmail}
+                                    onChange={(e) => setLandownerEmail(e.target.value)}
+                                    placeholder="landowner@example.com"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Postal Address</div>
+                                <input
+                                    value={landownerAddress}
+                                    onChange={(e) => setLandownerAddress(e.target.value)}
+                                    placeholder="Farm address, postcode..."
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Detectorist (Default)</div>
+                                <input
+                                    value={collector}
+                                    onChange={(e) => setCollector(e.target.value)}
+                                    placeholder="Name or initials"
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+                                />
+                            </label>
+                            <label className="block">
+                                <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Land Type</div>
+                                <select
+                                    value={landType}
+                                    onChange={(e) => setLandType(e.target.value as any)}
+                                    className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all appearance-none font-medium"
+                                >
+                                {landTypes.map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                                </select>
+                            </label>
+                        </div>
+                      </>
+                    )}
 
                     <div className="flex items-center gap-3 pt-2">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Field Setup & Geometry</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Location" : "Field Setup & Geometry"}</div>
                       <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                     </div>
                     <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
                         <div className="flex flex-col sm:flex-row gap-2">
-                            <button
-                                type="button"
-                                onClick={() => setIsPickingBoundary(true)}
-                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
-                            >
-                                <span>📐</span>
-                                <span>{boundary ? "Boundary Set ✓" : "Define Boundary"}</span>
-                            </button>
+                            {!isRally && (
+                                <button
+                                    type="button"
+                                    onClick={() => setIsPickingBoundary(true)}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
+                                >
+                                    <span>📐</span>
+                                    <span>{boundary ? "Boundary Set ✓" : "Define Boundary"}</span>
+                                </button>
+                            )}
                             <button
                                 type="button"
                                 onClick={() => setIsPickingLocation(true)}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 shadow-sm hover:border-emerald-400 hover:text-emerald-600 transition-all"
                             >
                                 <span>🗺️</span>
-                                <span>Pick Centre</span>
+                                <span>Pick Location</span>
                             </button>
                             <button
                                 type="button"
@@ -835,15 +906,15 @@ export default function PermissionPage(props: {
                             </button>
                         </div>
 
-                        {!boundary && (!fields || fields.length === 0) && (
+                        {!isRally && !boundary && (!fields || fields.length === 0) && (
                             <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
                                 <span className="shrink-0 mt-0.5">💡</span>
                                 <span>Set the boundary, then split it into sub-fields — one per field or pasture.</span>
                             </div>
                         )}
 
-                        {/* Sub-Fields inside Geometry box */}
-                        {isEdit && (
+                        {/* Sub-Fields inside Geometry box — individual permissions only */}
+                        {!isRally && isEdit && (
                             <div className="grid gap-3 border-t-2 border-emerald-200/70 dark:border-emerald-700/50 pt-5 mt-1">
                                 <div className="flex justify-between items-start gap-3">
                                     <div>
@@ -928,7 +999,8 @@ export default function PermissionPage(props: {
                         </div>
                     </div>
 
-                    <div className="flex flex-col gap-2">
+                    {!isRally && (
+                      <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                             <div className="text-sm font-bold text-gray-700 dark:text-gray-300">Permission Status</div>
                             {!isEdit && (
@@ -938,9 +1010,9 @@ export default function PermissionPage(props: {
                             )}
                         </div>
                         <label className="flex items-center gap-2 cursor-pointer group w-fit">
-                            <input 
-                                type="checkbox" 
-                                checked={permissionGranted} 
+                            <input
+                                type="checkbox"
+                                checked={permissionGranted}
                                 onChange={(e) => setPermissionGranted(e.target.checked)}
                                 className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                             />
@@ -951,7 +1023,7 @@ export default function PermissionPage(props: {
                             <div className="pt-2 animate-in fade-in slide-in-from-top-2">
                                 <label className="block">
                                     <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Valid From (Date of Agreement)</div>
-                                    <input 
+                                    <input
                                         type="date"
                                         value={validFrom}
                                         onChange={(e) => setValidFrom(e.target.value)}
@@ -960,14 +1032,15 @@ export default function PermissionPage(props: {
                                 </label>
                             </div>
                         )}
-                    </div>
+                      </div>
+                    )}
 
                     <div className="flex items-center gap-3 pt-2">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Additional Notes</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Notes</div>
                       <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                     </div>
                     <label className="block">
-                    <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Land/Farm Notes</div>
+                    <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">{isRally ? "Event Notes" : "Land/Farm Notes"}</div>
                     <textarea 
                         value={notes} 
                         onChange={(e) => setNotes(e.target.value)} 
@@ -982,7 +1055,7 @@ export default function PermissionPage(props: {
                             disabled={saving || !name.trim()} 
                             className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50`}
                         >
-                            {saving ? "Saving..." : isEdit ? "Update Details ✓" : "Create Record →"}
+                            {saving ? "Saving..." : isEdit ? (isRally ? "Update Rally ✓" : "Update Details ✓") : (isRally ? "Save Rally →" : "Create Record →")}
                         </button>
                         {isEdit && (
                             <button 
@@ -1001,7 +1074,7 @@ export default function PermissionPage(props: {
                         <div className="flex items-center justify-between gap-2">
                             {/* Type badge with optional no-permission dot to its left */}
                             <div className="flex items-center gap-2">
-                                {!permissionGranted && (
+                                {!permissionGranted && !isRally && (
                                     <div className="relative flex items-center">
                                         <button
                                             onClick={() => setNoPermTooltip(v => !v)}
@@ -1045,24 +1118,27 @@ export default function PermissionPage(props: {
                                     🗺 Field Guide
                                 </button>
                             )}
+                            {!isRally && (
                             <button
                                 onClick={() => setAgreementModalOpen(true)}
                                 className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                             >
                                 🤝 {agreementId ? "Update Agreement" : "Generate Agreement"}
                             </button>
+                            )}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="grid gap-4">
                             <div>
-                                <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Landowner / Contact</h4>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">{isRally ? "Organiser / Contact" : "Landowner / Contact"}</h4>
                                 <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName || "Not recorded"}</p>
                                 {landownerPhone && <p className="text-sm opacity-60">📞 {landownerPhone}</p>}
                                 {landownerEmail && <p className="text-sm opacity-60">✉️ {landownerEmail}</p>}
-                                {landownerAddress && <p className="text-sm opacity-60 mt-1 italic">📍 {landownerAddress}</p>}
+                                {!isRally && landownerAddress && <p className="text-sm opacity-60 mt-1 italic">📍 {landownerAddress}</p>}
                             </div>
+                            {!isRally && (
                             <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Land Details</h4>
                                 <div className="flex justify-between items-center">
@@ -1077,6 +1153,13 @@ export default function PermissionPage(props: {
                                     )}
                                 </div>
                             </div>
+                            )}
+                            {isRally && validFrom && (
+                            <div>
+                                <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Event Date</h4>
+                                <p className="font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString()}</p>
+                            </div>
+                            )}
                         </div>
 
                         <div className="grid gap-4">
@@ -1105,12 +1188,14 @@ export default function PermissionPage(props: {
                                         {ncmdExpiry && <span>Exp: {new Date(ncmdExpiry).toLocaleDateString()}</span>}
                                     </div>
                                 )}
-                                <button 
+                                {!isRally && (
+                                <button
                                     onClick={() => setProofModalOpen(true)}
                                     className="absolute bottom-0 right-0 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border-2 border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100 transition-all flex items-center gap-1 shadow-sm"
                                 >
                                     🛡️ PROOF
                                 </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1126,7 +1211,7 @@ export default function PermissionPage(props: {
                         <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
                             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Permission Boundary & Coverage</h4>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{isRally ? "Location" : "Permission Boundary & Coverage"}</h4>
                                     <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Tracking data from all {sessions?.length} sessions</p>
                                 </div>
                                 <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
 import { ScaledImage } from "../components/ScaledImage";
@@ -18,25 +19,17 @@ export default function Home(props: {
   goFindsBox: () => void;
   goFieldGuide: () => void;
 }) {
+  const nav = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
-  
+
   const permissions = useLiveQuery(
     async () => {
       let rows = await db.permissions.where("projectId").equals(props.projectId).toArray();
-      
-      let enriched = await enrichPermissions(props.projectId, rows);
 
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        enriched = enriched.filter(l => 
-          l.name.toLowerCase().includes(query) || 
-          (l.landownerName?.toLowerCase().includes(query) ?? false) ||
-          (l.notes?.toLowerCase().includes(query) ?? false)
-        );
-      }
+      let enriched = await enrichPermissions(props.projectId, rows);
 
       // Sort by session count descending, then by last session date, then by creation date
       enriched.sort((a, b) => {
@@ -48,10 +41,31 @@ export default function Home(props: {
         return bDate.localeCompare(aDate);
       });
 
-      return enriched.slice(0, 3);
+      return enriched;
     },
-    [props.projectId, searchQuery]
+    [props.projectId]
   );
+
+  const activeSession = useLiveQuery(async () => {
+    const sessions = await db.sessions
+      .where("projectId").equals(props.projectId)
+      .filter(s => !s.isFinished)
+      .toArray();
+    return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
+  }, [props.projectId]);
+
+  const filteredPermissions = useMemo(() => {
+    if (!permissions) return undefined;
+    if (!searchQuery.trim()) return permissions.slice(0, 3);
+    const q = searchQuery.toLowerCase();
+    return permissions
+      .filter(l =>
+        l.name.toLowerCase().includes(q) ||
+        (l.landownerName?.toLowerCase().includes(q) ?? false) ||
+        (l.notes?.toLowerCase().includes(q) ?? false)
+      )
+      .slice(0, 3);
+  }, [permissions, searchQuery]);
 
   const finds = useLiveQuery(
     async () => db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
@@ -60,6 +74,78 @@ export default function Home(props: {
 
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
+
+  const nextMove = useMemo(() => {
+    if (pendingFinds && pendingFinds.length > 0) {
+      return {
+        type: 'pending' as const,
+        message: `${pendingFinds.length} pending ${pendingFinds.length === 1 ? 'find' : 'finds'} waiting to be finished`,
+        cta: 'Finish Records',
+        action: () => props.goFindsWithFilter("filter=pending"),
+      };
+    }
+    if (activeSession) {
+      return {
+        type: 'active_session' as const,
+        message: 'You have an active session in progress',
+        cta: 'Resume Session',
+        action: () => nav(`/session/${activeSession.id}`),
+      };
+    }
+    if (permissions && permissions.length > 0) {
+      const now = Date.now();
+      const upcomingRally = permissions
+        .filter(p => p.type === "rally" && p.validFrom)
+        .map(p => ({ ...p, daysUntil: Math.ceil((new Date(p.validFrom!).getTime() - now) / 86400000) }))
+        .filter(p => p.daysUntil >= 0 && p.daysUntil <= 14)
+        .sort((a, b) => a.daysUntil - b.daysUntil)[0];
+      if (upcomingRally) {
+        const dayLabel = upcomingRally.daysUntil === 0 ? "Today!" : upcomingRally.daysUntil === 1 ? "Tomorrow" : `${upcomingRally.daysUntil} days away`;
+        return {
+          type: 'upcoming_rally' as const,
+          message: upcomingRally.name,
+          detail: dayLabel,
+          cta: 'View Rally',
+          action: () => props.goPermissionEdit(upcomingRally.id),
+        };
+      }
+      const stale = permissions.find(p => {
+        if (p.type === "rally") return false;
+        if (!p.lastSessionDate) return false;
+        const days = (now - new Date(p.lastSessionDate).getTime()) / 86400000;
+        return days > 30 && p.cumulativePercent !== null && p.cumulativePercent < 70;
+      });
+      if (stale) {
+        const days = Math.round((now - new Date(stale.lastSessionDate!).getTime()) / 86400000);
+        const covered = Math.round(stale.cumulativePercent!);
+        return {
+          type: 'stale_permission' as const,
+          message: `${stale.name} is ${covered}% covered`,
+          detail: `Not visited in ${days} days`,
+          cta: 'Review Permission',
+          action: () => props.goPermissionEdit(stale.id),
+        };
+      }
+      const newPerm = permissions.find(p => p.type !== "rally" && p.sessionCount === 0);
+      if (newPerm) {
+        return {
+          type: 'new_permission' as const,
+          message: `${newPerm.name} has not been detected yet`,
+          cta: 'Start First Session',
+          action: () => nav(`/session/new?permissionId=${newPerm.id}`),
+        };
+      }
+    }
+    if (permissions && permissions.length === 0) {
+      return {
+        type: 'no_permissions' as const,
+        message: 'Add your first permission to get started',
+        cta: 'Add Permission',
+        action: () => props.goPermission(),
+      };
+    }
+    return null;
+  }, [pendingFinds, activeSession, permissions, nav, props]);
 
   const finds2026Stats = useMemo(() => {
     if (!finds) return null;
@@ -83,6 +169,7 @@ export default function Home(props: {
 
     return { total: thisYear.length, gold, silver, hammered, periodCounts };
   }, [finds]);
+
 
   const findIds = useMemo(() => recentFinds?.slice(0, 3).map(s => s.id) ?? [], [recentFinds]);
 
@@ -117,6 +204,26 @@ export default function Home(props: {
         )}
       </button>
 
+      {nextMove && (
+        <div className={`rounded-2xl p-4 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
+          <div className="min-w-0">
+            <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              {nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Next Move'}
+            </p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
+            {'detail' in nextMove && nextMove.detail && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{nextMove.detail}</p>
+            )}
+          </div>
+          <button
+            onClick={nextMove.action}
+            className={`shrink-0 text-white text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
+          >
+            {nextMove.cta}
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-2 flex-wrap mt-1">
         <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white px-4 sm:px-6 py-2 rounded-xl font-semibold shadow transition-all duration-200 ease-out flex items-center gap-2 active:translate-y-0 text-sm sm:text-base">
             <span>📍</span> <span className="hidden xs:inline">New</span> Permission
@@ -146,6 +253,10 @@ export default function Home(props: {
                             onClick={() => props.goFind(f.permissionId, f.id)}
                             className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5"
                         >Finish Record</button>
+                        <button
+                            onClick={() => db.finds.update(f.id, { isPending: false })}
+                            className="w-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
+                        >Save as-is</button>
                         {confirmingDeleteId === f.id ? (
                           <div className="flex gap-1 mt-1">
                             <button
@@ -261,32 +372,25 @@ export default function Home(props: {
                     />
                 </div>
                 <div className="text-sm text-gray-500 font-mono hidden sm:block whitespace-nowrap">{permissions?.length ?? 0} total</div>
+
             </div>
         </div>
         
-        {(!permissions || permissions.length === 0) && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-10 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
-                <div className="text-5xl mb-4">🗺️</div>
-                <h3 className="text-xl font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-tight">Ready to start?</h3>
-                <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-6 max-w-xs mx-auto">
-                    {searchQuery ? "No results found matching your search." : "Welcome! Add your first permission or start a club rally to begin recording finds."}
-                </p>
-                {!searchQuery && (
-                    <div className="flex flex-col gap-3 max-w-xs mx-auto">
-                        <button onClick={props.goPermission} className="bg-emerald-600 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all">
-                            Add Permission
-                        </button>
-                        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-teal-600 text-white py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all">
-                            Join a Rally
-                        </button>
-                    </div>
+        {(!filteredPermissions || filteredPermissions.length === 0) && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
+                {searchQuery ? (
+                    <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
+                ) : (
+                    <button onClick={() => props.goPermissionWithParam("rally")} className="bg-teal-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
+                        Join a Club Rally
+                    </button>
                 )}
             </div>
         )}
         
-        {permissions && permissions.length > 0 && (
+        {filteredPermissions && filteredPermissions.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {permissions.map((l) => (
+            {filteredPermissions.map((l) => (
               <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
                 {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
                 
