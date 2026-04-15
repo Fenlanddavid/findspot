@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
@@ -24,6 +24,21 @@ export default function Home(props: {
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
+  const [dismissedNextMoves, setDismissedNextMoves] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('fs_nextmove_dismissed');
+      return new Set(stored ? JSON.parse(stored) : []);
+    } catch { return new Set(); }
+  });
+
+  const dismissNextMove = useCallback((key: string) => {
+    setDismissedNextMoves(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
 
   const permissions = useLiveQuery(
     async () => {
@@ -75,77 +90,94 @@ export default function Home(props: {
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
 
-  const nextMove = useMemo(() => {
+  const nextMoveItems = useMemo(() => {
+    const items: Array<{
+      type: string;
+      dismissKey: string;
+      message: string;
+      detail?: string;
+      cta: string;
+      action: () => void;
+    }> = [];
+
     if (pendingFinds && pendingFinds.length > 0) {
-      return {
-        type: 'pending' as const,
+      items.push({
+        type: 'pending',
+        dismissKey: `pending:${pendingFinds.length}`,
         message: `${pendingFinds.length} pending ${pendingFinds.length === 1 ? 'find' : 'finds'} waiting to be finished`,
         cta: 'Finish Records',
         action: () => props.goFindsWithFilter("filter=pending"),
-      };
+      });
     }
     if (activeSession) {
-      return {
-        type: 'active_session' as const,
+      items.push({
+        type: 'active_session',
+        dismissKey: `active_session:${activeSession.id}`,
         message: 'You have an active session in progress',
         cta: 'Resume Session',
         action: () => nav(`/session/${activeSession.id}`),
-      };
+      });
     }
     if (permissions && permissions.length > 0) {
       const now = Date.now();
-      const upcomingRally = permissions
+      const upcomingRallies = permissions
         .filter(p => p.type === "rally" && p.validFrom)
         .map(p => ({ ...p, daysUntil: Math.ceil((new Date(p.validFrom!).getTime() - now) / 86400000) }))
         .filter(p => p.daysUntil >= 0 && p.daysUntil <= 14)
-        .sort((a, b) => a.daysUntil - b.daysUntil)[0];
-      if (upcomingRally) {
-        const dayLabel = upcomingRally.daysUntil === 0 ? "Today!" : upcomingRally.daysUntil === 1 ? "Tomorrow" : `${upcomingRally.daysUntil} days away`;
-        return {
-          type: 'upcoming_rally' as const,
-          message: upcomingRally.name,
+        .sort((a, b) => a.daysUntil - b.daysUntil);
+      for (const rally of upcomingRallies) {
+        const dayLabel = rally.daysUntil === 0 ? "Today!" : rally.daysUntil === 1 ? "Tomorrow" : `${rally.daysUntil} days away`;
+        items.push({
+          type: 'upcoming_rally',
+          dismissKey: `upcoming_rally:${rally.id}`,
+          message: rally.name,
           detail: dayLabel,
           cta: 'View Rally',
-          action: () => props.goPermissionEdit(upcomingRally.id),
-        };
+          action: () => props.goPermissionEdit(rally.id),
+        });
       }
-      const stale = permissions.find(p => {
+      const stalePerms = permissions.filter(p => {
         if (p.type === "rally") return false;
         if (!p.lastSessionDate) return false;
         const days = (now - new Date(p.lastSessionDate).getTime()) / 86400000;
         return days > 30 && p.cumulativePercent !== null && p.cumulativePercent < 70;
       });
-      if (stale) {
+      for (const stale of stalePerms) {
         const days = Math.round((now - new Date(stale.lastSessionDate!).getTime()) / 86400000);
         const covered = Math.round(stale.cumulativePercent!);
-        return {
-          type: 'stale_permission' as const,
+        items.push({
+          type: 'stale_permission',
+          dismissKey: `stale_permission:${stale.id}`,
           message: `${stale.name} is ${covered}% covered`,
           detail: `Not visited in ${days} days`,
           cta: 'Review Permission',
           action: () => props.goPermissionEdit(stale.id),
-        };
+        });
       }
-      const newPerm = permissions.find(p => p.type !== "rally" && p.sessionCount === 0);
-      if (newPerm) {
-        return {
-          type: 'new_permission' as const,
+      const newPerms = permissions.filter(p => p.type !== "rally" && p.sessionCount === 0);
+      for (const newPerm of newPerms) {
+        items.push({
+          type: 'new_permission',
+          dismissKey: `new_permission:${newPerm.id}`,
           message: `${newPerm.name} has not been detected yet`,
           cta: 'Start First Session',
           action: () => nav(`/session/new?permissionId=${newPerm.id}`),
-        };
+        });
       }
     }
     if (permissions && permissions.length === 0) {
-      return {
-        type: 'no_permissions' as const,
+      items.push({
+        type: 'no_permissions',
+        dismissKey: `no_permissions`,
         message: 'Add your first permission to get started',
         cta: 'Add Permission',
         action: () => props.goPermission(),
-      };
+      });
     }
-    return null;
+    return items;
   }, [pendingFinds, activeSession, permissions, nav, props]);
+
+  const nextMove = nextMoveItems.find(item => !dismissedNextMoves.has(item.dismissKey)) ?? null;
 
   const finds2026Stats = useMemo(() => {
     if (!finds) return null;
@@ -204,9 +236,16 @@ export default function Home(props: {
         )}
       </button>
 
-      {nextMove && (
-        <div className={`rounded-2xl p-4 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
-          <div className="min-w-0">
+      {nextMove && !dismissedNextMoves.has(nextMove.dismissKey) && (
+        <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
+          <button
+            onClick={() => dismissNextMove(nextMove.dismissKey)}
+            className="absolute top-1.5 right-1.5 w-4 h-4 p-0 flex items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+          <div className="min-w-0 flex-1">
             <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
               {nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Next Move'}
             </p>

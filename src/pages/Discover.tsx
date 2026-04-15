@@ -471,7 +471,7 @@ function EventDetailModal({
             onClick={onRecordRally}
             className="flex-1 bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl transition-colors"
           >
-            + Add to FindSpot
+            I'm Going
           </button>
           <button
             onClick={onClose}
