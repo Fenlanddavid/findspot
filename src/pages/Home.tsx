@@ -247,7 +247,7 @@ export default function Home(props: {
           </button>
           <div className="min-w-0 flex-1">
             <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Next Move'}
+              {nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next step'}
             </p>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
             {'detail' in nextMove && nextMove.detail && (
