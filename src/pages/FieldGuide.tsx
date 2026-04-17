@@ -7,6 +7,7 @@ import { db } from '../db';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
+import { useTilePrewarm } from '../hooks/useTilePrewarm';
 
 import {
     Cluster, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
@@ -240,6 +241,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
         },
     });
+
+    useTilePrewarm(mapRef);
 
     // ─── Clear / Reset ────────────────────────────────────────────────────────
 

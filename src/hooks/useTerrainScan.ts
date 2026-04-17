@@ -18,6 +18,7 @@ import {
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
+import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,9 +63,10 @@ interface UseTerrainScanOptions {
 
 export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions) {
     const [isScanning, setIsScanning] = useState(false);
-    const tokenRef = useRef<string | null>(null);
-    const abortRef = useRef<AbortController | null>(null);
-    const mountedRef = useRef(true);
+    const tokenRef     = useRef<string | null>(null);
+    const abortRef     = useRef<AbortController | null>(null);
+    const mountedRef   = useRef(true);
+    const workersRef   = useRef<Worker[]>([]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -74,6 +76,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
     const cancelScan = useCallback(() => {
         tokenRef.current = null;
         abortRef.current?.abort();
+        // Terminate any in-flight scan workers immediately
+        workersRef.current.forEach(w => w.terminate());
+        workersRef.current = [];
         if (mountedRef.current) setIsScanning(false);
     }, []);
 
@@ -90,15 +95,19 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         tokenRef.current = token;
         const { signal } = abort;
 
+        // Fresh worker registry for this scan run
+        const workerReg: Worker[] = [];
+        workersRef.current = workerReg;
+
         if (mountedRef.current) setIsScanning(true);
         const scanStart = Date.now();
 
-        const zoom    = SCAN_CONFIG.TERRAIN_ZOOM;
-        const bounds  = map.getBounds();
-        const center  = map.getCenter();
-        const n       = Math.pow(2, zoom);
-        const cX      = (center.lng + 180) / 360 * n;
-        const cY      = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
+        const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
+        const bounds = map.getBounds();
+        const center = map.getCenter();
+        const n      = Math.pow(2, zoom);
+        const cX     = (center.lng + 180) / 360 * n;
+        const cY     = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
         const tX_start = Math.floor(cX) - 1;
         const tY_start = Math.floor(cY) - 1;
 
@@ -107,25 +116,43 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const qEast  = bounds.getEast();
         const qNorth = bounds.getNorth();
 
-        // Start NHLE and route fetches in parallel with tile scanning
+        // ── Fire all network requests in parallel ─────────────────────────────
+        // Wayback IDs are resolved once here so satellite workers receive them
+        // directly — avoids each worker independently fetching the catalog.
+        const waybackPromise = resolveWaybackIds();
+
         const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+        const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
+
         const nhlePromise  = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
+        const aimPromise   = fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse);
         const routePromise = fetchScanRoutes(center.lat, center.lng, signal);
 
-        onStatusChange("Scanning Terrain...");
+        onStatusChange('Scanning Terrain...');
 
-        const terrainTask      = scanDataSource('terrain',          zoom, tX_start, tY_start, bounds, n, { features: [] });
-        const terrainGlobalTask = scanDataSource('terrain_global',  zoom, tX_start, tY_start, bounds, n, { features: [] });
-        const slopeTask        = scanDataSource('slope',            zoom, tX_start, tY_start, bounds, n, { features: [] });
-        onStatusChange("Scanning Hydrology...");
-        const hydroTask        = scanDataSource('hydrology',        zoom, tX_start, tY_start, bounds, n, { features: [] });
-        onStatusChange("Spectral Sampling...");
-        const springTask       = scanDataSource('satellite_spring', zoom, tX_start, tY_start, bounds, n, { features: [] });
-        const summerTask       = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] });
+        // Non-satellite workers start immediately — no wayback dependency
+        const terrainTask       = scanDataSource('terrain',       zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+        const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+        const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+
+        onStatusChange('Scanning Hydrology...');
+        const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+
+        onStatusChange('Spectral Sampling...');
+        // Satellite workers need waybackIds — await the (already in-flight) promise
+        const waybackIds = await waybackPromise;
+        if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
+            setIsScanning(false);
+            return null;
+        }
+        const springTask   = scanDataSource('satellite_spring', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
+        const summerTask   = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
 
         try {
-            const [nhleData, terrainHits, terrainGlobalHits, slopeHits, hydroHits, springHits, summerHits] = await Promise.all([
-                nhlePromise, terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask,
+            // NHLE, AIM, and all six tile workers resolve in parallel
+            const [nhleData, aimData, terrainHits, terrainGlobalHits, slopeHits, hydroHits, springHits, summerHits] = await Promise.all([
+                nhlePromise, aimPromise,
+                terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask,
             ]);
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
@@ -133,7 +160,6 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return null;
             }
 
-            // Monument points for later use
             const monumentPoints: [number, number][] = (nhleData.features || []).flatMap(f => {
                 if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
                 if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
@@ -144,14 +170,15 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const aerialHitCount = springHits.length + summerHits.length;
             if (aerialHitCount > 0) onLog(`> Aerial: ${aerialHitCount} spectral signal${aerialHitCount !== 1 ? 's' : ''} detected.`, 'terrain');
             else onLog('> Aerial: no spectral signals detected (Wayback tiles may not cover this area).', 'terrain', 'warn');
+            if (aimData.features?.length > 0) onLog(`> AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`, 'terrain');
 
-            // Routes (with timeout)
-            onStatusChange("Syncing Routes...");
+            // Routes — started in parallel, should already be done
+            onStatusChange('Syncing Routes...');
             let routes: HistoricRoute[] = [];
             try {
                 const timeout  = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS));
                 const routeRaw = await Promise.race([routePromise, timeout]);
-                if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements);
+                if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
             } catch {
                 onLog('> Routes: service unavailable, continuing without.', 'terrain', 'warn');
             }
@@ -161,30 +188,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return null;
             }
 
-            // AIM data (sequential — needs NHLE first for map ordering)
-            onStatusChange("Deep Signal Audit...");
-            const aimUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
-            let aimData: AIMResponse = { features: [] };
-            try {
-                const aRes = await fetch(aimUrl, { signal });
-                aimData    = await aRes.json() as AIMResponse;
-                if (aimData.features?.length > 0) onLog(`> AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`, 'terrain');
-            } catch {
-                onLog('> AIM: service unavailable, continuing without.', 'terrain', 'warn');
-            }
-
-            if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
-                setIsScanning(false);
-                return null;
-            }
-
-            // ── Cluster processing pipeline ────────────────────────────────────
-            onStatusChange("Locking Coordinates...");
+            // ── Cluster processing pipeline ───────────────────────────────────
+            onStatusChange('Locking Coordinates...');
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
             const merged      = findConsensus(rawCombined);
-
-            // AIM enrichment: tag clusters inside aerial monument polygons
             const aimEnriched = applyAIMEnrichment(merged, aimData);
 
             // Proximity-collapse features within 15 m
@@ -202,15 +210,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 if (!anchored) updatedFeatures.push(newHit);
             });
 
-            // NHLE protection: mark clusters inside scheduled monument boundaries
             applyNHLEProtection(updatedFeatures, nhleData);
 
-            const suppressed    = suppressDisturbance(updatedFeatures);
+            const suppressed     = suppressDisturbance(updatedFeatures);
             const contextualized = analyzeContext(suppressed, routes)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
-            // Initial (terrain-only) hotspots — historic enrichment follows in the historic phase
             const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);

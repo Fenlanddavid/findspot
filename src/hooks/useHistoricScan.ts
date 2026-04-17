@@ -112,7 +112,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
             const [geoData, etymData, osmData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
                 fetchLocationLabel(center.lat, center.lng, signal),
-                fetchEtymologySignals(south, west, north, east, signal),
+                fetchEtymologySignals(center.lat, center.lng, signal),
                 fetchHeritageFeatures(center.lat, center.lng, signal),
                 opts.nhleData
                     ? Promise.resolve(null)
@@ -217,6 +217,41 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 if (heritageCount > 0) onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} found.`, 'historic');
                 else                   onLog('> NHLE: No scheduled monuments in this area.', 'historic');
             }
+
+            // Add NHLE scheduled monuments into the feature list so they appear
+            // in the Historic panel alongside OSM features. They are shown on the
+            // map as boundary overlays but were not listed before.
+            const nhleFinds: HistoricFind[] = (nhleData.features || []).map((f, i) => {
+                let lat = 0, lon = 0;
+                if (f.geometry?.type === 'Point') {
+                    [lon, lat] = f.geometry.coordinates as number[];
+                } else if (f.geometry?.type === 'Polygon') {
+                    [lon, lat] = (f.geometry.coordinates as number[][][])[0][0];
+                } else if (f.geometry?.type === 'MultiPolygon') {
+                    [lon, lat] = (f.geometry.coordinates as number[][][][])[0][0][0];
+                }
+                if (!lat || !lon) return null;
+                const name = f.properties?.Name || 'Scheduled Monument';
+                return {
+                    id:         `NHLE-${f.properties?.ListEntry ?? i}`,
+                    internalId: String(f.properties?.ListEntry ?? i),
+                    objectType: `${name} (Scheduled Monument)`,
+                    broadperiod: 'Prehistoric–Medieval',
+                    county:     'Local Area',
+                    workflow:   'PAS' as const,
+                    lat, lon,
+                    isApprox:   false,
+                    osmType:    'way' as const,
+                };
+            }).filter(Boolean) as HistoricFind[];
+
+            // Merge NHLE scheduled monuments into pasFinds, deduplicating against
+            // any OSM features that are very close (same site listed in both sources).
+            const osmCoords = pasFinds.map(f => ({ lat: f.lat, lon: f.lon }));
+            const dedupedNhle = nhleFinds.filter(nf =>
+                !osmCoords.some(o => Math.abs(o.lat - nf.lat) < 0.0005 && Math.abs(o.lon - nf.lon) < 0.0005)
+            );
+            pasFinds = [...dedupedNhle, ...pasFinds];
 
             // 5. AIM (fresh fetch or pass-through from terrain scan)
             const aimData = opts.aimData ?? aimRaw ?? { features: [] };

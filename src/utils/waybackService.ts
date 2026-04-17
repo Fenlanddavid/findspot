@@ -19,8 +19,9 @@ export interface WaybackIds {
     summer: number;
 }
 
-// Session-level cache — one catalog fetch per page load is enough
-let _cache: WaybackIds | null = null;
+// Session-level cache — stores the in-flight promise so concurrent callers
+// (e.g. two satellite workers) share a single fetch rather than each firing one.
+let _promise: Promise<WaybackIds> | null = null;
 
 // Extract release number from identifier like "WB_2025_R07" → 7
 function releaseMonth(id: string): number | null {
@@ -28,9 +29,7 @@ function releaseMonth(id: string): number | null {
     return m ? parseInt(m[1], 10) : null;
 }
 
-export async function resolveWaybackIds(): Promise<WaybackIds> {
-    if (_cache) return _cache;
-
+async function _doResolve(): Promise<WaybackIds> {
     try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 5000);
@@ -71,12 +70,15 @@ export async function resolveWaybackIds(): Promise<WaybackIds> {
         const spring = releases.find(r => r.rNum >= 4 && r.rNum <= 5)?.tileId ?? FALLBACK.spring;
         const summer = releases.find(r => r.rNum >= 6 && r.rNum <= 8)?.tileId ?? FALLBACK.summer;
 
-        _cache = { spring, summer };
+        return { spring, summer };
     } catch {
-        _cache = FALLBACK;
+        return FALLBACK;
     }
+}
 
-    return _cache;
+export function resolveWaybackIds(): Promise<WaybackIds> {
+    if (!_promise) _promise = _doResolve();
+    return _promise;
 }
 
 export function waybackTileUrl(releaseId: number, zoom: number, ty: number, tx: number): string {

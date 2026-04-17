@@ -132,16 +132,18 @@ export async function fetchLocationLabel(
 }
 
 /**
- * Overpass query for place-name / etymology signals in a bounding box.
+ * Overpass query for place-name / etymology signals within 4km of a point.
+ * Uses a radius rather than the map viewport bbox so results are consistent
+ * regardless of zoom level — named places relevant to a location can be
+ * several km away and would be missed by a tight bbox at high zoom.
  */
 export async function fetchEtymologySignals(
-    south: number,
-    west: number,
-    north: number,
-    east: number,
+    lat: number,
+    lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    const query = `[out:json][timeout:25];(node["place"](${south},${west},${north},${east});way["place"](${south},${west},${north},${east});rel["place"](${south},${west},${north},${east});node["natural"](${south},${west},${north},${east});way["natural"](${south},${west},${north},${east});node["historic"](${south},${west},${north},${east});way["historic"](${south},${west},${north},${east});node["landuse"="farmyard"](${south},${west},${north},${east});way["landuse"="farmyard"](${south},${west},${north},${east}););out center;`;
+    const r = 4000;
+    const query = `[out:json][timeout:25];(node["place"](around:${r},${lat},${lng});way["place"](around:${r},${lat},${lng});rel["place"](around:${r},${lat},${lng});node["natural"](around:${r},${lat},${lng});way["natural"](around:${r},${lat},${lng});node["historic"](around:${r},${lat},${lng});way["historic"](around:${r},${lat},${lng});node["landuse"="farmyard"](around:${r},${lat},${lng});way["landuse"="farmyard"](around:${r},${lat},${lng}););out center;`;
     return overpassFetch(query, signal);
 }
 
