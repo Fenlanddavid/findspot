@@ -35,7 +35,6 @@ export default function PermissionPage(props: {
   const typeParam = searchParams.get("type");
   const [type, setType] = useState<Permission["type"]>(typeParam === "rally" ? "rally" : "individual");
   const [collector, setCollector] = useState("");
-  const [observedAt, setObservedAt] = useState(new Date().toISOString().slice(0, 16));
   const [lat, setLat] = useState<number | null>(null);
   const [lon, setLon] = useState<number | null>(null);
   const [acc, setAcc] = useState<number | null>(null);
@@ -151,7 +150,7 @@ export default function PermissionPage(props: {
   function formatDuration(ms: number) {
     if (ms <= 0) return null;
     const mins = Math.floor(ms / 60000);
-    const hrs = Math.floor(mins / 600);
+    const hrs = Math.floor(mins / 60);
     if (hrs > 0) return `${hrs}h ${mins % 60}m`;
     return `${mins}m`;
   }
@@ -578,7 +577,7 @@ export default function PermissionPage(props: {
 
         // Auto-create "Main Field" if a boundary was defined during creation
         if (boundary) {
-            const fieldId = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+            const fieldId = uuid();
             await db.fields.add({
                 id: fieldId,
                 projectId: props.projectId,
