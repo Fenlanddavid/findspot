@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchPara
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
-import { ensureDefaultProject } from "./app/seed";
+import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
 import { exportData, importData, exportToCSV, requestPersistentStorage, setSetting, getSetting } from "./services/data";
 
 // Eagerly loaded — core navigation paths
@@ -64,7 +64,10 @@ function Shell() {
   const nav = useNavigate();
 
   useEffect(() => {
-    ensureDefaultProject().then(setProjectId);
+    ensureDefaultProject().then(async (id) => {
+      await ensureDefaultPermission(id);
+      setProjectId(id);
+    });
     requestPersistentStorage();
 
     // Track unique installation (one-time per device)

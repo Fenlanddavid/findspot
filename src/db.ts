@@ -53,6 +53,7 @@ export type Permission = {
   validFrom?: string; // ISO date string
 
   isPinned?: boolean;
+  isDefault?: boolean;
 
   createdAt: string;
   updatedAt: string;

@@ -176,6 +176,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const nav = useNavigate();
 
     const permissions = useLiveQuery(() => db.permissions.where('projectId').equals(projectId).toArray()) || [];
+    const realPermissions = permissions.filter(p => !p.isDefault);
     const fields      = useLiveQuery(() => db.fields.where('projectId').equals(projectId).toArray()) || [];
     const activeSession = useLiveQuery(async () => {
         const sessions = await db.sessions.where('projectId').equals(projectId).filter(s => !s.isFinished).toArray();
@@ -184,8 +185,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     function handleStartSession() {
         if (activeSession) { nav(`/session/${activeSession.id}`); return; }
-        if (permissions.length === 0) { nav('/permission'); return; }
-        if (permissions.length === 1) { nav(`/session/new?permissionId=${permissions[0].id}`); return; }
+        if (realPermissions.length === 0) { nav('/permission'); return; }
+        if (realPermissions.length === 1) { nav(`/session/new?permissionId=${realPermissions[0].id}`); return; }
         setShowPermissionPicker(p => !p);
     }
 
@@ -661,25 +662,39 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         })()}
                                     </div>
                                     <div className="mt-3 pt-3 border-t border-white/10">
-                                        <button
-                                            onClick={handleStartSession}
-                                            className="w-full border border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-400 hover:text-emerald-300 font-bold py-2 rounded-xl text-[10px] uppercase tracking-widest transition-all"
-                                        >
-                                            {activeSession ? 'Continue Session' : 'Start Session Here'}
-                                        </button>
-                                        {showPermissionPicker && !activeSession && permissions.length > 1 && (
-                                            <div className="mt-2 flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
-                                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
-                                                {permissions.map(p => (
-                                                    <button
-                                                        key={p.id}
-                                                        onClick={() => { setShowPermissionPicker(false); nav(`/session/new?permissionId=${p.id}`); }}
-                                                        className="w-full text-left px-3 py-2 rounded-xl bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-500/40 text-white/70 hover:text-white text-[11px] font-bold transition-all truncate"
-                                                    >
-                                                        {p.name || '(Unnamed)'}
-                                                    </button>
-                                                ))}
+                                        {!activeSession && realPermissions.length === 0 ? (
+                                            <div className="text-center">
+                                                <button
+                                                    onClick={() => nav('/permission')}
+                                                    className="w-full border border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-400 hover:text-emerald-300 font-bold py-2 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+                                                >
+                                                    Add a Permission to Start Sessions
+                                                </button>
+                                                <p className="text-[8px] text-white/30 mt-1.5">Sessions track your visit and field coverage</p>
                                             </div>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={handleStartSession}
+                                                    className="w-full border border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-400 hover:text-emerald-300 font-bold py-2 rounded-xl text-[10px] uppercase tracking-widest transition-all"
+                                                >
+                                                    {activeSession ? 'Continue Session' : 'Start Session Here'}
+                                                </button>
+                                                {showPermissionPicker && !activeSession && realPermissions.length > 1 && (
+                                                    <div className="mt-2 flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
+                                                        <p className="text-[8px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
+                                                        {realPermissions.map(p => (
+                                                            <button
+                                                                key={p.id}
+                                                                onClick={() => { setShowPermissionPicker(false); nav(`/session/new?permissionId=${p.id}`); }}
+                                                                className="w-full text-left px-3 py-2 rounded-xl bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-500/40 text-white/70 hover:text-white text-[11px] font-bold transition-all truncate"
+                                                            >
+                                                                {p.name || '(Unnamed)'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                     <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
@@ -1159,25 +1174,39 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         })()}
                                     </div>
                                     <div className="mt-2.5 pt-2.5 border-t border-white/8">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleStartSession(); }}
-                                            className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
-                                        >
-                                            {activeSession ? 'Continue Session' : 'Start Session Here'}
-                                        </button>
-                                        {showPermissionPicker && !activeSession && permissions.length > 1 && (
-                                            <div className="mt-2 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
-                                                <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
-                                                {permissions.map(p => (
-                                                    <button
-                                                        key={p.id}
-                                                        onClick={(e) => { e.stopPropagation(); setShowPermissionPicker(false); nav(`/session/new?permissionId=${p.id}`); }}
-                                                        className="w-full text-left px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-500/40 text-white/70 hover:text-white text-[9px] font-bold transition-all truncate"
-                                                    >
-                                                        {p.name || '(Unnamed)'}
-                                                    </button>
-                                                ))}
+                                        {!activeSession && realPermissions.length === 0 ? (
+                                            <div className="text-center">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); nav('/permission'); }}
+                                                    className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
+                                                >
+                                                    Add a Permission to Start Sessions
+                                                </button>
+                                                <p className="text-[7px] text-white/25 mt-1">Sessions track your visit and field coverage</p>
                                             </div>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleStartSession(); }}
+                                                    className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
+                                                >
+                                                    {activeSession ? 'Continue Session' : 'Start Session Here'}
+                                                </button>
+                                                {showPermissionPicker && !activeSession && realPermissions.length > 1 && (
+                                                    <div className="mt-2 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
+                                                        <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
+                                                        {realPermissions.map(p => (
+                                                            <button
+                                                                key={p.id}
+                                                                onClick={(e) => { e.stopPropagation(); setShowPermissionPicker(false); nav(`/session/new?permissionId=${p.id}`); }}
+                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-500/40 text-white/70 hover:text-white text-[9px] font-bold transition-all truncate"
+                                                            >
+                                                                {p.name || '(Unnamed)'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                     <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>

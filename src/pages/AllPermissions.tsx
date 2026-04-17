@@ -37,6 +37,7 @@ export default function AllPermissions(props: { projectId: string }) {
     ?.filter(p => viewMode === "rallies" ? p.type === "rally" : p.type !== "rally")
     .sort((a, b) => {
       if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
+      if (!!a.isDefault !== !!b.isDefault) return a.isDefault ? 1 : -1;
       return 0;
     });
 
@@ -110,6 +111,7 @@ export default function AllPermissions(props: { projectId: string }) {
             return (
               <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => navigate(`/permission/${l.id}`)}>
                 {isRally && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
+                {l.isDefault && <div className="absolute top-0 right-0 bg-gray-400 dark:bg-gray-600 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">General</div>}
 
                 {/* Header */}
                 <div className="flex justify-between items-start gap-3 mb-3">

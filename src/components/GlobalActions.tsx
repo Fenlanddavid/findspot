@@ -55,12 +55,16 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
         setNoGpsWarning(true);
     }
 
-    // Default to last permission
-    const lastPerm = await db.permissions.where("projectId").equals(projectId).reverse().sortBy("createdAt").then(arr => arr[0]);
+    // Prefer most recent real permission, fall back to default
+    const lastPerm = await db.permissions
+        .where("projectId").equals(projectId)
+        .reverse()
+        .sortBy("createdAt")
+        .then(arr => arr.find(p => !p.isDefault) ?? arr[0]);
 
     if (!lastPerm) {
         setIsCapturing(false);
-        setFabError("Add a permission first before using Quick Find.");
+        setFabError("No permission found. Please try again.");
         return;
     }
 

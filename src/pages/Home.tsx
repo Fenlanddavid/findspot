@@ -68,11 +68,17 @@ export default function Home(props: {
     return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
   }, [props.projectId]);
 
+  const hasOnlyDefault = useMemo(() =>
+    !!permissions && permissions.length > 0 && permissions.every(p => p.isDefault),
+    [permissions]
+  );
+
   const filteredPermissions = useMemo(() => {
     if (!permissions) return undefined;
-    if (!searchQuery.trim()) return permissions.slice(0, 3);
+    const real = permissions.filter(p => !p.isDefault);
+    if (!searchQuery.trim()) return real.slice(0, 3);
     const q = searchQuery.toLowerCase();
-    return permissions
+    return real
       .filter(l =>
         l.name.toLowerCase().includes(q) ||
         (l.landownerName?.toLowerCase().includes(q) ?? false) ||
@@ -270,6 +276,18 @@ export default function Home(props: {
             <span>🏟️</span> Club/Rally
         </button>
       </div>
+
+      {hasOnlyDefault && (
+        <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+          <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
+            You're recording to a general permission.{" "}
+            <span className="opacity-70">Add your own to track sessions and field coverage.</span>
+          </p>
+          <button onClick={props.goPermission} className="shrink-0 text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline whitespace-nowrap">
+            Add Permission →
+          </button>
+        </div>
+      )}
 
       {pendingFinds && pendingFinds.length > 0 && (
         <section className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 animate-in slide-in-from-top-4">
