@@ -99,6 +99,7 @@ export default function Settings() {
   async function toggleTheme() {
     const newTheme = theme === "dark" ? "light" : "dark";
     await setSetting("theme", newTheme);
+    localStorage.setItem("fs_theme", newTheme);
     setTheme(newTheme);
   }
 
@@ -129,6 +130,12 @@ export default function Settings() {
       setDefaultDetector("");
       await setSetting("defaultDetector", "");
     }
+  }
+
+  async function saveField(key: string, value: string) {
+    await setSetting(key, value);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   async function saveSettings() {
@@ -236,7 +243,7 @@ export default function Settings() {
               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Default Detector for New Finds</label>
               <select
                 value={defaultDetector}
-                onChange={(e) => setDefaultDetector(e.target.value)}
+                onChange={(e) => { setDefaultDetector(e.target.value); saveField("defaultDetector", e.target.value); }}
                 className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
               >
                 <option value="">(None)</option>
@@ -260,6 +267,7 @@ export default function Settings() {
                   type="text"
                   value={detectorist}
                   onChange={(e) => setDetectorist(e.target.value)}
+                  onBlur={(e) => saveField("detectorist", e.target.value)}
                   placeholder="e.g. John Doe"
                   className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
@@ -270,6 +278,7 @@ export default function Settings() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={(e) => saveField("detectoristEmail", e.target.value)}
                   placeholder="john@example.com"
                   className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
                 />
@@ -285,6 +294,7 @@ export default function Settings() {
                     type="text"
                     value={insuranceProvider}
                     onChange={(e) => setInsuranceProvider(e.target.value)}
+                    onBlur={(e) => saveField("insuranceProvider", e.target.value)}
                     placeholder="e.g. NCMD, AMDS, club name..."
                     className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
@@ -295,6 +305,7 @@ export default function Settings() {
                     type="text"
                     value={ncmdNumber}
                     onChange={(e) => setNcmdNumber(e.target.value)}
+                    onBlur={(e) => saveField("ncmdNumber", e.target.value)}
                     placeholder="e.g. 123456"
                     className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
@@ -304,7 +315,7 @@ export default function Settings() {
                   <input
                     type="date"
                     value={ncmdExpiry}
-                    onChange={(e) => setNcmdExpiry(e.target.value)}
+                    onChange={(e) => { setNcmdExpiry(e.target.value); saveField("ncmdExpiry", e.target.value); }}
                     className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
                   />
                 </div>

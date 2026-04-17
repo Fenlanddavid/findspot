@@ -20,6 +20,11 @@ export default function AllFinds(props: { projectId: string }) {
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+
+  // Reset page when any filter changes
+  useEffect(() => { setPage(0); }, [searchQuery, filterPeriod, filterType, filterMaterial, filterPending]);
 
   // --- DATA FETCHING ---
   const finds = useLiveQuery(
@@ -151,7 +156,8 @@ export default function AllFinds(props: { projectId: string }) {
   }, [finds]);
 
   // --- RENDER HELPERS ---
-  const findIds = useMemo(() => finds?.map(s => s.id) ?? [], [finds]);
+  const visibleFinds = useMemo(() => finds?.slice(0, (page + 1) * PAGE_SIZE), [finds, page]);
+  const findIds = useMemo(() => visibleFinds?.map(s => s.id) ?? [], [visibleFinds]);
 
   // Stats are computed from all finds (ignoring type/period/material filters) so the counts stay stable as filter shortcuts
   const allFindsForStats = useLiveQuery(
@@ -240,8 +246,9 @@ export default function AllFinds(props: { projectId: string }) {
       )}
 
       {viewMode === 'list' ? (
+        <>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {finds?.map((s) => {
+            {visibleFinds?.map((s) => {
                 const media = firstMediaMap?.get(s.id);
                 return (
                     <div key={s.id} onClick={() => setOpenFindId(s.id)} className="group border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col h-full">
@@ -260,6 +267,17 @@ export default function AllFinds(props: { projectId: string }) {
                 );
             })}
         </div>
+        {finds && visibleFinds && finds.length > visibleFinds.length && (
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setPage(p => p + 1)}
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-6 py-2.5 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-600 transition-all shadow-sm"
+            >
+              Load more <span className="opacity-50">({finds.length - visibleFinds.length} remaining)</span>
+            </button>
+          </div>
+        )}
+        </>
       ) : (
         <div className="h-[600px] sm:h-[calc(100vh-250px)] relative border border-gray-200 dark:border-gray-700 rounded-3xl overflow-hidden bg-black shadow-2xl">
             <div ref={mapDivRef} className="absolute inset-0" />

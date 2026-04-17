@@ -46,11 +46,10 @@ export default function Home(props: {
 
       let enriched = await enrichPermissions(props.projectId, rows);
 
-      // Sort by session count descending, then by last session date, then by creation date
+      // Sort: pinned first, then by session count, then by last session date
       enriched.sort((a, b) => {
-        if (b.sessionCount !== a.sessionCount) {
-          return b.sessionCount - a.sessionCount;
-        }
+        if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
+        if (b.sessionCount !== a.sessionCount) return b.sessionCount - a.sessionCount;
         const bDate = b.lastSessionDate || b.createdAt || "";
         const aDate = a.lastSessionDate || a.createdAt || "";
         return bDate.localeCompare(aDate);
@@ -287,7 +286,7 @@ export default function Home(props: {
                         className="min-w-[140px] bg-white dark:bg-gray-800 p-3 rounded-2xl border border-amber-200 dark:border-amber-700 shadow-sm transition-all"
                     >
                         <div className="text-[10px] font-black text-amber-600 uppercase mb-1">{f.findCode}</div>
-                        <div className="text-[8px] opacity-40 font-mono mb-2">{new Date(f.createdAt).toLocaleTimeString()}</div>
+                        <div className="text-[8px] opacity-40 font-mono mb-2">{new Date(f.createdAt).toLocaleDateString()} {new Date(f.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                         <button
                             onClick={() => props.goFind(f.permissionId, f.id)}
                             className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5"
@@ -397,7 +396,7 @@ export default function Home(props: {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
                 <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
-                <button onClick={props.goPermissions} className="text-sm text-emerald-600 font-bold hover:underline">View All</button>
+                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All →</button>
             </div>
             <div className="flex items-center gap-3 w-full md:max-w-md">
                 <div className="relative flex-1">
@@ -420,9 +419,14 @@ export default function Home(props: {
                 {searchQuery ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
-                    <button onClick={() => props.goPermissionWithParam("rally")} className="bg-teal-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
-                        Join a Club Rally
-                    </button>
+                    <div className="flex flex-col items-center gap-3">
+                        <button onClick={props.goPermission} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
+                            📍 Add Permission
+                        </button>
+                        <button onClick={() => props.goPermissionWithParam("rally")} className="text-teal-600 dark:text-teal-400 text-sm font-bold hover:underline">
+                            or join a club rally →
+                        </button>
+                    </div>
                 )}
             </div>
         )}
@@ -494,6 +498,13 @@ export default function Home(props: {
                   <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
                     View
                   </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }); }}
+                    title={l.isPinned ? "Unpin" : "Pin to top"}
+                    className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
+                  >
+                    📌
+                  </button>
                 </div>
               </div>
             ))}
@@ -502,9 +513,9 @@ export default function Home(props: {
       </section>
 
       <section>
-        <div className="flex items-baseline justify-between mb-4">
+        <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
-            <button onClick={props.goAllFinds} className="text-sm text-emerald-600 font-bold hover:underline">View All</button>
+            <button onClick={props.goAllFinds} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All Finds →</button>
         </div>
 
         {(!recentFinds || recentFinds.length === 0) && <div className="text-gray-500 italic bg-gray-50 dark:bg-gray-800/50 p-10 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">No finds recorded yet.</div>}

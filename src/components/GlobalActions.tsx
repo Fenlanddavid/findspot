@@ -30,6 +30,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   const hideOn = ["/settings", "/finds-box", "/fieldguide"];
   if (hideOn.includes(location.pathname)) return null;
   if (location.pathname.startsWith("/find")) return null; // Already on find page
+  if (location.pathname === "/permission" || location.pathname.startsWith("/permission/")) return null; // On permission form/edit
 
   async function quickFind() {
     if (isCapturing) return;
@@ -178,9 +179,10 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
       )}
 
       {!!pendingCount && pendingCount > 0 && (
-         <button 
+         <button
             onClick={() => navigate("/finds?filter=pending")}
             className="pointer-events-auto bg-amber-500 text-white px-4 py-2 rounded-full font-black text-[10px] shadow-lg border-2 border-white animate-bounce uppercase tracking-widest"
+            style={{ animationIterationCount: 3 }}
          >
             {pendingCount} Pending Finds
          </button>

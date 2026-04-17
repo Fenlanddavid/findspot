@@ -597,7 +597,7 @@ export default function FindPage(props: {
           <span>{props.filename}</span>
           {media.photoType && (
             <span className={`px-1 rounded uppercase text-[8px] font-bold ${media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-              {media.photoType === 'in-situ' ? 'Photo 1' : media.photoType === 'cleaned' ? 'Photo 2' : media.photoType}
+              {media.photoType === 'in-situ' ? 'In Situ' : media.photoType === 'cleaned' ? 'Cleaned' : media.photoType}
             </span>
           )}
         </div>
@@ -743,7 +743,7 @@ export default function FindPage(props: {
       {/* Header */}
       <div className="flex justify-between items-center px-1">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
-          {props.permissionId ? "Add Find" : "Club/Rally Dig"}
+          {props.permissionId ? "Add Find" : "Record Find"}
         </h2>
         <div className="flex gap-3">
           <button

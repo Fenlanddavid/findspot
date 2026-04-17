@@ -125,26 +125,49 @@ export default function PermissionPage(props: {
       return bDate.localeCompare(aDate);
     });
     
-    // Fetch counts and tracks in parallel for all sessions
-    return Promise.all(rows.map(async (s) => {
-      const field = s.fieldId ? await db.fields.get(s.fieldId) : null;
-      const findCount = await db.finds.where("sessionId").equals(s.id).count();
-      const sessionTracks = await db.tracks.where("sessionId").equals(s.id).toArray();
-      
+    // Batch fetch all related data in 3 queries instead of 3×N
+    const sessionIds = rows.map(s => s.id);
+    const fieldIds = [...new Set(rows.map(s => s.fieldId).filter(Boolean) as string[])];
+
+    const [allFindsForSessions, allTracksForSessions, allFields] = await Promise.all([
+      db.finds.where("sessionId").anyOf(sessionIds).toArray(),
+      db.tracks.where("sessionId").anyOf(sessionIds).toArray(),
+      fieldIds.length > 0 ? db.fields.bulkGet(fieldIds) : Promise.resolve([]),
+    ]);
+
+    const findCountBySession = new Map<string, number>();
+    for (const f of allFindsForSessions) {
+      if (f.sessionId) findCountBySession.set(f.sessionId, (findCountBySession.get(f.sessionId) ?? 0) + 1);
+    }
+
+    const tracksBySession = new Map<string, typeof allTracksForSessions>();
+    for (const t of allTracksForSessions) {
+      if (!t.sessionId) continue;
+      if (!tracksBySession.has(t.sessionId)) tracksBySession.set(t.sessionId, []);
+      tracksBySession.get(t.sessionId)!.push(t);
+    }
+
+    const fieldById = new Map(allFields.filter(Boolean).map(f => [f!.id, f!]));
+
+    return rows.map(s => {
+      const field = s.fieldId ? fieldById.get(s.fieldId) ?? null : null;
+      const findCount = findCountBySession.get(s.id) ?? 0;
+      const sessionTracks = tracksBySession.get(s.id) ?? [];
+
       let durationMs = 0;
       if (sessionTracks.length > 0) {
         const allPoints = sessionTracks
           .flatMap(t => t.points || [])
           .filter(p => !!p && typeof p.timestamp === 'number')
           .sort((a, b) => a.timestamp - b.timestamp);
-          
+
         if (allPoints.length > 1) {
           durationMs = allPoints[allPoints.length - 1].timestamp - allPoints[0].timestamp;
         }
       }
 
       return { ...s, fieldName: field?.name, findCount, hasTracking: sessionTracks.length > 0, durationMs };
-    }));
+    });
   }, [id]);
 
   function formatDuration(ms: number) {

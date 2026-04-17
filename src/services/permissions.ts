@@ -23,12 +23,16 @@ export async function enrichPermissions(
 
   const permissionIds = rows.map(p => p.id);
 
-  const [allFields, allSessions, allTracks, allFinds] = await Promise.all([
+  const [allFields, allSessions, allFinds] = await Promise.all([
     db.fields.where("permissionId").anyOf(permissionIds).toArray(),
     db.sessions.where("permissionId").anyOf(permissionIds).toArray(),
-    db.tracks.where("projectId").equals(projectId).toArray(),
     db.finds.where("permissionId").anyOf(permissionIds).toArray(),
   ]);
+
+  const allSessionIds = allSessions.map(s => s.id);
+  const allTracks = allSessionIds.length > 0
+    ? await db.tracks.where("sessionId").anyOf(allSessionIds).toArray()
+    : [];
 
   // Group everything in memory
   const fieldsByPermission = new Map<string, Field[]>();
@@ -94,8 +98,9 @@ export async function enrichPermissions(
     let lat = typeof p.lat === "number" ? p.lat : null;
     let lon = typeof p.lon === "number" ? p.lon : null;
 
-    if ((!lat || !lon) && fields.length > 0 && fields[0].boundary?.coordinates?.[0]) {
-      const coords = fields[0].boundary.coordinates[0];
+    const fieldWithBoundary = fields.find(f => f.boundary?.coordinates?.[0]);
+    if ((!lat || !lon) && fieldWithBoundary) {
+      const coords = fieldWithBoundary.boundary.coordinates[0];
       lat = coords[0][1];
       lon = coords[0][0];
     }

@@ -52,6 +52,8 @@ export type Permission = {
 
   validFrom?: string; // ISO date string
 
+  isPinned?: boolean;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -340,6 +342,10 @@ export class FindSpotDB extends Dexie {
 
     this.version(16).stores({
       sessions: "id, projectId, permissionId, fieldId, date, isFinished, startTime, endTime, createdAt",
+    });
+
+    this.version(17).stores({
+      permissions: "id, projectId, name, type, permissionGranted, boundary, validFrom, isPinned, createdAt",
     });
   }
 }

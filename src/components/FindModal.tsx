@@ -90,7 +90,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     };
   }, [imageUrls]);
 
-  if (!draft) return <Modal onClose={props.onClose} title="Loading…"><div>Loading data...</div></Modal>;
+  // find===undefined means still loading; find===explicitly missing means DB returned nothing
+  if (find === undefined && !draft) return <Modal onClose={props.onClose} title="Loading…"><div className="py-6 text-center opacity-50 text-sm">Loading...</div></Modal>;
+  if (!draft) return <Modal onClose={props.onClose} title="Find not found"><div className="py-6 text-center opacity-50 text-sm">This find no longer exists.</div></Modal>;
 
   async function doGPS() {
     if (!draft) return;
@@ -745,8 +747,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                                                          x.media.photoType === 'photo2' ? 'Photo 2' : 
                                                          x.media.photoType === 'photo3' ? 'Photo 3' : 
                                                          x.media.photoType === 'photo4' ? 'Photo 4' : 
-                                                         x.media.photoType === 'in-situ' ? 'Photo 1' : 
-                                                         x.media.photoType === 'cleaned' ? 'Photo 2' : 
+                                                         x.media.photoType === 'in-situ' ? 'In Situ' :
+                                                         x.media.photoType === 'cleaned' ? 'Cleaned' :
                                                          x.media.photoType}
                                                       </span>                          )}
                         </div>

@@ -72,18 +72,18 @@ export default function FindsBox(props: { projectId: string }) {
             Search
           </button>
         </form>
-        <div className="mt-2 flex gap-3">
+        <div className="mt-3 flex gap-2">
           <button
             onClick={() => navigate("/finds")}
-            className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
           >
-            Browse all finds →
+            Browse All Finds →
           </button>
           <button
             onClick={() => navigate("/finds?view=map")}
-            className="text-[10px] text-gray-400 dark:text-gray-500 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
+            className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest hover:border-emerald-400 transition-all"
           >
-            Map view →
+            Map View
           </button>
         </div>
       </section>

@@ -62,9 +62,6 @@ const TYPE_OPTIONS: { value: EventType | "all"; label: string }[] = [
 // JSON files served from /public — update these paths when you move to a hosted API.
 const EVENTS_URL = "/findspot/events.json";
 const CLUBS_URL = "/findspot/clubs.json";
-// Submissions are POSTed here if available; always stored locally too.
-const SUBMIT_URL = "https://findspot.app/api/submit";
-
 const LOCAL_SUBMISSIONS_KEY = "fs_event_submissions";
 const LOCAL_CLUB_SUBMISSIONS_KEY = "fs_club_submissions";
 const EVENTS_CACHE_KEY = "fs_events_cache";
@@ -182,7 +179,9 @@ async function resolveCoordinates<T extends { lat?: number; lon?: number; postco
       const outcode = item.postcode!.trim().toUpperCase().split(" ")[0];
       if (outcodeCache.has(outcode)) return;
       try {
-        const res = await fetch(`https://api.postcodes.io/outcodes/${outcode}`);
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 8000);
+        const res = await fetch(`https://api.postcodes.io/outcodes/${outcode}`, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
         if (res.ok) {
           const json = await res.json();
           outcodeCache.set(outcode, json.result ? { lat: json.result.latitude, lon: json.result.longitude } : null);

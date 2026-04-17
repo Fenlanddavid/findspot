@@ -33,9 +33,12 @@ export default function AllPermissions(props: { projectId: string }) {
     [props.projectId, searchQuery]
   );
 
-  const filteredByMode = permissions?.filter(p =>
-    viewMode === "rallies" ? p.type === "rally" : p.type !== "rally"
-  );
+  const filteredByMode = permissions
+    ?.filter(p => viewMode === "rallies" ? p.type === "rally" : p.type !== "rally")
+    .sort((a, b) => {
+      if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
+      return 0;
+    });
 
   return (
     <div className="max-w-5xl mx-auto pb-20 px-4">
@@ -133,15 +136,15 @@ export default function AllPermissions(props: { projectId: string }) {
                   <StaticMapPreview
                     lat={l.lat}
                     lon={l.lon}
-                    boundary={l.boundary || (l as any).fields?.[0]?.boundary}
-                    tracks={(l as any).tracks}
+                    boundary={l.boundary || l.fields?.[0]?.boundary}
+                    tracks={l.tracks}
                     className="h-full w-full rounded-none"
                   />
-                  {!isRally && (l as any).cumulativePercent !== null && (
+                  {!isRally && l.cumulativePercent !== null && (
                     <div className="absolute bottom-2 left-2 flex flex-col gap-1">
                       <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
                         <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
-                        <span className={`text-[10px] font-black leading-none ${(l as any).cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - (l as any).cumulativePercent)}%</span>
+                        <span className={`text-[10px] font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
                       </div>
                     </div>
                   )}
@@ -159,7 +162,7 @@ export default function AllPermissions(props: { projectId: string }) {
                   {!isRally && (
                     <div className="flex items-center justify-between">
                       <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                        {(l as any).fields?.length || 0} {(l as any).fields?.length === 1 ? 'Field' : 'Fields'}
+                        {l.fields?.length || 0} {l.fields?.length === 1 ? 'Field' : 'Fields'}
                       </div>
                       {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
                     </div>
@@ -184,6 +187,13 @@ export default function AllPermissions(props: { projectId: string }) {
                       🗺
                     </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }); }}
+                    title={l.isPinned ? "Unpin" : "Pin to top"}
+                    className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
+                  >
+                    📌
+                  </button>
                 </div>
               </div>
             );

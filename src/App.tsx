@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
@@ -365,8 +365,6 @@ function Shell() {
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/permission" element={<LinkToPermission />} />
-            <Route path="/permission/:id" element={<LinkToPermission />} />
         </Routes>
         </Suspense>
       </main>
@@ -377,14 +375,6 @@ function Shell() {
   );
 }
 
-function LinkToPermission() {
-    const nav = useNavigate();
-    const { id } = useParams();
-    useEffect(() => {
-        nav(id ? `/permission/${id}` : "/permission", { replace: true });
-    }, [id, nav]);
-    return null;
-}
 
 function HomeRouter({ projectId }: { projectId: string }) {
   const nav = useNavigate();
