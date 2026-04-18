@@ -170,6 +170,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Terrain scan centre — for drift guard in historic phase
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
 
+    // User location marker (shown after GPS button press, persists for session)
+    const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
+
     // Scoring hook
     const { potentialScore, scanConfidence, setPotentialScore, setScanConfidence, calculatePotentialScore } = usePotentialScore();
 
@@ -405,7 +408,37 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         if (isLocating) return;
         setIsLocating(true);
         navigator.geolocation.getCurrentPosition(
-            (pos) => { setIsLocating(false); mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 16 }); },
+            (pos) => {
+                setIsLocating(false);
+                const { longitude, latitude } = pos.coords;
+                const map = mapRef.current;
+                if (!map) return;
+                map.flyTo({ center: [longitude, latitude], zoom: 16 });
+
+                // Build or reposition the "you are here" target marker
+                if (!userLocationMarkerRef.current) {
+                    const el = document.createElement('div');
+                    el.style.cssText = [
+                        'width:28px', 'height:28px', 'position:relative',
+                        'display:flex', 'align-items:center', 'justify-content:center',
+                    ].join(';');
+                    // Outer red circle
+                    el.innerHTML = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+                            <circle cx="14" cy="14" r="12" fill="rgba(220,38,38,0.2)" stroke="#dc2626" stroke-width="2"/>
+                            <line x1="14" y1="2"  x2="14" y2="8"  stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="14" y1="20" x2="14" y2="26" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="2"  y1="14" x2="8"  y2="14" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
+                            <line x1="20" y1="14" x2="26" y2="14" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/>
+                            <circle cx="14" cy="14" r="2.5" fill="#dc2626"/>
+                        </svg>`;
+                    userLocationMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+                        .setLngLat([longitude, latitude])
+                        .addTo(map);
+                } else {
+                    userLocationMarkerRef.current.setLngLat([longitude, latitude]);
+                }
+            },
             (err) => { setIsLocating(false); console.error('GPS Error:', err); },
             { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
         );
