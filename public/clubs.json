@@ -339,5 +339,16 @@
     "postcode": "GU",
     "facebookUrl": "https://www.facebook.com/groups/surreymetaldetecting/",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "club-042",
+    "name": "True North Detecting",
+    "description": "Range of experience from newbies to seasoned detectorists. Digs normally every Sunday.",
+    "town": "Crook",
+    "county": "Durham",
+    "postcode": "DL16",
+    "websiteUrl": "https://www.truenorthdetecting.uk/contact",
+    "facebookUrl": "https://www.facebook.com/True-north-detecting",
+    "verificationStatus": "verified"
   }
 ]
