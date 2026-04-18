@@ -239,9 +239,11 @@ export default function FindPage(props: {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     try {
-      const { form: draftForm, locationName: draftLoc } = JSON.parse(raw);
+      const { form: draftForm, locationName: draftLoc, sessionId: draftSessionId, fieldId: draftFieldId } = JSON.parse(raw);
       setForm(prev => ({ ...prev, ...draftForm }));
       if (draftLoc) setLocationName(draftLoc);
+      if (draftSessionId) setSessionId(draftSessionId);
+      if (draftFieldId) setFieldId(draftFieldId);
       setDraftRestored(true);
     } catch {
       localStorage.removeItem(DRAFT_KEY);
@@ -252,7 +254,7 @@ export default function FindPage(props: {
   useEffect(() => {
     if (!userModified || savedId || props.quickId) return;
     const timer = setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, locationName }));
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, locationName, sessionId, fieldId }));
     }, 2000);
     return () => clearTimeout(timer);
   }, [form, locationName, userModified, savedId, props.quickId]);

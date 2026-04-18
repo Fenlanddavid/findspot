@@ -59,6 +59,7 @@ function Shell() {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
@@ -104,6 +105,16 @@ function Shell() {
 
     // Check backup status
     checkBackupStatus();
+
+    // Check storage quota — warn if over 80% full
+    const checkStorageQuota = async () => {
+      try {
+        if (!navigator.storage?.estimate) return;
+        const { usage = 0, quota = 1 } = await navigator.storage.estimate();
+        if (quota > 0 && usage / quota > 0.8) setShowQuotaWarning(true);
+      } catch {}
+    };
+    checkStorageQuota();
   }, []);
 
   const androidIntentUrl = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
@@ -242,9 +253,31 @@ function Shell() {
             <div className="text-sm text-sky-800 dark:text-sky-300">
               <span className="font-bold">Update available.</span> A new version of FindSpot is ready to install.
             </div>
-            <button onClick={() => updateServiceWorker(true)} className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shrink-0">
+            <button
+              onClick={() => {
+                if (confirm("Update FindSpot now? Any unsaved changes will be lost.")) {
+                  updateServiceWorker(true);
+                }
+              }}
+              className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors shrink-0"
+            >
               Update Now
             </button>
+          </div>
+        )}
+        {showQuotaWarning && (
+          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <span className="text-xl">🔴</span>
+              <div>
+                <h4 className="text-sm font-bold text-red-900 dark:text-red-100">Storage Almost Full</h4>
+                <p className="text-xs text-red-800 dark:text-red-300 opacity-80">Your device storage is over 80% full. Back up your data now to avoid losing finds.</p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => { setShowQuotaWarning(false); nav("/settings"); }} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Back Up Now</button>
+              <button onClick={() => setShowQuotaWarning(false)} className="text-red-700 dark:text-red-400 text-xs font-bold hover:underline px-2">Dismiss</button>
+            </div>
           </div>
         )}
         {showBackupReminder && (
@@ -272,6 +305,7 @@ function Shell() {
             </div>
           </div>
         )}
+        <PageErrorBoundary>
         <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold animate-pulse">Loading…</div>}>
         <Routes>
             <Route path="/" element={<HomeRouter projectId={projectId} />} />
@@ -288,6 +322,7 @@ function Shell() {
             <Route path="/settings" element={<Settings />} />
         </Routes>
         </Suspense>
+        </PageErrorBoundary>
       </main>
 
       <GlobalActions projectId={projectId} />
@@ -336,6 +371,28 @@ function FindRouter({ projectId }: { projectId: string }) {
     initialLat={lat ? parseFloat(lat) : null}
     initialLon={lon ? parseFloat(lon) : null}
   />;
+}
+
+class PageErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8 text-center border border-red-200 rounded-xl bg-red-50 dark:bg-red-900/10 dark:border-red-800 mt-4">
+          <p className="text-red-700 dark:text-red-400 font-bold mb-2">This page failed to load.</p>
+          <p className="text-xs text-red-600 dark:text-red-500 mb-4 font-mono">{this.state.error.message}</p>
+          <button onClick={() => this.setState({ error: null })} className="text-sm text-emerald-600 dark:text-emerald-400 font-bold underline">Try again</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {

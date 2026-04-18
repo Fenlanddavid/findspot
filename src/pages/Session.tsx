@@ -406,19 +406,26 @@ export default function SessionPage(props: {
   useEffect(() => {
     if (sessionId) {
       db.sessions.get(sessionId).then(s => {
-        if (s) {
-          setDate(new Date(s.date).toISOString().slice(0, 16));
-          setLat(s.lat);
-          setLon(s.lon);
-          setAcc(s.gpsAccuracyM);
-          setFieldId(s.fieldId || null);
-          setLandUse(s.landUse);
-          setCropType(s.cropType);
-          setIsStubble(s.isStubble);
-          setNotes(s.notes);
-          setIsFinished(!!s.isFinished);
-          setKeyNotes(s.keyNotes ?? []);
+        if (!s) {
+          if (isEdit) {
+            // Session not found — it may have been deleted; redirect to home
+            nav("/");
+            return;
+          }
+          setLoading(false);
+          return;
         }
+        setDate(new Date(s.date).toISOString().slice(0, 16));
+        setLat(s.lat);
+        setLon(s.lon);
+        setAcc(s.gpsAccuracyM);
+        setFieldId(s.fieldId || null);
+        setLandUse(s.landUse);
+        setCropType(s.cropType);
+        setIsStubble(s.isStubble);
+        setNotes(s.notes);
+        setIsFinished(!!s.isFinished);
+        setKeyNotes(s.keyNotes ?? []);
         setLoading(false);
       }).catch(err => {
         console.error("Failed to load session:", err);
@@ -609,13 +616,19 @@ export default function SessionPage(props: {
     });
     
     if (sessionId) {
-        await db.sessions.update(sessionId, { 
-            isFinished: true,
-            endTime: endTimeIso
-        });
+        try {
+            await db.sessions.update(sessionId, {
+                isFinished: true,
+                endTime: endTimeIso
+            });
+        } catch (e: any) {
+            setError("Could not finish session: " + (e?.message ?? "Unknown error"));
+            setIsTracking(isTrackingActive());
+            return;
+        }
         setIsFinished(true);
     }
-    
+
     setShowSummary(true);
   }
 

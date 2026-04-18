@@ -53,6 +53,9 @@ export default function Settings() {
   const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportingCSV, setExportingCSV] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
@@ -161,6 +164,7 @@ export default function Settings() {
   }
 
   async function handleExport() {
+    setExporting(true);
     try {
       const json = await exportData();
       triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
@@ -168,15 +172,20 @@ export default function Settings() {
       setLastBackup(new Date().toISOString());
     } catch (e) {
       setDataError("Export failed: " + e);
+    } finally {
+      setExporting(false);
     }
   }
 
   async function handleCSVExport() {
+    setExportingCSV(true);
     try {
       const csv = await exportToCSV();
       triggerDownload(new Blob([csv], { type: "text/csv" }), `findspot-records-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (e) {
       setDataError("CSV export failed: " + e);
+    } finally {
+      setExportingCSV(false);
     }
   }
 
@@ -191,12 +200,14 @@ export default function Settings() {
     if (!importPendingFile) return;
     const file = importPendingFile;
     setImportPendingFile(null);
+    setImporting(true);
     try {
       const text = await file.text();
       await importData(text);
       window.location.reload();
     } catch (e) {
       setDataError("Import failed: " + e);
+      setImporting(false);
     }
   }
 
@@ -215,7 +226,7 @@ export default function Settings() {
         <div className="px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <span><strong>Import "{importPendingFile.name}"?</strong> This will merge data into your current database.</span>
           <div className="flex gap-2 shrink-0">
-            <button onClick={confirmImport} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Confirm Import</button>
+            <button onClick={confirmImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing…" : "Confirm Import"}</button>
             <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
@@ -224,19 +235,21 @@ export default function Settings() {
       <div className="flex gap-3 mb-8">
         <button
           onClick={handleExport}
-          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors shadow-sm"
+          disabled={exporting}
+          className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors shadow-sm"
         >
-          Backup
+          {exporting ? "Saving…" : "Backup"}
         </button>
-        <label className="flex-1 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors cursor-pointer shadow-sm">
-          Restore
-          <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+        <label className={`flex-1 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors shadow-sm ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
+          {importing ? "Restoring…" : "Restore"}
+          {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
         </label>
         <button
           onClick={handleCSVExport}
-          className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors shadow-sm"
+          disabled={exportingCSV}
+          className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
         >
-          CSV
+          {exportingCSV ? "Exporting…" : "CSV"}
         </button>
       </div>
 
