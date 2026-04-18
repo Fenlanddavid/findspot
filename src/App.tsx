@@ -24,7 +24,7 @@ const Discover = React.lazy(() => import("./pages/Discover"));
 
 export function Logo() {
   return (
-    <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className="w-10 h-10 sm:w-16 sm:h-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#10b981" />
@@ -197,7 +197,7 @@ function Shell() {
         <div className="flex items-center justify-between gap-4">
             <Link to="/" className="no-underline flex items-center gap-3 group">
               <Logo />
-              <h1 className="m-0 text-2xl sm:text-3xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
+              <h1 className="m-0 text-2xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
             
             <div className="flex items-center gap-3 border-l pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
