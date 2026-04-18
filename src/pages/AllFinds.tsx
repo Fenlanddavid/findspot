@@ -55,6 +55,9 @@ export default function AllFinds(props: { projectId: string }) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const lastPos = useRef<{ center: [number, number]; zoom: number } | null>(null);
+  // Keep a ref to the latest finds so the map's load callback can seed data immediately
+  const findsRef = useRef(finds);
+  useEffect(() => { findsRef.current = finds; }, [finds]);
   const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
   useEffect(() => {
     db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
@@ -90,9 +93,20 @@ export default function AllFinds(props: { projectId: string }) {
     });
 
     map.on('load', () => {
+        const seedFeatures = (findsRef.current ?? [])
+            .filter(f => f.lat && f.lon)
+            .map(f => ({
+                type: 'Feature' as const,
+                geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
+                properties: {
+                    id: f.id,
+                    category: (f.objectType || '').toLowerCase().includes('coin') ? 'coin' : (f.period || 'Unknown')
+                }
+            }));
+
         map.addSource('finds', {
             type: 'geojson',
-            data: { type: 'FeatureCollection', features: [] }
+            data: { type: 'FeatureCollection', features: seedFeatures }
         });
         map.addLayer({
             id: 'finds-points',

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting } from "../services/data";
+import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting, exportData, importData, exportToCSV } from "../services/data";
 
 const POPULAR_MODELS = [
   "Minelab Equinox 900", 
@@ -51,6 +51,8 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
+  const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
@@ -149,9 +151,94 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExport() {
+    try {
+      const json = await exportData();
+      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      await setSetting("lastBackupDate", new Date().toISOString());
+      setLastBackup(new Date().toISOString());
+    } catch (e) {
+      setDataError("Export failed: " + e);
+    }
+  }
+
+  async function handleCSVExport() {
+    try {
+      const csv = await exportToCSV();
+      triggerDownload(new Blob([csv], { type: "text/csv" }), `findspot-records-${new Date().toISOString().slice(0, 10)}.csv`);
+    } catch (e) {
+      setDataError("CSV export failed: " + e);
+    }
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportPendingFile(file);
+    e.target.value = "";
+  }
+
+  async function confirmImport() {
+    if (!importPendingFile) return;
+    const file = importPendingFile;
+    setImportPendingFile(null);
+    try {
+      const text = await file.text();
+      await importData(text);
+      window.location.reload();
+    } catch (e) {
+      setDataError("Import failed: " + e);
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 pb-20 mt-4">
-      <h1 className="text-2xl sm:text-3xl font-black mb-8 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
+      <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
+
+      {dataError && (
+        <div className="flex items-center justify-between gap-3 px-4 py-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-300">
+          <span>{dataError}</span>
+          <button onClick={() => setDataError(null)} className="font-bold shrink-0">✕</button>
+        </div>
+      )}
+
+      {importPendingFile && (
+        <div className="px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <span><strong>Import "{importPendingFile.name}"?</strong> This will merge data into your current database.</span>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={confirmImport} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Confirm Import</button>
+            <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3 mb-8">
+        <button
+          onClick={handleExport}
+          className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors shadow-sm"
+        >
+          Backup
+        </button>
+        <label className="flex-1 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors cursor-pointer shadow-sm">
+          Restore
+          <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
+        </label>
+        <button
+          onClick={handleCSVExport}
+          className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors shadow-sm"
+        >
+          CSV
+        </button>
+      </div>
 
       <div className="space-y-8">
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">

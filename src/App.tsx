@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
 import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
-import { exportData, importData, exportToCSV, requestPersistentStorage, setSetting, getSetting } from "./services/data";
+import { requestPersistentStorage, setSetting, getSetting } from "./services/data";
 
 // Eagerly loaded — core navigation paths
 import Home from "./pages/Home";
@@ -58,8 +58,6 @@ function Shell() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
-  const [shellError, setShellError] = useState<string | null>(null);
-  const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const nav = useNavigate();
 
@@ -157,54 +155,6 @@ function Shell() {
     }
   }, [theme]);
 
-  function triggerDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function handleExport() {
-    try {
-      const json = await exportData();
-      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
-      await setSetting("lastBackupDate", new Date().toISOString());
-    } catch (e) {
-      setShellError("Export failed: " + e);
-    }
-  }
-
-  async function handleCSVExport() {
-    try {
-      const csv = await exportToCSV();
-      triggerDownload(new Blob([csv], { type: "text/csv" }), `findspot-records-${new Date().toISOString().slice(0, 10)}.csv`);
-    } catch (e) {
-      setShellError("CSV export failed: " + e);
-    }
-  }
-
-  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportPendingFile(file);
-    e.target.value = "";
-  }
-
-  async function confirmImport() {
-    if (!importPendingFile) return;
-    const file = importPendingFile;
-    setImportPendingFile(null);
-    try {
-      const text = await file.text();
-      await importData(text);
-      window.location.reload();
-    } catch (e) {
-      setShellError("Import failed: " + e);
-    }
-  }
-
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
   return (
@@ -267,18 +217,7 @@ function Shell() {
                     )}
                   </div>
                 )}
-                <button onClick={handleCSVExport} className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-widest bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">
-                    CSV
-                </button>
-                <div className="flex gap-3 items-center border-l pl-3 border-gray-200 dark:border-gray-600 ml-1">
-                    <button onClick={handleExport} className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors">
-                        Backup
-                    </button>
-                    <label className="text-xs font-medium opacity-70 hover:opacity-100 hover:text-emerald-600 transition-colors cursor-pointer">
-                        Restore
-                        <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                    </label>
-                </div>
+                <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </div>
         </div>
 
@@ -289,7 +228,6 @@ function Shell() {
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
               <NavLink to="/discover" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Discover</NavLink>
               <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</NavLink>
-              <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </nav>
 
             <div className="hidden sm:flex items-center gap-3">
@@ -309,23 +247,6 @@ function Shell() {
             </button>
           </div>
         )}
-        {shellError && (
-          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between gap-4">
-            <span className="text-sm text-red-800 dark:text-red-300">{shellError}</span>
-            <button onClick={() => setShellError(null)} className="text-red-600 dark:text-red-400 font-bold text-xs shrink-0">Dismiss</button>
-          </div>
-        )}
-        {importPendingFile && (
-          <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-blue-800 dark:text-blue-300">
-              <span className="font-bold">Import "{importPendingFile.name}"?</span> This will merge data into your current database.
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <button onClick={confirmImport} className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Confirm Import</button>
-              <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
-            </div>
-          </div>
-        )}
         {showBackupReminder && (
           <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
             <div className="flex items-center gap-3">
@@ -336,16 +257,13 @@ function Shell() {
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button 
-                onClick={() => {
-                  handleExport();
-                  setShowBackupReminder(false);
-                }}
+              <button
+                onClick={() => { setShowBackupReminder(false); nav("/settings"); }}
                 className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
               >
-                Backup Now
+                Go to Settings →
               </button>
-              <button 
+              <button
                 onClick={snoozeBackup}
                 className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
               >

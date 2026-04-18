@@ -112,7 +112,7 @@ export default function OnboardingFlow() {
                         <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/25 rounded-2xl px-4 py-3">
                             <span className="text-base mt-0.5">🛡️</span>
                             <p className="text-[12px] text-amber-300/80 leading-snug">
-                                FindSpot stores everything locally on your device. <span className="font-bold text-amber-300">Back up regularly</span> using the Backup button in the top right — if you lose your device, your records go with it.
+                                FindSpot stores everything locally on your device. <span className="font-bold text-amber-300">Back up regularly</span> using the Backup button in Settings — if you lose your device, your records go with it.
                             </p>
                         </div>
 
@@ -325,10 +325,10 @@ export default function OnboardingFlow() {
                                 <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
                                     <span className="text-white font-black text-sm leading-none">+</span>
                                 </div>
-                                <p className="text-[12px] font-black text-emerald-300">Quick Find button</p>
+                                <p className="text-[12px] font-black text-emerald-300">Add Find button</p>
                             </div>
                             <p className="text-[12px] text-white/55 leading-snug">
-                                The green <span className="text-emerald-400 font-bold">+</span> button at the bottom of every screen lets you log a find in one tap. It captures your GPS location and saves a <span className="text-white/80 font-bold">pending find</span> that you can fill in properly later — so you never lose a record in the moment.
+                                The green <span className="text-emerald-400 font-bold">Add Find</span> button at the bottom of every screen lets you log a find in one tap. It captures your GPS location and saves a <span className="text-white/80 font-bold">pending find</span> that you can fill in properly later — so you never lose a record in the moment.
                             </p>
                         </div>
 

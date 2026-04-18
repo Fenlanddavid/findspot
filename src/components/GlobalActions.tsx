@@ -14,6 +14,9 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   const [lastQuickId, setLastQuickId] = React.useState<string | null>(null);
   const [noGpsWarning, setNoGpsWarning] = React.useState(false);
   const [fabError, setFabError] = React.useState<string | null>(null);
+  const [fabIntroduced, setFabIntroduced] = React.useState(() =>
+    !!localStorage.getItem('fs_fab_used') || !!localStorage.getItem('fs_onboarding_done')
+  );
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   const activeSession = useLiveQuery(
@@ -40,6 +43,11 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
 
     // Provide immediate haptic feedback
     if (navigator.vibrate) navigator.vibrate(50);
+
+    if (!fabIntroduced) {
+      localStorage.setItem('fs_fab_used', '1');
+      setFabIntroduced(true);
+    }
 
     const id = uuid();
     const now = new Date().toISOString();
@@ -193,26 +201,26 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
       )}
 
       <div className="flex gap-3 pointer-events-auto">
-        <button 
+        <button
             onClick={quickFind}
             disabled={isCapturing}
-            className={`bg-gradient-to-br ${isCapturing ? 'from-gray-400 to-gray-600 animate-pulse' : 'from-emerald-500 to-emerald-700'} text-white w-12 h-12 rounded-full shadow-lg hover:shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center group relative border border-white/20`}
-            aria-label="Quick Add Find"
+            className={`bg-gradient-to-br ${isCapturing ? 'from-gray-400 to-gray-600 animate-pulse' : 'from-emerald-500 to-emerald-700'} text-white shadow-lg hover:shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center relative border border-white/20
+              ${fabIntroduced ? 'w-12 h-12 rounded-full' : 'rounded-full px-4 h-12'}`}
+            aria-label="Record Find"
         >
             {isCapturing ? (
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-5 w-5 text-white shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-            ) : (
+            ) : fabIntroduced ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
+            ) : (
+                <span className="text-xs sm:text-sm font-medium whitespace-nowrap">Add Find</span>
             )}
-            <span className="absolute bottom-full mb-3 right-0 bg-gray-900 text-white text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-bold uppercase tracking-widest shadow-xl">
-                {isCapturing ? "Locating..." : "Quick Record"}
-            </span>
         </button>
       </div>
     </div>
