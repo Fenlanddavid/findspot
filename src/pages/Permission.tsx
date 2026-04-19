@@ -75,6 +75,7 @@ export default function PermissionPage(props: {
   const [proofModalOpen, setProofModalOpen] = useState(false);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
   const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
@@ -255,6 +256,8 @@ export default function PermissionPage(props: {
 
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
+  const fieldRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
+  const fieldScrollRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const hasData = boundary || (fields && fields.length > 0);
@@ -298,12 +301,31 @@ export default function PermissionPage(props: {
                 data: { type: "FeatureCollection", features: [] }
             });
 
+            // Transparent fill for reliable tap hit area
+            map.addLayer({
+                id: "fields-fill",
+                type: "fill",
+                source: "fields-boundary",
+                paint: { "fill-color": "#0d9488", "fill-opacity": 0.001 }
+            });
+
             map.addLayer({
                 id: "fields-outline",
                 type: "line",
                 source: "fields-boundary",
                 paint: { "line-color": "#0d9488", "line-width": 2 }
             });
+
+            map.on("click", "fields-fill", (e) => {
+                const fid = e.features?.[0]?.properties?.id as string | undefined;
+                if (fid) setSelectedFieldId(prev => prev === fid ? null : fid);
+            });
+            map.on("click", (e) => {
+                const hits = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
+                if (hits.length === 0) setSelectedFieldId(null);
+            });
+            map.on("mouseenter", "fields-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+            map.on("mouseleave", "fields-fill", () => { map.getCanvas().style.cursor = ""; });
 
             map.addLayer({
                 id: "field-labels",
@@ -394,7 +416,7 @@ export default function PermissionPage(props: {
                 features: (fields || []).map(f => ({
                     type: "Feature",
                     geometry: f.boundary,
-                    properties: { name: f.name }
+                    properties: { name: f.name, id: f.id }
                 }))
             } as any);
         }
@@ -418,6 +440,13 @@ export default function PermissionPage(props: {
             if (!bounds.isEmpty()) {
                 map.fitBounds(bounds, { padding: 40, duration: 0 });
             }
+        }
+
+        // Hide outer boundary outline when sub-fields are present — they define the area
+        if (map.getLayer("boundary-outline")) {
+            map.setLayoutProperty("boundary-outline", "visibility",
+                fields && fields.length > 0 ? "none" : "visible"
+            );
         }
     }
 
@@ -446,6 +475,27 @@ export default function PermissionPage(props: {
         }
     }
   }, [showCoverage, coverageResult, fieldGapResults]);
+
+  // Field selection highlight effect
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    if (selectedFieldId) {
+        map.setPaintProperty("fields-outline", "line-color", [
+            "case", ["==", ["get", "id"], selectedFieldId], "#34d399", "#0d9488"
+        ] as any);
+        map.setPaintProperty("fields-outline", "line-width", [
+            "case", ["==", ["get", "id"], selectedFieldId], 4, 2
+        ] as any);
+        map.setPaintProperty("fields-outline", "line-opacity", 1);
+        const el = fieldRefs.current.get(selectedFieldId);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
+        map.setPaintProperty("fields-outline", "line-color", "#0d9488");
+        map.setPaintProperty("fields-outline", "line-width", 2);
+        map.setPaintProperty("fields-outline", "line-opacity", 1);
+    }
+  }, [selectedFieldId]);
 
   useEffect(() => {
     getSetting("insuranceProvider", "").then(setInsuranceProvider);
@@ -497,6 +547,22 @@ export default function PermissionPage(props: {
       if (prefillNotes) setNotes(prefillNotes);
     }
   }, [id]);
+
+  // Auto-create Main Field for old permissions that have a boundary but no fields yet
+  useEffect(() => {
+    if (!id || !boundary || fields === undefined || fields.length > 0) return;
+    const now = new Date().toISOString();
+    db.fields.add({
+      id: uuid(),
+      projectId: props.projectId,
+      permissionId: id,
+      name: "Main Field",
+      boundary: boundary,
+      notes: "Automatically created from permission boundary",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }, [id, boundary, fields]);
 
   async function doGPS() {
     setError(null);
@@ -1246,20 +1312,42 @@ export default function PermissionPage(props: {
                                 <div ref={mapDivRef} className="absolute inset-0" />
                             </div>
 
-                            {/* Sub-Fields List in View Mode */}
+                            {/* Sub-Fields Carousel */}
                             {fields && fields.length > 0 && (
-                                <div className="mt-6 grid gap-4">
+                                <div className="mt-6 grid gap-3">
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
-                                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
-                                            <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-0.5 font-medium">Defined working areas within this permission</p>
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
+                                                Sub-Fields
+                                                <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>
+                                            </h4>
+                                            <p className="text-[11px] text-white/70 mt-0.5 font-medium">Tap on a field on the map or scroll to select</p>
                                         </div>
-                                        <span className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full shrink-0">{fields.length}</span>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div
+                                        ref={fieldScrollRef}
+                                        className="grid gap-3 overflow-y-auto scroll-smooth"
+                                        style={{ maxHeight: "460px", scrollbarWidth: "none" }}
+                                    >
                                         {fields.map(f => (
-                                            <div key={f.id} className="bg-white dark:bg-gray-800 border border-emerald-100 dark:border-emerald-800/60 rounded-xl shadow-sm flex flex-col">
-                                                <div className="p-4 flex-1">
+                                            <div
+                                                key={f.id}
+                                                ref={(el) => { if (el) fieldRefs.current.set(f.id, el); else fieldRefs.current.delete(f.id); }}
+                                                className={`bg-white dark:bg-gray-800 border rounded-xl shadow-sm flex flex-col transition-all duration-300 cursor-pointer ${selectedFieldId === f.id ? "border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-300/50 dark:ring-emerald-700/50" : "border-emerald-100 dark:border-emerald-800/60"}`}
+                                                onClick={(e) => {
+                                                    if ((e.target as HTMLElement).closest("button")) return;
+                                                    setSelectedFieldId(f.id);
+                                                    const map = mapRef.current;
+                                                    if (map && f.boundary?.coordinates?.[0]) {
+                                                        const bounds = new maplibregl.LngLatBounds();
+                                                        (f.boundary.coordinates[0] as [number, number][]).forEach((p) => {
+                                                            if (Array.isArray(p) && p.length >= 2) bounds.extend(p);
+                                                        });
+                                                        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
+                                                    }
+                                                }}
+                                            >
+                                                <div className="p-3 flex-1">
                                                     <div className="flex justify-between items-start gap-2 mb-1.5">
                                                         <div className="min-w-0">
                                                             <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
@@ -1267,6 +1355,27 @@ export default function PermissionPage(props: {
                                                                 {f.boundary ? "📐 Boundary mapped" : "No boundary"}
                                                             </div>
                                                         </div>
+                                                    </div>
+                                                    {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic mb-2">{f.notes}</div>}
+                                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                                        {f.boundary && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedFieldId(f.id);
+                                                                    const map = mapRef.current;
+                                                                    if (map && f.boundary?.coordinates?.[0]) {
+                                                                        const bounds = new maplibregl.LngLatBounds();
+                                                                        (f.boundary.coordinates[0] as [number, number][]).forEach((p) => {
+                                                                            if (Array.isArray(p) && p.length >= 2) bounds.extend(p);
+                                                                        });
+                                                                        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
+                                                                    }
+                                                                }}
+                                                                className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${selectedFieldId === f.id ? "bg-emerald-600 border-emerald-600 text-white" : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:border-emerald-400"}`}
+                                                            >
+                                                                ◎ Locate
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => {
                                                                 const next = new Set(shownFieldGapIds);
@@ -1274,7 +1383,7 @@ export default function PermissionPage(props: {
                                                                 else next.add(f.id);
                                                                 setShownFieldGapIds(next);
                                                             }}
-                                                            className={`text-[9px] font-black px-2.5 py-1.5 rounded-lg border transition-all shrink-0 ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900 text-orange-700 dark:text-orange-400 hover:border-orange-400'}`}
+                                                            className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900 text-orange-700 dark:text-orange-400 hover:border-orange-400'}`}
                                                         >
                                                             🧭 {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
                                                             {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
@@ -1282,24 +1391,23 @@ export default function PermissionPage(props: {
                                                             )}
                                                         </button>
                                                     </div>
-                                                    {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic">{f.notes}</div>}
                                                 </div>
-                                                <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-4 py-2.5">
+                                                <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-3 py-2">
                                                     <button
                                                         onClick={() => nav(`/session/new?permissionId=${id}&fieldId=${f.id}`)}
-                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-2 rounded-lg transition-colors shadow-sm"
+                                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-1.5 rounded-lg transition-colors shadow-sm"
                                                     >
                                                         Start Session
                                                     </button>
                                                     <button
                                                         onClick={() => setEditingFieldId(f.id)}
-                                                        className="px-3 py-2 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
+                                                        className="px-2.5 py-1.5 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
                                                     >
                                                         Edit
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteField(f.id)}
-                                                        className="py-2 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
+                                                        className="py-1.5 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
                                                         title="Delete sub-field"
                                                     >
                                                         ✕

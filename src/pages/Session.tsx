@@ -897,7 +897,7 @@ export default function SessionPage(props: {
                                 {selectedField ? `Recorded Trail: ${selectedField.name}` : "Recorded Trail Tracks"}
                             </h4>
                             <div className="flex items-center gap-2">
-                                {(selectedField && selectedField.boundary) && (
+                                {!isFinished && (selectedField && selectedField.boundary) && (
                                     <button 
                                         type="button"
                                         onClick={() => setShowCoverage(!showCoverage)}
