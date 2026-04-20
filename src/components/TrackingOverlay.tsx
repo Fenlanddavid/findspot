@@ -11,19 +11,28 @@ export function TrackingOverlay({ isVisible, onClose, wakeLockSupported }: Track
 
   return (
     <div className="fixed inset-0 bg-black text-white z-[9999] flex flex-col items-center justify-center p-8 text-center select-none overflow-hidden">
+      {!wakeLockSupported && (
+        <div className="absolute top-0 left-0 right-0 bg-amber-500 text-black px-4 py-3 flex items-center justify-center gap-2">
+          <span className="text-base">⚠️</span>
+          <p className="text-[11px] font-black uppercase tracking-widest">
+            Keep your screen on — locking it will stop GPS recording
+          </p>
+        </div>
+      )}
+
       <div className="max-w-xs opacity-40">
         <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-800">
           <span className="text-xl grayscale opacity-50">👣</span>
         </div>
         <h2 className="text-lg font-bold mb-2 uppercase tracking-widest text-gray-400">Tracking Active</h2>
         <p className="text-[10px] opacity-40 mb-8 font-medium">
-          {wakeLockSupported 
-            ? "Screen will stay awake for high-precision GPS tracking." 
-            : "Keep your screen on manually for accurate GPS tracking."}
+          {wakeLockSupported
+            ? "Screen will stay awake for high-precision GPS tracking."
+            : "GPS is recording your trail in the background."}
         </p>
       </div>
 
-      <button 
+      <button
         onClick={onClose}
         type="button"
         className="mt-2 px-4 py-2 bg-gray-900 text-gray-500 border border-gray-800 rounded-lg font-bold text-[10px] uppercase tracking-widest active:bg-gray-800 transition-colors"

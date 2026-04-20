@@ -686,24 +686,31 @@ export default function SessionPage(props: {
                             </div>
                         </div>
                         {!isFinished && (
-                            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                <button 
-                                    onClick={toggleTracking}
-                                    className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
-                                >
-                                    <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
-                                </button>
-                                {isTracking && (
-                                    <button 
-                                        onClick={() => setShowTrackingOverlay(true)}
-                                        className="bg-black text-white px-4 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 border-2 border-gray-800"
-                                        title="Fullscreen Tracking Mode"
+                            <>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                    <button
+                                        onClick={toggleTracking}
+                                        className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
                                     >
-                                        <span className="text-lg">📱</span>
-                                        <span className="sm:hidden text-xs uppercase tracking-widest">Fullscreen</span>
+                                        <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
                                     </button>
+                                    {isTracking && (
+                                        <button
+                                            onClick={() => setShowTrackingOverlay(true)}
+                                            className="bg-black text-white px-4 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 border-2 border-gray-800"
+                                            title="Fullscreen Tracking Mode"
+                                        >
+                                            <span className="text-lg">📱</span>
+                                            <span className="sm:hidden text-xs uppercase tracking-widest">Fullscreen</span>
+                                        </button>
+                                    )}
+                                </div>
+                                {isTracking && !isWakeLockSupported() && (
+                                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">
+                                        ⚠️ Keep your screen on — locking it will stop GPS recording
+                                    </p>
                                 )}
-                            </div>
+                            </>
                         )}
                     </div>
 

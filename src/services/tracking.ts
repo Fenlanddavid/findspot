@@ -5,6 +5,7 @@ let watchId: number | null = null;
 let currentTrackId: string | null = null;
 let wakeLock: any = null;
 let isStarting = false;
+let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
 
 export function isWakeLockSupported(): boolean {
   return 'wakeLock' in navigator;
@@ -45,6 +46,7 @@ export async function startTracking(projectId: string, sessionId: string | null 
     try {
         const trackId = uuid();
         const now = new Date().toISOString();
+        pointsBuffer = [];
 
         const colors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
@@ -72,9 +74,6 @@ export async function startTracking(projectId: string, sessionId: string | null 
             async (pos) => {
                 if (!currentTrackId) return;
 
-                const track = await db.tracks.get(currentTrackId);
-                if (!track) return;
-
                 const newPoint = {
                     lat: pos.coords.latitude,
                     lon: pos.coords.longitude,
@@ -83,10 +82,11 @@ export async function startTracking(projectId: string, sessionId: string | null 
                 };
 
                 // Only add if accuracy is decent (< 50m) OR it's the first point
-                if (pos.coords.accuracy > 50 && track.points.length > 0) return;
+                if (pos.coords.accuracy > 50 && pointsBuffer.length > 0) return;
 
+                pointsBuffer.push(newPoint);
                 await db.tracks.update(currentTrackId, {
-                    points: [...track.points, newPoint],
+                    points: pointsBuffer,
                     updatedAt: new Date().toISOString()
                 });
             },
@@ -121,6 +121,7 @@ export async function stopTracking() {
         });
         currentTrackId = null;
     }
+    pointsBuffer = [];
 
     await releaseWakeLock();
 }
