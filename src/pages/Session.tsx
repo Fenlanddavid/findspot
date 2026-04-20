@@ -705,7 +705,7 @@ export default function SessionPage(props: {
                                         </button>
                                     )}
                                 </div>
-                                {isTracking && !isWakeLockSupported() && (
+                                {isTracking && (
                                     <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">
                                         ⚠️ Keep your screen on — locking it will stop GPS recording
                                     </p>

@@ -11,14 +11,9 @@ export function TrackingOverlay({ isVisible, onClose, wakeLockSupported }: Track
 
   return (
     <div className="fixed inset-0 bg-black text-white z-[9999] flex flex-col items-center justify-center p-8 text-center select-none overflow-hidden">
-      {!wakeLockSupported && (
-        <div className="absolute top-0 left-0 right-0 bg-amber-500 text-black px-4 py-3 flex items-center justify-center gap-2">
-          <span className="text-base">⚠️</span>
-          <p className="text-[11px] font-black uppercase tracking-widest">
-            Keep your screen on — locking it will stop GPS recording
-          </p>
-        </div>
-      )}
+      <p className="absolute top-6 text-[10px] font-bold text-amber-400 tracking-widest">
+        ⚠️ Keep your screen on — locking it will stop GPS recording
+      </p>
 
       <div className="max-w-xs opacity-40">
         <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-800">
