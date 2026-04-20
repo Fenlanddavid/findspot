@@ -21,6 +21,7 @@ export default function Home(props: {
 }) {
   const nav = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [eggComplete, setEggComplete] = useState(false);
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
@@ -423,7 +424,20 @@ export default function Home(props: {
                         type="text"
                         placeholder="Search permissions..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSearchQuery(val);
+                          if (
+                            val.toLowerCase() === 'spot' &&
+                            localStorage.getItem('easter_stage_2_complete')
+                          ) {
+                            localStorage.setItem('easter_complete', 'true');
+                            if (!eggComplete) {
+                              setEggComplete(true);
+                              setTimeout(() => setEggComplete(false), 10000);
+                            }
+                          }
+                        }}
                         className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-400/40 focus:border-emerald-400 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] outline-none transition-all"
                     />
                 </div>
@@ -434,7 +448,17 @@ export default function Home(props: {
         
         {(!filteredPermissions || filteredPermissions.length === 0) && (
             <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
-                {searchQuery ? (
+                {searchQuery && eggComplete ? (
+                    <div>
+                      <p className="text-[11px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                        Signal confirmed.<br />
+                        <span className="opacity-80">You've completed what most won't.</span>
+                      </p>
+                      <p className="mt-3 font-black text-base tracking-[0.15em] text-emerald-600 dark:text-emerald-300">
+                        Code: FEN-54
+                      </p>
+                    </div>
+                ) : searchQuery ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-3">

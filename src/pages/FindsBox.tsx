@@ -9,6 +9,18 @@ export default function FindsBox(props: { projectId: string }) {
   const navigate = useNavigate();
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [eggVisible, setEggVisible] = useState(false);
+
+  function handleFindWordTap() {
+    if (!localStorage.getItem('easter_stage_1_complete')) return;
+    if (eggVisible) return;
+    const shown = parseInt(localStorage.getItem('easter_stage_2_shown') ?? '0', 10);
+    if (shown >= 2) return;
+    localStorage.setItem('easter_stage_2_complete', 'true');
+    localStorage.setItem('easter_stage_2_shown', String(shown + 1));
+    setEggVisible(true);
+    setTimeout(() => setEggVisible(false), 9000);
+  }
 
   const finds = useLiveQuery(
     async () => {
@@ -95,8 +107,24 @@ export default function FindsBox(props: { projectId: string }) {
           <h1 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">Top Finds</h1>
         </div>
         <p className="text-gray-500 dark:text-gray-400 font-medium max-w-xl leading-relaxed">
-          Tap the star on any find to showcase it here.
+          Tap the star on any{' '}
+          <span onClick={handleFindWordTap} className="cursor-default">find</span>
+          {' '}to showcase it here.
         </p>
+        <div
+          className="overflow-hidden transition-all duration-700 ease-in-out"
+          style={{ maxHeight: eggVisible ? '120px' : '0px', opacity: eggVisible ? 1 : 0 }}
+        >
+          <div className="mt-3 px-3 py-2 rounded-lg border border-emerald-400/30 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-950/40">
+            <p className="text-[10px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
+              You're closer than most.<br />
+              <br />
+              <span className="opacity-70">But this isn't complete.</span><br />
+              <br />
+              <span className="opacity-60">Not everything has been said yet.</span>
+            </p>
+          </div>
+        </div>
       </header>
 
       {(!finds || finds.length === 0) ? (

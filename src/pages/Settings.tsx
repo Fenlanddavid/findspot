@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting, exportData, importData, exportToCSV } from "../services/data";
 
 const POPULAR_MODELS = [
@@ -50,7 +50,8 @@ export default function Settings() {
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
+  const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'clue'>('idle');
+  const tapSeqRef = useRef<number[]>([]);
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -208,6 +209,22 @@ export default function Settings() {
     } catch (e) {
       setDataError("Import failed: " + e);
       setImporting(false);
+    }
+  }
+
+  function handleCounterClick() {
+    if (eggPhase !== 'idle') return;
+    const now = Date.now();
+    tapSeqRef.current.push(now);
+    tapSeqRef.current = tapSeqRef.current.filter(t => now - t <= 2500);
+    const count = tapSeqRef.current.length;
+    if (count > 8) { tapSeqRef.current = []; return; }
+    if (count >= 6) {
+      tapSeqRef.current = [];
+      localStorage.setItem('easter_stage_1_complete', 'true');
+      setEggPhase('signal');
+      setTimeout(() => setEggPhase('clue'), 3500);
+      setTimeout(() => setEggPhase('idle'), 10000);
     }
   }
 
@@ -569,12 +586,7 @@ export default function Settings() {
           <div className="mt-2 flex flex-col items-end pr-2 gap-1">
             <div
               className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity cursor-default"
-              onClick={() => {
-                if (eggPhase !== 'idle') return;
-                setEggPhase('signal');
-                setTimeout(() => setEggPhase('mission'), 3500);
-                setTimeout(() => setEggPhase('idle'), 9000);
-              }}
+              onClick={handleCounterClick}
             >
               <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
               <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
@@ -592,21 +604,15 @@ export default function Settings() {
             </div>
             <div
               className="overflow-hidden transition-all duration-700 ease-in-out"
-              style={{ maxHeight: eggPhase === 'mission' ? '80px' : '0px', opacity: eggPhase === 'mission' ? 1 : 0 }}
+              style={{ maxHeight: eggPhase === 'clue' ? '120px' : '0px', opacity: eggPhase === 'clue' ? 1 : 0 }}
             >
               <div className="mt-1 px-3 py-2 rounded-lg border border-emerald-400/30 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-950/40 text-right">
                 <p className="text-[10px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                  Leave a{' '}
-                  <a
-                    href="https://www.facebook.com/FindSpot/posts/pfbid02bQuUYmHua9Hg82jiL7bL3rjfaBHUcNAxZb9gKn9N5XtGXuidHFdzczPcGL5iVyXml"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline underline-offset-2"
-                  >
-                    "Signal detected"
-                  </a>
-                  {' '}comment.<br />
-                  <span className="opacity-70">You know where to find it.</span>
+                  First signal found.<br />
+                  <br />
+                  <span className="opacity-70">Keep looking.</span><br />
+                  <br />
+                  <span className="opacity-60">Some things are marked.</span>
                 </p>
               </div>
             </div>
