@@ -74,7 +74,7 @@ function Shell() {
       try {
         const isInstalled = localStorage.getItem("fs_installed");
         if (!isInstalled) {
-          await fetch("https://api.counterapi.dev/v1/findspot-uk/installs/up");
+          await fetch("https://findspot-counter.trials-uk.workers.dev/up");
           localStorage.setItem("fs_installed", "true");
         }
       } catch (e) {

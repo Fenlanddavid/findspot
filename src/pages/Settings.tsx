@@ -76,7 +76,7 @@ export default function Settings() {
     // Fetch Community Stats — non-critical, abort after 5s
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    fetch("https://api.counterapi.dev/v1/findspot-uk/installs/", { signal: controller.signal })
+    fetch("https://findspot-counter.trials-uk.workers.dev/count", { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
         clearTimeout(timeoutId);
