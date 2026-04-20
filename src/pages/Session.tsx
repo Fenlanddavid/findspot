@@ -159,6 +159,10 @@ export default function SessionPage(props: {
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
 
+  const [showTrimUI, setShowTrimUI] = useState(false);
+  const [trimStartMins, setTrimStartMins] = useState(0);
+  const [trimEndMins, setTrimEndMins] = useState(0);
+  const [trimming, setTrimming] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null });
   const [showFieldReport, setShowFieldReport] = useState(false);
@@ -632,6 +636,28 @@ export default function SessionPage(props: {
     setShowSummary(true);
   }
 
+  async function applyTrim() {
+    if (!tracks || tracks.length === 0) return;
+    setTrimming(true);
+    try {
+      for (const track of tracks) {
+        if (!track.points || track.points.length < 2) continue;
+        const sorted = [...track.points].sort((a, b) => a.timestamp - b.timestamp);
+        const first = sorted[0].timestamp;
+        const last = sorted[sorted.length - 1].timestamp;
+        const startCut = first + trimStartMins * 60 * 1000;
+        const endCut = last - trimEndMins * 60 * 1000;
+        const trimmed = sorted.filter(p => p.timestamp >= startCut && p.timestamp <= endCut);
+        await db.tracks.update(track.id, { points: trimmed, updatedAt: new Date().toISOString() });
+      }
+      setTrimStartMins(0);
+      setTrimEndMins(0);
+      setShowTrimUI(false);
+    } finally {
+      setTrimming(false);
+    }
+  }
+
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
@@ -918,6 +944,15 @@ export default function SessionPage(props: {
                                         )}
                                     </button>
                                 )}
+                                {isFinished && tracks && tracks.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowTrimUI(!showTrimUI)}
+                                        className={`px-3 py-1 rounded-lg font-bold text-[10px] border transition-all ${showTrimUI ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400'}`}
+                                    >
+                                        ✂️ Trim
+                                    </button>
+                                )}
                                 {tracks && tracks.map(t => (
                                     <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] font-bold">
                                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
@@ -937,6 +972,61 @@ export default function SessionPage(props: {
                                 </div>
                             )}
                         </div>
+
+                        {/* Trim panel */}
+                        {showTrimUI && isFinished && (
+                          <div className="mt-3 p-4 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col gap-4">
+                            {(() => {
+                              const allPts = (tracks || []).flatMap(t => t.points || []).sort((a, b) => a.timestamp - b.timestamp);
+                              const totalMins = allPts.length > 1 ? Math.round((allPts[allPts.length - 1].timestamp - allPts[0].timestamp) / 60000) : 0;
+                              const remainMins = Math.max(0, totalMins - trimStartMins - trimEndMins);
+                              return (
+                                <>
+                                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                                    <span>Track: {totalMins}m total</span>
+                                    <span className={remainMins < 5 ? 'text-red-500 font-bold' : 'text-emerald-500 font-bold'}>→ {remainMins}m after trim</span>
+                                  </div>
+                                  <div className="grid gap-3">
+                                    {[{ label: 'Remove from start', value: trimStartMins, set: setTrimStartMins }, { label: 'Remove from end', value: trimEndMins, set: setTrimEndMins }].map(({ label, value, set }) => (
+                                      <div key={label}>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1.5">{label} {value > 0 && <span className="text-amber-500">— {value}m</span>}</p>
+                                        <div className="flex gap-1.5">
+                                          {[0, 5, 10, 15, 30].map(m => (
+                                            <button
+                                              key={m}
+                                              type="button"
+                                              onClick={() => set(m)}
+                                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black border transition-all ${value === m ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-400'}`}
+                                            >
+                                              {m === 0 ? 'None' : `${m}m`}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={applyTrim}
+                                      disabled={trimming || (trimStartMins === 0 && trimEndMins === 0) || remainMins < 1}
+                                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition-all"
+                                    >
+                                      {trimming ? 'Trimming…' : 'Apply Trim'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setShowTrimUI(false); setTrimStartMins(0); setTrimEndMins(0); }}
+                                      className="px-4 bg-gray-100 dark:bg-gray-800 text-gray-500 font-black text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition-all"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
                     </div>
                 )}
             </div>
