@@ -14,6 +14,24 @@ export interface Interpretation {
     strategy:  string;
 }
 
+// ─── Hotspot signal strength (display only — mirrors targetInterpreter) ────────
+
+export type HotspotSignalStrength = 'Strong Zone' | 'Moderate Zone' | 'Developing Zone';
+
+export function getHotspotSignalStrength(score: number): HotspotSignalStrength {
+    if (score >= 75) return 'Strong Zone';
+    if (score >= 50) return 'Moderate Zone';
+    return 'Developing Zone';
+}
+
+export function getHotspotHook(strength: HotspotSignalStrength): string {
+    switch (strength) {
+        case 'Strong Zone':     return 'Strong alignment across the area — begin in this area';
+        case 'Moderate Zone':   return 'Signals align across this area — worth working through';
+        case 'Developing Zone': return 'Weaker alignment — use to guide wider coverage';
+    }
+}
+
 // ─── Confidence tier (internal — simplified from Hotspot confidence labels) ───
 
 type ConfidenceTier = 'High' | 'Strong' | 'Moderate' | 'Low';

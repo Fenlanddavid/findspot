@@ -16,7 +16,8 @@ import {
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
-import { buildInterpretation, getInterpretationLabel } from '../utils/hotspotInterpreter';
+import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getHotspotHook, HotspotSignalStrength } from '../utils/hotspotInterpreter';
+import { buildTargetInterpretation, TargetSignalStrength } from '../utils/targetInterpreter';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -48,12 +49,12 @@ const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
     'Route-Side Activity Zone':    'Movement Corridor',
     'Terrain Structure Candidate': 'Structural Feature',
     'Spectral Activity Candidate': 'Cropmark Signal',
-    'Lowland Activity Zone':       'Lowland Activity',
-    'Raised Activity Area':        'Raised Activity',
+    'Lowland Activity Zone':       'Lowland Activity Zone',
+    'Raised Activity Area':        'Raised Activity Area',
     'Route-Influenced Area':       'Route-Influenced Area',
-    'Cropmark Activity Zone':      'Cropmark Activity',
-    'Multi-Signal Activity Zone':  'Multi-Signal Activity',
-    'General Activity Zone':       'Activity Zone',
+    'Cropmark Activity Zone':      'Cropmark Activity Zone',
+    'Multi-Signal Activity Zone':  'Multi-Signal Activity Zone',
+    'General Activity Zone':       'Supporting Activity Zone',
 };
 
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
@@ -160,6 +161,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
+    const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
     const [showPermissionPicker,   setShowPermissionPicker]   = useState(false);
 
     // PAS / intel state
@@ -257,6 +259,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSelectedId(null);
         setSelectedHotspotId(null);
         setShowSuggestion(false);
+        setShowPermissionPicker(false);
         setScanStatus('');
         setSystemLog([makeLog('SYSTEM CLEARED. Ready for new scan.')]);
         setPasFinds([]);
@@ -401,6 +404,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
         }
     }, [selectedId]);
+
+    useEffect(() => {
+        setShowPermissionPicker(false);
+    }, [selectedHotspotId]);
 
     // ─── GPS / search ─────────────────────────────────────────────────────────
 
@@ -619,23 +626,30 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {/* Mobile Hotspot Card Popup */}
                     {selectedHotspotId && !historicMode && (
                         <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-                            {hotspots.filter(h => h.id === selectedHotspotId).map(h => (
-                                <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl transition-all ${h.confidence === 'High Probability' ? 'bg-slate-900 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : h.confidence === 'Strong Signal' ? 'bg-slate-900 border-emerald-500/50' : 'bg-slate-900 border-white/20'}`}>
+                            {hotspots.filter(h => h.id === selectedHotspotId).map(h => {
+                                const hStrength = getHotspotSignalStrength(h.score);
+                                const hHook = getHotspotHook(hStrength);
+                                const hBorder = hStrength === 'Strong Zone' ? 'bg-slate-900 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : hStrength === 'Moderate Zone' ? 'bg-slate-900 border-emerald-500/50' : 'bg-slate-900 border-white/20';
+                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
+                                return (
+                                <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl transition-all ${hBorder}`}>
+                                    <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Hotspot {h.number}</p>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex-1 min-w-0 pr-3">
-                                            <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1">Hotspot {h.number}</p>
+                                            {/* 1. Title */}
                                             <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{HOTSPOT_TITLES[h.classification]}</h3>
-                                            <p className="text-[10px] text-white/50 mb-2 leading-tight">{h.classificationReason}</p>
-                                            <p className="text-[11px] font-medium leading-snug">
-                                                <span className={h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/60' : 'text-white/40'}>{getPotentialTier(h.score)}</span>
-                                                <span className="text-white/20 mx-1">·</span>
-                                                <span className={h.confidence === 'High Probability' ? 'text-amber-300/70' : h.confidence === 'Strong Signal' ? 'text-emerald-300/70' : 'text-white/40'}>{h.confidence}</span>
-                                                {h.secondaryTag && <><span className="text-white/20 mx-1.5">·</span><span className="text-amber-300/60">{h.secondaryTag}</span></>}
-                                            </p>
-                                            {(h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
-                                                <div className="flex items-center gap-2.5 flex-wrap mt-1.5">
+                                            {/* 2. Signal strength */}
+                                            <p className={`text-[11px] font-black mb-1 ${hStrengthColour}`}>{hStrength}</p>
+                                            {/* 3. Hook */}
+                                            <p className="text-[11px] font-bold text-white/70 leading-snug mb-2">{hHook}</p>
+                                            {/* 4. classificationReason — muted, below hook */}
+                                            {h.classificationReason && <p className="text-[9px] text-white/35 leading-tight mb-1.5">{h.classificationReason}</p>}
+                                            {/* 5. Meta badges */}
+                                            {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
+                                                <div className="flex items-center gap-2.5 flex-wrap mt-1">
+                                                    {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/50 uppercase tracking-widest">{h.secondaryTag}</span>}
                                                     {h.isOnCorridor && <span className="text-[8px] font-bold text-emerald-500/50 uppercase tracking-widest">On corridor</span>}
-                                                    {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">{h.linkedCount} linked</span>}
+                                                    {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                                 </div>
                                             )}
                                             {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest mt-1.5 block">DETECT HERE</span>}
@@ -650,7 +664,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="border-t border-white/8 pt-3 mb-3">
-                                        <p className="text-[8px] font-medium text-white/65 mb-2.5">What the data shows</p>
+                                        <p className="text-[8px] font-medium text-white/65 mb-2.5">Why this matters</p>
                                         <div className="space-y-2">
                                             {h.explanation.slice(0, 3).map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
@@ -662,7 +676,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                     {h.suggestedFocus && (
                                         <div className="mt-3 pt-3 border-t border-emerald-500/15">
-                                            <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus Area</p>
+                                            <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus area</p>
                                             <p className="text-[11px] font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                         </div>
                                     )}
@@ -671,7 +685,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
                                             className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
                                         >
-                                            {expandedInterpretationId === h.id ? '▲ Hide explanation' : '▼ Explain this'}
+                                            {expandedInterpretationId === h.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
@@ -701,7 +715,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     onClick={() => nav('/permission')}
                                                     className="w-full border border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-400 hover:text-emerald-300 font-bold py-2 rounded-xl text-[10px] uppercase tracking-widest transition-all"
                                                 >
-                                                    Add a Permission to Start Sessions
+                                                    Add a permission to start a session
                                                 </button>
                                                 <p className="text-[8px] text-white/30 mt-1.5">Sessions track your visit and field coverage</p>
                                             </div>
@@ -713,6 +727,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 >
                                                     {activeSession ? 'Continue Session' : 'Start Session Here'}
                                                 </button>
+                                                {activeSession && (() => {
+                                                    const sessionPermission = permissions.find(p => p.id === activeSession.permissionId);
+                                                    const sessionDate = new Date(activeSession.date);
+                                                    const today = new Date();
+                                                    const isToday = sessionDate.toDateString() === today.toDateString();
+                                                    const dateLabel = isToday ? 'Today' : sessionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                                                    return (
+                                                        <p className="text-[9px] text-white/35 text-center mt-1.5">
+                                                            {sessionPermission?.name || 'Unknown permission'} · {dateLabel}
+                                                        </p>
+                                                    );
+                                                })()}
                                                 {showPermissionPicker && !activeSession && realPermissions.length > 1 && (
                                                     <div className="mt-2 flex flex-col gap-1.5 animate-in fade-in slide-in-from-top-2 duration-150">
                                                         <p className="text-[8px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
@@ -732,105 +758,128 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                     <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
                     {/* Mobile Target Card Popup */}
                     {selectedId && !selectedHotspotId && (
                         <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-                            {detectedFeatures.filter(f => f.id === selectedId).map(f => (
-                                <div key={f.id} className={`p-4 rounded-2xl border shadow-2xl transition-all ${f.sources.length >= 3 ? 'bg-amber-600 border-yellow-300 text-white shadow-[0_0_30px_rgba(217,119,6,0.5)]' : f.sources.includes('hydrology') ? 'bg-blue-600 border-white text-white' : f.source === 'terrain' ? 'bg-emerald-500 border-white text-white' : f.source === 'historic' ? 'bg-slate-700 border-white text-white' : 'bg-sky-500 border-white text-white'}`}>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 bg-black/20 rounded-lg flex items-center justify-center text-[10px] font-black">{f.number}</div>
-                                            <h3 className="text-xs font-black uppercase tracking-tight">{f.type}</h3>
+                            {detectedFeatures.filter(f => f.id === selectedId).map(f => {
+                                const tInterp = buildTargetInterpretation(f);
+                                const strengthColour: Record<TargetSignalStrength, string> = {
+                                    'Strong Signal':     'text-amber-400',
+                                    'Moderate Signal':   'text-emerald-400',
+                                    'Supporting Signal': 'text-white/40',
+                                };
+                                const borderColour: Record<TargetSignalStrength, string> = {
+                                    'Strong Signal':     'border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]',
+                                    'Moderate Signal':   'border-emerald-500/50',
+                                    'Supporting Signal': 'border-white/20',
+                                };
+                                return (
+                                    <div key={f.id} className={`p-5 rounded-3xl border-2 bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : borderColour[tInterp.signalStrength]}`}>
+                                        {/* Centred target label */}
+                                        <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Target {f.number}</p>
+                                        {/* Header */}
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex-1 min-w-0 pr-3">
+                                                <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
+                                                {!f.isProtected && <p className={`text-[11px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
+                                            </div>
+                                            <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            </button>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10 shadow-lg">
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                        </button>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 mb-4">
-                                        <div className="bg-black/20 p-2 rounded-xl flex flex-col items-center justify-center">
-                                            <span className="block text-[8px] uppercase font-bold opacity-70 mb-2">Signal Sources</span>
-                                            <div className="flex flex-col gap-1 w-full px-1">
-                                                {[
-                                                    { ids: ['terrain', 'terrain_global'], label: 'Lidar' },
-                                                    { ids: ['slope'], label: 'Slope / LRM' },
-                                                    { ids: ['hydrology'], label: 'Hydrology' },
-                                                    { ids: ['satellite', 'satellite_spring', 'satellite_summer'], label: 'Aerial' },
-                                                    { ids: ['historic'], label: 'Historic' }
-                                                ].map(s => (
-                                                    <div key={s.label} className="flex items-center justify-between w-full">
-                                                        <span className="text-[8px] font-black uppercase tracking-tighter">{s.label}</span>
-                                                        <div className={`w-2 h-2 rounded-full border border-white/10 ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-black/40'}`} />
+                                        {f.isProtected ? (
+                                            /* Protected monument — no detecting guidance shown */
+                                            <div className="border-t border-red-500/20 pt-3 space-y-3">
+                                                <div className="p-3 bg-red-600/20 rounded-2xl border border-red-500/50 text-center">
+                                                    <p className="text-[11px] font-black uppercase tracking-widest text-red-300 mb-1">⚠️ Scheduled Monument</p>
+                                                    <p className="text-[10px] text-red-200/70 leading-snug">Detecting on or near this site is illegal. Do not disturb.</p>
+                                                </div>
+                                                {f.aimInfo && (
+                                                    <div className="p-2 rounded-xl border bg-white/5 border-white/10">
+                                                        <p className="text-[9px] font-black uppercase text-white/40 leading-tight mb-0.5">Site type</p>
+                                                        <p className="text-[10px] font-bold text-white/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <div className="bg-black/20 p-2 rounded-xl">
-                                                <span className="block text-[8px] uppercase font-bold opacity-70">Confidence</span>
-                                                <span className="text-[10px] font-black uppercase tracking-widest">Confidence: {f.confidence}</span>
-                                            </div>
-                                            <div className={`p-2 rounded-xl border ${(f.persistenceScore || 0) > 70 ? 'bg-emerald-500/20 border-emerald-400' : (f.persistenceScore || 0) > 40 ? 'bg-amber-500/20 border-amber-400' : 'bg-slate-500/20 border-slate-400'}`}>
-                                                <span className="block text-[8px] uppercase font-bold opacity-70">Persistence</span>
-                                                <span className={`text-[10px] font-black uppercase tracking-widest ${(f.persistenceScore || 0) > 70 ? 'text-emerald-400' : (f.persistenceScore || 0) > 40 ? 'text-amber-400' : 'text-slate-400'}`}>
-                                                    {(f.persistenceScore || 0) > 70 ? 'High' : (f.persistenceScore || 0) > 40 ? 'Medium' : 'Low'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2 px-1">
-                                        {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
-                                            <div className={`p-2 rounded-xl border mb-2 ${f.disturbanceRisk === 'High' ? 'bg-red-500/20 border-red-400' : 'bg-amber-500/20 border-amber-400'}`}>
-                                                <p className="m-0 text-[9px] font-black uppercase text-red-300 leading-tight">Modern Disturbance Risk: {f.disturbanceRisk}</p>
-                                                <p className="m-0 text-[10px] font-bold text-white tracking-tight">{f.disturbanceReason}</p>
-                                            </div>
-                                        )}
-                                        {f.contextLabel && (
-                                            <div className="bg-emerald-400/20 p-2 rounded-xl border border-emerald-400/30 mb-2">
-                                                <p className="m-0 text-[9px] font-black uppercase text-emerald-300 leading-tight">Settlement Context:</p>
-                                                <p className="m-0 text-[10px] font-bold text-white tracking-tight">{f.contextLabel}</p>
-                                            </div>
-                                        )}
-                                        {f.aimInfo && (
-                                            <div className="bg-amber-400/20 p-2 rounded-xl border border-amber-400/30 mb-2">
-                                                <p className="m-0 text-[9px] font-black uppercase text-amber-200 leading-tight">Historic Verification:</p>
-                                                <p className="m-0 text-[10px] font-bold text-white tracking-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
-                                            </div>
-                                        )}
-                                        {f.isHighConfidenceCrossing && (
-                                            <div className="bg-blue-600/40 p-2 rounded-xl border border-blue-400 mb-2 animate-pulse">
-                                                <p className="m-0 text-[10px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
-                                            </div>
-                                        )}
-                                        {f.explanationLines && f.explanationLines.length > 0 && (
-                                            <div className="mt-2 mb-3 space-y-1 bg-black/20 p-2 rounded-xl border border-white/5">
-                                                {f.explanationLines.map((line, idx) => (
-                                                    <div key={idx} className="flex items-center gap-1.5">
-                                                        <div className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" />
-                                                        <p className="text-[9px] font-bold text-emerald-100/80 leading-tight uppercase italic">{line}</p>
+                                        ) : (
+                                            <>
+                                                {/* Hook */}
+                                                <p className="text-[12px] font-bold text-white/80 leading-snug mb-3">{tInterp.hook}</p>
+                                                {/* Crossing badge */}
+                                                {f.isHighConfidenceCrossing && (
+                                                    <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-3 animate-pulse">
+                                                        <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
                                                     </div>
-                                                ))}
-                                            </div>
+                                                )}
+                                                {/* Why this matters */}
+                                                <div className="border-t border-white/8 pt-3 mb-3">
+                                                    <p className="text-[8px] font-medium text-white/65 mb-2.5">Why this matters</p>
+                                                    {f.explanationLines && f.explanationLines.length > 0 ? (
+                                                        <div className="space-y-2">
+                                                            {f.explanationLines.slice(0, 3).map((line, idx) => (
+                                                                <div key={idx} className="flex items-start gap-3">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                                                                    <p className="text-xs font-bold text-white leading-tight flex-1">{line}</p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-xs text-white/50 leading-tight">Signal detected across available scan sources.</p>
+                                                    )}
+                                                    {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
+                                                        <div className={`mt-3 p-2 rounded-xl border ${f.disturbanceRisk === 'High' ? 'bg-red-500/20 border-red-400/50' : 'bg-amber-500/20 border-amber-400/50'}`}>
+                                                            <p className={`text-[9px] font-black uppercase leading-tight mb-0.5 ${f.disturbanceRisk === 'High' ? 'text-red-300' : 'text-amber-300'}`}>Disturbance risk: {f.disturbanceRisk}</p>
+                                                            <p className="text-[10px] font-bold text-white/80 leading-tight">{f.disturbanceReason}</p>
+                                                        </div>
+                                                    )}
+                                                    {f.aimInfo && (
+                                                        <div className="mt-2 p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
+                                                            <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Historic verification</p>
+                                                            <p className="text-[10px] font-bold text-white/80 leading-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {/* Focus area */}
+                                                <div className="mt-3 pt-3 border-t border-emerald-500/15">
+                                                    <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus area</p>
+                                                    <p className="text-[11px] font-bold text-emerald-300 leading-snug">{tInterp.focus}</p>
+                                                </div>
+                                                {/* Expand toggle */}
+                                                <div className="mt-3 pt-3 border-t border-white/8">
+                                                    <span
+                                                        onClick={() => setExpandedTargetId(expandedTargetId === f.id ? null : f.id)}
+                                                        className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
+                                                    >
+                                                        {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                                    </span>
+                                                    {expandedTargetId === f.id && (
+                                                        <div className="mt-4 space-y-4 animate-in fade-in duration-200">
+                                                            <div>
+                                                                <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
+                                                                <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.summary}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
+                                                                <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.whyItStandsOut}</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
+                                                                <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.howToApproach}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
                                         )}
-                                        <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide">
-                                            Signal Profile: <span className="font-black">{f.polarity || 'Unknown'}</span>
-                                        </p>
-                                        <div className="flex items-center gap-3">
-                                            <p className="m-0 text-[10px] font-bold uppercase opacity-80 tracking-wide whitespace-nowrap">Potential Index:</p>
-                                            <div className="flex-1 h-1.5 bg-black/40 rounded-full overflow-hidden flex items-center">
-                                                <div className="h-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)] transition-all duration-1000" style={{ width: `${f.findPotential}%` }} />
-                                            </div>
-                                            <span className="text-[10px] font-black text-white">{Math.round(f.findPotential)}</span>
-                                        </div>
-                                        <p className="text-[7px] text-white/40 italic text-right">relative score</p>
+                                        <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                     </div>
-                                    {f.isProtected && <div className="mt-4 p-1.5 bg-red-600/40 rounded-lg text-[8px] font-black uppercase tracking-widest text-center border border-red-400">⚠️ Protected Monument</div>}
-                                    <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
@@ -1129,7 +1178,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             {selectedHotspotId && <button onClick={() => setSelectedHotspotId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
                         </div>
                         <div className="flex flex-col gap-4">
-                            {hotspots.length > 0 ? hotspots.map(h => (
+                            {hotspots.length > 0 ? hotspots.map(h => {
+                                const hStrength = getHotspotSignalStrength(h.score);
+                                const hHook = getHotspotHook(hStrength);
+                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
+                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : hStrength === 'Moderate Zone' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20';
+                                return (
                                 <div
                                     key={h.id}
                                     onClick={() => {
@@ -1137,23 +1191,28 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         setSelectedHotspotId(h.id);
                                         mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                     }}
-                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : h.confidence === 'High Probability' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : h.confidence === 'Strong Signal' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
+                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/10 border-white ring-4 ring-white/10' : hBorderIdle}`}
                                 >
                                     <div className="mb-3">
-                                        <div className="flex justify-between items-start mb-0.5">
+                                        {/* 1. Title */}
+                                        <div className="flex justify-between items-start mb-1">
                                             <h3 className={`text-[10px] font-black tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{HOTSPOT_TITLES[h.classification]}</h3>
-                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                {showSuggestion && h.number === 1 && <span className="text-[7px] font-black text-emerald-400 animate-pulse tracking-widest">DETECT HERE</span>}
-                                                <span className={`text-[8px] font-black tracking-tight ${h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/50' : 'text-slate-500'}`}>{getPotentialTierShort(h.score)}</span>
-                                            </div>
+                                            {showSuggestion && h.number === 1 && <span className="text-[7px] font-black text-emerald-400 animate-pulse tracking-widest flex-shrink-0">DETECT HERE</span>}
                                         </div>
-                                        <p className="text-[9px] text-white/45 mb-1.5 leading-tight">{h.classificationReason}</p>
-                                        <p className="text-[10px] font-medium leading-snug mb-2">
-                                            <span className={h.score > 80 ? 'text-amber-400' : h.score > 60 ? 'text-emerald-400' : h.score > 35 ? 'text-white/60' : 'text-white/40'}>{getPotentialTier(h.score)}</span>
-                                            <span className="text-white/20 mx-1">·</span>
-                                            <span className={h.confidence === 'High Probability' ? 'text-amber-300/70' : h.confidence === 'Strong Signal' ? 'text-emerald-300/70' : 'text-white/40'}>{h.confidence}</span>
-                                            {h.secondaryTag && <><span className="text-white/20 mx-1.5">·</span><span className="text-amber-300/60">{h.secondaryTag}</span></>}
-                                        </p>
+                                        {/* 2. Signal strength */}
+                                        <p className={`text-[9px] font-black mb-0.5 ${hStrengthColour}`}>{hStrength}</p>
+                                        {/* 3. Hook */}
+                                        <p className="text-[9px] font-bold text-white/60 leading-snug mb-1.5">{hHook}</p>
+                                        {/* 4. classificationReason — muted, below hook */}
+                                        {h.classificationReason && <p className="text-[8px] text-white/30 leading-tight mb-1">{h.classificationReason}</p>}
+                                        {/* 5. Meta badges */}
+                                        {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
+                                            <div className="flex items-center gap-2 flex-wrap mt-1 mb-1">
+                                                {h.secondaryTag && <span className="text-[7px] font-bold text-amber-300/45 uppercase tracking-widest">{h.secondaryTag}</span>}
+                                                {h.isOnCorridor && <span className="text-[7px] font-bold text-emerald-500/45 uppercase tracking-widest">On corridor</span>}
+                                                {(h.linkedCount ?? 0) > 0 && <span className="text-[7px] font-bold text-white/25 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
+                                            </div>
+                                        )}
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-3 animate-pulse">
@@ -1161,7 +1220,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="space-y-1.5 mt-3">
-                                        <p className="text-[7px] font-medium text-white/25 mb-1.5">What the data shows</p>
+                                        <p className="text-[7px] font-medium text-white/25 mb-1.5">Why this matters</p>
                                         {h.explanation.slice(0, 3).map((reason, idx) => (
                                             <div key={idx} className="flex items-center gap-2">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
@@ -1183,7 +1242,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
                                             className="text-[10px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
                                         >
-                                            {expandedInterpretationId === h.id ? '▲ Hide' : '▼ Explain this'}
+                                            {expandedInterpretationId === h.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
@@ -1213,7 +1272,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     onClick={(e) => { e.stopPropagation(); nav('/permission'); }}
                                                     className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
                                                 >
-                                                    Add a Permission to Start Sessions
+                                                    Add a permission to start a session
                                                 </button>
                                                 <p className="text-[7px] text-white/25 mt-1">Sessions track your visit and field coverage</p>
                                             </div>
@@ -1225,6 +1284,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 >
                                                     {activeSession ? 'Continue Session' : 'Start Session Here'}
                                                 </button>
+                                                {activeSession && (() => {
+                                                    const sessionPermission = permissions.find(p => p.id === activeSession.permissionId);
+                                                    const sessionDate = new Date(activeSession.date);
+                                                    const today = new Date();
+                                                    const isToday = sessionDate.toDateString() === today.toDateString();
+                                                    const dateLabel = isToday ? 'Today' : sessionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                                                    return (
+                                                        <p className="text-[8px] text-white/30 text-center mt-1">
+                                                            {sessionPermission?.name || 'Unknown permission'} · {dateLabel}
+                                                        </p>
+                                                    );
+                                                })()}
                                                 {showPermissionPicker && !activeSession && realPermissions.length > 1 && (
                                                     <div className="mt-2 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
                                                         <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
@@ -1244,7 +1315,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     </div>
                                     <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
-                            )) : (
+                                );
+                            }) : (
                                 <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No tactical hotspots defined.</p>
                             )}
                         </div>
@@ -1259,55 +1331,117 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     </div>
 
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 scrollbar-hide space-y-4">
-                        {detectedFeatures.map((f) => (
-                            <div
-                                key={f.id}
-                                id={`card-${f.id}`}
-                                onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
-                                className={`p-5 rounded-2xl cursor-pointer transition-all border ${selectedId === f.id ? (f.sources.length >= 3 ? 'bg-amber-600 border-white shadow-[0_0_25px_rgba(217,119,6,0.6)]' : f.sources.includes('hydrology') ? 'bg-blue-600 border-white shadow-[0_0_25px_rgba(37,99,235,0.5)]' : f.source === 'terrain' ? 'bg-emerald-500 border-white shadow-[0_0_25px_rgba(16,185,129,0.5)]' : f.source === 'historic' ? 'bg-slate-700 border-white shadow-[0_0_25px_rgba(255,255,255,0.2)]' : 'bg-sky-500 border-white shadow-[0_0_25px_rgba(59,130,246,0.5)]') : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
-                            >
-                                <div className="flex justify-between items-center mb-3">
-                                    <div className="w-8 h-8 bg-black/20 rounded-lg flex items-center justify-center text-xs font-black text-white">{f.number}</div>
-                                    <div className="flex flex-col gap-0.5 items-end">
-                                        {[{ ids: ['terrain', 'terrain_global'], label: 'Lidar' }, { ids: ['slope'], label: 'Slope / LRM' }, { ids: ['hydrology'], label: 'Hydrology' }, { ids: ['satellite', 'satellite_spring', 'satellite_summer'], label: 'Aerial' }, { ids: ['historic'], label: 'Historic' }].map(s => (
-                                            <div key={s.label} className="flex items-center gap-1.5">
-                                                <span className={`text-[7px] font-black uppercase tracking-tighter ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'text-white' : 'text-white/20'}`}>{s.label}</span>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]' : 'bg-black/40'}`} />
+                        {detectedFeatures.map((f) => {
+                            const tInterp = buildTargetInterpretation(f);
+                            const isSelected = selectedId === f.id;
+                            const strengthColour: Record<TargetSignalStrength, string> = {
+                                'Strong Signal':     'text-amber-400',
+                                'Moderate Signal':   'text-emerald-400',
+                                'Supporting Signal': 'text-white/40',
+                            };
+                            return (
+                                <div
+                                    key={f.id}
+                                    id={`card-${f.id}`}
+                                    onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                    className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? 'bg-white/10 border-white ring-4 ring-white/10' : f.isProtected ? 'bg-slate-900/40 border-red-500/40 hover:border-red-500/70' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
+                                >
+                                    {/* Centred target label */}
+                                    <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-2">Target {f.number}</p>
+                                    {/* Header row: type + source dots */}
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="flex-1 min-w-0 pr-2">
+                                            <h3 className={`text-[10px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>
+                                            {!f.isProtected && <p className={`text-[9px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
+                                        </div>
+                                        <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
+                                            {[{ ids: ['terrain', 'terrain_global'], label: 'Lidar' }, { ids: ['slope'], label: 'Slope' }, { ids: ['hydrology'], label: 'Hydro' }, { ids: ['satellite', 'satellite_spring', 'satellite_summer'], label: 'Aerial' }, { ids: ['historic'], label: 'Historic' }].map(s => (
+                                                <div key={s.label} className="flex items-center gap-1">
+                                                    <span className={`text-[6px] font-black uppercase tracking-tighter ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'text-white/60' : 'text-white/15'}`}>{s.label}</span>
+                                                    <div className={`w-1 h-1 rounded-full ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.5)]' : 'bg-black/40'}`} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {f.isProtected ? (
+                                        /* Protected monument — no detecting guidance shown */
+                                        <div className="border-t border-red-500/20 pt-2 space-y-2">
+                                            <div className="p-2 bg-red-600/20 rounded-xl border border-red-500/40 text-center">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-red-300 mb-0.5">⚠️ Scheduled Monument</p>
+                                                <p className="text-[9px] text-red-200/70 leading-snug">Detecting here is illegal. Do not disturb.</p>
                                             </div>
-                                        ))}
-                                    </div>
+                                            {f.aimInfo && (
+                                                <div className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg">
+                                                    <p className="text-[8px] font-black uppercase text-white/40">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Hook */}
+                                            <p className="text-[10px] font-bold text-white/70 leading-snug mb-2">{tInterp.hook}</p>
+                                            {/* Crossing badge */}
+                                            {f.isHighConfidenceCrossing && (<div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-2 animate-pulse"><p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p></div>)}
+                                            {/* Why this matters */}
+                                            <div className="space-y-1.5 mt-2 border-t border-white/8 pt-2">
+                                                <p className="text-[7px] font-medium text-white/25 mb-1.5">Why this matters</p>
+                                                {f.explanationLines && f.explanationLines.length > 0 ? (
+                                                    f.explanationLines.slice(0, 3).map((line, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2">
+                                                            <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+                                                            <p className="text-[10px] font-bold text-slate-300 leading-tight">{line}</p>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-[10px] text-white/40 leading-tight">Signal detected across available scan sources.</p>
+                                                )}
+                                            </div>
+                                            {/* Disturbance + AIM */}
+                                            {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
+                                                <div className={`mt-2 px-2 py-1 rounded-lg border ${f.disturbanceRisk === 'High' ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
+                                                    <p className={`m-0 text-[8px] font-black uppercase ${f.disturbanceRisk === 'High' ? 'text-red-400' : 'text-amber-400'}`}>Risk: {f.disturbanceRisk} ({f.disturbanceReason})</p>
+                                                </div>
+                                            )}
+                                            {f.aimInfo && (<div className="mt-1 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg"><p className="m-0 text-[8px] font-black uppercase text-amber-400">Verified: {f.aimInfo.type} · {f.aimInfo.period}</p></div>)}
+                                            {/* Focus area */}
+                                            <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
+                                                <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
+                                                <p className="text-[9px] leading-tight">
+                                                    <span className="font-black text-emerald-500/50 uppercase tracking-widest">Focus: </span>
+                                                    <span className="font-bold text-emerald-300/80">{tInterp.focus}</span>
+                                                </p>
+                                            </div>
+                                            {/* Expand toggle */}
+                                            <div className="mt-2.5 pt-2.5 border-t border-white/5">
+                                                <span
+                                                    onClick={(e) => { e.stopPropagation(); setExpandedTargetId(expandedTargetId === f.id ? null : f.id); }}
+                                                    className="text-[10px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
+                                                >
+                                                    {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                                </span>
+                                                {expandedTargetId === f.id && (
+                                                    <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
+                                                        <div>
+                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
+                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.summary}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
+                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.whyItStandsOut}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
+                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.howToApproach}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                    <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
                                 </div>
-                                <h3 className={`text-sm font-black uppercase tracking-tight mb-1 ${selectedId === f.id ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>
-                                {f.contextLabel && (<div className="mt-1 mb-2 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg"><p className="m-0 text-[8px] font-black uppercase text-emerald-400">Context: {f.contextLabel}</p></div>)}
-                                {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
-                                    <div className={`mt-1 mb-2 px-2 py-1 rounded-lg border ${f.disturbanceRisk === 'High' ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
-                                        <p className={`m-0 text-[8px] font-black uppercase ${f.disturbanceRisk === 'High' ? 'text-red-400' : 'text-amber-400'}`}>Risk: {f.disturbanceRisk} ({f.disturbanceReason})</p>
-                                    </div>
-                                )}
-                                {f.aimInfo && (<div className="mt-1 mb-2 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg"><p className="m-0 text-[8px] font-black uppercase text-amber-400">Verified: {f.aimInfo.type}</p><p className="m-0 text-[8px] font-bold text-amber-200/70">{f.aimInfo.period}</p></div>)}
-                                {f.isHighConfidenceCrossing && (<div className="bg-blue-600/40 p-2 rounded-xl border border-blue-400 mb-2 animate-pulse"><p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p></div>)}
-                                {f.explanationLines && f.explanationLines.length > 0 && (
-                                    <div className="mt-2 mb-3 space-y-1 bg-black/20 p-2 rounded-xl border border-white/5">
-                                        {f.explanationLines.map((line, idx) => (<div key={idx} className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-emerald-400 shrink-0" /><p className="text-[9px] font-bold text-emerald-100/80 leading-tight uppercase italic">{line}</p></div>))}
-                                    </div>
-                                )}
-                                <div className="flex justify-between items-center mt-2">
-                                    <span className={`text-[10px] font-bold uppercase ${selectedId === f.id ? 'text-white/80' : 'text-slate-500'}`}>Persistence:</span>
-                                    <div className="flex items-center gap-1.5">
-                                        {f.rescanCount && f.rescanCount > 1 && (<span className="text-[7px] font-black bg-emerald-500/20 text-emerald-400 px-1 rounded border border-emerald-500/30">LOCKED x{f.rescanCount}</span>)}
-                                        <span className={`text-[10px] font-black ${(f.persistenceScore || 0) > 70 ? 'text-emerald-400' : (f.persistenceScore || 0) > 40 ? 'text-amber-400' : 'text-slate-400'}`}>
-                                            {(f.persistenceScore || 0) > 70 ? 'High' : (f.persistenceScore || 0) > 40 ? 'Medium' : 'Low'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="flex justify-between items-center mt-0.5">
-                                    <span className={`text-[10px] font-bold uppercase ${selectedId === f.id ? 'text-white/80' : 'text-slate-500'}`}>Confidence:</span>
-                                    <span className={`text-[10px] font-black ${selectedId === f.id ? 'text-white' : (f.sources.length >= 3 ? 'text-amber-400' : f.source === 'terrain' ? 'text-emerald-400' : 'text-sky-400')}`}>Confidence: {f.confidence}</span>
-                                </div>
-                                {f.isProtected && <div className="mt-3 p-2 bg-white/20 rounded-lg text-[8px] font-black text-white uppercase tracking-widest text-center">⚠️ Protected Monument</div>}
-                                <p className="text-center text-[7px] text-white italic mt-3">Highlights historic activity — not guaranteed finds.</p>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* System Log */}
