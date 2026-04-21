@@ -1047,6 +1047,11 @@ export default function Discover({ projectId }: { projectId: string }) {
     setLocationError(false);
   }
 
+  // Auto-request location on mount
+  useEffect(() => {
+    requestLocation();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fetch remote data on mount, resolving any postcode fields to lat/lon
   useEffect(() => {
     setLoadingRemote(true);
