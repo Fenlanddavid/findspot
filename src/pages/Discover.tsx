@@ -995,8 +995,14 @@ export default function Discover({ projectId }: { projectId: string }) {
   const [locationError, setLocationError] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
-  const [radius, setRadius] = useState<Radius>(25);
-  const [typeFilter, setTypeFilter] = useState<EventType | "all">("all");
+  const [radius, setRadius] = useState<Radius>(() => {
+    const v = Number(localStorage.getItem('fs_discover_radius'));
+    return (RADIUS_OPTIONS as readonly number[]).includes(v) ? v as Radius : 25;
+  });
+  const [typeFilter, setTypeFilter] = useState<EventType | "all">(() => {
+    const v = localStorage.getItem('fs_discover_type');
+    return (v === 'rally' || v === 'club_dig' || v === 'all') ? v : 'all';
+  });
 
   const [remoteEvents, setRemoteEvents] = useState<DetectingEvent[]>([]);
   const [remoteClubs, setRemoteClubs] = useState<ClubListing[]>([]);
@@ -1182,7 +1188,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         <div className="flex items-center justify-between mb-3">
           <SectionHeader>Local Clubs</SectionHeader>
           <div className="relative shrink-0 -mt-3">
-            <select value={radius} onChange={(e) => { setRadius(Number(e.target.value) as Radius); setShowAllClubs(false); }} className={selectClass}>
+            <select value={radius} onChange={(e) => { const v = Number(e.target.value) as Radius; setRadius(v); localStorage.setItem('fs_discover_radius', String(v)); setShowAllClubs(false); }} className={selectClass}>
               {RADIUS_OPTIONS.map((r) => (
                 <option key={r} value={r}>{r} miles</option>
               ))}
@@ -1239,7 +1245,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         <div className="flex items-center justify-between mb-3">
           <SectionHeader>Upcoming Events</SectionHeader>
           <div className="relative shrink-0 -mt-3">
-            <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value as EventType | "all"); setShowAllEvents(false); }} className={selectClass}>
+            <select value={typeFilter} onChange={(e) => { const v = e.target.value as EventType | "all"; setTypeFilter(v); localStorage.setItem('fs_discover_type', v); setShowAllEvents(false); }} className={selectClass}>
               {TYPE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}

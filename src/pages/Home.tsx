@@ -23,8 +23,7 @@ export default function Home(props: {
   const [searchQuery, setSearchQuery] = useState("");
   const [eggComplete, setEggComplete] = useState(false);
   const [openFindId, setOpenFindId] = useState<string | null>(null);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const [privacyExpanded, setPrivacyExpanded] = useState(false);
+const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [dismissedNextMoves, setDismissedNextMoves] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem('fs_nextmove_dismissed');
@@ -110,7 +109,9 @@ export default function Home(props: {
       items.push({
         type: 'pending',
         dismissKey: `pending:${pendingFinds.length}`,
-        message: `${pendingFinds.length} pending ${pendingFinds.length === 1 ? 'find' : 'finds'} waiting to be finished`,
+        message: pendingFinds.length === 1
+          ? 'You have a pending find to finish'
+          : `You have ${pendingFinds.length} pending finds to finish`,
         cta: 'Finish Records',
         action: () => props.goFindsWithFilter("filter=pending"),
       });
@@ -235,10 +236,10 @@ export default function Home(props: {
         <span className="text-xs shrink-0">🔒</span>
         {privacyExpanded ? (
           <p className="text-xs font-normal text-black dark:text-white m-0">
-            Your data is private. All find spots, GPS coordinates, and landowner details are stored locally on this device. Nothing is ever uploaded or shared.
+            Your data is private. All find spots, GPS coordinates, and landowner details are stored locally on this device. Nothing is ever uploaded or shared. No subscriptions. No accounts. Your data stays on this device.
           </p>
         ) : (
-          <span className="text-xs font-normal text-black dark:text-white">Your data is private</span>
+          <span className="text-xs font-normal text-black dark:text-white">Your data is private · No subscriptions · No accounts</span>
         )}
       </button>
 
@@ -290,51 +291,21 @@ export default function Home(props: {
         </div>
       )}
 
-      {pendingFinds && pendingFinds.length > 0 && (
-        <section className="bg-amber-50 dark:bg-amber-900/10 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 animate-in slide-in-from-top-4">
-            <div className="flex justify-between items-center mb-3 px-1">
-                <h3 className="text-sm font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 flex items-center gap-2">
-                    <span className="animate-pulse opacity-80">🟠</span> {pendingFinds.length} Pending Finds
-                </h3>
-                <button onClick={() => props.goFindsWithFilter("filter=pending")} className="text-[10px] font-black uppercase text-amber-600 hover:underline">View Queue</button>
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-1 px-1 [mask-image:linear-gradient(to_right,black_0,black_calc(100%-48px),transparent_100%)]">
-                {pendingFinds.map(f => (
-                    <div
-                        key={f.id}
-                        className="min-w-[140px] bg-white dark:bg-gray-800 p-3 rounded-2xl border border-amber-200 dark:border-amber-700 shadow-sm transition-all"
-                    >
-                        <div className="text-[10px] font-black text-amber-600 uppercase mb-1">{f.findCode}</div>
-                        <div className="text-[8px] opacity-40 font-mono mb-2">{new Date(f.createdAt).toLocaleDateString()} {new Date(f.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                        <button
-                            onClick={() => props.goFind(f.permissionId, f.id)}
-                            className="w-full bg-amber-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5"
-                        >Finish Record</button>
-                        <button
-                            onClick={() => db.finds.update(f.id, { isPending: false })}
-                            className="w-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight mb-1.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-600"
-                        >Save as-is</button>
-                        {confirmingDeleteId === f.id ? (
-                          <div className="flex gap-1 mt-1">
-                            <button
-                              onClick={() => { db.finds.delete(f.id); setConfirmingDeleteId(null); }}
-                              className="flex-1 bg-red-600 text-white py-1 rounded-lg text-[10px] font-black uppercase tracking-tight"
-                            >Yes</button>
-                            <button
-                              onClick={() => setConfirmingDeleteId(null)}
-                              className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight"
-                            >No</button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmingDeleteId(f.id)}
-                            className="w-full bg-transparent border border-red-200 dark:border-red-800 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 py-1 rounded-lg text-[10px] font-black uppercase tracking-tight transition-colors"
-                          >Delete</button>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </section>
+      {pendingFinds && pendingFinds.length > 0 && nextMove?.type !== 'pending' && (
+        <button
+          onClick={() => props.goFindsWithFilter("filter=pending")}
+          className="flex items-center justify-between gap-4 w-full bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3 hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="animate-pulse opacity-80 text-sm">🟠</span>
+            <span className="text-sm font-black text-amber-700 dark:text-amber-400">
+              {pendingFinds.length} pending {pendingFinds.length === 1 ? 'find' : 'finds'}
+            </span>
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
+            View Queue →
+          </span>
+        </button>
       )}
 
       {finds2026Stats && (

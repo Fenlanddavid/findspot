@@ -36,6 +36,18 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
     setError(null);
     setSaving(true);
     try {
+      // Check for duplicate field name within same permission
+      const duplicate = await db.fields
+        .where("permissionId")
+        .equals(permissionId)
+        .filter(f => f.name.trim().toLowerCase() === name.trim().toLowerCase() && f.id !== (field?.id ?? ""))
+        .first();
+      if (duplicate) {
+        setError(`A field called "${name.trim()}" already exists. Please choose a different name.`);
+        setSaving(false);
+        return;
+      }
+
       const now = new Date().toISOString();
       const id = field?.id ?? uuid();
       

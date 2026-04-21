@@ -67,9 +67,12 @@ export default function PermissionPage(props: {
   const [isPickingBoundary, setIsPickingBoundary] = useState(false);
   const [boundary, setBoundary] = useState<any | null>(null);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [coverageError, setCoverageError] = useState(false);
   const [shownFieldGapIds, setShownFieldGapIds] = useState<Set<string>>(new Set());
   const [fieldGapResults, setFieldGapResults] = useState<Map<string, CoverageResult>>(new Map());
+  const [fieldGapErrors, setFieldGapErrors] = useState<Set<string>>(new Set());
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
+  const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
   const [agreementId, setAgreementId] = useState<string | undefined>();
   const [agreementModalOpen, setAgreementModalOpen] = useState(false);
   const [proofModalOpen, setProofModalOpen] = useState(false);
@@ -216,8 +219,11 @@ export default function PermissionPage(props: {
   useEffect(() => {
     if (!showCoverage || !boundary) {
         setCoverageResult(null);
+        setCoverageError(false);
     } else {
-        setCoverageResult(calculateCoverage(boundary, allTracks || []));
+        const result = calculateCoverage(boundary, allTracks || []);
+        setCoverageResult(result);
+        setCoverageError(result === null);
     }
 
     if (shownFieldGapIds.size === 0) {
@@ -247,10 +253,13 @@ export default function PermissionPage(props: {
         return { fId, result };
     })).then(results => {
         const next = new Map<string, CoverageResult>();
+        const errors = new Set<string>();
         results.forEach(r => {
             if (r && r.result) next.set(r.fId, r.result);
+            else if (r && !r.result) errors.add(r.fId);
         });
         setFieldGapResults(next);
+        setFieldGapErrors(errors);
     });
   }, [showCoverage, shownFieldGapIds, boundary, allTracks]);
 
@@ -264,7 +273,9 @@ export default function PermissionPage(props: {
     if (!mapDivRef.current || !hasData) return;
 
     if (!mapRef.current) {
-        const map = new maplibregl.Map({
+        let map: maplibregl.Map;
+        try {
+          map = new maplibregl.Map({
             container: mapDivRef.current,
             style: {
                 version: 8,
@@ -280,7 +291,11 @@ export default function PermissionPage(props: {
             },
             center: [lon || -2, lat || 54.5],
             zoom: 16,
-        });
+          });
+        } catch (mapErr) {
+          console.error("Map init failed:", mapErr);
+          return;
+        }
 
         map.on("load", () => {
             map.addSource("boundary", {
@@ -498,6 +513,17 @@ export default function PermissionPage(props: {
   }, [selectedFieldId]);
 
   useEffect(() => {
+    if (isEdit) {
+      const msg = sessionStorage.getItem('fs_pending_toast');
+      if (msg) {
+        sessionStorage.removeItem('fs_pending_toast');
+        setMilestoneMsg(msg);
+        setTimeout(() => setMilestoneMsg(null), 4000);
+      }
+    }
+  }, [isEdit]);
+
+  useEffect(() => {
     getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
@@ -680,6 +706,10 @@ export default function PermissionPage(props: {
         }
 
         setIsEditing(false);
+        if (!localStorage.getItem('fs_first_permission')) {
+          localStorage.setItem('fs_first_permission', '1');
+          sessionStorage.setItem('fs_pending_toast', 'Nice — your first permission is set!');
+        }
         props.onSaved(finalId);
       }
     } catch (e: any) {
@@ -702,6 +732,11 @@ export default function PermissionPage(props: {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 px-4">
+      {milestoneMsg && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
+          {milestoneMsg}
+        </div>
+      )}
       <div className="no-print grid gap-8 mt-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
@@ -801,7 +836,7 @@ export default function PermissionPage(props: {
 
         <div className="grid lg:grid-cols-3 gap-8">
             {/* Left Column: Permission Info */}
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
+            <div className={`lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
                 {isEditing ? (
                   <>
                     <div className="flex items-center gap-3">
@@ -1388,6 +1423,9 @@ export default function PermissionPage(props: {
                                                             🧭 {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
                                                             {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
                                                                 <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left</span>
+                                                            )}
+                                                            {shownFieldGapIds.has(f.id) && fieldGapErrors.has(f.id) && (
+                                                                <span className="ml-1">⚠️</span>
                                                             )}
                                                         </button>
                                                     </div>

@@ -158,6 +158,8 @@ export default function SessionPage(props: {
   const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
+  const [coverageError, setCoverageError] = useState(false);
+  const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
 
   const [showTrimUI, setShowTrimUI] = useState(false);
   const [trimStartMins, setTrimStartMins] = useState(0);
@@ -206,10 +208,12 @@ export default function SessionPage(props: {
     const boundary = selectedField?.boundary || (permission as any)?.boundary;
     if (!showCoverage || !boundary) {
         setCoverageResult(null);
+        setCoverageError(false);
         return;
     }
     const result = calculateCoverage(boundary, tracks || []);
     setCoverageResult(result);
+    setCoverageError(result === null);
   }, [showCoverage, selectedField, permission, tracks]);
 
   const findThumbMedia = useMemo(() => {
@@ -245,23 +249,29 @@ export default function SessionPage(props: {
     if (!mapDivRef.current || (!hasBoundary && (!tracks || tracks.length === 0) && !isTracking)) return;
 
     if (!mapRef.current) {
-      const map = new maplibregl.Map({
-        container: mapDivRef.current,
-        style: {
-          version: 8,
-          sources: {
-            "raster-tiles": {
-              type: "raster",
-              tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
-              tileSize: 256,
-              attribution: "© OpenStreetMap"
-            }
+      let map: maplibregl.Map;
+      try {
+        map = new maplibregl.Map({
+          container: mapDivRef.current,
+          style: {
+            version: 8,
+            sources: {
+              "raster-tiles": {
+                type: "raster",
+                tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                tileSize: 256,
+                attribution: "© OpenStreetMap"
+              }
+            },
+            layers: [{ id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
           },
-          layers: [{ id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
-        },
-        center: DEFAULT_CENTER,
-        zoom: DEFAULT_ZOOM,
-      });
+          center: DEFAULT_CENTER,
+          zoom: DEFAULT_ZOOM,
+        });
+      } catch (mapErr) {
+        console.error("Map init failed:", mapErr);
+        return;
+      }
 
       map.on("load", () => {
         map.addSource("boundary", {
@@ -537,6 +547,11 @@ export default function SessionPage(props: {
       } else {
         await db.sessions.add(session);
         setIsEditing(false);
+        if (!localStorage.getItem('fs_first_session')) {
+          localStorage.setItem('fs_first_session', '1');
+          setMilestoneMsg('First session started — enjoy the dig!');
+          setTimeout(() => setMilestoneMsg(null), 4000);
+        }
         nav(`/session/${sessionId}`, { replace: true });
       }
     } catch (e: any) {
@@ -662,6 +677,11 @@ export default function SessionPage(props: {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 px-4">
+      {milestoneMsg && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
+          {milestoneMsg}
+        </div>
+      )}
       <div className="grid gap-8 mt-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
@@ -941,6 +961,9 @@ export default function SessionPage(props: {
                                             <span className="bg-white/20 px-1 rounded text-[8px]">
                                                 {Math.round(100 - coverageResult.percentCovered)}%
                                             </span>
+                                        )}
+                                        {showCoverage && coverageError && (
+                                            <span className="text-[8px]">⚠️ Failed</span>
                                         )}
                                     </button>
                                 )}

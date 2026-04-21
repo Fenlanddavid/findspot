@@ -153,7 +153,7 @@ export default function FindPage(props: {
 
   const currentPermissionId = useMemo(() => {
     if (props.permissionId) return props.permissionId;
-    return permissions?.find(p => p.name === locationName)?.id || null;
+    return permissions?.find(p => locationName && p.name.toLowerCase() === locationName.toLowerCase())?.id || null;
   }, [props.permissionId, permissions, locationName]);
 
   useEffect(() => {
@@ -206,6 +206,7 @@ export default function FindPage(props: {
 
   // #5 — GPS capturing state
   const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
 
   // #14 — draft restore flag
   const [draftRestored, setDraftRestored] = useState(false);
@@ -345,7 +346,7 @@ export default function FindPage(props: {
     const existing = await db.permissions
       .where("projectId")
       .equals(props.projectId)
-      .filter(l => l.name === trimmedName)
+      .filter(l => l.name.toLowerCase() === trimmedName.toLowerCase())
       .first();
     if (existing) return existing.id;
 
@@ -433,12 +434,22 @@ export default function FindPage(props: {
       setUserModified(false);
       setSavedId(id);
 
+      if (!localStorage.getItem('fs_first_find')) {
+        localStorage.setItem('fs_first_find', '1');
+        setMilestoneMsg('Nice — your first find recorded!');
+        setTimeout(() => setMilestoneMsg(null), 4000);
+      }
+
       if (props.quickId) {
         setTimeout(() => navigate("/"), 500);
       }
       return id;
     } catch (e: any) {
-      setError(e?.message ?? "Save failed");
+      if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+        setError("Device storage full — go to Settings to back up and free space.");
+      } else {
+        setError(e?.message ?? "Save failed");
+      }
       return null;
     } finally {
       setSaving(false);
@@ -575,7 +586,11 @@ export default function FindPage(props: {
 
       await db.media.bulkAdd(items);
     } catch (e: any) {
-      setError(e?.message ?? "Photo add failed");
+      if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+        setError("Device storage full — go to Settings to back up and free space.");
+      } else {
+        setError(e?.message ?? "Photo add failed");
+      }
     }
   }
 
@@ -1251,8 +1266,14 @@ export default function FindPage(props: {
         </div>
       </div>
 
+      {milestoneMsg && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
+          {milestoneMsg}
+        </div>
+      )}
+
       {/* #2 — Sticky bottom save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] relative">
         {/* Quick photo shortcut — always active (#4) */}
         <label className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 cursor-pointer bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
           📸 Add Photo
@@ -1265,6 +1286,12 @@ export default function FindPage(props: {
             className="hidden"
           />
         </label>
+
+        {gpsCapturing && !savedId && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold absolute -top-6 left-0 right-0 text-center bg-amber-50 dark:bg-amber-900/30 py-1">
+            ⚠️ GPS still locating — you can save without a location or wait
+          </p>
+        )}
 
         {/* #1 — "Finish Later" only in Quick mode, only when unsaved */}
         {isQuick && !savedId && (

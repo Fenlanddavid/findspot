@@ -18,6 +18,7 @@ import OnboardingFlow from "./components/OnboardingFlow";
 const SessionPage = React.lazy(() => import("./pages/Session"));
 const AllFinds = React.lazy(() => import("./pages/AllFinds"));
 const FindsBox = React.lazy(() => import("./pages/FindsBox"));
+const PendingFinds = React.lazy(() => import("./pages/PendingFinds"));
 const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
 const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
 const Discover = React.lazy(() => import("./pages/Discover"));
@@ -318,6 +319,7 @@ function Shell() {
             <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
+            <Route path="/pending" element={<PendingFinds projectId={projectId} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} />} />
             <Route path="/settings" element={<Settings />} />
         </Routes>
@@ -349,7 +351,7 @@ function HomeRouter({ projectId }: { projectId: string }) {
         nav(`/find${q ? `?${q}` : ""}`);
       }}
       goAllFinds={() => nav("/finds")}
-      goFindsWithFilter={(filter: string) => nav(`/finds?${filter}`)}
+      goFindsWithFilter={(filter: string) => filter === 'filter=pending' ? nav('/pending') : nav(`/finds?${filter}`)}
       goFindsBox={() => nav("/finds-box")}
       goFieldGuide={() => nav("/fieldguide")}
     />
