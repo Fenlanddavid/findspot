@@ -21,7 +21,6 @@ export default function Home(props: {
 }) {
   const nav = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [eggComplete, setEggComplete] = useState(false);
   const [openFindId, setOpenFindId] = useState<string | null>(null);
 const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [dismissedNextMoves, setDismissedNextMoves] = useState<Set<string>>(() => {
@@ -105,24 +104,26 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       action: () => void;
     }> = [];
 
+    if (activeSession) {
+      const sessionPermName = permissions?.find(p => p.id === activeSession.permissionId)?.name;
+      items.push({
+        type: 'active_session',
+        dismissKey: `active_session:${activeSession.id}`,
+        message: 'You are currently in an active session',
+        detail: sessionPermName ? `Session on: ${sessionPermName}` : undefined,
+        cta: 'Resume Session',
+        action: () => nav(`/session/${activeSession.id}`),
+      });
+    }
     if (pendingFinds && pendingFinds.length > 0) {
       items.push({
         type: 'pending',
-        dismissKey: `pending:${pendingFinds.length}`,
+        dismissKey: `pending:${pendingFinds[0]?.id ?? pendingFinds.length}`,
         message: pendingFinds.length === 1
           ? 'You have a pending find to finish'
           : `You have ${pendingFinds.length} pending finds to finish`,
         cta: 'Finish Records',
         action: () => props.goFindsWithFilter("filter=pending"),
-      });
-    }
-    if (activeSession) {
-      items.push({
-        type: 'active_session',
-        dismissKey: `active_session:${activeSession.id}`,
-        message: 'You have an active session in progress',
-        cta: 'Resume Session',
-        action: () => nav(`/session/${activeSession.id}`),
       });
     }
     if (permissions && permissions.length > 0) {
@@ -245,16 +246,22 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
       {nextMove && !dismissedNextMoves.has(nextMove.dismissKey) && (
         <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
-          <button
-            onClick={() => dismissNextMove(nextMove.dismissKey)}
-            className="absolute top-1.5 right-1.5 w-4 h-4 p-0 flex items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
+          {nextMove.type !== 'active_session' && (
+            <button
+              onClick={() => dismissNextMove(nextMove.dismissKey)}
+              className="absolute top-1.5 right-1.5 w-4 h-4 p-0 flex items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          )}
           <div className="min-w-0 flex-1">
-            <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-              {nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next step'}
+            <p className={`text-[9px] font-black mb-1 ${
+              nextMove.type === 'active_session'
+                ? 'uppercase tracking-widest text-amber-600 dark:text-amber-400'
+                : 'uppercase tracking-widest ' + (nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')
+            }`}>
+              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next step'}
             </p>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
             {'detail' in nextMove && nextMove.detail && (
@@ -396,18 +403,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                         placeholder="Search permissions..."
                         value={searchQuery}
                         onChange={(e) => {
-                          const val = e.target.value;
-                          setSearchQuery(val);
-                          if (
-                            val.toLowerCase() === 'spot' &&
-                            localStorage.getItem('easter_stage_2_complete')
-                          ) {
-                            localStorage.setItem('easter_complete', 'true');
-                            if (!eggComplete) {
-                              setEggComplete(true);
-                              setTimeout(() => setEggComplete(false), 10000);
-                            }
-                          }
+                          setSearchQuery(e.target.value);
                         }}
                         className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-400/40 focus:border-emerald-400 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] outline-none transition-all"
                     />
@@ -419,17 +415,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         
         {(!filteredPermissions || filteredPermissions.length === 0) && (
             <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
-                {searchQuery && eggComplete ? (
-                    <div>
-                      <p className="text-[11px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                        Signal confirmed.<br />
-                        <span className="opacity-80">You've completed what most won't.</span>
-                      </p>
-                      <p className="mt-3 font-black text-base tracking-[0.15em] text-emerald-600 dark:text-emerald-300">
-                        Code: FEN-54
-                      </p>
-                    </div>
-                ) : searchQuery ? (
+                {searchQuery ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-3">

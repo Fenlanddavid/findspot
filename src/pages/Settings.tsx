@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting, exportData, importData, exportToCSV } from "../services/data";
 
 const POPULAR_MODELS = [
@@ -8,24 +8,26 @@ const POPULAR_MODELS = [
   "Minelab Equinox 600",
   "Minelab Manticore", 
   "Minelab CTX 3030",
+  "Minelab Vanquish 560",
+  "Minelab Vanquish 460",
+  "Minelab Vanquish 360",
   "Minelab Vanquish 540",
   "Minelab Vanquish 440",
   "Minelab X-Terra Pro",
   "Minelab X-Terra Elite",
-  "XP Deus II", 
-  "XP Deus", 
-  "XP ORX", 
-  "Nokta Legend", 
-  "Nokta Simplex Ultra", 
+  "XP Deus II",
+  "XP Deus",
+  "XP ORX",
+  "Nokta Legend",
+  "Nokta Simplex Ultra",
   "Nokta Simplex BT",
   "Nokta Simplex Lite",
   "Nokta Score / Double Score",
-  "Garrett AT Pro", 
-  "Garrett Apex", 
+  "Garrett ACE Apex",
+  "Garrett AT Pro",
   "Garrett Ace 400i",
   "Garrett Ace 300i",
   "Garrett Ace 200i",
-  "Garrett Ace Apex",
   "Teknetics T2",
   "Teknetics G2",
   "Fisher F75",
@@ -50,8 +52,6 @@ export default function Settings() {
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'clue'>('idle');
-  const tapSeqRef = useRef<number[]>([]);
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -209,22 +209,6 @@ export default function Settings() {
     } catch (e) {
       setDataError("Import failed: " + e);
       setImporting(false);
-    }
-  }
-
-  function handleCounterClick() {
-    if (eggPhase !== 'idle') return;
-    const now = Date.now();
-    tapSeqRef.current.push(now);
-    tapSeqRef.current = tapSeqRef.current.filter(t => now - t <= 2500);
-    const count = tapSeqRef.current.length;
-    if (count > 8) { tapSeqRef.current = []; return; }
-    if (count >= 6) {
-      tapSeqRef.current = [];
-      localStorage.setItem('easter_stage_1_complete', 'true');
-      setEggPhase('signal');
-      setTimeout(() => setEggPhase('clue'), 3500);
-      setTimeout(() => setEggPhase('idle'), 10000);
     }
   }
 
@@ -585,36 +569,10 @@ export default function Settings() {
         {typeof installCount === 'number' && (
           <div className="mt-2 flex flex-col items-end pr-2 gap-1">
             <div
-              className="flex items-center gap-1 opacity-40 hover:opacity-100 transition-opacity cursor-default"
-              onClick={handleCounterClick}
+              className="flex items-center gap-1 opacity-40"
             >
               <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
               <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
-            </div>
-            <div
-              className="overflow-hidden transition-all duration-700 ease-in-out"
-              style={{ maxHeight: eggPhase === 'signal' ? '80px' : '0px', opacity: eggPhase === 'signal' ? 1 : 0 }}
-            >
-              <div className="mt-1 px-3 py-2 rounded-lg border border-emerald-400/30 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-950/40 text-right">
-                <p className="text-[10px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                  Signal detected.<br />
-                  <span className="opacity-70">Most wouldn't have noticed that.</span>
-                </p>
-              </div>
-            </div>
-            <div
-              className="overflow-hidden transition-all duration-700 ease-in-out"
-              style={{ maxHeight: eggPhase === 'clue' ? '120px' : '0px', opacity: eggPhase === 'clue' ? 1 : 0 }}
-            >
-              <div className="mt-1 px-3 py-2 rounded-lg border border-emerald-400/30 dark:border-emerald-500/20 bg-emerald-50/60 dark:bg-emerald-950/40 text-right">
-                <p className="text-[10px] font-mono tracking-wide text-emerald-700 dark:text-emerald-400 leading-relaxed">
-                  First signal found.<br />
-                  <br />
-                  <span className="opacity-70">Keep looking.</span><br />
-                  <br />
-                  <span className="opacity-60">Some things are marked.</span>
-                </p>
-              </div>
             </div>
           </div>
         )}

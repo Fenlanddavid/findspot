@@ -133,7 +133,8 @@ export default function FindPage(props: {
   sessionId: string | null;
   quickId: string | null;
   initialLat?: number | null;
-  initialLon?: number | null
+  initialLon?: number | null;
+  manual?: boolean;
 }) {
   const navigate = useNavigate();
   const [locationName, setLocationName] = useState("");
@@ -324,9 +325,9 @@ export default function FindPage(props: {
     }
   }, [props.permissionId, permissions, props.quickId]);
 
-  // Auto-capture GPS on mount if not editing
+  // Auto-capture GPS on mount if not editing and not manual entry mode
   useEffect(() => {
-    if (!form.lat && !props.quickId && !savedId) {
+    if (!form.lat && !props.quickId && !savedId && !props.manual) {
       doGPS();
     }
   }, []);

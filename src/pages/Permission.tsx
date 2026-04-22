@@ -321,7 +321,7 @@ export default function PermissionPage(props: {
                 id: "fields-fill",
                 type: "fill",
                 source: "fields-boundary",
-                paint: { "fill-color": "#0d9488", "fill-opacity": 0.001 }
+                paint: { "fill-color": "#0d9488", "fill-opacity": 0.01 }
             });
 
             map.addLayer({
@@ -331,13 +331,16 @@ export default function PermissionPage(props: {
                 paint: { "line-color": "#0d9488", "line-width": 2 }
             });
 
-            map.on("click", "fields-fill", (e) => {
-                const fid = e.features?.[0]?.properties?.id as string | undefined;
-                if (fid) setSelectedFieldId(prev => prev === fid ? null : fid);
-            });
+            // Single consolidated click handler — avoids double-fire where the layer-specific
+            // handler sets selectedFieldId and the general handler immediately clears it.
             map.on("click", (e) => {
                 const hits = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
-                if (hits.length === 0) setSelectedFieldId(null);
+                if (hits.length > 0) {
+                    const fid = hits[0]?.properties?.id as string | undefined;
+                    if (fid) setSelectedFieldId(prev => prev === fid ? null : fid);
+                } else {
+                    setSelectedFieldId(null);
+                }
             });
             map.on("mouseenter", "fields-fill", () => { map.getCanvas().style.cursor = "pointer"; });
             map.on("mouseleave", "fields-fill", () => { map.getCanvas().style.cursor = ""; });

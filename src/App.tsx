@@ -365,13 +365,15 @@ function FindRouter({ projectId }: { projectId: string }) {
   const quickId = params.get("quickId");
   const lat = params.get("lat");
   const lon = params.get("lon");
-  return <FindPage 
-    projectId={projectId} 
-    permissionId={permissionId ?? null} 
-    sessionId={sessionId ?? null} 
+  const manual = params.get("manual") === "true";
+  return <FindPage
+    projectId={projectId}
+    permissionId={permissionId ?? null}
+    sessionId={sessionId ?? null}
     quickId={quickId ?? null}
     initialLat={lat ? parseFloat(lat) : null}
     initialLon={lon ? parseFloat(lon) : null}
+    manual={manual}
   />;
 }
 
