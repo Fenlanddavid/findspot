@@ -187,6 +187,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
+    const [showFields,             setShowFields]             = useState(false);
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
@@ -261,7 +262,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
-        isSatellite, historicMode, historicLayerVisibility, historicLayerToggles,
+        fieldBoundaries: fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, boundary: f.boundary })),
+        isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
         initLat, initLng,
         callbacks: {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
@@ -507,21 +509,28 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {!isSearchOpen ? (
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar })); }}
+                                onClick={() => setShowFields(v => !v)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
+                                My Fields
+                            </button>
+                            <button
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
                                 className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
                                 LiDAR
                             </button>
                             <button
-                                onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 })); }}
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
                                 className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                                 1880 OS
                             </button>
                             <button
-                                onClick={() => { if (!historicMode) setHistoricMode(true); setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 })); }}
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
                                 className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>

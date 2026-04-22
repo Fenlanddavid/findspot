@@ -79,6 +79,7 @@ export default function PermissionPage(props: {
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [permissionSelected, setPermissionSelected] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
   const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
@@ -310,6 +311,14 @@ export default function PermissionPage(props: {
                 paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1] }
             });
 
+            // Transparent fill on the permission boundary — hit-target when no sub-fields exist
+            map.addLayer({
+                id: "boundary-fill",
+                type: "fill",
+                source: "boundary",
+                paint: { "fill-color": "#10b981", "fill-opacity": 0.01 }
+            });
+
             // Add Sub-Fields Source
             map.addSource("fields-boundary", {
                 type: "geojson",
@@ -334,16 +343,26 @@ export default function PermissionPage(props: {
             // Single consolidated click handler — avoids double-fire where the layer-specific
             // handler sets selectedFieldId and the general handler immediately clears it.
             map.on("click", (e) => {
-                const hits = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
-                if (hits.length > 0) {
-                    const fid = hits[0]?.properties?.id as string | undefined;
-                    if (fid) setSelectedFieldId(prev => prev === fid ? null : fid);
+                const fieldHits = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
+                if (fieldHits.length > 0) {
+                    const fid = fieldHits[0]?.properties?.id as string | undefined;
+                    if (fid) { setPermissionSelected(false); setSelectedFieldId(prev => prev === fid ? null : fid); }
+                    return;
+                }
+                // No sub-fields — allow tapping the permission boundary itself
+                const boundaryHits = map.queryRenderedFeatures(e.point, { layers: ["boundary-fill"] });
+                if (boundaryHits.length > 0) {
+                    setSelectedFieldId(null);
+                    setPermissionSelected(prev => !prev);
                 } else {
                     setSelectedFieldId(null);
+                    setPermissionSelected(false);
                 }
             });
-            map.on("mouseenter", "fields-fill", () => { map.getCanvas().style.cursor = "pointer"; });
-            map.on("mouseleave", "fields-fill", () => { map.getCanvas().style.cursor = ""; });
+            map.on("mouseenter", "fields-fill",    () => { map.getCanvas().style.cursor = "pointer"; });
+            map.on("mouseleave", "fields-fill",    () => { map.getCanvas().style.cursor = ""; });
+            map.on("mouseenter", "boundary-fill",  () => { map.getCanvas().style.cursor = "pointer"; });
+            map.on("mouseleave", "boundary-fill",  () => { map.getCanvas().style.cursor = ""; });
 
             map.addLayer({
                 id: "field-labels",
@@ -577,21 +596,6 @@ export default function PermissionPage(props: {
     }
   }, [id]);
 
-  // Auto-create Main Field for old permissions that have a boundary but no fields yet
-  useEffect(() => {
-    if (!id || !boundary || fields === undefined || fields.length > 0) return;
-    const now = new Date().toISOString();
-    db.fields.add({
-      id: uuid(),
-      projectId: props.projectId,
-      permissionId: id,
-      name: "Main Field",
-      boundary: boundary,
-      notes: "Automatically created from permission boundary",
-      createdAt: now,
-      updatedAt: now,
-    });
-  }, [id, boundary, fields]);
 
   async function doGPS() {
     setError(null);
@@ -669,44 +673,11 @@ export default function PermissionPage(props: {
       if (isEdit) {
         await db.permissions.update(id, permission);
         
-        // Auto-create "Main Field" if a boundary exists but NO fields exist yet
-        if (boundary) {
-            const fieldCount = await db.fields.where("permissionId").equals(id).count();
-            if (fieldCount === 0) {
-                const fieldId = uuid();
-                await db.fields.add({
-                    id: fieldId,
-                    projectId: props.projectId,
-                    permissionId: id,
-                    name: "Main Field",
-                    boundary: boundary,
-                    notes: "Automatically created from permission boundary",
-                    createdAt: now,
-                    updatedAt: now
-                });
-            }
-        }
-
         setIsEditing(false);
         setSaved(true);
       } else {
         (permission as any).createdAt = now;
         await db.permissions.add(permission);
-
-        // Auto-create "Main Field" if a boundary was defined during creation
-        if (boundary) {
-            const fieldId = uuid();
-            await db.fields.add({
-                id: fieldId,
-                projectId: props.projectId,
-                permissionId: finalId,
-                name: "Main Field",
-                boundary: boundary,
-                notes: "Automatically created from initial permission boundary",
-                createdAt: now,
-                updatedAt: now
-            });
-        }
 
         setIsEditing(false);
         if (!localStorage.getItem('fs_first_permission')) {
@@ -825,15 +796,37 @@ export default function PermissionPage(props: {
             </div>
         )}
         {saved && (
-            <div className="border-2 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl shadow-sm flex gap-3 items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-lg shrink-0">✓</div>
-                    <div>
-                        <div className="font-black text-emerald-700 dark:text-emerald-300">{isRally ? "Rally saved" : "Permission saved"}</div>
-                        <div className="text-xs opacity-70 font-medium mt-0.5">Ready to use with finds, sessions, and coverage</div>
+            <div className="border-2 border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 p-4 rounded-xl shadow-sm flex flex-col gap-3">
+                <div className="flex gap-3 items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-lg shrink-0">✓</div>
+                        <div>
+                            <div className="font-black text-emerald-700 dark:text-emerald-300">{isRally ? "Rally saved" : "Permission saved"}</div>
+                            <div className="text-xs opacity-70 font-medium mt-0.5">
+                                {boundary && !isRally && (!fields || fields.length === 0)
+                                    ? "Would you like to divide this into sub-fields?"
+                                    : "Ready to use with finds, sessions, and coverage"}
+                            </div>
+                        </div>
                     </div>
+                    <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100 shrink-0">Dismiss</button>
                 </div>
-                <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100 shrink-0">Dismiss</button>
+                {boundary && !isRally && (!fields || fields.length === 0) && (
+                    <div className="flex gap-2 pl-12">
+                        <button
+                            onClick={() => { setSaved(false); setIsAddingField(true); }}
+                            className="text-xs font-black bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
+                        >
+                            + Add Sub-Fields
+                        </button>
+                        <button
+                            onClick={() => setSaved(false)}
+                            className="text-xs font-black text-emerald-700 dark:text-emerald-400 px-4 py-2 rounded-lg border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                        >
+                            Not now
+                        </button>
+                    </div>
+                )}
             </div>
         )}
 
@@ -1032,10 +1025,16 @@ export default function PermissionPage(props: {
                             </button>
                         </div>
 
-                        {!isRally && !boundary && (!fields || fields.length === 0) && (
+                        {!isRally && !boundary && (
                             <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
                                 <span className="shrink-0 mt-0.5">💡</span>
                                 <span>Set the boundary, then split it into sub-fields — one per field or pasture.</span>
+                            </div>
+                        )}
+                        {!isRally && !isEdit && boundary && (
+                            <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                                <span className="shrink-0 mt-0.5">📐</span>
+                                <span>Boundary set — save your permission first, then you can divide it into sub-fields.</span>
                             </div>
                         )}
 
@@ -1348,20 +1347,61 @@ export default function PermissionPage(props: {
                             {/* Map Preview */}
                             <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                                 <div ref={mapDivRef} className="absolute inset-0" />
+
+                                {/* Permission-level stats — shown when boundary tapped and no sub-fields exist */}
+                                {permissionSelected && (!fields || fields.length === 0) && (
+                                    <div className="absolute bottom-3 left-3 right-3 bg-gray-900/90 backdrop-blur-sm rounded-xl border border-emerald-500/40 p-3 shadow-lg">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Permission Area</p>
+                                            <button onClick={() => setPermissionSelected(false)} className="text-white/40 hover:text-white/80 text-xs leading-none">×</button>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <div>
+                                                <p className="text-lg font-black text-white leading-none">{finds?.filter(f => !f.isPending).length ?? 0}</p>
+                                                <p className="text-[9px] text-white/50 uppercase tracking-widest">Finds</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-lg font-black text-white leading-none">{sessions?.length ?? 0}</p>
+                                                <p className="text-[9px] text-white/50 uppercase tracking-widest">Sessions</p>
+                                            </div>
+                                            {pendingFinds && pendingFinds.length > 0 && (
+                                                <div>
+                                                    <p className="text-lg font-black text-amber-400 leading-none">{pendingFinds.length}</p>
+                                                    <p className="text-[9px] text-white/50 uppercase tracking-widest">Pending</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {(!fields || fields.length === 0) && (
+                                            <p className="text-[9px] text-white/30 mt-2 italic">Add sub-fields to track coverage per area</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Sub-Fields Carousel */}
-                            {fields && fields.length > 0 && (
+                            {fields !== undefined && (
                                 <div className="mt-6 grid gap-3">
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
                                             <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
                                                 Sub-Fields
-                                                <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>
+                                                {fields.length > 0 && <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>}
                                             </h4>
-                                            <p className="text-[11px] text-white/70 mt-0.5 font-medium">Tap on a field on the map or scroll to select</p>
+                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                                                {fields.length > 0 ? "Tap on a field on the map or scroll to select" : "Divide your permission into named detecting areas"}
+                                            </p>
                                         </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAddingField(true)}
+                                            className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
+                                        >
+                                            + Add Sub-Field
+                                        </button>
                                     </div>
+                                    {fields.length === 0 && (
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No sub-fields added yet — tap the button above to get started.</p>
+                                    )}
                                     <div
                                         ref={fieldScrollRef}
                                         className="grid gap-3 overflow-y-auto scroll-smooth"

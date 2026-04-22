@@ -80,12 +80,22 @@ export async function enrichPermissions(
     let totalAreaM2 = 0;
     let totalDetectedM2 = 0;
 
-    for (const f of fields) {
-      const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
-      const fieldTracks = permissionTracks.filter(t =>
-        t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
-      );
-      const result = calculateCoverage(f.boundary, fieldTracks);
+    if (fields.length > 0) {
+      // Coverage per sub-field
+      for (const f of fields) {
+        const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
+        const fieldTracks = permissionTracks.filter(t =>
+          t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
+        );
+        const result = calculateCoverage(f.boundary, fieldTracks);
+        if (result) {
+          totalAreaM2 += result.totalAreaM2;
+          totalDetectedM2 += result.detectedAreaM2;
+        }
+      }
+    } else if (p.boundary) {
+      // No sub-fields — use the permission boundary itself
+      const result = calculateCoverage(p.boundary, permissionTracks);
       if (result) {
         totalAreaM2 += result.totalAreaM2;
         totalDetectedM2 += result.detectedAreaM2;
@@ -98,6 +108,14 @@ export async function enrichPermissions(
     let lat = typeof p.lat === "number" ? p.lat : null;
     let lon = typeof p.lon === "number" ? p.lon : null;
 
+    // Fallback 1: derive from permission's own boundary
+    if ((!lat || !lon) && p.boundary?.coordinates?.[0]?.[0]) {
+      const coords = p.boundary.coordinates[0];
+      lon = coords[0][0];
+      lat = coords[0][1];
+    }
+
+    // Fallback 2: first sub-field boundary
     const fieldWithBoundary = fields.find(f => f.boundary?.coordinates?.[0]);
     if ((!lat || !lon) && fieldWithBoundary) {
       const coords = fieldWithBoundary.boundary.coordinates[0];
@@ -105,6 +123,7 @@ export async function enrichPermissions(
       lon = coords[0][0];
     }
 
+    // Fallback 3: most recent find
     if (!lat || !lon) {
       const recentFind = recentFindByPermission.get(p.id);
       if (recentFind?.lat && recentFind?.lon) {

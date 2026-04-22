@@ -49,9 +49,11 @@ export type UseFieldGuideMapOptions = {
     detectedFeatures: Cluster[];
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
+    fieldBoundaries: Array<{ id: string; name: string; boundary: any }>;
     // Layer visibility drivers
     isSatellite: boolean;
     historicMode: boolean;
+    showFields: boolean;
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean };
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
     // Initial fly-to coordinates
@@ -64,8 +66,8 @@ export type UseFieldGuideMapOptions = {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useFieldGuideMap({
-    hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
-    isSatellite, historicMode, historicLayerVisibility, historicLayerToggles,
+    hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes, fieldBoundaries,
+    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
     initLat, initLng, callbacks,
 }: UseFieldGuideMapOptions) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -162,6 +164,12 @@ export function useFieldGuideMap({
             map.addSource('crossings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'crossings-halo',   type: 'circle', source: 'crossings', layout: { visibility: 'none' }, paint: { 'circle-radius': 14, 'circle-color': '#f59e0b', 'circle-opacity': 0.25, 'circle-stroke-width': 0 } });
             map.addLayer({ id: 'crossings-circle', type: 'circle', source: 'crossings', layout: { visibility: 'none' }, paint: { 'circle-radius': 6, 'circle-color': '#f59e0b', 'circle-opacity': 0.95, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
+
+            // ── Permission field boundaries overlay ───────────────────────────
+            map.addSource('permission-fields', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({ id: 'permission-fields-fill',    type: 'fill',   source: 'permission-fields', layout: { visibility: 'none' }, paint: { 'fill-color': '#0d9488', 'fill-opacity': 0.08 } });
+            map.addLayer({ id: 'permission-fields-outline', type: 'line',   source: 'permission-fields', layout: { visibility: 'none' }, paint: { 'line-color': '#0d9488', 'line-width': 2, 'line-opacity': 0.9, 'line-dasharray': [4, 2] } });
+            map.addLayer({ id: 'permission-fields-labels',  type: 'symbol', source: 'permission-fields', layout: { visibility: 'none', 'text-field': ['get', 'name'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-anchor': 'center', 'text-max-width': 8 }, paint: { 'text-color': '#5eead4', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
 
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
@@ -418,10 +426,34 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        if (map.getLayer('overlay-lidar'))  map.setLayoutProperty('overlay-lidar',  'visibility', (historicMode && historicLayerToggles.lidar)  ? 'visible' : 'none');
-        if (map.getLayer('overlay-os1930')) map.setLayoutProperty('overlay-os1930', 'visibility', (historicMode && historicLayerToggles.os1930) ? 'visible' : 'none');
-        if (map.getLayer('overlay-os1880')) map.setLayoutProperty('overlay-os1880', 'visibility', (historicMode && historicLayerToggles.os1880) ? 'visible' : 'none');
-    }, [historicLayerToggles, historicMode]);
+        if (map.getLayer('overlay-lidar'))  map.setLayoutProperty('overlay-lidar',  'visibility', historicLayerToggles.lidar  ? 'visible' : 'none');
+        if (map.getLayer('overlay-os1930')) map.setLayoutProperty('overlay-os1930', 'visibility', historicLayerToggles.os1930 ? 'visible' : 'none');
+        if (map.getLayer('overlay-os1880')) map.setLayoutProperty('overlay-os1880', 'visibility', historicLayerToggles.os1880 ? 'visible' : 'none');
+    }, [historicLayerToggles]);
+
+    // ── Field boundaries data ─────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const src = map.getSource('permission-fields') as maplibregl.GeoJSONSource | undefined;
+        if (!src) return;
+        src.setData({
+            type: 'FeatureCollection',
+            features: fieldBoundaries
+                .filter(f => f.boundary)
+                .map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
+        } as any);
+    }, [fieldBoundaries]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Field boundaries visibility ───────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const vis = showFields ? 'visible' : 'none';
+        ['permission-fields-fill', 'permission-fields-outline', 'permission-fields-labels'].forEach(id => {
+            if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
+        });
+    }, [showFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 
