@@ -326,6 +326,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   {draft.dateRange && (
                     <p className="text-[13px] font-mono text-gray-400/60 dark:text-gray-500/60 m-0 mt-1">{draft.dateRange}</p>
                   )}
+                  {draft.foundAt && (
+                    <p className="text-[11px] font-mono text-gray-400/50 dark:text-gray-500/50 m-0 mt-2">
+                      Found {new Date(draft.foundAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · {new Date(draft.foundAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
                 </div>
 
                 {/* SECONDARY — key scan fields */}

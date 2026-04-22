@@ -131,6 +131,33 @@ function getSupportingSignal(explanation: string[]): string | null {
     return null;
 }
 
+// ─── Historic interpretation helpers ─────────────────────────────────────────
+
+function getHistoricInterpretation(breakdown: { terrain: number; historic: number; spectral: number } | null): { title: string; subtitle: string } {
+    if (!breakdown) return { title: 'No scan data yet', subtitle: 'Run a scan to generate historic intelligence for this area.' };
+    const strong = [breakdown.terrain, breakdown.historic, breakdown.spectral].filter(v => v >= 50).length;
+    if (strong === 3) return { title: 'Strong historic context across this area', subtitle: 'Signals from terrain, historic density, and spectral response all align.' };
+    if (strong === 2) return { title: 'Solid historic alignment detected', subtitle: 'Two key signals suggest meaningful past activity in this area.' };
+    if (strong === 1) return { title: 'Partial historic signal present', subtitle: 'One indicator points to potential historic activity — worth investigating.' };
+    return { title: 'Limited historic alignment', subtitle: 'Signals are weak or below threshold for a confident read.' };
+}
+
+function getSignalSummary(breakdown: { terrain: number; hydro: number; historic: number; spectral: number } | null): string[] {
+    if (!breakdown) return [];
+    const lines: string[] = [];
+    if (breakdown.terrain >= 70) lines.push('Strong terrain relief — elevated ground or natural features present.');
+    else if (breakdown.terrain >= 40) lines.push('Moderate terrain relief detected in the scan area.');
+    else lines.push('Limited terrain variation — other signals carry more weight here.');
+    if (breakdown.hydro >= 60) lines.push('Significant hydrological context — proximity to water sources.');
+    else if (breakdown.hydro >= 30) lines.push('Some hydrological proximity — minor water influence.');
+    if (breakdown.historic >= 70) lines.push('High historic density — multiple recorded finds or sites nearby.');
+    else if (breakdown.historic >= 40) lines.push('Moderate historic density — some recorded activity in the wider area.');
+    else lines.push('Low historic density from available records.');
+    if (breakdown.spectral >= 60) lines.push('Strong spectral response — possible subsurface disturbance.');
+    else if (breakdown.spectral >= 30) lines.push('Moderate spectral signal detected.');
+    return lines;
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FieldGuide({ projectId }: { projectId: string }) {
@@ -153,10 +180,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [searchQuery,            setSearchQuery]            = useState('');
     const [isSearchOpen,           setIsSearchOpen]           = useState(false);
     const [isIntelOpen,            setIsIntelOpen]            = useState(false);
+    const [intelDetailsOpen,       setIntelDetailsOpen]       = useState(false);
+    const [intelLayersOpen,        setIntelLayersOpen]        = useState(false);
     const [targetPeriod,           setTargetPeriod]           = useState<'All' | 'Bronze Age' | 'Roman' | 'Medieval'>('All');
     const [isLocating,             setIsLocating]             = useState(false);
     const [historicMode,           setHistoricMode]           = useState(false);
-    const [historicStripExpanded,  setHistoricStripExpanded]  = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
@@ -267,7 +295,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setPotentialScore(null);
         setScanConfidence(null);
         setHistoricMode(false);
-        setHistoricStripExpanded(false);
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
         setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
         setMapClickLabel(null);
@@ -384,17 +411,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             aimData:    null,
             scanCenter: terrainScanCenterRef.current,
         });
+        // Open the intel panel after a user-triggered historic scan
+        setIsIntelOpen(true);
+        setIntelDetailsOpen(false);
     }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase]);
 
     // ─── Auto-trigger effects ─────────────────────────────────────────────────
 
     useEffect(() => {
-        if (isIntelOpen && !isHistoricScanning) loadStandaloneHistoric();
+        if (isIntelOpen && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
     }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         if (historicMode && !isHistoricScanning) loadStandaloneHistoric();
     }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
     // ─── Scroll on feature select ─────────────────────────────────────────────
 
@@ -522,12 +553,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         )}
                         <button
                             onClick={() => {
+                                if (analyzing) return;
                                 if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                else { setHistoricMode(false); setHistoricStripExpanded(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
+                                else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                             }}
-                            className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${historicMode ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS ? 'animate-pulse opacity-80' : ''}`}
+                            disabled={analyzing}
+                            className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                         >
-                            {loadingPAS ? 'Scanning...' : 'Historic'}
+                            {analyzing ? 'Terrain scanning...' : (loadingPAS && historicMode) ? 'Scanning...' : 'Historic'}
                         </button>
                         <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
                     </div>
@@ -601,9 +634,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {/* Mobile Tactical Tray (Hotspot Selection) */}
                     {hotspots.length > 0 && !historicMode && (
                         <div className="absolute top-4 left-4 z-[100] lg:hidden pointer-events-none flex flex-col gap-2">
-                            <div className="bg-slate-900/90 text-emerald-400 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl border border-emerald-500/30 backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                {hotspotVersion === 'enhanced' ? 'Enhanced Target' : 'Terrain Target'}
+                            <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2 ${isHistoricScanning ? 'bg-slate-900/90 border border-amber-500/40 text-amber-400' : 'bg-slate-900/90 border border-emerald-500/30 text-emerald-400'}`}>
+                                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isHistoricScanning ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+                                {isHistoricScanning ? 'Enhancing...' : hotspotVersion === 'enhanced' ? 'Enhanced Hotspot' : 'Terrain Hotspot'}
                             </div>
                             <div className="flex flex-col gap-2 pointer-events-auto max-h-[40vh] overflow-y-auto scrollbar-hide pb-4">
                                 {hotspots.slice(0, 3).map(h => (
@@ -614,7 +647,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             setSelectedHotspotId(h.id === selectedHotspotId ? null : h.id);
                                             if (h.id !== selectedHotspotId) mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                         }}
-                                        className={`w-14 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 flex-shrink-0 ${selectedHotspotId === h.id ? 'bg-emerald-500 border-white text-white shadow-[0_0_20px_rgba(16,185,129,0.5)]' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
+                                        className={`w-14 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 flex-shrink-0 ${selectedHotspotId === h.id ? 'bg-emerald-500 border-white text-white shadow-[0_0_20px_rgba(16,185,129,0.5)]' : isHistoricScanning ? 'bg-slate-900/90 border-amber-500/30 text-amber-300 animate-pulse' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
                                     >
                                         <span className="text-[12px] font-black tracking-tight">{h.score}%</span>
                                     </button>
@@ -883,221 +916,228 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     )}
 
-                    {/* Historic Field Intelligence Banner — top of map, mobile */}
+                    {/* Historic Field Intelligence Banner — compact pill, mobile */}
                     {historicMode && !isIntelOpen && (
-                        <div className="absolute top-3 left-3 right-3 z-[90] lg:hidden pointer-events-auto">
-                            {historicStripExpanded ? (
-                                <div className="bg-black rounded-2xl border border-blue-500/30 shadow-2xl overflow-hidden">
-                                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                                            <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Field Intelligence</span>
-                                        </div>
-                                        <button onClick={() => setHistoricStripExpanded(false)} className="w-7 h-7 flex items-center justify-center bg-white/5 rounded-lg border border-white/10 text-white active:scale-90">
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-                                        </button>
-                                    </div>
-                                    <div className="p-4 space-y-4 max-h-[55vh] overflow-y-auto">
-                                        <div>
-                                            <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Historic Layers</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {[{ key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }].map(({ key, label }) => (
-                                                    <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
-                                                        {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        {historicRoutes.length > 0 && (
-                                            <div>
-                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Routes Detected</p>
-                                                {historicRoutes.filter(r => r.type === 'roman_road').length > 0 && (
-                                                    <div className="flex items-center gap-3 py-2 border-b border-white/5">
-                                                        <div className="w-8 h-[3px] bg-blue-500 rounded-full shrink-0" />
-                                                        <span className="text-[10px] font-black text-white uppercase flex-1">Roman road</span>
-                                                        <span className="text-[9px] text-blue-400 font-black">{historicRoutes.filter(r => r.type === 'roman_road').length} seg.</span>
-                                                    </div>
-                                                )}
-                                                {historicRoutes.filter(r => r.type !== 'roman_road').length > 0 && (
-                                                    <div className="flex items-center gap-3 py-2">
-                                                        <div className="w-8 border-t-2 border-dashed border-blue-300 shrink-0" />
-                                                        <span className="text-[10px] font-black text-white uppercase flex-1">Historic trackway</span>
-                                                        <span className="text-[9px] text-blue-300 font-black">{historicRoutes.filter(r => r.type !== 'roman_road').length} seg.</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {pasFinds.length > 0 && (
-                                            <div>
-                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-2">Heritage Sites ({pasFinds.length})</p>
-                                                <div className="space-y-0">
-                                                    {pasFinds.slice(0, 5).map(f => (
-                                                        <div key={f.id} className="flex items-center gap-3 py-2 border-b border-white/5 active:bg-white/5" onClick={() => { mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); setHistoricStripExpanded(false); }}>
-                                                            <div className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                                                            <span className="text-[10px] font-bold text-slate-200 truncate flex-1">{f.objectType}</span>
-                                                            <span className="text-[8px] text-slate-500 shrink-0">{f.broadperiod}</span>
-                                                        </div>
-                                                    ))}
-                                                    {pasFinds.length > 5 && <p className="text-[8px] text-slate-500 text-center font-bold uppercase tracking-widest py-1.5">+{pasFinds.length - 5} more</p>}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {placeSignals.length > 0 && (
-                                            <div>
-                                                <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-2">Place Signals</p>
-                                                {placeSignals.slice(0, 2).map((s, i) => (
-                                                    <div key={i} className="flex items-center gap-2 py-1.5 border-b border-white/5">
-                                                        <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                                                        <span className="text-[9px] font-bold text-slate-300 flex-1">"{s.name}"</span>
-                                                        <span className="text-[8px] text-slate-500">{s.meaning}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                        <button onClick={() => { setIsIntelOpen(true); setHistoricStripExpanded(false); }} className="w-full py-2.5 bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[9px] font-black uppercase tracking-widest rounded-xl active:bg-blue-500/20">
-                                            Full Intel View
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-950/90 backdrop-blur-xl rounded-2xl border border-blue-500/25 shadow-xl active:scale-[0.98] cursor-pointer" onClick={() => setHistoricStripExpanded(true)}>
-                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
-                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.15em] shrink-0">Historic</span>
-                                    <span className="text-[9px] text-slate-400 truncate text-left flex-1 min-w-0">
-                                        {loadingPAS ? 'Scanning...' : ([historicRoutes.filter(r => r.type === 'roman_road').length > 0 ? 'Roman road' : null, historicRoutes.filter(r => r.type !== 'roman_road').length > 0 ? 'Trackway' : null, pasFinds.length > 0 ? `${pasFinds.length} site${pasFinds.length !== 1 ? 's' : ''}` : null, placeSignals.length > 0 ? `"${placeSignals[0]?.name}"` : null].filter(Boolean).join(' · ') || 'No features found nearby')}
-                                    </span>
-                                    <button
-                                        onClick={e => {
-                                            e.stopPropagation();
-                                            const allOn = Object.values(historicLayerVisibility).every(v => v);
-                                            const next = !allOn;
-                                            setHistoricLayerVisibility({ routes: next, corridors: next, crossings: next, monuments: next, aim: next });
-                                        }}
-                                        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 shrink-0 ${Object.values(historicLayerVisibility).every(v => v) ? 'bg-blue-500 border-blue-300 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                                    >
-                                        Overlays
-                                    </button>
-                                    <svg className="shrink-0 text-slate-500" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                </div>
-                            )}
+                        <div className="absolute top-4 left-4 z-[90] lg:hidden pointer-events-auto">
+                            <button
+                                onClick={() => setIsIntelOpen(true)}
+                                className="bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-2xl flex items-center gap-2 active:scale-95 transition-all"
+                            >
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                                <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">
+                                    {loadingPAS ? 'Scanning...' : 'Historic Intel'}
+                                </span>
+                            </button>
                         </div>
                     )}
 
-                    {/* Mobile Site Intel HUD Overlay */}
-                    {isIntelOpen && (
-                        <div className="absolute inset-0 z-[105] lg:hidden bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex flex-col">
-                            <div className="p-4 pt-6 border-b border-white/5 flex justify-between items-center">
-                                <div>
-                                    <h2 className="text-xl font-black text-white uppercase tracking-tighter italic leading-none">Site Intelligence</h2>
-                                    <p className="text-[10px] text-emerald-500 font-black uppercase tracking-[0.2em]">Regional Scan Profile</p>
-                                </div>
-                                <button onClick={() => setIsIntelOpen(false)} className="w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-white transition-all active:scale-90">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    {/* Mobile Historic Intelligence Panel */}
+                    {isIntelOpen && (() => {
+                        const bd = potentialScore?.breakdown ?? null;
+                        const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.signals } : null);
+                        const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.signals } : null);
+                        const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
+                        return (
+                        <>
+                        {/* Tap-behind to dismiss */}
+                        <div className="absolute inset-0 z-[104] lg:hidden" onClick={() => setIsIntelOpen(false)} />
+                        {/* Intel card — same position/style as hotspot card popup */}
+                        <div className="absolute bottom-6 left-4 right-4 z-[105] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="bg-slate-900 border-2 border-amber-500/40 shadow-[0_0_40px_rgba(245,158,11,0.15)] rounded-3xl overflow-hidden">
+
+                            {/* Card header row */}
+                            <div className="flex justify-between items-start px-5 pt-4 pb-0">
+                                <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Historic Area Information</p>
+                                <button onClick={() => setIsIntelOpen(false)} className="text-white/30 hover:text-white/60 transition-colors -mt-1 -mr-1 p-1">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-24">
-                                <div className="relative flex flex-col items-center justify-center py-6">
-                                    <div className="relative w-48 h-48 flex items-center justify-center">
-                                        <svg className="absolute inset-0 w-full h-full -rotate-90">
-                                            <circle cx="96" cy="96" r="80" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/5" />
-                                            <circle cx="96" cy="96" r="80" fill="none" stroke="currentColor" strokeWidth="8" className={`${pasFinds.length > 0 ? 'text-red-500' : 'text-emerald-500'} shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all duration-1000`} strokeDasharray="502" strokeDashoffset={502 - (502 * (potentialScore?.score || 0)) / 100} strokeLinecap="round" />
-                                        </svg>
-                                        <div className="text-center">
-                                            <span className="block text-6xl font-black text-white tracking-tighter leading-none">{potentialScore?.score || '0'}</span>
-                                            <span className={`text-xs font-black uppercase tracking-widest mt-1 ${pasFinds.length > 0 ? 'text-red-400' : 'text-emerald-500'}`}>Potential Index</span>
+
+                            <div className="overflow-y-auto max-h-[52vh] px-5 pb-5 pt-2 space-y-3">
+
+                                    <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{interp.title}</h3>
+                                    <p className="text-[11px] font-bold text-white/70 leading-snug mb-3">{interp.subtitle}</p>
+
+                                    {/* Signal bullets — like "Why this matters" */}
+                                    {sigLines.length > 0 && (
+                                        <div className="border-t border-white/8 pt-3 mb-3">
+                                            <p className="text-[8px] font-medium text-white/40 mb-2.5">Why this stands out</p>
+                                            <div className="space-y-2">
+                                                {sigLines.map((line, i) => (
+                                                    <div key={i} className="flex items-start gap-3">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.7)]" />
+                                                        <p className="text-xs font-bold text-white leading-tight flex-1">{line}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                                {pasFinds.length > 0 && (
-                                    <div className="space-y-4">
-                                        <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                                            <div className="w-1 h-3 bg-blue-500" /> Historic Period Profile
-                                        </h3>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
-                                                <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
-                                                    <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
-                                                    <span className="text-sm font-black text-blue-400">{count}</span>
+                                    )}
+
+                                    {/* Summary counts */}
+                                    {hasData && (
+                                        <>
+                                        <div className="flex gap-2 mt-3">
+                                            {pasFinds.length > 0 && (
+                                                <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
+                                                    <span className="block text-lg font-black text-blue-400">{pasFinds.length}</span>
+                                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Sites</span>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10 relative">
-                                        {scanConfidence && (
-                                            <span className={`absolute top-2 right-2 text-[6px] font-black px-1 rounded border ${scanConfidence === 'High Probability' ? 'text-emerald-400 border-emerald-400/30' : scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' : 'text-red-400 border-red-400/30'}`}>{scanConfidence}</span>
-                                        )}
-                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
-                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-emerald-500" style={{ width: `${potentialScore?.breakdown?.terrain || 0}%` }} /></div>
-                                        <span className="text-lg font-black text-emerald-500">{potentialScore?.breakdown?.terrain || '0'}<span className="text-[10px] text-emerald-500/50 italic">%</span></span>
-                                    </div>
-                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
-                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-blue-500" style={{ width: `${potentialScore?.breakdown?.hydro || 0}%` }} /></div>
-                                        <span className="text-lg font-black text-blue-500">{potentialScore?.breakdown?.hydro || '0'}<span className="text-[10px] text-blue-500/50 italic">%</span></span>
-                                    </div>
-                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
-                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-amber-500" style={{ width: `${potentialScore?.breakdown?.historic || 0}%` }} /></div>
-                                        <span className="text-lg font-black text-amber-500">{potentialScore?.breakdown?.historic || '0'}<span className="text-[10px] text-amber-500/50 italic">%</span></span>
-                                    </div>
-                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
-                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore?.breakdown?.signals || 0}%` }} /></div>
-                                        <span className="text-lg font-black text-purple-500">{potentialScore?.breakdown?.signals || '0'}<span className="text-[10px] text-purple-500/50 italic">%</span></span>
-                                    </div>
-                                </div>
-                                {pasFinds.length > 0 && (
-                                    <div className="space-y-4">
-                                        <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em] flex items-center gap-2"><div className="w-1 h-3 bg-blue-500" /> Historic Findings</h3>
-                                        <div className="space-y-2">
-                                            {pasFinds.map(f => (
-                                                <div key={f.id} onClick={() => { setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
-                                                    <div className="flex-1 min-w-0 pr-4">
-                                                        <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
-                                                        <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
-                                                    </div>
-                                                    <div className="text-right shrink-0">
-                                                        <p className="text-[9px] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
-                                                        <p className="text-[8px] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
-                                                    </div>
+                                            )}
+                                            {historicRoutes.length > 0 && (
+                                                <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
+                                                    <span className="block text-lg font-black text-blue-400">{historicRoutes.length}</span>
+                                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Routes</span>
                                                 </div>
-                                            ))}
+                                            )}
+                                            {placeSignals.length > 0 && (
+                                                <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
+                                                    <span className="block text-lg font-black text-blue-300">{placeSignals.length}</span>
+                                                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Place Names</span>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                )}
-                                {placeSignals.length > 0 && (
-                                    <div className="space-y-4">
-                                        <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] flex items-center gap-2"><div className="w-1 h-3 bg-emerald-500" /> Etymological Signals</h3>
-                                        <div className="space-y-2">
-                                            {placeSignals.map((s, i) => (
-                                                <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl relative overflow-hidden group">
-                                                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[7px] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <span className="text-sm font-black text-white uppercase italic tracking-tight">"{s.name}"</span>
-                                                        <span className="text-[9px] font-bold text-emerald-500/60 uppercase">{s.distance.toFixed(1)} km</span>
-                                                    </div>
-                                                    <p className="text-[8px] font-black text-emerald-500/40 uppercase mb-2 tracking-widest">{s.type}</p>
-                                                    <p className="text-[10px] font-bold text-slate-300 leading-tight"><span className="text-emerald-500/80 uppercase text-[9px]">Meaning:</span> {s.meaning}</p>
-                                                    <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2">
-                                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-white/5 px-1.5 py-0.5 rounded">{s.period}</span>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <div className="w-10 h-1 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${s.confidence * 100}%` }} /></div>
-                                                            <span className="text-[7px] font-black text-emerald-500/60">{(s.confidence * 100).toFixed(0)}%</span>
+                                        <p className="text-[9px] font-black text-white/60 italic mt-2 text-center tracking-wide">Zoom out to understand wider context</p>
+                                        </>
+                                    )}
+
+                                    {/* Further details + Layers on same row */}
+                                    {(hasData || potentialScore) && (
+                                        <div className="mt-4 pt-3 border-t border-white/8">
+                                            <div className="flex justify-between items-center">
+                                                <span
+                                                    onClick={() => setIntelDetailsOpen(v => !v)}
+                                                    className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
+                                                >
+                                                    {intelDetailsOpen ? '▲ Hide details' : '▼ View full breakdown'}
+                                                </span>
+                                                <span
+                                                    onClick={() => setIntelLayersOpen(v => !v)}
+                                                    className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
+                                                >
+                                                    {intelLayersOpen ? '▲ Hide layers' : '▼ Map layers'}
+                                                </span>
+                                            </div>
+
+                                            {intelLayersOpen && (
+                                                <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
+                                                    {[{ key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }].map(({ key, label }) => (
+                                                        <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                                            {label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {intelDetailsOpen && (
+                                                <div className="mt-4 space-y-4 animate-in fade-in duration-200">
+
+                                                    {/* Period Profile */}
+                                                    {pasFinds.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Period Profile</p>
+                                                            <div className="grid grid-cols-2 gap-2">
+                                                                {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
+                                                                    <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
+                                                                        <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                                                        <span className="text-sm font-black text-blue-400">{count}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
+
+                                                    {/* Historic Findings */}
+                                                    {pasFinds.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
+                                                            <div className="space-y-2">
+                                                                {pasFinds.map(f => (
+                                                                    <div key={f.id} onClick={() => { setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
+                                                                        <div className="flex-1 min-w-0 pr-4">
+                                                                            <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
+                                                                            <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
+                                                                        </div>
+                                                                        <div className="text-right shrink-0">
+                                                                            <p className="text-[9px] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
+                                                                            <p className="text-[8px] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Etymological Signals */}
+                                                    {placeSignals.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
+                                                            <p className="text-[9px] text-slate-500 font-bold">Place-name evidence suggests historic activity in the wider area.</p>
+                                                            <div className="space-y-2">
+                                                                {placeSignals.map((s, i) => (
+                                                                    <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl relative overflow-hidden">
+                                                                        <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[7px] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
+                                                                        <div className="flex justify-between items-start mb-1">
+                                                                            <span className="text-sm font-black text-white uppercase italic tracking-tight">"{s.name}"</span>
+                                                                            <span className="text-[9px] font-bold text-emerald-500/60 uppercase">{s.distance.toFixed(1)} km</span>
+                                                                        </div>
+                                                                        <p className="text-[8px] font-black text-emerald-500/40 uppercase mb-2 tracking-widest">{s.type}</p>
+                                                                        <p className="text-[10px] font-bold text-slate-300 leading-tight"><span className="text-emerald-500/80 uppercase text-[9px]">Meaning:</span> {s.meaning}</p>
+                                                                        <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2">
+                                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-white/5 px-1.5 py-0.5 rounded">{s.period}</span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <div className="w-10 h-1 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${s.confidence * 100}%` }} /></div>
+                                                                                <span className="text-[7px] font-black text-emerald-500/60">{(s.confidence * 100).toFixed(0)}%</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Detailed Breakdown */}
+                                                    {potentialScore && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Detailed Breakdown</p>
+                                                            <div className="grid grid-cols-2 gap-3">
+                                                                <div className="bg-white/5 p-4 rounded-3xl border border-white/10 relative">
+                                                                    {scanConfidence && (
+                                                                        <span className={`absolute top-2 right-2 text-[6px] font-black px-1 rounded border ${scanConfidence === 'High Probability' ? 'text-emerald-400 border-emerald-400/30' : scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' : 'text-red-400 border-red-400/30'}`}>{scanConfidence}</span>
+                                                                    )}
+                                                                    <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
+                                                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-emerald-500" style={{ width: `${potentialScore.breakdown?.terrain || 0}%` }} /></div>
+                                                                    <span className="text-lg font-black text-emerald-500">{potentialScore.breakdown?.terrain || '0'}<span className="text-[10px] text-emerald-500/50 italic">%</span></span>
+                                                                </div>
+                                                                <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                                                                    <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
+                                                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-blue-500" style={{ width: `${potentialScore.breakdown?.hydro || 0}%` }} /></div>
+                                                                    <span className="text-lg font-black text-blue-500">{potentialScore.breakdown?.hydro || '0'}<span className="text-[10px] text-blue-500/50 italic">%</span></span>
+                                                                </div>
+                                                                <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                                                                    <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
+                                                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-amber-500" style={{ width: `${potentialScore.breakdown?.historic || 0}%` }} /></div>
+                                                                    <span className="text-lg font-black text-amber-500">{potentialScore.breakdown?.historic || '0'}<span className="text-[10px] text-amber-500/50 italic">%</span></span>
+                                                                </div>
+                                                                <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
+                                                                    <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
+                                                                    <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.signals || 0}%` }} /></div>
+                                                                    <span className="text-lg font-black text-purple-500">{potentialScore.breakdown?.signals || '0'}<span className="text-[10px] text-purple-500/50 italic">%</span></span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                            <div className="p-4 pb-8 bg-black/40 border-t border-white/5">
-                                <p className="text-center text-[8px] font-black text-slate-500 uppercase tracking-[0.3em] italic animate-pulse">Scanning Spectral Data... [Consensus v12.8]</p>
+                                    )}
+
+
                             </div>
                         </div>
-                    )}
+                        </div>
+                        </>
+                        );
+                    })()}
                 </div>
 
                 {/* Sidebar */}

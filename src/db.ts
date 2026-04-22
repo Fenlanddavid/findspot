@@ -166,6 +166,8 @@ export type Find = {
   storageLocation: string;
   notes: string;
 
+  foundAt?: string; // ISO datetime — when the find was actually made (may differ from createdAt)
+
   createdAt: string;
   updatedAt: string;
 };
@@ -347,6 +349,10 @@ export class FindSpotDB extends Dexie {
 
     this.version(17).stores({
       permissions: "id, projectId, name, type, permissionGranted, boundary, validFrom, isPinned, createdAt",
+    });
+
+    this.version(18).stores({
+      finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, createdAt",
     });
   }
 }

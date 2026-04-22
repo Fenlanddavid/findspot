@@ -81,7 +81,19 @@ type FormState = {
   dateRange: string;
   storageLocation: string;
   notes: string;
+  foundDate: string; // YYYY-MM-DD
+  foundTime: string; // HH:MM
 };
+
+function todayDate(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function currentTime(): string {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 
 function makeInitialForm(initialLat?: number | null, initialLon?: number | null): FormState {
   return {
@@ -110,6 +122,8 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     dateRange: "",
     storageLocation: "",
     notes: "",
+    foundDate: todayDate(),
+    foundTime: currentTime(),
   };
 }
 
@@ -271,6 +285,7 @@ export default function FindPage(props: {
         if (f) {
           setSavedId(f.id);
           const grid = (f.lat && f.lon) ? toOSGridRef(f.lat, f.lon) || "" : "";
+          const src = f.foundAt ? new Date(f.foundAt) : null;
           setForm(prev => ({
             ...prev,
             findCode: f.findCode,
@@ -280,6 +295,12 @@ export default function FindPage(props: {
             acc: f.gpsAccuracyM,
             osGridRef: grid,
             notes: f.notes,
+            foundDate: src
+              ? `${src.getFullYear()}-${String(src.getMonth()+1).padStart(2,"0")}-${String(src.getDate()).padStart(2,"0")}`
+              : todayDate(),
+            foundTime: src
+              ? `${String(src.getHours()).padStart(2,"0")}:${String(src.getMinutes()).padStart(2,"0")}`
+              : currentTime(),
           }));
           if (f.permissionId) {
             db.permissions.get(f.permissionId).then(p => {
@@ -382,6 +403,10 @@ export default function FindPage(props: {
       const now = new Date().toISOString();
       const targetPermissionId = await resolvePermission(trimmedName, now);
 
+      const foundAt = form.foundDate
+        ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
+        : undefined;
+
       const s: Omit<Find, 'createdAt'> = {
         id,
         projectId: props.projectId,
@@ -414,6 +439,7 @@ export default function FindPage(props: {
         storageLocation: form.storageLocation.trim(),
         notes: form.notes.trim(),
         isPending: false,
+        foundAt,
         updatedAt: now,
       };
 
@@ -466,6 +492,10 @@ export default function FindPage(props: {
       const now = new Date().toISOString();
       const targetPermissionId = await resolvePermission(trimmedName, now);
 
+      const foundAt = form.foundDate
+        ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
+        : undefined;
+
       const pendingData = {
         id,
         projectId: props.projectId,
@@ -498,6 +528,7 @@ export default function FindPage(props: {
         storageLocation: "",
         notes: form.notes.trim(),
         isPending: true,
+        foundAt,
         updatedAt: now,
       };
 
@@ -1091,6 +1122,25 @@ export default function FindPage(props: {
                       {materials.map((x) => <option key={x} value={x}>{x}</option>)}
                     </select>
                   </label>
+                </div>
+
+                {/* Date Found */}
+                <div>
+                  <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Date Found</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      value={form.foundDate}
+                      onChange={(e) => update({ foundDate: e.target.value })}
+                      className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow text-sm"
+                    />
+                    <input
+                      type="time"
+                      value={form.foundTime}
+                      onChange={(e) => update({ foundTime: e.target.value })}
+                      className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow text-sm"
+                    />
+                  </div>
                 </div>
               </CollapsibleSection>
 

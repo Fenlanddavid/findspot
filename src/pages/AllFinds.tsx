@@ -19,17 +19,20 @@ export default function AllFinds(props: { projectId: string }) {
   const filterPending = searchParams.get("filter") === "pending";
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") ?? "");
+  const [dateFrom, setDateFrom] = useState(searchParams.get("from") ?? "");
+  const [dateTo, setDateTo]   = useState(searchParams.get("to")   ?? "");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
   // Reset page when any filter changes
-  useEffect(() => { setPage(0); }, [searchQuery, filterPeriod, filterType, filterMaterial, filterPending]);
+  useEffect(() => { setPage(0); }, [searchQuery, filterPeriod, filterType, filterMaterial, filterPending, dateFrom, dateTo]);
 
   // --- DATA FETCHING ---
   const finds = useLiveQuery(
     async () => {
       let results = await db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
+      results.sort((a, b) => (b.foundAt ?? b.createdAt).localeCompare(a.foundAt ?? a.createdAt));
       return results.filter(s => {
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
@@ -41,6 +44,16 @@ export default function AllFinds(props: { projectId: string }) {
                                  (s.coinType || "").toLowerCase().includes(q);
             if (!matchesSearch) return false;
         }
+        if (dateFrom) {
+            const from = new Date(dateFrom);
+            from.setHours(0, 0, 0, 0);
+            if (new Date(s.foundAt ?? s.createdAt) < from) return false;
+        }
+        if (dateTo) {
+            const to = new Date(dateTo);
+            to.setHours(23, 59, 59, 999);
+            if (new Date(s.foundAt ?? s.createdAt) > to) return false;
+        }
         if (filterPeriod && s.period !== filterPeriod) return false;
         if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase())) return false;
         if (filterMaterial && s.material !== filterMaterial) return false;
@@ -48,7 +61,7 @@ export default function AllFinds(props: { projectId: string }) {
         return true;
       });
     },
-    [props.projectId, searchQuery, filterPeriod, filterType, filterMaterial, filterPending]
+    [props.projectId, searchQuery, filterPeriod, filterType, filterMaterial, filterPending, dateFrom, dateTo]
   );
 
   // --- MAP LOGIC ---
@@ -180,17 +193,25 @@ export default function AllFinds(props: { projectId: string }) {
       return results.filter(s => {
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
-          return (s.objectType || "").toLowerCase().includes(q) ||
-                 (s.findCode || "").toLowerCase().includes(q) ||
-                 (s.notes || "").toLowerCase().includes(q) ||
-                 (s.period || "").toLowerCase().includes(q) ||
-                 (s.material || "").toLowerCase().includes(q) ||
-                 (s.coinType || "").toLowerCase().includes(q);
+          if (!((s.objectType || "").toLowerCase().includes(q) ||
+                (s.findCode || "").toLowerCase().includes(q) ||
+                (s.notes || "").toLowerCase().includes(q) ||
+                (s.period || "").toLowerCase().includes(q) ||
+                (s.material || "").toLowerCase().includes(q) ||
+                (s.coinType || "").toLowerCase().includes(q))) return false;
+        }
+        if (dateFrom) {
+          const from = new Date(dateFrom); from.setHours(0, 0, 0, 0);
+          if (new Date(s.foundAt ?? s.createdAt) < from) return false;
+        }
+        if (dateTo) {
+          const to = new Date(dateTo); to.setHours(23, 59, 59, 999);
+          if (new Date(s.foundAt ?? s.createdAt) > to) return false;
         }
         return true;
       });
     },
-    [props.projectId, searchQuery]
+    [props.projectId, searchQuery, dateFrom, dateTo]
   );
   const stats = useMemo(() => {
     if (!allFindsForStats) return null;
@@ -233,6 +254,31 @@ export default function AllFinds(props: { projectId: string }) {
         </div>
       </header>
 
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">Date Found</span>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={e => { const v = e.target.value; setDateFrom(v); const p = new URLSearchParams(searchParams); if (v) p.set('from', v); else p.delete('from'); setSearchParams(p, { replace: true }); }}
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 text-sm shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+        />
+        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">to</span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={e => { const v = e.target.value; setDateTo(v); const p = new URLSearchParams(searchParams); if (v) p.set('to', v); else p.delete('to'); setSearchParams(p, { replace: true }); }}
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 text-sm shadow-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+        />
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => { setDateFrom(''); setDateTo(''); const p = new URLSearchParams(searchParams); p.delete('from'); p.delete('to'); setSearchParams(p, { replace: true }); }}
+            className="text-[9px] font-black text-gray-400 hover:text-red-500 uppercase tracking-widest transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {stats && stats.total > 0 && (
         <div className="flex gap-3 mb-4 flex-wrap">
           <button
@@ -274,7 +320,7 @@ export default function AllFinds(props: { projectId: string }) {
                             <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-emerald-600 transition-colors line-clamp-1 uppercase tracking-tight">{s.objectType || "Unidentified"}</h3>
                             <div className="flex flex-wrap gap-2 pt-3 mt-auto">
                                 <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-emerald-50 border-emerald-100 text-emerald-700">{s.period}</span>
-                                <span className="ml-auto text-[9px] opacity-40 font-black uppercase tracking-widest">{new Date(s.createdAt).toLocaleDateString()}</span>
+                                <span className="ml-auto text-[9px] opacity-40 font-black uppercase tracking-widest">{new Date(s.foundAt ?? s.createdAt).toLocaleDateString()} {new Date(s.foundAt ?? s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                         </div>
                     </div>
