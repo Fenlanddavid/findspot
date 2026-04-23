@@ -92,6 +92,11 @@ export default function PermissionPage(props: {
     return db.fields.where("permissionId").equals(id).reverse().sortBy("createdAt");
   }, [id]);
 
+  const isFirstPermission = useLiveQuery(async () => {
+    if (isEdit) return false;
+    return (await db.permissions.count()) === 0;
+  }, [isEdit]);
+
   const agreementFile = useLiveQuery(async () => {
     if (!agreementId) return null;
     return db.media.get(agreementId);
@@ -840,6 +845,11 @@ export default function PermissionPage(props: {
                       <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Event Details" : "Permission Details"}</div>
                       <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                     </div>
+                    {isFirstPermission && (
+                      <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-800 dark:text-emerald-400">
+                        Just add a name to get started — fields, boundaries, and landowner details can all be added later.
+                      </div>
+                    )}
                     <div className="flex flex-col sm:flex-row gap-1.5 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit border border-gray-200 dark:border-gray-800">
                         <button
                             onClick={() => setType("individual")}

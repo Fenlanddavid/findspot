@@ -352,8 +352,12 @@ export default function OnboardingFlow() {
                         {dots(2)}
                         <div className="mb-6">
                             <h2 className="text-xl font-black text-white tracking-tight mb-3">Field Guide</h2>
-                            <p className="text-[13px] text-white/60 leading-relaxed mb-4">
+                            <p className="text-[13px] text-white/60 leading-relaxed mb-2">
                                 Field Guide scans the landscape using terrain, satellite, and historic data to highlight where past activity may have occurred.
+                            </p>
+
+                            <p className="text-[13px] text-emerald-400 font-bold mb-4">
+                                No setup needed — start scanning straight away.
                             </p>
 
                             <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4">
@@ -522,9 +526,11 @@ export default function OnboardingFlow() {
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-[11px] text-white/30 leading-relaxed mt-4">
-                                You don't have to fill everything in at once — add more detail whenever you're ready.
-                            </p>
+                            <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl px-4 py-3 mt-4">
+                                <p className="text-[12px] text-emerald-300/90 leading-relaxed">
+                                    Start simple — just a name is enough. Add fields, boundaries, and landowner details whenever you're ready.
+                                </p>
+                            </div>
                         </div>
 
                         <button

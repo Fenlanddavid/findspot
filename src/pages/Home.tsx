@@ -177,9 +177,10 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       items.push({
         type: 'no_permissions',
         dismissKey: `no_permissions`,
-        message: 'Add your first permission to get started',
-        cta: 'Add Permission',
-        action: () => props.goPermission(),
+        message: 'Scan the land first — find where activity likely was before you start detecting',
+        detail: 'No setup needed',
+        cta: 'Open FieldGuide',
+        action: () => props.goFieldGuide(),
       });
     }
     return items;

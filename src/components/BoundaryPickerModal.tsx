@@ -12,6 +12,37 @@ interface BoundaryPickerModalProps {
   onSelect: (boundary: any) => void;
 }
 
+function buildSourceData(pts: [number, number][]) {
+  const features: any[] = [];
+  if (pts.length > 0) {
+    pts.forEach((p, i) => {
+      features.push({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: p },
+        properties: { index: i }
+      });
+    });
+    if (pts.length >= 2) {
+      const coords = [...pts];
+      if (pts.length >= 3) {
+        coords.push(pts[0]);
+        features.push({
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [coords] },
+          properties: {}
+        });
+      } else {
+        features.push({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: coords },
+          properties: {}
+        });
+      }
+    }
+  }
+  return { type: "FeatureCollection" as const, features };
+}
+
 export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initialLat, initialLon, onClose, onSelect }: BoundaryPickerModalProps) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -21,6 +52,17 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+
+  // Refs for drag state — accessible inside map event handlers without stale closures
+  const pointsRef = useRef<[number, number][]>([]);
+  const draggingIndexRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didDragRef = useRef(false);
+
+  // Keep pointsRef in sync with React state
+  useEffect(() => {
+    pointsRef.current = points;
+  }, [points]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -58,7 +100,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   useEffect(() => {
     if (!mapDivRef.current) return;
 
-    const style = mapStyle === "streets" 
+    const style = mapStyle === "streets"
       ? "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
       : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
@@ -100,10 +142,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     map.on("load", () => {
       map.addSource("boundary", {
         type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: []
-        }
+        data: { type: "FeatureCollection", features: [] }
       });
 
       map.addLayer({
@@ -131,15 +170,109 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
         id: "boundary-points",
         type: "circle",
         source: "boundary",
+        filter: ["==", "$type", "Point"],
         paint: {
-          "circle-radius": 6,
+          "circle-radius": 9,
           "circle-color": "#ffffff",
-          "circle-stroke-width": 2,
+          "circle-stroke-width": 2.5,
           "circle-stroke-color": "#10b981"
         }
       });
 
+      // Invisible larger hit area layer for easier touch targeting
+      map.addLayer({
+        id: "boundary-points-hit",
+        type: "circle",
+        source: "boundary",
+        filter: ["==", "$type", "Point"],
+        paint: {
+          "circle-radius": 20,
+          "circle-color": "transparent",
+          "circle-opacity": 0
+        }
+      });
+
+      function updateSource(pts: [number, number][]) {
+        const source = map.getSource("boundary") as maplibregl.GeoJSONSource;
+        if (source) source.setData(buildSourceData(pts));
+      }
+
+      function endDrag() {
+        if (longPressTimerRef.current) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+        if (draggingIndexRef.current !== null) {
+          didDragRef.current = true; // Block the click that fires after mouseup/touchend
+          setPoints([...pointsRef.current]);
+          draggingIndexRef.current = null;
+          map.dragPan.enable();
+          map.getCanvas().style.cursor = "";
+        }
+      }
+
+      // Long press detection on vertex dots — use the hit layer for easier touch targeting
+      function startLongPress(idx: number) {
+        longPressTimerRef.current = setTimeout(() => {
+          longPressTimerRef.current = null;
+          draggingIndexRef.current = idx;
+          map.dragPan.disable();
+          map.getCanvas().style.cursor = "grabbing";
+        }, 300);
+      }
+
+      map.on("mousedown", "boundary-points-hit", (e) => {
+        const idx = e.features?.[0]?.properties?.index;
+        if (idx == null) return;
+        startLongPress(idx as number);
+      });
+
+      map.on("touchstart", "boundary-points-hit", (e) => {
+        const idx = e.features?.[0]?.properties?.index;
+        if (idx == null) return;
+        startLongPress(idx as number);
+      });
+
+      // Cancel long press if finger/mouse moves before threshold fires
+      function cancelLongPressIfPending() {
+        if (longPressTimerRef.current && draggingIndexRef.current === null) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+      }
+
+      map.on("mousemove", (e) => {
+        cancelLongPressIfPending();
+        if (draggingIndexRef.current === null) return;
+        const newPoints = [...pointsRef.current];
+        newPoints[draggingIndexRef.current] = [e.lngLat.lng, e.lngLat.lat];
+        pointsRef.current = newPoints;
+        updateSource(newPoints);
+      });
+
+      map.on("touchmove", (e) => {
+        cancelLongPressIfPending();
+        if (draggingIndexRef.current === null) return;
+        const newPoints = [...pointsRef.current];
+        newPoints[draggingIndexRef.current] = [e.lngLat.lng, e.lngLat.lat];
+        pointsRef.current = newPoints;
+        updateSource(newPoints);
+      });
+
+      map.on("mouseup", endDrag);
+      map.on("touchend", endDrag);
+      map.on("touchcancel", endDrag);
+
       map.on("click", (e) => {
+        // Block click if we just finished a drag
+        if (didDragRef.current) {
+          didDragRef.current = false;
+          return;
+        }
+        // Don't add a new point if the tap was on an existing dot
+        const hits = map.queryRenderedFeatures(e.point, { layers: ["boundary-points-hit"] });
+        if (hits.length > 0) return;
+
         const newPoint: [number, number] = [e.lngLat.lng, e.lngLat.lat];
         setPoints(prev => [...prev, newPoint]);
       });
@@ -157,42 +290,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     const source = map.getSource("boundary") as maplibregl.GeoJSONSource;
     if (!source) return;
 
-    const features: any[] = [];
-    
-    if (points.length > 0) {
-      // Point features for all corners
-      points.forEach((p, i) => {
-        features.push({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: p },
-          properties: { index: i }
-        });
-      });
-
-      // Line/Polygon feature
-      if (points.length >= 2) {
-        const coords = [...points];
-        if (points.length >= 3) {
-          coords.push(points[0]); // Close it
-          features.push({
-            type: "Feature",
-            geometry: { type: "Polygon", coordinates: [coords] },
-            properties: {}
-          });
-        } else {
-          features.push({
-            type: "Feature",
-            geometry: { type: "LineString", coordinates: coords },
-            properties: {}
-          });
-        }
-      }
-    }
-
-    source.setData({
-      type: "FeatureCollection",
-      features
-    });
+    source.setData(buildSourceData(points));
   }, [points]);
 
   function handleSave() {
@@ -216,12 +314,12 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     <Modal title="Define Field Boundary" onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-xs font-medium text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
-          Tip: Tap the corners of the field to draw its boundary. Plot at least 3 points to form a polygon.
+          Tap the corners of the field to place points. Hold and drag a dot to reposition it.
         </div>
 
         <div className="relative h-[400px] sm:h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner">
           <div ref={mapDivRef} className="absolute inset-0" />
-          
+
           <div className="absolute top-4 left-4 flex flex-col gap-2 z-10 max-w-[calc(100%-100px)]">
             <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
               <input
@@ -241,7 +339,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             {searchError && (
               <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
             )}
-            <button 
+            <button
               onClick={() => setMapStyle(prev => prev === "streets" ? "satellite" : "streets")}
               className="w-fit bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-lg shadow-md text-[10px] font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all uppercase"
             >
@@ -276,14 +374,14 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button 
+          <button
             onClick={handleSave}
             disabled={points.length < 3}
             className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all disabled:opacity-50"
           >
             Save Boundary ✓
           </button>
-          <button 
+          <button
             onClick={onClose}
             className="px-8 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold hover:bg-gray-200 transition-all"
           >
