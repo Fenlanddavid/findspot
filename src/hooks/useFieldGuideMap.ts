@@ -49,11 +49,11 @@ export type UseFieldGuideMapOptions = {
     detectedFeatures: Cluster[];
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
-    fieldBoundaries: Array<{ id: string; name: string; boundary: any }>;
+    fieldBoundaries: Array<{ id: string; name: string; permissionId: string; boundary: any }>;
     // Layer visibility drivers
     isSatellite: boolean;
     historicMode: boolean;
-    showFields: boolean;
+    showFields: false | 'all' | string;
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean };
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
     // Initial fly-to coordinates
@@ -437,19 +437,25 @@ export function useFieldGuideMap({
         if (!map) return;
         const src = map.getSource('permission-fields') as maplibregl.GeoJSONSource | undefined;
         if (!src) return;
+        const visible = showFields !== false
+            ? fieldBoundaries.filter(f => {
+                if (!f.boundary) return false;
+                if (showFields === 'all') return true;
+                if (typeof showFields === 'string' && showFields.startsWith('field:')) return f.id === showFields.slice(6);
+                return f.permissionId === showFields;
+            })
+            : [];
         src.setData({
             type: 'FeatureCollection',
-            features: fieldBoundaries
-                .filter(f => f.boundary)
-                .map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
+            features: visible.map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
         } as any);
-    }, [fieldBoundaries]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [fieldBoundaries, showFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Field boundaries visibility ───────────────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        const vis = showFields ? 'visible' : 'none';
+        const vis = showFields !== false ? 'visible' : 'none';
         ['permission-fields-fill', 'permission-fields-outline', 'permission-fields-labels'].forEach(id => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
         });

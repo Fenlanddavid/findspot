@@ -187,7 +187,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
-    const [showFields,             setShowFields]             = useState(false);
+    const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
+    const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
+    const [fieldPickerStep,        setFieldPickerStep]        = useState<'top' | string>('top'); // string = permId drilling into its fields
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
@@ -262,14 +264,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
-        fieldBoundaries: fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, boundary: f.boundary })),
+        fieldBoundaries: fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
         initLat, initLng,
         callbacks: {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
             onHotspotClick:  (id)  => { setShowSuggestion(false); setSelectedHotspotId(id); },
-            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); },
-            onDragStart:     ()    => setShowSuggestion(false),
+            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); },
+            onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
             onPASFindLog:    (msg) => addLog(msg, 'historic'),
@@ -290,6 +292,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSelectedHotspotId(null);
         setShowSuggestion(false);
         setShowPermissionPicker(false);
+        setShowFieldsPicker(false);
+        setFieldPickerStep('top');
         setScanStatus('');
         setSystemLog([makeLog('SYSTEM CLEARED. Ready for new scan.')]);
         setPasFinds([]);
@@ -509,11 +513,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {!isSearchOpen ? (
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setShowFields(v => !v)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                                onClick={() => setShowFieldsPicker(v => !v)}
+                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
                             >
                                 <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
-                                My Fields
+                                {showFields !== false && showFields !== 'all'
+                                    ? showFields.startsWith('field:')
+                                        ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
+                                        : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
+                                    : showFields === 'all' ? 'All Fields' : 'My Fields'}
                             </button>
                             <button
                                 onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
@@ -593,6 +601,86 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             <div className="flex flex-1 overflow-hidden relative">
                 <div className="flex-1 relative bg-slate-900">
                     <div ref={mapContainerRef} className="absolute inset-0" />
+
+                    {/* My Fields Picker */}
+                    {showFieldsPicker && (
+                        <div className="absolute top-2 left-2 z-[65] animate-in fade-in slide-in-from-top-2 duration-150">
+                            <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-md p-2 min-w-[170px] max-w-[220px]">
+                                {fieldPickerStep === 'top' ? (
+                                    <>
+                                        <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1 mb-1.5">Show fields</p>
+                                        <button
+                                            onClick={() => { setShowFields(false); setShowFieldsPicker(false); }}
+                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-0.5 ${showFields === false ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            Off
+                                        </button>
+                                        {fields.some(f => f.boundary) && (
+                                            <button
+                                                onClick={() => { setShowFields('all'); setShowFieldsPicker(false); }}
+                                                className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-1 ${showFields === 'all' ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                            >
+                                                All fields
+                                            </button>
+                                        )}
+                                        {realPermissions
+                                            .filter(p => fields.some(f => f.permissionId === p.id && f.boundary))
+                                            .map(p => {
+                                                const permFieldCount = fields.filter(f => f.permissionId === p.id && f.boundary).length;
+                                                const isActive = showFields === p.id || (typeof showFields === 'string' && showFields.startsWith('field:') && fields.find(f => f.id === showFields.slice(6))?.permissionId === p.id);
+                                                return (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => {
+                                                            if (permFieldCount > 1) {
+                                                                setFieldPickerStep(p.id);
+                                                            } else {
+                                                                setShowFields(p.id);
+                                                                setShowFieldsPicker(false);
+                                                            }
+                                                        }}
+                                                        className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                                    >
+                                                        <span className="truncate">{p.name || '(Unnamed)'}</span>
+                                                        {permFieldCount > 1 && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 opacity-50"><polyline points="9 18 15 12 9 6"/></svg>}
+                                                    </button>
+                                                );
+                                            })
+                                        }
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Field-level drill-down for a specific permission */}
+                                        <button
+                                            onClick={() => setFieldPickerStep('top')}
+                                            className="flex items-center gap-1 text-[9px] font-black text-white/40 hover:text-white/70 uppercase tracking-widest px-1 mb-1.5 transition-colors"
+                                        >
+                                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="15 18 9 12 15 6"/></svg>
+                                            {realPermissions.find(p => p.id === fieldPickerStep)?.name ?? 'Back'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowFields(fieldPickerStep); setShowFieldsPicker(false); setFieldPickerStep('top'); }}
+                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-1 ${showFields === fieldPickerStep ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                        >
+                                            All fields
+                                        </button>
+                                        {fields
+                                            .filter(f => f.permissionId === fieldPickerStep && f.boundary)
+                                            .map(f => (
+                                                <button
+                                                    key={f.id}
+                                                    onClick={() => { setShowFields(`field:${f.id}`); setShowFieldsPicker(false); setFieldPickerStep('top'); }}
+                                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 ${showFields === `field:${f.id}` ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                                >
+                                                    {f.name || '(Unnamed)'}
+                                                </button>
+                                            ))
+                                        }
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Map Layer Toggle */}
                     <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
