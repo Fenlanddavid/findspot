@@ -29,6 +29,8 @@ export default function OnboardingFlow() {
         if (!visible || FORCED_THIS_LOAD) return;
         Promise.all([db.permissions.count(), db.finds.count()]).then(([p, f]) => {
             if (p > 0 || f > 0) dismiss();
+        }).catch(() => {
+            dismiss();
         });
     }, []);
 

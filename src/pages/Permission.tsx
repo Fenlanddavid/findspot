@@ -241,20 +241,20 @@ export default function PermissionPage(props: {
     Promise.all(fIds.map(async (fId) => {
         const field = await db.fields.get(fId);
         if (!field || !field.boundary) return null;
-        
+
         // 1. Find all sessions explicitly assigned to this field
         const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
         const fieldSessionIds = new Set(sessions.map(s => s.id));
-        
+
         // 2. Find sessions for this permission that have NO field assigned (General tracks)
         const unassignedSessions = await db.sessions.where("permissionId").equals(id!).filter(s => !s.fieldId).toArray();
         const unassignedSessionIds = new Set(unassignedSessions.map(s => s.id));
 
         // Filter allTracks for either explicitly assigned or unassigned sessions
-        const fieldTracks = (allTracks ?? []).filter(t => 
+        const fieldTracks = (allTracks ?? []).filter(t =>
             t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
         );
-        
+
         const result = calculateCoverage(field.boundary, fieldTracks);
         return { fId, result };
     })).then(results => {
@@ -266,8 +266,10 @@ export default function PermissionPage(props: {
         });
         setFieldGapResults(next);
         setFieldGapErrors(errors);
+    }).catch(() => {
+        setFieldGapErrors(new Set(fIds));
     });
-  }, [showCoverage, shownFieldGapIds, boundary, allTracks]);
+  }, [showCoverage, shownFieldGapIds, boundary, allTracks, id]);
 
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
