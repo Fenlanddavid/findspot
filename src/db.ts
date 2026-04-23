@@ -354,6 +354,12 @@ export class FindSpotDB extends Dexie {
     this.version(18).stores({
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, createdAt",
     });
+
+    this.version(19).stores({}).upgrade(async tx => {
+      const permissionIds = new Set((await tx.table("permissions").toArray()).map((p: any) => p.id));
+      const orphanedFields = await tx.table("fields").filter((f: any) => !permissionIds.has(f.permissionId)).toArray();
+      await tx.table("fields").bulkDelete(orphanedFields.map((f: any) => f.id));
+    });
   }
 }
 
