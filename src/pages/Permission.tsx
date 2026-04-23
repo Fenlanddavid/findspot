@@ -615,7 +615,7 @@ export default function PermissionPage(props: {
     
     setSaving(true);
     try {
-      await db.transaction("rw", db.permissions, db.sessions, db.finds, db.media, db.fields, async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields], async () => {
         const finds = await db.finds.where("permissionId").equals(id).toArray();
         const findIds = finds.map(s => s.id);
         await db.media.where("findId").anyOf(findIds).delete();
