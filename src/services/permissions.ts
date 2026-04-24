@@ -1,9 +1,11 @@
 import { db, Permission, Field, Track } from "../db";
 import { calculateCoverage } from "./coverage";
+import { area as turfArea } from "@turf/turf";
 
 export type EnrichedPermission = Permission & {
   fields: Field[];
   cumulativePercent: number | null;
+  totalAcres: number | null;
   tracks: Track[];
   sessionCount: number;
   lastSessionDate: string | null;
@@ -135,12 +137,22 @@ export async function enrichPermissions(
     const permissionFinds = findsByPermission.get(p.id) ?? [];
     const findCount = permissionFinds.filter(f => !f.isPending).length;
 
+    const fieldsWithBoundary = fields.filter(f => f.boundary);
+    let totalAcres: number | null = null;
+    if (fieldsWithBoundary.length > 0) {
+      const totalM2 = fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary), 0);
+      totalAcres = totalM2 / 4046.86;
+    } else if (p.boundary) {
+      totalAcres = turfArea(p.boundary) / 4046.86;
+    }
+
     return {
       ...p,
       lat,
       lon,
       fields,
       cumulativePercent,
+      totalAcres,
       tracks: permissionTracks,
       sessionCount: sessions.length,
       lastSessionDate,

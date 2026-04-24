@@ -166,7 +166,14 @@ export default function AllPermissions(props: { projectId: string }) {
                       <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
                         {l.fields?.length || 0} {l.fields?.length === 1 ? 'Field' : 'Fields'}
                       </div>
-                      {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
+                      <div className="flex flex-col items-end gap-1">
+                        {l.totalAcres !== null && (
+                          <div className="text-[10px] font-bold text-emerald-700/60 dark:text-emerald-400/60">
+                            {l.totalAcres.toFixed(1)} acres
+                          </div>
+                        )}
+                        {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
+                      </div>
                     </div>
                   )}
                 </div>

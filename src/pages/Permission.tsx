@@ -1281,9 +1281,21 @@ export default function PermissionPage(props: {
                             <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Land Details</h4>
                                 <div className="flex justify-between items-center">
-                                    <p className="font-bold text-gray-700 dark:text-gray-300 capitalize">
-                                        {landType}
-                                    </p>
+                                    <div>
+                                        <p className="font-bold text-gray-700 dark:text-gray-300 capitalize">{landType}</p>
+                                        {(() => {
+                                            const fieldsWithBoundary = (fields ?? []).filter(f => f.boundary);
+                                            let acres: number | null = null;
+                                            if (fieldsWithBoundary.length > 0) {
+                                                acres = fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary) / 4046.86, 0);
+                                            } else if (boundary) {
+                                                acres = turfArea(boundary) / 4046.86;
+                                            }
+                                            return acres !== null ? (
+                                                <p className="text-[10px] font-bold text-gray-400 dark:text-white/80 mt-0.5">{acres.toFixed(1)} acres</p>
+                                            ) : null;
+                                        })()}
+                                    </div>
                                     {validFrom && (
                                         <div className="text-right">
                                             <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 text-emerald-600 dark:text-emerald-400">Valid From</h4>
