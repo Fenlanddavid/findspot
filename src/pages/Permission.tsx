@@ -15,6 +15,7 @@ import { BoundaryPickerModal } from "../components/BoundaryPickerModal";
 import { FieldModal } from "../components/FieldModal";
 import PermissionProofModal from "../components/PermissionProofModal";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
+import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -1446,6 +1447,11 @@ export default function PermissionPage(props: {
                                                                 {f.boundary ? "📐 Boundary mapped" : "No boundary"}
                                                             </div>
                                                         </div>
+                                                        {f.boundary && (
+                                                            <div className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                                                                {(turfArea(f.boundary) / 4046.86).toFixed(1)} acres
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic mb-2">{f.notes}</div>}
                                                     <div className="flex flex-wrap gap-1.5 mt-2">
