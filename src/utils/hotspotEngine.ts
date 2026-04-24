@@ -343,8 +343,10 @@ export function buildTerrainHotspots(
             explanation.push('Spectral vegetation anomaly');
         }
 
-        const center   = c.center;
-        const isRaised = members.some(m => m.polarity === 'Raised');
+        const center        = c.center;
+        const isRaised      = members.some(m => m.polarity === 'Raised');
+        const hasSlope      = sources.has('slope');
+        const isSouthFacing = members.some(m => typeof m.aspect === 'number' && m.aspect >= 135 && m.aspect <= 225);
 
         if (isRaised) {
             context += 8;
@@ -353,7 +355,8 @@ export function buildTerrainHotspots(
         }
 
         if (hasHydrology) {
-            anomaly += 5;
+            // Raised ground near water is a strong signal; flat/wet ground alone is weak
+            anomaly += isRaised ? 5 : 2;
             if (isRaised) {
                 behaviour += 6 + (hasLidar ? 4 : 0);
                 explanation.push('Island effect: Dry ground in wet zone');
@@ -475,18 +478,49 @@ export function buildTerrainHotspots(
         routeReasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
         behaviour += routeScore;
 
+        // ── Slope break scoring ───────────────────────────────────────────────
+        // Slope clusters were present in sources but had no explicit scoring.
+        // Large/clear breaks are meaningful; small/noisy clusters are not.
+        if (hasSlope) {
+            const bestSlope = members
+                .filter(m => m.sources.includes('slope'))
+                .sort((a, b) => (b.metrics?.area ?? 0) - (a.metrics?.area ?? 0))[0];
+            const slopeArea = bestSlope?.metrics?.area ?? 0;
+            if (slopeArea >= 80) {
+                anomaly += 5;
+                explanation.push('Slope break / terrace edge detected');
+            } else {
+                anomaly += 1; // noisy / tiny slope cluster — minimal contribution
+            }
+            // Slope is most meaningful alongside a corroborating signal
+            if (hasHydrology)                          context += 2;
+            if (hasRomanProximity || hasHistProximity) context += 2;
+        }
+
+        // ── Aspect scoring (south-facing support boost) ───────────────────────
+        // Minor reinforcing boost only — aspect alone cannot create a hotspot.
+        // Explanation only surfaces when other evidence already supports the site.
+        if (isSouthFacing) {
+            context += 3;
+            if (hasLidar || hasHydrology || hasRomanProximity || hasHistProximity) {
+                explanation.push('South-facing slope supports activity potential');
+            }
+        }
+
         // ── Penalties (hotspot-level with caps to prevent over-stacking) ──────
         // Applied once per hotspot rather than per member, so a merged group of
         // disturbed clusters isn't penalised multiple times for the same issue.
         const highDisturbanceCount = members.filter(m => m.disturbanceRisk === 'High').length;
         const featurelessCount     = members.filter(m => m.metrics && m.metrics.density < 0.05).length;
 
+        // Signal-count-aware penalties: heavily suppress weak isolated signals but
+        // protect multi-source results where several independent layers agree.
         if (highDisturbanceCount > 0) {
-            penalty -= Math.min(highDisturbanceCount * 20, 20); // cap at -20
+            penalty += sources.size >= 3 ? -3 : sources.size >= 2 ? -6 : -8;
             explanation.push('IGNORE: High risk of modern disturbance');
         }
         if (featurelessCount > 0) {
-            penalty -= Math.min(featurelessCount * 10, 10); // cap at -10
+            penalty += sources.size >= 3 ? -2 : sources.size >= 2 ? -4 : -6;
             if (featurelessCount / members.length > 0.5) explanation.push('IGNORE: Uniform/Featureless terrain');
         }
 
