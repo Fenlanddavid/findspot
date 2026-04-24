@@ -50,11 +50,12 @@ export function ScaleCalibrationModal(props: { media: Media; url: string; onClos
         
         <div className="relative cursor-crosshair border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-black flex items-center justify-center min-h-[300px]">
           <div className="relative inline-block">
-            <img 
+            <img
               ref={imgRef}
-              src={props.url} 
-              onClick={handleImageClick} 
-              className="max-w-full h-auto select-none block" 
+              src={props.url}
+              onClick={handleImageClick}
+              className="max-w-full h-auto select-none block"
+              alt="Tap two points to calibrate scale"
               draggable={false}
             />
             <svg className="absolute inset-0 pointer-events-none w-full h-full">

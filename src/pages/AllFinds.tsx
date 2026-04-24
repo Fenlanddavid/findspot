@@ -29,7 +29,10 @@ export default function AllFinds(props: { projectId: string }) {
   useEffect(() => { setPage(0); }, [searchQuery, filterPeriod, filterType, filterMaterial, filterPending, dateFrom, dateTo]);
 
   // --- DATA FETCHING ---
-  const finds = useLiveQuery(
+  // Single DB query — applies only search + date filters.
+  // Type/period/material/pending filters are cheap in-memory and applied via useMemo below,
+  // so stats can be derived from the same base without a second round-trip.
+  const baseFinds = useLiveQuery(
     async () => {
       let results = await db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
       results.sort((a, b) => (b.foundAt ?? b.createdAt).localeCompare(a.foundAt ?? a.createdAt));
@@ -54,15 +57,22 @@ export default function AllFinds(props: { projectId: string }) {
             to.setHours(23, 59, 59, 999);
             if (new Date(s.foundAt ?? s.createdAt) > to) return false;
         }
-        if (filterPeriod && s.period !== filterPeriod) return false;
-        if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase())) return false;
-        if (filterMaterial && s.material !== filterMaterial) return false;
-        if (filterPending && !s.isPending) return false;
         return true;
       });
     },
-    [props.projectId, searchQuery, filterPeriod, filterType, filterMaterial, filterPending, dateFrom, dateTo]
+    [props.projectId, searchQuery, dateFrom, dateTo]
   );
+
+  const finds = useMemo(() => {
+    if (!baseFinds) return undefined;
+    return baseFinds.filter(s => {
+      if (filterPeriod && s.period !== filterPeriod) return false;
+      if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase())) return false;
+      if (filterMaterial && s.material !== filterMaterial) return false;
+      if (filterPending && !s.isPending) return false;
+      return true;
+    });
+  }, [baseFinds, filterPeriod, filterType, filterMaterial, filterPending]);
 
   // --- MAP LOGIC ---
   const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -159,10 +169,14 @@ export default function AllFinds(props: { projectId: string }) {
   // Update base layer style without recreating the map
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const isStreets = mapStyleMode === "streets";
-    map.setLayoutProperty("osm-layer", "visibility", isStreets ? "visible" : "none");
-    map.setLayoutProperty("satellite-layer", "visibility", !isStreets ? "visible" : "none");
+    if (!map) return;
+    const apply = () => {
+      const isStreets = mapStyleMode === "streets";
+      map.setLayoutProperty("osm-layer", "visibility", isStreets ? "visible" : "none");
+      map.setLayoutProperty("satellite-layer", "visibility", !isStreets ? "visible" : "none");
+    };
+    if (map.isStyleLoaded()) apply();
+    else map.once("styledata", apply);
   }, [mapStyleMode]);
 
   useEffect(() => {
@@ -186,41 +200,15 @@ export default function AllFinds(props: { projectId: string }) {
   const visibleFinds = useMemo(() => finds?.slice(0, (page + 1) * PAGE_SIZE), [finds, page]);
   const findIds = useMemo(() => visibleFinds?.map(s => s.id) ?? [], [visibleFinds]);
 
-  // Stats are computed from all finds (ignoring type/period/material filters) so the counts stay stable as filter shortcuts
-  const allFindsForStats = useLiveQuery(
-    async () => {
-      let results = await db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
-      return results.filter(s => {
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          if (!((s.objectType || "").toLowerCase().includes(q) ||
-                (s.findCode || "").toLowerCase().includes(q) ||
-                (s.notes || "").toLowerCase().includes(q) ||
-                (s.period || "").toLowerCase().includes(q) ||
-                (s.material || "").toLowerCase().includes(q) ||
-                (s.coinType || "").toLowerCase().includes(q))) return false;
-        }
-        if (dateFrom) {
-          const from = new Date(dateFrom); from.setHours(0, 0, 0, 0);
-          if (new Date(s.foundAt ?? s.createdAt) < from) return false;
-        }
-        if (dateTo) {
-          const to = new Date(dateTo); to.setHours(23, 59, 59, 999);
-          if (new Date(s.foundAt ?? s.createdAt) > to) return false;
-        }
-        return true;
-      });
-    },
-    [props.projectId, searchQuery, dateFrom, dateTo]
-  );
+  // Stats ignore type/period/material/pending filters so counts stay stable as filter shortcuts
   const stats = useMemo(() => {
-    if (!allFindsForStats) return null;
+    if (!baseFinds) return null;
     return {
-      total: allFindsForStats.length,
-      coins: allFindsForStats.filter(f => (f.objectType || "").toLowerCase().includes("coin")).length,
-      roman: allFindsForStats.filter(f => f.period === "Roman").length,
+      total: baseFinds.length,
+      coins: baseFinds.filter(f => (f.objectType || "").toLowerCase().includes("coin")).length,
+      roman: baseFinds.filter(f => f.period === "Roman").length,
     };
-  }, [allFindsForStats]);
+  }, [baseFinds]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();

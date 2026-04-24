@@ -3,7 +3,7 @@ import { v4 as uuid } from "uuid";
 
 let watchId: number | null = null;
 let currentTrackId: string | null = null;
-let wakeLock: any = null;
+let wakeLock: WakeLockSentinel | null = null;
 let isStarting = false;
 let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
 
@@ -16,7 +16,7 @@ async function requestWakeLock() {
   try {
     if (wakeLock) await wakeLock.release();
     wakeLock = await (navigator as any).wakeLock.request('screen');
-    wakeLock.addEventListener('release', () => { wakeLock = null; });
+    wakeLock!.addEventListener('release', () => { wakeLock = null; });
   } catch (err: any) {
     console.error(`Wake lock: ${err.name}, ${err.message}`);
   }
