@@ -350,5 +350,15 @@
     "websiteUrl": "https://www.truenorthdetecting.uk/contact",
     "facebookUrl": "https://www.facebook.com/groups/truenorthdetecting/",
     "verificationStatus": "verified"
+  },
+  {
+    "id": "club-043",
+    "name": "Heart Of Scotland Charity Digs",
+    "description": "Non-profit club searching Central and Perthshire, welcoming professional and amateur detectorists. Digs on Saturdays.",
+    "town": "Bathgate",
+    "county": "West Lothian",
+    "postcode": "KY12",
+    "facebookUrl": "https://www.facebook.com/groups/1910807836430509",
+    "verificationStatus": "community"
   }
 ]

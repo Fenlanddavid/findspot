@@ -730,7 +730,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Mobile Tactical Tray (Hotspot Selection) */}
                     {hotspots.length > 0 && !historicMode && (
-                        <div className="absolute top-4 left-4 z-[100] lg:hidden pointer-events-none flex flex-col gap-2">
+                        <div className="absolute top-4 left-4 z-[100] pointer-events-none flex flex-col gap-2">
                             <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2 ${isHistoricScanning ? 'bg-slate-900/90 border border-amber-500/40 text-amber-400' : 'bg-slate-900/90 border border-emerald-500/30 text-emerald-400'}`}>
                                 <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isHistoricScanning ? 'bg-amber-400' : 'bg-emerald-500'}`} />
                                 {isHistoricScanning ? 'Enhancing...' : hotspotVersion === 'enhanced' ? 'Enhanced Hotspot' : 'Terrain Hotspot'}
@@ -753,9 +753,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     )}
 
-                    {/* Mobile Hotspot Card Popup */}
+                    {/* Hotspot Card Popup */}
                     {selectedHotspotId && !historicMode && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] lg:overflow-y-auto lg:scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {hotspots.filter(h => h.id === selectedHotspotId).map(h => {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hHook = getHotspotHook(hStrength);
@@ -893,9 +893,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     )}
 
-                    {/* Mobile Target Card Popup */}
+                    {/* Target Card Popup */}
                     {selectedId && !selectedHotspotId && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] lg:overflow-y-auto lg:scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {detectedFeatures.filter(f => f.id === selectedId).map(f => {
                                 const tInterp = buildTargetInterpretation(f);
                                 const strengthColour: Record<TargetSignalStrength, string> = {
@@ -1013,9 +1013,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     )}
 
-                    {/* Historic Field Intelligence Banner — compact pill, mobile */}
+                    {/* Historic Field Intelligence Banner — compact pill */}
                     {historicMode && !isIntelOpen && (
-                        <div className="absolute top-4 left-4 z-[90] lg:hidden pointer-events-auto">
+                        <div className="absolute top-4 left-4 z-[90] pointer-events-auto">
                             <button
                                 onClick={() => setIsIntelOpen(true)}
                                 className="bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-2xl flex items-center gap-2 active:scale-95 transition-all"
@@ -1037,9 +1037,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         return (
                         <>
                         {/* Tap-behind to dismiss */}
-                        <div className="absolute inset-0 z-[104] lg:hidden" onClick={() => setIsIntelOpen(false)} />
+                        <div className="absolute inset-0 z-[104]" onClick={() => setIsIntelOpen(false)} />
                         {/* Intel card — same position/style as hotspot card popup */}
-                        <div className="absolute bottom-6 left-4 right-4 z-[105] lg:hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="absolute bottom-6 left-4 right-4 z-[105] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
                         <div className="bg-slate-900 border-2 border-amber-500/40 shadow-[0_0_40px_rgba(245,158,11,0.15)] rounded-3xl overflow-hidden">
 
                             {/* Card header row */}
@@ -1238,7 +1238,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
 
                 {/* Sidebar */}
-                <div className="w-80 hidden lg:flex flex-col bg-slate-900/80 backdrop-blur-xl border-l border-white/5 shrink-0 relative z-50 overflow-y-auto scrollbar-hide">
+                <div className="hidden flex-col bg-slate-900/80 backdrop-blur-xl border-l border-white/5 shrink-0 relative z-50 overflow-y-auto scrollbar-hide">
 
                     {/* Archaeological Potential Section */}
                     <div className="p-6 border-b border-white/10 bg-emerald-500/5">
