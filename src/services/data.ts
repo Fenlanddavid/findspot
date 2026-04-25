@@ -15,11 +15,14 @@ export async function exportData(): Promise<string> {
     };
   }));
 
+  const fields = await db.fields.toArray();
+
   const data = {
     version: 2,
     exportedAt: new Date().toISOString(),
     projects,
     permissions,
+    fields,
     sessions,
     finds,
     media: mediaExport,
@@ -84,9 +87,10 @@ export async function importData(json: string) {
   
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
 
-  await db.transaction("rw", [db.projects, db.permissions, db.sessions, db.finds, db.media, db.settings], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.settings], async () => {
     await db.projects.bulkPut(data.projects);
     if(data.permissions) await db.permissions.bulkPut(data.permissions);
+    if(data.fields) await db.fields.bulkPut(data.fields);
     if(data.sessions) await db.sessions.bulkPut(data.sessions);
     if(data.finds) await db.finds.bulkPut(data.finds);
     if(data.settings) await db.settings.bulkPut(data.settings);
