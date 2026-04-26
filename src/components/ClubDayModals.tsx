@@ -380,6 +380,7 @@ export function ExportClubDayModal({
 }) {
   const [exporting, setExporting] = useState(false);
   const [exported, setExported] = useState(false);
+  const [exportedFile, setExportedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recorderName, setRecorderName] = useState("");
 
@@ -396,34 +397,41 @@ export function ExportClubDayModal({
       }
       const json = await exportClubDayData(sharedPermissionId, recorderName.trim() || undefined);
       const filename = `clubday-export-${permissionName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
-
-      const submittedAt = new Date().toISOString();
-
       const file = new File([json], filename, { type: "application/json" });
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: `Club Day Export — ${permissionName}` });
-          await db.permissions.update(permissionId, { submittedAt });
-          onClose();
-          return;
-        } catch {
-          // Fall through to download
-        }
-      }
 
-      const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+      // Always download first — most reliable across all devices
+      const url = URL.createObjectURL(file);
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      await db.permissions.update(permissionId, { submittedAt });
+
+      await db.permissions.update(permissionId, { submittedAt: new Date().toISOString() });
+      setExportedFile(file);
       setExported(true);
     } catch (e: any) {
       setError(e?.message ?? "Export failed");
     } finally {
       setExporting(false);
     }
+  }
+
+  async function handleShareFile() {
+    if (!exportedFile) return;
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [exportedFile] })) {
+      try {
+        await navigator.share({ files: [exportedFile], title: `Club Day Export — ${permissionName}` });
+        return;
+      } catch { /* dismissed */ }
+    }
+    // Fallback: re-download
+    const url = URL.createObjectURL(exportedFile);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = exportedFile.name;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   const mailtoHref = organiserEmail
@@ -440,19 +448,25 @@ export function ExportClubDayModal({
           <div className="space-y-4">
             <div className="w-12 h-12 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center mx-auto text-xl font-black text-teal-600">✓</div>
             <p className="text-sm text-center text-gray-600 dark:text-gray-400">
-              Your export file has been saved. Now send it to the organiser.
+              File saved to your device. Now send it to the organiser.
             </p>
+            <button
+              onClick={handleShareFile}
+              className="w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+            >
+              Share File…
+            </button>
             {organiserEmail && (
-              <div className="p-4 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-xl space-y-3">
-                <div className="text-[9px] font-black uppercase tracking-widest text-teal-500">Send to organiser</div>
-                <p className="text-xs text-teal-700 dark:text-teal-300 font-bold break-all">{organiserEmail}</p>
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl space-y-3">
+                <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Or send via email</div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold break-all">{organiserEmail}</p>
                 <a
                   href={mailtoHref!}
-                  className="flex items-center justify-center w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+                  className="flex items-center justify-center w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
                 >
                   Open Email App
                 </a>
-                <p className="text-[10px] text-teal-600 dark:text-teal-400 text-center">Attach the downloaded file to the email.</p>
+                <p className="text-[10px] text-gray-400 text-center">Attach the file from your Downloads folder.</p>
               </div>
             )}
             <button onClick={onClose} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors">

@@ -128,12 +128,14 @@ function SessionSummary({
                 </div>
               )}
 
-              <button
-                  onClick={onFieldReport}
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
-              >
-                  Generate Field Report
-              </button>
+              {!isClubDayMember && (
+                <button
+                    onClick={onFieldReport}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                >
+                    Generate Field Report
+                </button>
+              )}
               <button
                   onClick={onClose}
                   className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 rounded-xl transition-all uppercase tracking-widest text-[10px]"
