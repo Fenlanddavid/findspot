@@ -653,11 +653,14 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks], async () => {
+        const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+        const sessionIds = sessions.map(s => s.id);
         const finds = await db.finds.where("permissionId").equals(id).toArray();
-        const findIds = finds.map(s => s.id);
-        await db.media.where("findId").anyOf(findIds).delete();
+        const findIds = finds.map(f => f.id);
+        if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         await db.finds.where("permissionId").equals(id).delete();
+        if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
         await db.permissions.delete(id);
@@ -676,11 +679,14 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       const perm = await db.permissions.get(id);
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.importedPackages], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
+        const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+        const sessionIds = sessions.map(s => s.id);
         const finds = await db.finds.where("permissionId").equals(id).toArray();
         const findIds = finds.map(f => f.id);
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         await db.finds.where("permissionId").equals(id).delete();
+        if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
         await db.permissions.delete(id);

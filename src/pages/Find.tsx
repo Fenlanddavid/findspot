@@ -19,6 +19,8 @@ const completenesses: Find["completeness"][] = ["Complete", "Incomplete", "Fragm
 
 const DRAFT_KEY = "fs_find_draft";
 
+const toFloat = (v: string): number | null => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+
 function makeFindCode(): string {
   const year = new Date().getFullYear();
   const rand = Math.floor(Math.random() * 900000) + 100000;
@@ -440,13 +442,13 @@ export default function FindPage(props: {
         w3w: form.w3w.trim(),
         period: form.period,
         material: form.material,
-        weightG: form.weightG ? parseFloat(form.weightG) : null,
-        widthMm: form.widthMm ? parseFloat(form.widthMm) : null,
-        heightMm: form.heightMm ? parseFloat(form.heightMm) : null,
-        depthMm: form.depthMm ? parseFloat(form.depthMm) : null,
+        weightG: toFloat(form.weightG),
+        widthMm: toFloat(form.widthMm),
+        heightMm: toFloat(form.heightMm),
+        depthMm: toFloat(form.depthMm),
         detector: form.detector || undefined,
         targetId: form.targetId ? parseInt(form.targetId) : undefined,
-        depthCm: form.depthCm ? parseFloat(form.depthCm) : undefined,
+        depthCm: toFloat(form.depthCm) ?? undefined,
         decoration: form.decoration.trim(),
         completeness: form.completeness,
         findContext: form.findContext.trim(),
@@ -538,7 +540,7 @@ export default function FindPage(props: {
         depthMm: null,
         detector: form.detector || undefined,
         targetId: undefined,
-        depthCm: form.depthCm ? parseFloat(form.depthCm) : undefined,
+        depthCm: toFloat(form.depthCm) ?? undefined,
         decoration: "",
         completeness: form.completeness,
         findContext: "",
