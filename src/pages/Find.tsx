@@ -5,7 +5,7 @@ import { db, Media, Find } from "../db";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
-import { getSetting, setSetting } from "../services/data";
+import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 
@@ -394,6 +394,17 @@ export default function FindPage(props: {
     return newId;
   }
 
+  async function getClubDayAttribution(permissionId: string): Promise<{ sharedPermissionId?: string; recorderId?: string; recorderName?: string }> {
+    const perm = await db.permissions.get(permissionId);
+    const sharedId = perm?.sharedPermissionId || (perm?.isClubDayMember ? perm.id : undefined);
+    if (!sharedId) return {};
+    const [recorderId, recorderName] = await Promise.all([
+      getOrCreateRecorderId(),
+      getSetting<string>("recorderName", "Unnamed detectorist"),
+    ]);
+    return { sharedPermissionId: sharedId, recorderId, recorderName };
+  }
+
   async function saveFind(): Promise<string | null> {
     setError(null);
     setSaving(true);
@@ -408,10 +419,13 @@ export default function FindPage(props: {
         ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
         : undefined;
 
+      const clubDayAttribution = isEditMode ? {} : await getClubDayAttribution(targetPermissionId);
+
       const s: Omit<Find, 'createdAt'> = {
         id,
         projectId: props.projectId,
         permissionId: targetPermissionId,
+        ...clubDayAttribution,
         fieldId,
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),
@@ -497,10 +511,13 @@ export default function FindPage(props: {
         ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
         : undefined;
 
+      const clubDayAttribution = dbDraftId ? {} : await getClubDayAttribution(targetPermissionId);
+
       const pendingData = {
         id,
         projectId: props.projectId,
         permissionId: targetPermissionId,
+        ...clubDayAttribution,
         fieldId,
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),
@@ -557,10 +574,12 @@ export default function FindPage(props: {
       const id = uuid();
       const now = new Date().toISOString();
       const permId = await resolvePermission(trimmedName, now);
+      const clubDayAttribution = await getClubDayAttribution(permId);
       await db.finds.add({
         id,
         projectId: props.projectId,
         permissionId: permId,
+        ...clubDayAttribution,
         fieldId,
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),

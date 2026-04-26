@@ -24,6 +24,7 @@ interface ReportData {
   insuranceProvider: string;
   ncmdNumber: string;
   boundary: GeoJSONPolygon | null;
+  isClubDay: boolean;
 }
 
 // ─── Numbered marker sprite ───────────────────────────────────────────────────
@@ -152,7 +153,9 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
           boundary = field?.boundary ?? boundary;
         }
 
-        // Sessions scoped to field or whole permission
+        // Sessions scoped to field or whole permission.
+        // Merged member sessions are normalised to the organiser's permissionId on import,
+        // so a single query covers both organiser and member data.
         const allSessions = fieldId
           ? await db.sessions.where("fieldId").equals(fieldId).toArray()
           : await db.sessions.where("permissionId").equals(permissionId).toArray();
@@ -181,8 +184,9 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
         const detectoristName = (await getSetting("detectorist", "")) as string;
         const insuranceProvider = (await getSetting("insuranceProvider", "")) as string;
         const ncmdNumber = (await getSetting("ncmdNumber", "")) as string;
+        const isClubDay = !!(permission as any).isSharedPermission;
 
-        setData({ permission, scopeLabel, sessions: allSessions, finds: allFinds, tracks: allTracks, detectoristName, insuranceProvider, ncmdNumber, boundary });
+        setData({ permission, scopeLabel, sessions: allSessions, finds: allFinds, tracks: allTracks, detectoristName, insuranceProvider, ncmdNumber, boundary, isClubDay });
       } catch (e: any) {
         setError(e.message || "Failed to load report data");
       } finally {
@@ -348,7 +352,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
     return <Modal title="Landowner Report" onClose={onClose}><div className="py-8 text-center text-red-600">{error || "Unknown error"}</div></Modal>;
   }
 
-  const { permission, scopeLabel, finds, tracks, sessions, detectoristName, insuranceProvider, ncmdNumber } = data;
+  const { permission, scopeLabel, finds, tracks, sessions, detectoristName, insuranceProvider, ncmdNumber, isClubDay } = data;
   const summary = summariseFinds(finds);
   const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat && f.lon));
   const reportTitle = fieldId ? `${permission.name} — ${scopeLabel}` : permission.name;
@@ -356,6 +360,10 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
   const sessionDateMap = new Map(
     sessions.map(s => [s.id, new Date(s.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })])
   );
+  const sessionRecorderMap = new Map(
+    sessions.filter(s => (s as any).recorderName).map(s => [s.id, (s as any).recorderName as string])
+  );
+  const participants = [...new Set(sessions.map(s => (s as any).recorderName as string).filter(Boolean))];
   const hasMultipleSessions = sessions.length > 1;
 
   return (
@@ -421,6 +429,18 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
               );
             })()}
 
+            {/* Participants — club/rally digs */}
+            {isClubDay && participants.length > 0 && (
+              <div data-pdf-block>
+                <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 6 }}>Participants</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {participants.map(name => (
+                    <span key={name} style={{ fontSize: 11, fontFamily: "sans-serif", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "3px 10px", color: "#166534", fontWeight: 600 }}>{name}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Combined map */}
             {hasMap && (
               <div data-pdf-block>
@@ -455,6 +475,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                     const hasGps = !!(find.lat && find.lon);
                     const detail = toFarmerDetail(find);
                     const sessionDate = find.sessionId ? sessionDateMap.get(find.sessionId) : null;
+                    const recorder = isClubDay && find.sessionId ? sessionRecorderMap.get(find.sessionId) : null;
                     return (
                       <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", background: i % 2 === 0 ? "#f9fafb" : "#ffffff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
                         <div style={{ width: 22, height: 22, borderRadius: "50%", background: hasGps ? "#059669" : "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#fff", fontSize: 9, fontWeight: 900, fontFamily: "sans-serif", marginTop: detail ? 1 : 0 }}>
@@ -467,6 +488,9 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
                           {hasMultipleSessions && sessionDate && (
                             <span style={{ fontSize: 9, color: "#059669", fontFamily: "sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>{sessionDate}</span>
+                          )}
+                          {recorder && (
+                            <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "sans-serif", whiteSpace: "nowrap" }}>{recorder}</span>
                           )}
                           {!hasGps && (
                             <span style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic" }}>No GPS</span>

@@ -38,6 +38,7 @@ const POPULAR_MODELS = [
 export default function Settings() {
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
+  const [recorderName, setRecorderName] = useState("");
   const [email, setEmail] = useState("");
   const [insuranceProvider, setInsuranceProvider] = useState("");
   const [ncmdNumber, setNcmdNumber] = useState("");
@@ -61,6 +62,7 @@ export default function Settings() {
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
     getSetting("detectorist", "").then(setDetectorist);
+    getSetting("recorderName", "").then(setRecorderName);
     getSetting("detectoristEmail", "").then(setEmail);
     getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
@@ -146,6 +148,7 @@ export default function Settings() {
 
   async function saveSettings() {
     await setSetting("detectorist", detectorist);
+    await setSetting("recorderName", recorderName);
     await setSetting("detectoristEmail", email);
     await setSetting("insuranceProvider", insuranceProvider);
     await setSetting("ncmdNumber", ncmdNumber);
@@ -154,6 +157,7 @@ export default function Settings() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
+
 
   function triggerDownload(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
@@ -374,6 +378,17 @@ export default function Settings() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Club Day Name</label>
+                <input
+                  type="text"
+                  value={recorderName}
+                  onChange={(e) => setRecorderName(e.target.value)}
+                  placeholder="Name shown on club day exports"
+                  className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Shown to the organiser when you export your Club Day data. Stored on this device only.</p>
+              </div>
+              <div>
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
                 <input
                   type="email"
@@ -542,6 +557,7 @@ export default function Settings() {
             </div>
           </div>
         </section>
+
 
         <section className="bg-amber-50 dark:bg-amber-900/20 p-5 rounded-2xl border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-4">
           <div>

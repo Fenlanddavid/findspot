@@ -11,6 +11,7 @@ import Home from "./pages/Home";
 import PermissionPage from "./pages/Permission";
 import FindPage from "./pages/Find";
 import Settings from "./pages/Settings";
+import JoinClubDay from "./pages/JoinClubDay";
 import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
 
@@ -322,6 +323,7 @@ function Shell() {
             <Route path="/pending" element={<PendingFinds projectId={projectId} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/join" element={<JoinClubDay />} />
         </Routes>
         </Suspense>
         </PageErrorBoundary>

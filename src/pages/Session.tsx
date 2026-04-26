@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { db, Permission, Session, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
+import { getSetting, getOrCreateRecorderId } from "../services/data";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
@@ -518,6 +519,19 @@ export default function SessionPage(props: {
         resolvedPermissionId = permissionId!;
       }
 
+      let clubDayAttribution: { sharedPermissionId?: string; recorderId?: string; recorderName?: string } = {};
+      if (!isEdit) {
+        const perm = await db.permissions.get(resolvedPermissionId);
+        const sharedId = perm?.sharedPermissionId || (perm?.isClubDayMember ? perm.id : undefined);
+        if (sharedId) {
+          const [recorderId, recorderName] = await Promise.all([
+            getOrCreateRecorderId(),
+            getSetting<string>("recorderName", "Unnamed detectorist"),
+          ]);
+          clubDayAttribution = { sharedPermissionId: sharedId, recorderId, recorderName };
+        }
+      }
+
       const sessionFields = {
         fieldId,
         date: isoDate,
@@ -537,6 +551,7 @@ export default function SessionPage(props: {
         id: sessionId,
         projectId: props.projectId,
         permissionId: resolvedPermissionId,
+        ...clubDayAttribution,
         ...sessionFields,
         createdAt: now,
       };

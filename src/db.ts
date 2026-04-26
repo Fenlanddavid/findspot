@@ -55,6 +55,18 @@ export type Permission = {
   isPinned?: boolean;
   isDefault?: boolean;
 
+  // Club Day — organiser side
+  sharedPermissionId?: string;   // Merge anchor; set when "Create Club Day Pack" is used
+  isSharedPermission?: boolean;  // True on organiser's permission once a pack has been created
+
+  // Club Day — member side
+  isClubDayMember?: boolean;            // True on synthetic read-only pack permissions
+  organiserContactNumber?: string;      // Included in pack; shown to members
+  organiserEmail?: string;              // Included in pack; used for export mailto link
+  significantFindInstructions?: string; // Shown prominently on member permission
+  clubDayPublicNotes?: string;          // Optional rally/event notes for members
+  submittedAt?: string;                 // ISO timestamp set when member exports their data
+
   createdAt: string;
   updatedAt: string;
 };
@@ -92,6 +104,11 @@ export type Session = {
   endTime?: string;   // ISO datetime when session was finished
 
   keyNotes?: string[]; // Farmer-facing checklist items for field report
+
+  // Club Day attribution
+  sharedPermissionId?: string;
+  recorderId?: string;
+  recorderName?: string;
 
   createdAt: string;
   updatedAt: string;
@@ -168,6 +185,11 @@ export type Find = {
 
   foundAt?: string; // ISO datetime — when the find was actually made (may differ from createdAt)
 
+  // Club Day attribution
+  sharedPermissionId?: string;
+  recorderId?: string;
+  recorderName?: string;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -207,6 +229,15 @@ export type Setting = {
   value: string | number | boolean;
 };
 
+export type ImportedPackage = {
+  id: string;
+  packageHash: string;
+  importedAt: string;
+  sharedPermissionId?: string;
+  recorderId?: string;
+  recorderName?: string;
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -216,6 +247,7 @@ export class FindSpotDB extends Dexie {
   media!: Table<Media, string>;
   tracks!: Table<Track, string>;
   settings!: Table<Setting, string>;
+  importedPackages!: Table<ImportedPackage, string>;
 
   constructor() {
     super("findspot_uk");
@@ -359,6 +391,10 @@ export class FindSpotDB extends Dexie {
       const permissionIds = new Set((await tx.table("permissions").toArray()).map((p: any) => p.id));
       const orphanedFields = await tx.table("fields").filter((f: any) => !permissionIds.has(f.permissionId)).toArray();
       await tx.table("fields").bulkDelete(orphanedFields.map((f: any) => f.id));
+    });
+
+    this.version(20).stores({
+      importedPackages: "id, packageHash, sharedPermissionId, importedAt",
     });
   }
 }

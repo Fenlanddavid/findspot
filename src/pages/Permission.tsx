@@ -3,6 +3,7 @@ import { db, Permission, Find, Media } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting } from "../services/data";
+import { CreateClubDayPackModal, ExportClubDayModal, ImportClubDayDataModal } from "../components/ClubDayModals";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
@@ -87,6 +88,19 @@ export default function PermissionPage(props: {
   const [noPermTooltip, setNoPermTooltip] = useState(false);
   // null = closed; undefined = whole permission; string = specific fieldId
   const [reportTarget, setReportTarget] = useState<string | undefined | null>(null);
+
+  // Club Day state
+  const [isClubDayMember, setIsClubDayMember] = useState(false);
+  const [isSharedPermission, setIsSharedPermission] = useState(false);
+  const [sharedPermissionId, setSharedPermissionId] = useState<string | undefined>();
+  const [organiserContactNumber, setOrganiserContactNumber] = useState<string | undefined>();
+  const [organiserEmail, setOrganiserEmail] = useState<string | undefined>();
+  const [submittedAt, setSubmittedAt] = useState<string | undefined>();
+  const [significantFindInstructions, setSignificantFindInstructions] = useState<string | undefined>();
+  const [clubDayPublicNotes, setClubDayPublicNotes] = useState<string | undefined>();
+  const [showCreatePack, setShowCreatePack] = useState(false);
+  const [showExportClubDay, setShowExportClubDay] = useState(false);
+  const [showImportClubDayData, setShowImportClubDayData] = useState(false);
 
   const fields = useLiveQuery(async () => {
     if (!id) return [];
@@ -188,6 +202,14 @@ export default function PermissionPage(props: {
     if (hrs > 0) return `${hrs}h ${mins % 60}m`;
     return `${mins}m`;
   }
+
+  // Submitted members (organiser side of club day)
+  const submittedMembers = useLiveQuery(async () => {
+    if (!id) return [];
+    const perm = await db.permissions.get(id);
+    if (!perm?.isSharedPermission || !perm.sharedPermissionId) return [];
+    return db.importedPackages.where("sharedPermissionId").equals(perm.sharedPermissionId).sortBy("importedAt");
+  }, [id]);
 
   // Fetch all media for the report
   const allMedia = useLiveQuery(async () => {
@@ -579,6 +601,14 @@ export default function PermissionPage(props: {
           setBoundary(l.boundary);
           setAgreementId((l as any).agreementId);
           setNotes(l.notes);
+          setIsClubDayMember(!!(l as any).isClubDayMember);
+          setIsSharedPermission(!!(l as any).isSharedPermission);
+          setSharedPermissionId((l as any).sharedPermissionId);
+          setOrganiserContactNumber((l as any).organiserContactNumber);
+          setOrganiserEmail((l as any).organiserEmail);
+          setSubmittedAt((l as any).submittedAt);
+          setSignificantFindInstructions((l as any).significantFindInstructions);
+          setClubDayPublicNotes((l as any).clubDayPublicNotes);
         }
         setLoading(false);
       }).catch(err => {
@@ -722,17 +752,27 @@ export default function PermissionPage(props: {
       )}
       <div className="no-print grid gap-8 mt-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex flex-wrap gap-3 items-center">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
-                    {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
-                </h2>
-                {isEdit && !isEditing && (
-                    <button 
-                        onClick={() => setIsEditing(true)}
-                        className="text-xs font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
+                      {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
+                  </h2>
+                  {isEdit && !isEditing && !isClubDayMember && (
+                    <button
+                      onClick={() => setShowCreatePack(true)}
+                      className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
                     >
-                        ✎ Edit Details
+                      Club/Rally
                     </button>
+                  )}
+                </div>
+                {isEdit && !isEditing && !isClubDayMember && (
+                  <button
+                    onClick={() => setIsEditing(true)}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors border-0 bg-transparent p-0 self-start"
+                  >
+                    ✎ Edit Details
+                  </button>
                 )}
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -787,6 +827,32 @@ export default function PermissionPage(props: {
                                 </>
                             )}
                         </div>
+                        {/* Club Day buttons — shown for shared/club day permissions */}
+                        {isClubDayMember && (
+                          <button
+                            onClick={() => setShowExportClubDay(true)}
+                            className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
+                          >
+                            📤 Export Club Day Data
+                          </button>
+                        )}
+                        {isClubDayMember && organiserContactNumber && (
+                          <a
+                            href={`tel:${organiserContactNumber}`}
+                            className="text-xs sm:text-sm font-black text-gray-600 dark:text-gray-400 hover:text-white hover:bg-gray-600 dark:hover:bg-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 transition-all flex-1 sm:flex-none text-center"
+                          >
+                            📞 Contact Organiser
+                          </a>
+                        )}
+                        {!isClubDayMember && isEdit && isSharedPermission && (
+                          <button
+                            onClick={() => setShowImportClubDayData(true)}
+                            className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
+                          >
+                            Import Member Data
+                          </button>
+                        )}
+                        {!isClubDayMember && (
                         <button
                             onClick={handleDelete}
                             disabled={saving}
@@ -794,6 +860,7 @@ export default function PermissionPage(props: {
                         >
                             Delete
                         </button>
+                        )}
                     </>
                 )}
             </div>
@@ -1247,6 +1314,58 @@ export default function PermissionPage(props: {
                         {/* Row 2 — permission name */}
                         <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words">{name}</h3>
 
+                        {/* Club Day member banners */}
+                        {isClubDayMember && (
+                          <div className="flex flex-col gap-2">
+                            <div className="px-3 py-2.5 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-xl">
+                              <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-0.5">Club / Rally permission</div>
+                              <p className="text-xs text-teal-700 dark:text-teal-300 font-medium leading-relaxed">This is read-only and managed by the organiser. Record your sessions and finds, then export your data at the end of the day.</p>
+                            </div>
+                            {submittedAt && (
+                              <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
+                                ✓ Data sent to organiser on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Your finds are still stored on this device.
+                              </div>
+                            )}
+                            {significantFindInstructions && (
+                              <div className="flex items-start gap-2 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-700 rounded-xl">
+                                <span className="text-lg shrink-0">⚠️</span>
+                                <div>
+                                  <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-0.5">Significant Find?</div>
+                                  <p className="text-xs text-amber-800 dark:text-amber-300 font-medium">{significantFindInstructions}</p>
+                                  {organiserContactNumber && (
+                                    <a href={`tel:${organiserContactNumber}`} className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-black text-amber-700 dark:text-amber-400 underline">
+                                      📞 {organiserContactNumber}
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {organiserContactNumber && !significantFindInstructions && (
+                              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-600 dark:text-gray-400">
+                                📞 Organiser: <a href={`tel:${organiserContactNumber}`} className="font-bold text-teal-600 dark:text-teal-400 underline">{organiserContactNumber}</a>
+                              </div>
+                            )}
+                            {clubDayPublicNotes && (
+                              <div className="px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl text-xs text-gray-600 dark:text-gray-400">
+                                {clubDayPublicNotes}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Organiser: submitted members list */}
+                        {!isClubDayMember && isSharedPermission && submittedMembers && submittedMembers.length > 0 && (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Members submitted</div>
+                            {submittedMembers.map(m => (
+                              <div key={m.id} className="flex items-center justify-between px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">✓ {m.recorderName || "Unnamed detectorist"}</span>
+                                <span className="text-[10px] text-emerald-600 dark:text-emerald-500">{new Date(m.importedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {/* Row 3 — action buttons */}
                         <div className="flex flex-wrap gap-2 items-center">
                             {lat && lon && (
@@ -1417,16 +1536,18 @@ export default function PermissionPage(props: {
                                                 {fields.length > 0 ? "Tap on a field on the map or scroll to select" : "Divide your permission into named detecting areas"}
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsAddingField(true)}
-                                            className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
-                                        >
-                                            + Add Sub-Field
-                                        </button>
+                                        {!isClubDayMember && (
+                                          <button
+                                              type="button"
+                                              onClick={() => setIsAddingField(true)}
+                                              className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
+                                          >
+                                              + Add Sub-Field
+                                          </button>
+                                        )}
                                     </div>
                                     {fields.length === 0 && (
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No sub-fields added yet — tap the button above to get started.</p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No sub-fields added yet{isClubDayMember ? "." : " — tap the button above to get started."}</p>
                                     )}
                                     <div
                                         ref={fieldScrollRef}
@@ -1511,19 +1632,23 @@ export default function PermissionPage(props: {
                                                     >
                                                         Start Session
                                                     </button>
-                                                    <button
-                                                        onClick={() => setEditingFieldId(f.id)}
-                                                        className="px-2.5 py-1.5 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteField(f.id)}
-                                                        className="py-1.5 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
-                                                        title="Delete sub-field"
-                                                    >
-                                                        ✕
-                                                    </button>
+                                                    {!isClubDayMember && (
+                                                      <>
+                                                        <button
+                                                            onClick={() => setEditingFieldId(f.id)}
+                                                            className="px-2.5 py-1.5 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteField(f.id)}
+                                                            className="py-1.5 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
+                                                            title="Delete sub-field"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                      </>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -1829,6 +1954,48 @@ export default function PermissionPage(props: {
           ncmdNumber={ncmdNumber}
           ncmdExpiry={ncmdExpiry}
           onClose={() => setProofModalOpen(false)}
+        />
+      )}
+
+      {showCreatePack && id && (
+        <CreateClubDayPackModal
+          permissionId={id}
+          permissionName={name}
+          organiserContactNumber={organiserContactNumber}
+          organiserEmail={organiserEmail}
+          significantFindInstructions={significantFindInstructions}
+          clubDayPublicNotes={clubDayPublicNotes}
+          fields={fields ?? []}
+          onClose={() => {
+            setShowCreatePack(false);
+            // Reload shared permission state
+            db.permissions.get(id).then(p => {
+              if (p) {
+                setIsSharedPermission(!!(p as any).isSharedPermission);
+                setSharedPermissionId((p as any).sharedPermissionId);
+                setOrganiserContactNumber((p as any).organiserContactNumber);
+                setOrganiserEmail((p as any).organiserEmail);
+                setSignificantFindInstructions((p as any).significantFindInstructions);
+                setClubDayPublicNotes((p as any).clubDayPublicNotes);
+              }
+            });
+          }}
+        />
+      )}
+
+      {showExportClubDay && id && sharedPermissionId && (
+        <ExportClubDayModal
+          permissionId={id}
+          sharedPermissionId={sharedPermissionId}
+          permissionName={name}
+          organiserEmail={organiserEmail}
+          onClose={() => setShowExportClubDay(false)}
+        />
+      )}
+
+      {showImportClubDayData && (
+        <ImportClubDayDataModal
+          onClose={() => setShowImportClubDayData(false)}
         />
       )}
 
