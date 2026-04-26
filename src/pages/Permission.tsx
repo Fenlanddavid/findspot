@@ -650,7 +650,7 @@ export default function PermissionPage(props: {
   async function handleDelete() {
     if (!id) return;
     if (!confirm("Are you sure? This will permanently delete this permission, all sessions, and all finds.")) return;
-    
+
     setSaving(true);
     try {
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields], async () => {
@@ -661,6 +661,36 @@ export default function PermissionPage(props: {
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
         await db.permissions.delete(id);
+      });
+      nav("/");
+    } catch (e: any) {
+      setError("Delete failed: " + e.message);
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteClubDayPermission() {
+    if (!id) return;
+    if (!confirm("Remove this club / rally permission? Your sessions and finds for this event will be permanently deleted from this device.")) return;
+
+    setSaving(true);
+    try {
+      const perm = await db.permissions.get(id);
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.importedPackages], async () => {
+        const finds = await db.finds.where("permissionId").equals(id).toArray();
+        const findIds = finds.map(f => f.id);
+        if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
+        await db.finds.where("permissionId").equals(id).delete();
+        await db.sessions.where("permissionId").equals(id).delete();
+        await db.fields.where("permissionId").equals(id).delete();
+        await db.permissions.delete(id);
+        // Remove the join record so the member can re-scan the QR if needed
+        if (perm?.sharedPermissionId) {
+          const joinRecord = await db.importedPackages
+            .filter(p => p.sharedPermissionId === perm.sharedPermissionId)
+            .first();
+          if (joinRecord) await db.importedPackages.delete(joinRecord.id);
+        }
       });
       nav("/");
     } catch (e: any) {
@@ -843,6 +873,15 @@ export default function PermissionPage(props: {
                           >
                             📞 Contact Organiser
                           </a>
+                        )}
+                        {isClubDayMember && (
+                          <button
+                            onClick={handleDeleteClubDayPermission}
+                            disabled={saving}
+                            className="text-xs sm:text-sm font-medium text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg border border-transparent hover:border-red-200 dark:hover:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
+                          >
+                            Leave Event
+                          </button>
                         )}
                         {!isClubDayMember && isEdit && isSharedPermission && (
                           <button

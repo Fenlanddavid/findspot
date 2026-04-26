@@ -12,6 +12,7 @@ import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
+import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -23,10 +24,13 @@ function SessionSummary({
   durationMins,
   totalTime,
   permissionId,
+  sharedPermissionId,
+  isClubDayMember,
   fieldId,
   onClose,
   onFieldReport,
   onLandownerReport,
+  onExportClubDay,
 }: {
   coverage: number,
   findsCount: number,
@@ -34,10 +38,13 @@ function SessionSummary({
   durationMins: number | null,
   totalTime: string | null,
   permissionId: string | null,
+  sharedPermissionId: string | undefined,
+  isClubDayMember: boolean,
   fieldId: string | null,
   onClose: () => void,
   onFieldReport: () => void,
   onLandownerReport: (forField: boolean) => void,
+  onExportClubDay: () => void,
 }) {
   // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
   let fourthStat: { label: string; value: string } | null = null;
@@ -74,7 +81,25 @@ function SessionSummary({
                   )}
               </div>
 
-              {permissionId && (
+              {permissionId && isClubDayMember && sharedPermissionId && (
+                <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Club / Rally</p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                            {pendingCount > 0
+                                ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. Finish those before sending your data to the organiser.`
+                                : "Send your sessions and finds to the organiser."}
+                        </p>
+                    </div>
+                    <button
+                        onClick={onExportClubDay}
+                        className="w-full bg-amber-500 hover:bg-amber-400 text-white font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                    >
+                        Send to Organiser
+                    </button>
+                </div>
+              )}
+              {permissionId && !isClubDayMember && (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
                     <div>
                         <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Landowner Report</p>
@@ -167,6 +192,7 @@ export default function SessionPage(props: {
   const [trimEndMins, setTrimEndMins] = useState(0);
   const [trimming, setTrimming] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
+  const [showExportClubDay, setShowExportClubDay] = useState(false);
   const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null });
   const [showFieldReport, setShowFieldReport] = useState(false);
   const [showLandownerReport, setShowLandownerReport] = useState(false);
@@ -1118,6 +1144,8 @@ export default function SessionPage(props: {
           durationMins={summaryData.durationMins}
           totalTime={summaryData.totalTime}
           permissionId={permission?.id ?? null}
+          sharedPermissionId={(permission as any)?.sharedPermissionId}
+          isClubDayMember={!!(permission as any)?.isClubDayMember}
           fieldId={fieldId}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
           onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}
@@ -1126,6 +1154,7 @@ export default function SessionPage(props: {
             setShowSummary(false);
             setShowLandownerReport(true);
           }}
+          onExportClubDay={() => { setShowSummary(false); setShowExportClubDay(true); }}
         />
       )}
       {showFieldReport && (
@@ -1139,6 +1168,15 @@ export default function SessionPage(props: {
           permissionId={permission.id}
           fieldId={landownerReportForField && fieldId ? fieldId : undefined}
           onClose={() => setShowLandownerReport(false)}
+        />
+      )}
+      {showExportClubDay && permission && (permission as any).sharedPermissionId && (
+        <ExportClubDayModal
+          permissionId={permission.id}
+          sharedPermissionId={(permission as any).sharedPermissionId}
+          permissionName={permission.name}
+          organiserEmail={(permission as any).organiserEmail}
+          onClose={() => setShowExportClubDay(false)}
         />
       )}
       <TrackingOverlay 
