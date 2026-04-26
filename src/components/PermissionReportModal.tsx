@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { db, Find, GeoJSONPolygon, Permission, Session, Track } from "../db";
+import { db, Find, GeoJSONPolygon, Media, Permission, Session, Track } from "../db";
 import { Modal } from "./Modal";
 import { toFarmerLabel, toFarmerDetail, summariseFinds } from "../services/fieldReport";
 import { getSetting } from "../services/data";
@@ -25,6 +25,7 @@ interface ReportData {
   ncmdNumber: string;
   boundary: GeoJSONPolygon | null;
   isClubDay: boolean;
+  photoUrls: Map<string, string>;
 }
 
 // ─── Numbered marker sprite ───────────────────────────────────────────────────
@@ -186,7 +187,22 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
         const ncmdNumber = (await getSetting("ncmdNumber", "")) as string;
         const isClubDay = !!(permission as any).isSharedPermission;
 
-        setData({ permission, scopeLabel, sessions: allSessions, finds: allFinds, tracks: allTracks, detectoristName, insuranceProvider, ncmdNumber, boundary, isClubDay });
+        const findIds = allFinds.map(f => f.id);
+        const firstPhotos: Media[] = findIds.length > 0
+          ? await db.media.where("findId").anyOf(findIds).toArray()
+          : [];
+        const photoUrls = new Map<string, string>();
+        for (const m of firstPhotos) {
+          if (!m.findId || photoUrls.has(m.findId)) continue;
+          await new Promise<void>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => { photoUrls.set(m.findId!, reader.result as string); resolve(); };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(m.blob);
+          });
+        }
+
+        setData({ permission, scopeLabel, sessions: allSessions, finds: allFinds, tracks: allTracks, detectoristName, insuranceProvider, ncmdNumber, boundary, isClubDay, photoUrls });
       } catch (e: any) {
         setError(e.message || "Failed to load report data");
       } finally {
@@ -352,7 +368,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
     return <Modal title="Landowner Report" onClose={onClose}><div className="py-8 text-center text-red-600">{error || "Unknown error"}</div></Modal>;
   }
 
-  const { permission, scopeLabel, finds, tracks, sessions, detectoristName, insuranceProvider, ncmdNumber, isClubDay } = data;
+  const { permission, scopeLabel, finds, tracks, sessions, detectoristName, insuranceProvider, ncmdNumber, isClubDay, photoUrls } = data;
   const summary = summariseFinds(finds);
   const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat && f.lon));
   const reportTitle = fieldId ? `${permission.name} — ${scopeLabel}` : permission.name;
@@ -485,6 +501,13 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                           <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{toFarmerLabel(find)}</div>
                           {detail && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, fontFamily: "sans-serif" }}>{detail}</div>}
                         </div>
+                        {photoUrls.has(find.id) && (
+                          <img
+                            src={photoUrls.get(find.id)}
+                            alt=""
+                            style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 4, border: "1px solid #e5e7eb", objectFit: "cover", display: "block" }}
+                          />
+                        )}
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
                           {hasMultipleSessions && sessionDate && (
                             <span style={{ fontSize: 9, color: "#059669", fontFamily: "sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>{sessionDate}</span>

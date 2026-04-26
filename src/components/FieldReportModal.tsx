@@ -31,6 +31,7 @@ interface ReportData {
   insuranceProvider: string;
   ncmdNumber: string;
   coveragePct: number | null;
+  photoUrls: Map<string, string>;
 }
 
 // ─── Numbered marker sprite ───────────────────────────────────────────────────
@@ -203,8 +204,23 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
           if (result) coveragePct = result.percentCovered;
         }
 
+        const findIds = allFinds.map(f => f.id);
+        const firstPhotos = findIds.length > 0
+          ? await db.media.where("findId").anyOf(findIds).toArray()
+          : [];
+        const photoUrls = new Map<string, string>();
+        for (const m of firstPhotos) {
+          if (!m.findId || photoUrls.has(m.findId)) continue;
+          await new Promise<void>(resolve => {
+            const reader = new FileReader();
+            reader.onload = () => { photoUrls.set(m.findId!, reader.result as string); resolve(); };
+            reader.onerror = () => resolve();
+            reader.readAsDataURL(m.blob);
+          });
+        }
+
         setKeyNotes(session.keyNotes ?? []);
-        setData({ session, permission, fieldName, boundary: boundary ?? null, finds: allFinds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct });
+        setData({ session, permission, fieldName, boundary: boundary ?? null, finds: allFinds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct, photoUrls });
       } catch (e: any) {
         setError(e.message || "Failed to load session data");
       } finally {
@@ -435,7 +451,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     return <Modal title="Field Report" onClose={onClose}><div className="py-8 text-center text-red-600">{error || "Unknown error"}</div></Modal>;
   }
 
-  const { session, permission, fieldName, finds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct } = data;
+  const { session, permission, fieldName, finds, tracks, detectoristName, insuranceProvider, ncmdNumber, coveragePct, photoUrls } = data;
   const summary = summariseFinds(finds);
   const duration = formatDuration(session.startTime, session.endTime, tracks);
   const sessionDate = new Date(session.date).toLocaleDateString("en-GB", {
@@ -586,6 +602,14 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, fontFamily: "sans-serif" }}>{detail}</div>
                           )}
                         </div>
+                        {/* Photo thumbnail */}
+                        {photoUrls.has(find.id) && (
+                          <img
+                            src={photoUrls.get(find.id)}
+                            alt=""
+                            style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 4, border: "1px solid #e5e7eb", objectFit: "cover", display: "block" }}
+                          />
+                        )}
                         {/* No-GPS note */}
                         {!hasGps && (
                           <span style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", flexShrink: 0, marginTop: 3 }}>Recorded without GPS</span>
