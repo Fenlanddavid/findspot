@@ -397,7 +397,7 @@ export function ExportClubDayModal({
       }
       const json = await exportClubDayData(sharedPermissionId, recorderName.trim() || undefined);
       const filename = `clubday-export-${permissionName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
-      const file = new File([json], filename, { type: "application/json" });
+      const file = new File([json], filename, { type: "text/plain" });
 
       // Always download first — most reliable across all devices
       const url = URL.createObjectURL(file);
