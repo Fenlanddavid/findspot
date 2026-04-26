@@ -396,8 +396,8 @@ export function ExportClubDayModal({
 
       const submittedAt = new Date().toISOString();
 
-      if (navigator.share) {
-        const file = new File([json], filename, { type: "application/json" });
+      const file = new File([json], filename, { type: "application/json" });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({ files: [file], title: `Club Day Export — ${permissionName}` });
           await db.permissions.update(permissionId, { submittedAt });
