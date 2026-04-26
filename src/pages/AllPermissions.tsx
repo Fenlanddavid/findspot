@@ -65,8 +65,8 @@ export default function AllPermissions(props: { projectId: string }) {
           </div>
         </div>
 
-        <div className="flex gap-2 items-center">
-          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1">
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1 self-start">
             <button
               onClick={() => setViewMode("permissions")}
               className={`px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${viewMode === "permissions" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
@@ -80,7 +80,7 @@ export default function AllPermissions(props: { projectId: string }) {
               🏟️ Rallies
             </button>
           </div>
-          <div className="relative flex-1 max-w-md">
+          <div className="relative w-full">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
             <input
               type="text"

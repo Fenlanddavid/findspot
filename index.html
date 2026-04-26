@@ -26,6 +26,19 @@
   </head>
   <body class="bg-gray-50 dark:bg-gray-900">
     <script>
+      // Restore path encoded by 404.html (GitHub Pages SPA redirect)
+      (function(l){
+        if(l.search[1]==='/'){
+          var decoded=l.search.slice(1).split('&').map(function(s){return s.replace(/~and~/g,'&');});
+          window.history.replaceState(null,null,
+            l.pathname.slice(0,-1)+decoded[0]+
+            (decoded[1]?'?'+decoded[1]:'')+
+            l.hash
+          );
+        }
+      }(window.location));
+    </script>
+    <script>
       (function(){var t=localStorage.getItem('fs_theme');if(t==='light'){document.documentElement.classList.remove('dark');}else{document.documentElement.classList.add('dark');}})();
     </script>
     <div id="root"></div>

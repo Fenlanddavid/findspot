@@ -12,6 +12,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   const [isCapturing, setIsCapturing] = React.useState(false);
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [lastQuickId, setLastQuickId] = React.useState<string | null>(null);
+  const [lastPermName, setLastPermName] = React.useState<string | null>(null);
   const [noGpsWarning, setNoGpsWarning] = React.useState(false);
   const [fabError, setFabError] = React.useState<string | null>(null);
   const [fabIntroduced, setFabIntroduced] = React.useState(() =>
@@ -64,14 +65,20 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
         setNoGpsWarning(true);
     }
 
-    // Prefer most recent real permission, fall back to default
-    const lastPerm = await db.permissions
-        .where("projectId").equals(projectId)
-        .reverse()
-        .sortBy("createdAt")
-        .then(arr => arr.find(p => !p.isDefault) ?? arr[0]);
+    // Prefer active session's permission, then most recent real permission, fall back to default
+    let targetPerm = activeSession?.permissionId
+        ? await db.permissions.get(activeSession.permissionId)
+        : undefined;
 
-    if (!lastPerm) {
+    if (!targetPerm) {
+        targetPerm = await db.permissions
+            .where("projectId").equals(projectId)
+            .reverse()
+            .sortBy("createdAt")
+            .then(arr => arr.find(p => !p.isDefault) ?? arr[0]);
+    }
+
+    if (!targetPerm) {
         setIsCapturing(false);
         setFabError("No permission found. Please try again.");
         return;
@@ -80,7 +87,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
     await db.finds.add({
         id,
         projectId,
-        permissionId: lastPerm.id,
+        permissionId: targetPerm.id,
         sessionId: activeSession?.id || null,
         fieldId: activeSession?.fieldId || null,
         findCode: `QUICK-${Date.now().toString().slice(-6)}`,
@@ -108,6 +115,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
 
     setIsCapturing(false);
     setLastQuickId(id);
+    setLastPermName(targetPerm.name || null);
     setShowSuccess(true);
     
     // Auto-hide success message after 10 seconds if no action taken
@@ -160,6 +168,9 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
                   </div>
                   <button onClick={() => setShowSuccess(false)} className="opacity-40 hover:opacity-100 text-xs leading-none">✕</button>
               </div>
+              {lastPermName && (
+                <div className="text-[9px] text-gray-400 truncate">→ {lastPermName}</div>
+              )}
               {noGpsWarning && (
                 <div className="text-[9px] text-amber-400 flex items-center gap-1 bg-amber-900/30 px-2 py-1 rounded-lg leading-tight">
                   ⚠️ No GPS — edit to add location

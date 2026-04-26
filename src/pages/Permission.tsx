@@ -959,21 +959,6 @@ export default function PermissionPage(props: {
                         Just add a name to get started — fields, boundaries, and landowner details can all be added later.
                       </div>
                     )}
-                    <div className="flex flex-col sm:flex-row gap-1.5 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-xl w-full sm:w-fit border border-gray-200 dark:border-gray-800">
-                        <button
-                            onClick={() => setType("individual")}
-                            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${type === "individual" ? "bg-white dark:bg-gray-800 shadow-md text-emerald-600 ring-1 ring-emerald-200 dark:ring-emerald-800" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
-                        >
-                            <span>👤</span> Individual Permission
-                        </button>
-                        <button
-                            onClick={() => setType("rally")}
-                            className={`flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 ${type === "rally" ? "bg-white dark:bg-gray-800 shadow-md text-teal-600 ring-1 ring-teal-200 dark:ring-teal-800" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
-                        >
-                            <span>🏕️</span> Club/Rally Dig
-                        </button>
-                    </div>
-
                     <label className="block">
                     <div className="mb-2 text-sm font-black text-gray-800 dark:text-gray-200">{type === 'rally' ? 'Rally / Event Name' : 'Permission Name / Location'}</div>
                     <input

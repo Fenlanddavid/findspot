@@ -6,6 +6,7 @@ import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions, EnrichedPermission } from "../services/permissions";
+import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 
 export default function Home(props: {
   projectId: string;
@@ -22,6 +23,7 @@ export default function Home(props: {
   const nav = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
+  const [showClubRallyModal, setShowClubRallyModal] = useState(false);
 const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [dismissedNextMoves, setDismissedNextMoves] = useState<Set<string>>(() => {
     try {
@@ -282,7 +284,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white px-4 sm:px-6 py-2 rounded-xl font-semibold shadow transition-all duration-200 ease-out flex items-center gap-2 active:translate-y-0 text-sm sm:text-base">
             <span>📍</span> <span className="hidden xs:inline">New</span> Permission
         </button>
-        <button onClick={() => props.goPermissionWithParam("rally")} className="bg-gray-100/70 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
+        <button onClick={() => setShowClubRallyModal(true)} className="bg-gray-100/70 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
             <span>🏟️</span> Club/Rally
         </button>
       </div>
@@ -566,6 +568,14 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
       {openFindId && (
         <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />
+      )}
+
+      {showClubRallyModal && (
+        <ClubRallyChoiceModal
+          onClose={() => setShowClubRallyModal(false)}
+          onSolo={() => { setShowClubRallyModal(false); props.goPermissionWithParam("rally"); }}
+          onJoinUrl={(url) => { setShowClubRallyModal(false); nav(url); }}
+        />
       )}
     </div>
   );
