@@ -417,26 +417,6 @@ export function ExportClubDayModal({
     }
   }
 
-  async function handleShareFile() {
-    if (!exportedFile) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({ files: [exportedFile], title: `Club Day Export — ${permissionName}` });
-        return;
-      } catch (e: any) {
-        if (e?.name === "AbortError") return; // user cancelled — don't re-download
-        // NotSupportedError or similar — fall through to re-download
-      }
-    }
-    // Fallback: re-download
-    const url = URL.createObjectURL(exportedFile);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = exportedFile.name;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   const mailtoHref = organiserEmail
     ? `mailto:${organiserEmail}?subject=${encodeURIComponent(`Club Day Finds — ${permissionName}`)}&body=${encodeURIComponent(`Hi,\n\nPlease find my Club Day export for ${permissionName} attached.\n\n${recorderName || ""}`.trim())}`
     : null;
@@ -450,27 +430,26 @@ export function ExportClubDayModal({
         {exported ? (
           <div className="space-y-4">
             <div className="w-12 h-12 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center mx-auto text-xl font-black text-teal-600">✓</div>
-            <p className="text-sm text-center text-gray-600 dark:text-gray-400">
-              File saved to your device. Now send it to the organiser.
+            <p className="text-sm font-bold text-center text-gray-800 dark:text-gray-100">
+              File saved to your Downloads folder.
             </p>
-            <button
-              onClick={handleShareFile}
-              className="w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
-            >
-              Share File…
-            </button>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-2">
+              <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">How to send the file</p>
+              <ol className="text-xs text-amber-900 dark:text-amber-200 font-medium space-y-1 list-decimal list-inside leading-relaxed">
+                <li>Open WhatsApp, email, or any app</li>
+                <li>Tap the attachment / paperclip icon</li>
+                <li>Choose <strong>Document</strong> or <strong>File</strong></li>
+                <li>Open your <strong>Downloads</strong> folder</li>
+                <li>Select the <strong>{exportedFile?.name}</strong> file</li>
+              </ol>
+            </div>
             {organiserEmail && (
-              <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl space-y-3">
-                <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Or send via email</div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 font-bold break-all">{organiserEmail}</p>
-                <a
-                  href={mailtoHref!}
-                  className="flex items-center justify-center w-full py-2.5 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
-                >
-                  Open Email App
-                </a>
-                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-200 text-center">Attach the file from your Downloads folder.</p>
-              </div>
+              <a
+                href={mailtoHref!}
+                className="flex items-center justify-center w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+              >
+                Open Email App
+              </a>
             )}
             <button onClick={onClose} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors">
               Done
