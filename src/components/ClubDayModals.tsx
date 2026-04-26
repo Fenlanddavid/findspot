@@ -31,11 +31,13 @@ function buildJoinUrl(params: {
 function QRScreen({
   joinUrl,
   permissionName,
+  eventName,
   onBack,
   onClose,
 }: {
   joinUrl: string;
   permissionName: string;
+  eventName: string;
   onBack: () => void;
   onClose: () => void;
 }) {
@@ -72,7 +74,7 @@ function QRScreen({
     <div className="p-5 space-y-5 overflow-y-auto flex-1 flex flex-col items-center">
       <div className="text-center space-y-1">
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500">Ready to share</div>
-        <h3 className="font-black text-gray-900 dark:text-gray-100">{permissionName}</h3>
+        <h3 className="font-black text-gray-900 dark:text-gray-100">{eventName || permissionName}</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400">Members scan the QR or use the link below. Works on any phone.</p>
       </div>
 
@@ -222,6 +224,7 @@ export function CreateClubDayPackModal({
           <QRScreen
             joinUrl={joinUrl}
             permissionName={permissionName}
+            eventName={eventName}
             onBack={() => setJoinUrl(null)}
             onClose={onClose}
           />
