@@ -1880,6 +1880,11 @@ export default function PermissionPage(props: {
 
                                             <div className="flex justify-between items-start mb-1">
                                                 <div className="flex flex-col gap-0.5 min-w-0">
+                                                    {(s as any).recorderName && (
+                                                        <div className="text-[10px] font-black text-teal-600 dark:text-teal-400 truncate">
+                                                            {(s as any).recorderName}
+                                                        </div>
+                                                    )}
                                                     <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
                                                         {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                                                     </div>
