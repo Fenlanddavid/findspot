@@ -419,11 +419,14 @@ export function ExportClubDayModal({
 
   async function handleShareFile() {
     if (!exportedFile) return;
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [exportedFile] })) {
+    if (navigator.share) {
       try {
         await navigator.share({ files: [exportedFile], title: `Club Day Export — ${permissionName}` });
         return;
-      } catch { /* dismissed */ }
+      } catch (e: any) {
+        if (e?.name === "AbortError") return; // user cancelled — don't re-download
+        // NotSupportedError or similar — fall through to re-download
+      }
     }
     // Fallback: re-download
     const url = URL.createObjectURL(exportedFile);
@@ -466,7 +469,7 @@ export function ExportClubDayModal({
                 >
                   Open Email App
                 </a>
-                <p className="text-[10px] text-gray-400 text-center">Attach the file from your Downloads folder.</p>
+                <p className="text-[10px] font-bold text-gray-700 dark:text-gray-200 text-center">Attach the file from your Downloads folder.</p>
               </div>
             )}
             <button onClick={onClose} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors">
