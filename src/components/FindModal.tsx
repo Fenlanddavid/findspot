@@ -136,43 +136,48 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function addPhotos(files: FileList | null, photoType?: Media["photoType"]) {
     if (!draft || !files || files.length === 0) return;
     setBusy(true);
-    const now = new Date().toISOString();
+    try {
+      const now = new Date().toISOString();
 
-    const items: Media[] = [];
-    
-    // If we're targeting a specific slot (photo1, photo2, etc.), 
-    // remove any existing photo in that slot first.
-    if (photoType && photoType !== "other") {
-        const existing = await db.media
-            .where("findId").equals(draft.id)
-            .and(m => m.photoType === photoType)
-            .toArray();
-        if (existing.length > 0) {
-            await db.media.bulkDelete(existing.map(m => m.id));
-        }
-    }
+      const items: Media[] = [];
 
-    for (const f of Array.from(files)) {
-      const blob = await fileToBlob(f);
-      items.push({
-        id: uuid(),
-        projectId: draft.projectId,
-        findId: draft.id,
-        type: "photo" as const,
-        photoType: photoType || "other",
-        filename: f.name,
-        mime: f.type || "application/octet-stream",
-        blob,
-        caption: "",
-        scalePresent: false,
-        createdAt: now,
-      });
-      
-      // If we are in a specific slot, we only take the first file
-      if (photoType && photoType !== "other") break;
+      // If we're targeting a specific slot (photo1, photo2, etc.),
+      // remove any existing photo in that slot first.
+      if (photoType && photoType !== "other") {
+          const existing = await db.media
+              .where("findId").equals(draft.id)
+              .and(m => m.photoType === photoType)
+              .toArray();
+          if (existing.length > 0) {
+              await db.media.bulkDelete(existing.map(m => m.id));
+          }
+      }
+
+      for (const f of Array.from(files)) {
+        const blob = await fileToBlob(f);
+        items.push({
+          id: uuid(),
+          projectId: draft.projectId,
+          findId: draft.id,
+          type: "photo" as const,
+          photoType: photoType || "other",
+          filename: f.name,
+          mime: f.type || "application/octet-stream",
+          blob,
+          caption: "",
+          scalePresent: false,
+          createdAt: now,
+        });
+
+        // If we are in a specific slot, we only take the first file
+        if (photoType && photoType !== "other") break;
+      }
+      await db.media.bulkAdd(items);
+    } catch (err) {
+      console.error("addPhotos failed:", err);
+    } finally {
+      setBusy(false);
     }
-    await db.media.bulkAdd(items);
-    setBusy(false);
   }
 
   async function removePhoto(mediaId: string) {
