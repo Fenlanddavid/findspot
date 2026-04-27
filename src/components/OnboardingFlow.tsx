@@ -14,7 +14,7 @@ const FLAG = 'fs_onboarding_done';
 const FORCED_THIS_LOAD = !!localStorage.getItem('fs_onboarding_force');
 if (FORCED_THIS_LOAD) localStorage.removeItem('fs_onboarding_force');
 
-type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'done';
+type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'clubday' | 'done';
 
 export default function OnboardingFlow() {
     // Fast sync check — avoids any flash for returning users
@@ -203,6 +203,20 @@ export default function OnboardingFlow() {
                                     <div>
                                         <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Set up your profile</p>
                                         <p className="text-[11px] text-white/40 mt-0.5">Recommended — other features depend on this</p>
+                                    </div>
+                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={() => setStep('clubday')}
+                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
+                            >
+                                <div className="flex items-center gap-4">
+                                    <span className="text-2xl">🏕️</span>
+                                    <div>
+                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Club / rally dig</p>
+                                        <p className="text-[11px] text-white/40 mt-0.5">Attending or organising a club event</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -540,6 +554,74 @@ export default function OnboardingFlow() {
                             className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
                         >
                             Create my first permission
+                        </button>
+
+                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                            Back
+                        </button>
+                        {skipBtn}
+                    </>
+                )}
+
+                {/* ── Step 3F: Club / Rally dig ────────────────────────────── */}
+                {step === 'clubday' && (
+                    <>
+                        {dots(2)}
+                        <div className="mb-6">
+                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Club / Rally dig</h2>
+                            <p className="text-[13px] text-white/60 leading-relaxed mb-4">
+                                FindSpot supports organised club digs and rallies — both for members attending and organisers running the event.
+                            </p>
+
+                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Attending a dig?</p>
+                            <div className="space-y-2 mb-5">
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">📷</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Scan the QR code</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">The organiser will share a QR code before or on the day. Tap the QR icon on the FindSpot home screen and scan it — the event permission loads automatically.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">📍</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Record your finds</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Log finds as normal against the event permission. At the end of the day, export your session data and send it to the organiser — there's a button on the session card to do this.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Organising a dig?</p>
+                            <div className="space-y-2 mb-4">
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">🏟️</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Tap Club Day / Rally</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">From the home screen tap the <span className="text-white/80 font-bold">Club Day / Rally</span> button, choose <span className="text-white/80 font-bold">Organise</span>, then either create a new event permission or select an existing one.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">🔗</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Generate the QR code</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Follow the setup steps to create your Club Day Pack. This produces a QR code to share with members — they scan it to load the event into their own app instantly.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">📥</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Collect member data</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Members send you their session exports at the end of the day. Import each one from the permission screen to merge their finds into your record.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => go('/')}
+                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
+                        >
+                            Got it — take me to the app
                         </button>
 
                         <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
