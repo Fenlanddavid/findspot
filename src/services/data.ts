@@ -99,6 +99,17 @@ export async function importData(json: string) {
     : [];
 
   await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.settings], async () => {
+    // Clear all existing data first — prevents orphaned placeholder records
+    // (e.g. the fresh-install project created before the restore) from
+    // surviving alongside the backup data and causing projectId mismatches.
+    await db.projects.clear();
+    await db.permissions.clear();
+    await db.fields.clear();
+    await db.sessions.clear();
+    await db.finds.clear();
+    await db.settings.clear();
+    await db.media.clear();
+
     await db.projects.bulkPut(data.projects);
     if (data.permissions) await db.permissions.bulkPut(data.permissions);
     if (data.fields) await db.fields.bulkPut(data.fields);

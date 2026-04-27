@@ -3,19 +3,34 @@ import { v4 as uuid } from "uuid";
 
 export async function ensureDefaultProject(): Promise<string> {
   const existing = await db.projects.toArray();
-  // Return the first project that has both a valid id and name
-  const valid = existing.find(p => p.id && p.name);
-  if (valid) return valid.id;
+  const valid = existing.filter(p => p.id && p.name);
 
-  const id = uuid();
-  await db.projects.add({
-    id,
-    name: "UK Find Log",
-    region: "UK",
-    createdAt: new Date().toISOString(),
-  });
+  if (valid.length === 0) {
+    const id = uuid();
+    await db.projects.add({
+      id,
+      name: "UK Find Log",
+      region: "UK",
+      createdAt: new Date().toISOString(),
+    });
+    return id;
+  }
 
-  return id;
+  if (valid.length === 1) return valid[0].id;
+
+  // Multiple projects exist — prefer the one that actually has data.
+  // This recovers the case where a fresh-install placeholder project was
+  // created just before a backup restore, leaving an orphaned empty project
+  // alongside the real one and making all finds invisible.
+  for (const p of valid) {
+    const hasData =
+      (await db.permissions.where("projectId").equals(p.id).count()) > 0 ||
+      (await db.finds.where("projectId").equals(p.id).count()) > 0;
+    if (hasData) return p.id;
+  }
+
+  // All projects are empty — return the first valid one (normal first-run path)
+  return valid[0].id;
 }
 
 export async function ensureDefaultPermission(projectId: string): Promise<void> {
