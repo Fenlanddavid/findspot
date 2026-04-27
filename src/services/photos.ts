@@ -5,30 +5,40 @@ export async function fileToBlob(file: File): Promise<Blob> {
   // Only compress images; pass other file types straight through
   if (!file.type.startsWith("image/")) return file.slice(0, file.size, file.type);
 
+  // Probe dimensions — createImageBitmap is GPU-backed so doesn't spike JS heap
+  const probe = await createImageBitmap(file);
+  const w = probe.width;
+  const h = probe.height;
+  probe.close(); // free GPU memory before the resize step
+
+  const scale = Math.min(1, MAX_PX / Math.max(w, h));
+  const targetW = Math.round(w * scale);
+  const targetH = Math.round(h * scale);
+
+  // Resize during hardware decode — avoids loading the full-res bitmap into JS heap.
+  // Critical for high-megapixel cameras (50MP+ = ~200MB uncompressed) on mobile WebViews.
+  const bitmap = await createImageBitmap(file, {
+    resizeWidth: targetW,
+    resizeHeight: targetH,
+    resizeQuality: "high",
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bitmap.close();
+    throw new Error("Canvas 2D context unavailable");
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close();
+
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-
-      const { naturalWidth: w, naturalHeight: h } = img;
-      const scale = Math.min(1, MAX_PX / Math.max(w, h));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(w * scale);
-      canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { reject(new Error("Canvas 2D context unavailable")); return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("Canvas toBlob failed"))),
-        "image/jpeg",
-        QUALITY,
-      );
-    };
-
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image load failed")); };
-    img.src = url;
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error("Canvas toBlob failed"))),
+      "image/jpeg",
+      QUALITY,
+    );
   });
 }
