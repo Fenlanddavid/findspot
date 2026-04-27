@@ -154,7 +154,10 @@ export type Find = {
   material:
     | "Gold"
     | "Silver"
+    | "50% Silver"
     | "Copper alloy"
+    | "Copper"
+    | "Cupro-Nickel"
     | "Lead"
     | "Iron"
     | "Tin"
@@ -179,6 +182,7 @@ export type Find = {
   targetId?: number;
   depthCm?: number;
   ruler?: string;
+  mint?: string;
   dateRange?: string;
 
   storageLocation: string;

@@ -349,13 +349,14 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 )}
 
                 {/* TERTIARY — supplementary fields */}
-                {(draft.coinType || draft.coinDenomination || draft.ruler || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
+                {(draft.coinType || draft.coinDenomination || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
                   <>
                     <div className="border-t border-gray-100 dark:border-white/[0.05] my-4" />
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
                       {draft.coinType && <DetailItem label="Coin Type" value={draft.coinType} />}
                       {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
                       {draft.ruler && <DetailItem label="Ruler" value={draft.ruler} />}
+                      {draft.mint && <DetailItem label="Mint" value={draft.mint} />}
                       <DetailItem label="PAS ID" value={draft.pasId} />
                       <DetailItem label="Weight (g)" value={draft.weightG} />
                       <DetailItem label="Width (mm)" value={draft.widthMm} />
@@ -499,14 +500,14 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                       </label>
                       <label className="grid gap-1">
                           <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">
-                            {draft.period === 'Celtic' ? 'Tribe / Ruler' : 
-                             draft.period === 'Roman' ? 'Emperor / Ruler' : 
+                            {draft.period === 'Celtic' ? 'Tribe / Ruler' :
+                             draft.period === 'Roman' ? 'Emperor / Ruler' :
                              'Ruler / Issuer'}
                           </span>
-                          <input 
-                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" 
-                              value={draft.ruler || ""} 
-                              onChange={(e) => setDraft({ ...draft, ruler: e.target.value })} 
+                          <input
+                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              value={draft.ruler || ""}
+                              onChange={(e) => setDraft({ ...draft, ruler: e.target.value })}
                               placeholder={
                                 draft.period === 'Celtic' ? 'e.g., Iceni, Trinovantes' :
                                 draft.period === 'Roman' ? 'e.g., Hadrian, Constantine' :
@@ -514,12 +515,23 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                               }
                           />
                       </label>
+                      {(draft.coinType === 'Hammered' || draft.period === 'Roman') && (
+                        <label className="grid gap-1">
+                            <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Mint / Mint Mark</span>
+                            <input
+                                className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                value={draft.mint || ""}
+                                onChange={(e) => setDraft({ ...draft, mint: e.target.value })}
+                                placeholder={draft.period === 'Roman' ? 'e.g., LONDINIUM, LUGDUNUM' : 'e.g., London, Canterbury'}
+                            />
+                        </label>
+                      )}
                       <label className="grid gap-1">
                           <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Date Range</span>
-                          <input 
-                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" 
-                              value={draft.dateRange || ""} 
-                              onChange={(e) => setDraft({ ...draft, dateRange: e.target.value })} 
+                          <input
+                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              value={draft.dateRange || ""}
+                              onChange={(e) => setDraft({ ...draft, dateRange: e.target.value })}
                               placeholder="e.g., 1272-1307"
                           />
                       </label>
@@ -530,9 +542,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               <div className="grid grid-cols-2 gap-4">
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Period</span>
-                  <select 
+                  <select
                     className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    value={draft.period} 
+                    value={draft.period}
                     onChange={(e) => setDraft({ ...draft, period: e.target.value as any })}
                   >
                     {["Prehistoric", "Bronze Age", "Iron Age", "Celtic", "Roman", "Anglo-Saxon", "Early Medieval", "Medieval", "Post-medieval", "Modern", "Unknown"].map(p => <option key={p} value={p}>{p}</option>)}
@@ -541,12 +553,15 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Material</span>
-                  <select 
+                  <select
                     className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    value={draft.material} 
+                    value={draft.material}
                     onChange={(e) => setDraft({ ...draft, material: e.target.value as any })}
                   >
-                    {["Gold", "Silver", "Copper alloy", "Lead", "Iron", "Tin", "Pewter", "Pottery", "Flint", "Stone", "Glass", "Bone", "Other"].map(m => <option key={m} value={m}>{m}</option>)}
+                    {(draft.findCategory === 'Coin' || draft.findCategory === 'Token / Jetton'
+                      ? ["Gold", "Silver", "50% Silver", "Copper alloy", "Copper", "Cupro-Nickel", "Tin", "Other"]
+                      : ["Gold", "Silver", "Copper alloy", "Lead", "Iron", "Tin", "Pewter", "Pottery", "Flint", "Stone", "Glass", "Bone", "Other"]
+                    ).map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </label>
               </div>

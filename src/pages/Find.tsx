@@ -15,6 +15,9 @@ const periods: Find["period"][] = [
 const materials: Find["material"][] = [
   "Gold", "Silver", "Copper alloy", "Lead", "Iron", "Tin", "Pewter", "Pottery", "Flint", "Stone", "Glass", "Bone", "Other",
 ];
+const coinMaterials: Find["material"][] = [
+  "Gold", "Silver", "50% Silver", "Copper alloy", "Copper", "Cupro-Nickel", "Tin", "Other",
+];
 const completenesses: Find["completeness"][] = ["Complete", "Incomplete", "Fragment"];
 
 const DRAFT_KEY = "fs_find_draft";
@@ -64,6 +67,7 @@ type FormState = {
   coinType: string;
   coinDenomination: string;
   ruler: string;
+  mint: string;
   lat: number | null;
   lon: number | null;
   acc: number | null;
@@ -106,6 +110,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     coinType: "",
     coinDenomination: "",
     ruler: "",
+    mint: "",
     lat: initialLat ?? null,
     lon: initialLon ?? null,
     acc: null,
@@ -439,6 +444,7 @@ export default function FindPage(props: {
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
         ruler: form.ruler.trim(),
+        mint: form.mint.trim() || undefined,
         lat: form.lat,
         lon: form.lon,
         gpsAccuracyM: form.acc,
@@ -532,6 +538,7 @@ export default function FindPage(props: {
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
         ruler: form.ruler.trim(),
+        mint: form.mint.trim() || undefined,
         lat: form.lat,
         lon: form.lon,
         gpsAccuracyM: form.acc,
@@ -1160,6 +1167,17 @@ export default function FindPage(props: {
                         className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                       />
                     </label>
+                    {(form.coinType === 'Hammered' || form.period === 'Roman') && (
+                      <label className="block">
+                        <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">Mint / Mint Mark</div>
+                        <input
+                          value={form.mint}
+                          onChange={(e) => update({ mint: e.target.value })}
+                          placeholder={form.period === 'Roman' ? 'e.g., LONDINIUM, LUGDUNUM' : 'e.g., London, Canterbury'}
+                          className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                        />
+                      </label>
+                    )}
                   </div>
                 )}
 
@@ -1175,7 +1193,7 @@ export default function FindPage(props: {
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Material</div>
                     <select value={form.material} onChange={(e) => update({ material: e.target.value as Find["material"] })}
                       className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow">
-                      {materials.map((x) => <option key={x} value={x}>{x}</option>)}
+                      {(form.findCategory === 'Coin' || form.findCategory === 'Token / Jetton' ? coinMaterials : materials).map((x) => <option key={x} value={x}>{x}</option>)}
                     </select>
                   </label>
                 </div>

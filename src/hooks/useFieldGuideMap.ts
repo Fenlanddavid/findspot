@@ -171,6 +171,7 @@ export function useFieldGuideMap({
             map.addLayer({ id: 'permission-fields-outline', type: 'line',   source: 'permission-fields', layout: { visibility: 'none' }, paint: { 'line-color': '#0d9488', 'line-width': 2, 'line-opacity': 0.9, 'line-dasharray': [4, 2] } });
             map.addLayer({ id: 'permission-fields-labels',  type: 'symbol', source: 'permission-fields', layout: { visibility: 'none', 'text-field': ['get', 'name'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-anchor': 'center', 'text-max-width': 8 }, paint: { 'text-color': '#5eead4', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
 
+
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
                 if (e.features?.[0]) callbacksRef.current.onFeatureClick(e.features[0].properties?.id);

@@ -623,15 +623,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 All fields
                                             </button>
                                         )}
-                                        {realPermissions
-                                            .filter(p => fields.some(f => f.permissionId === p.id && f.boundary))
-                                            .map(p => {
+                                        {realPermissions.map(p => {
                                                 const permFieldCount = fields.filter(f => f.permissionId === p.id && f.boundary).length;
+                                                const hasBoundaries = permFieldCount > 0;
                                                 const isActive = showFields === p.id || (typeof showFields === 'string' && showFields.startsWith('field:') && fields.find(f => f.id === showFields.slice(6))?.permissionId === p.id);
                                                 return (
                                                     <button
                                                         key={p.id}
                                                         onClick={() => {
+                                                            if (!hasBoundaries) return;
                                                             if (permFieldCount > 1) {
                                                                 setFieldPickerStep(p.id);
                                                             } else {
@@ -639,10 +639,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                 setShowFieldsPicker(false);
                                                             }
                                                         }}
-                                                        className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                                        className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : hasBoundaries ? 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10' : 'bg-white/5 border border-white/5 text-white/25 cursor-default'}`}
                                                     >
                                                         <span className="truncate">{p.name || '(Unnamed)'}</span>
-                                                        {permFieldCount > 1 && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 opacity-50"><polyline points="9 18 15 12 9 6"/></svg>}
+                                                        {!hasBoundaries
+                                                            ? <span className="text-[8px] font-normal opacity-50 shrink-0">No boundaries</span>
+                                                            : permFieldCount > 1 && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 opacity-50"><polyline points="9 18 15 12 9 6"/></svg>
+                                                        }
                                                     </button>
                                                 );
                                             })
