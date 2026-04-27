@@ -123,6 +123,7 @@ export type Find = {
 
   findCode: string;
   objectType: string;
+  findCategory?: "Coin" | "Artefact" | "Jewellery" | "Button / Fastener" | "Token / Jetton" | "Other";
   coinType?: string;
   coinDenomination?: string;
   pasId?: string;

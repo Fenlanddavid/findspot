@@ -60,6 +60,7 @@ function CollapsibleSection({ title, open, onToggle, children }: {
 type FormState = {
   findCode: string;
   objectType: string;
+  findCategory: Find["findCategory"] | "";
   coinType: string;
   coinDenomination: string;
   ruler: string;
@@ -101,6 +102,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
   return {
     findCode: makeFindCode(),
     objectType: "",
+    findCategory: "",
     coinType: "",
     coinDenomination: "",
     ruler: "",
@@ -293,6 +295,7 @@ export default function FindPage(props: {
             ...prev,
             findCode: f.findCode,
             objectType: f.objectType === "Pending Quick Find" ? "" : f.objectType,
+            findCategory: f.findCategory || "",
             lat: f.lat,
             lon: f.lon,
             acc: f.gpsAccuracyM,
@@ -432,6 +435,7 @@ export default function FindPage(props: {
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),
         objectType: form.objectType.trim(),
+        findCategory: form.findCategory || undefined,
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
         ruler: form.ruler.trim(),
@@ -524,6 +528,7 @@ export default function FindPage(props: {
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),
         objectType: form.objectType.trim() || "Pending Quick Find",
+        findCategory: form.findCategory || undefined,
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
         ruler: form.ruler.trim(),
@@ -586,6 +591,7 @@ export default function FindPage(props: {
         sessionId,
         findCode: form.findCode.trim() || makeFindCode(),
         objectType: form.objectType.trim() || "",
+        findCategory: form.findCategory || undefined,
         coinType: "", coinDenomination: "", ruler: "",
         lat: form.lat, lon: form.lon, gpsAccuracyM: form.acc,
         osGridRef: form.osGridRef, w3w: "",
@@ -1064,17 +1070,45 @@ export default function FindPage(props: {
 
               {/* Basic Details */}
               <CollapsibleSection title="Basic Details" open={openSections.basic} onToggle={() => toggleSection("basic")}>
+                <div>
+                  <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Find Category</div>
+                  <div className="flex flex-wrap gap-2">
+                    {(["Coin", "Artefact", "Jewellery", "Button / Fastener", "Token / Jetton", "Other"] as const).map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => update({ findCategory: form.findCategory === cat ? "" : cat })}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${
+                          form.findCategory === cat
+                            ? "bg-emerald-500 border-emerald-500 text-white"
+                            : "bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <label className="block">
-                  <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Object Type / Identification</div>
+                  <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Title / Description</div>
                   <input
                     value={form.objectType}
                     onChange={(e) => update({ objectType: e.target.value })}
-                    placeholder="e.g., Coin, Buckle, Brooch"
+                    placeholder={
+                      form.findCategory === "Coin" ? "e.g. Elizabeth I sixpence" :
+                      form.findCategory === "Artefact" ? "e.g. Copper alloy buckle" :
+                      form.findCategory === "Jewellery" ? "e.g. Silver ring" :
+                      form.findCategory === "Button / Fastener" ? "e.g. Livery button" :
+                      form.findCategory === "Token / Jetton" ? "e.g. Nuremberg jetton" :
+                      form.findCategory === "Other" ? "e.g. Lead object" :
+                      "e.g. Hammered silver penny"
+                    }
                     className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
                   />
                 </label>
 
-                {(form.objectType.toLowerCase().includes("coin") || form.coinType) && (
+                {(form.findCategory === "Coin" || form.findCategory === "Token / Jetton" || form.coinType || (!form.findCategory && form.objectType.toLowerCase().includes("coin"))) && (
                   <div className="grid grid-cols-1 gap-5 p-4 bg-emerald-50/30 dark:bg-emerald-900/10 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 animate-in slide-in-from-left-2">
                     <label className="block">
                       <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">Coin Classification</div>

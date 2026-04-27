@@ -116,9 +116,11 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
   if (!find) return null;
 
   const isCoin =
+    find.findCategory === 'Coin' ||
+    find.findCategory === 'Token / Jetton' ||
     !!find.coinType ||
     !!find.coinDenomination ||
-    find.objectType?.toLowerCase().includes('coin');
+    (!find.findCategory && find.objectType?.toLowerCase().includes('coin'));
 
   const mainTitle = isCoin && find.coinType ? `${find.coinType} Coin` : find.objectType || 'Recorded Find';
   const subTitle = isCoin ? find.coinDenomination : find.ruler || null;

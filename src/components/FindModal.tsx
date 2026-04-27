@@ -403,13 +403,46 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             </div>
           ) : (
             <>
+              <div>
+                <span className="text-sm font-bold opacity-75 block mb-1.5">Find Category</span>
+                <div className="flex flex-wrap gap-2">
+                  {(["Coin", "Artefact", "Jewellery", "Button / Fastener", "Token / Jetton", "Other"] as const).map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setDraft({ ...draft, findCategory: draft.findCategory === cat ? undefined : cat })}
+                      className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${
+                        draft.findCategory === cat
+                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          : "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <label className="grid gap-1">
-                    <span className="text-sm font-bold opacity-75">Object Type / Identification</span>
-                    <input className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" value={draft.objectType} onChange={(e) => setDraft({ ...draft, objectType: e.target.value })} />
+                    <span className="text-sm font-bold opacity-75">Title / Description</span>
+                    <input
+                      className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={draft.objectType}
+                      onChange={(e) => setDraft({ ...draft, objectType: e.target.value })}
+                      placeholder={
+                        draft.findCategory === "Coin" ? "e.g. Elizabeth I sixpence" :
+                        draft.findCategory === "Artefact" ? "e.g. Copper alloy buckle" :
+                        draft.findCategory === "Jewellery" ? "e.g. Silver ring" :
+                        draft.findCategory === "Button / Fastener" ? "e.g. Livery button" :
+                        draft.findCategory === "Token / Jetton" ? "e.g. Nuremberg jetton" :
+                        draft.findCategory === "Other" ? "e.g. Lead object" :
+                        "e.g. Hammered silver penny"
+                      }
+                    />
                 </label>
 
-                {(draft.objectType.toLowerCase().includes("coin") || draft.coinType) && (
+                {(draft.findCategory === "Coin" || draft.findCategory === "Token / Jetton" || draft.coinType || (!draft.findCategory && draft.objectType.toLowerCase().includes("coin"))) && (
                   <div className="grid grid-cols-1 gap-4 p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-900/20 animate-in slide-in-from-left-2">
                       <label className="grid gap-1">
                           <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Coin Classification</span>
@@ -519,7 +552,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               </div>
 
               {/* Also add dateRange for Artefacts (not just coins) */}
-              {!(draft.objectType.toLowerCase().includes("coin") || draft.coinType) && (
+              {!(draft.findCategory === "Coin" || draft.findCategory === "Token / Jetton" || draft.coinType || (!draft.findCategory && draft.objectType.toLowerCase().includes("coin"))) && (
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Date Range / Circa</span>
                   <input 

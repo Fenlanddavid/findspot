@@ -40,6 +40,7 @@ export default function AllFinds(props: { projectId: string }) {
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
             const matchesSearch = (s.objectType || "").toLowerCase().includes(q) ||
+                                 (s.findCategory || "").toLowerCase().includes(q) ||
                                  (s.findCode || "").toLowerCase().includes(q) ||
                                  (s.notes || "").toLowerCase().includes(q) ||
                                  (s.period || "").toLowerCase().includes(q) ||
@@ -67,7 +68,7 @@ export default function AllFinds(props: { projectId: string }) {
     if (!baseFinds) return undefined;
     return baseFinds.filter(s => {
       if (filterPeriod && s.period !== filterPeriod) return false;
-      if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase())) return false;
+      if (filterType && !(s.objectType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.coinType || "").toLowerCase().includes(filterType.toLowerCase()) && !(s.findCategory || "").toLowerCase().includes(filterType.toLowerCase())) return false;
       if (filterMaterial && s.material !== filterMaterial) return false;
       if (filterPending && !s.isPending) return false;
       return true;
@@ -123,7 +124,7 @@ export default function AllFinds(props: { projectId: string }) {
                 geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
                 properties: {
                     id: f.id,
-                    category: (f.objectType || '').toLowerCase().includes('coin') ? 'coin' : (f.period || 'Unknown')
+                    category: (f.findCategory === 'Coin' || f.findCategory === 'Token / Jetton' || (f.objectType || '').toLowerCase().includes('coin')) ? 'coin' : (f.period || 'Unknown')
                 }
             }));
 
@@ -189,7 +190,7 @@ export default function AllFinds(props: { projectId: string }) {
                 geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
                 properties: {
                     id: f.id,
-                    category: (f.objectType || '').toLowerCase().includes('coin') ? 'coin' : (f.period || 'Unknown')
+                    category: (f.findCategory === 'Coin' || f.findCategory === 'Token / Jetton' || (f.objectType || '').toLowerCase().includes('coin')) ? 'coin' : (f.period || 'Unknown')
                 }
             }))
         });
@@ -205,7 +206,7 @@ export default function AllFinds(props: { projectId: string }) {
     if (!baseFinds) return null;
     return {
       total: baseFinds.length,
-      coins: baseFinds.filter(f => (f.objectType || "").toLowerCase().includes("coin")).length,
+      coins: baseFinds.filter(f => f.findCategory === "Coin" || f.findCategory === "Token / Jetton" || (f.objectType || "").toLowerCase().includes("coin")).length,
       roman: baseFinds.filter(f => f.period === "Roman").length,
     };
   }, [baseFinds]);
