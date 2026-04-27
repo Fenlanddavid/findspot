@@ -139,11 +139,11 @@ export async function enrichPermissions(
 
     const fieldsWithBoundary = fields.filter(f => f.boundary);
     let totalAcres: number | null = null;
-    if (fieldsWithBoundary.length > 0) {
+    if (p.boundary) {
+      totalAcres = turfArea(p.boundary) / 4046.86;
+    } else if (fieldsWithBoundary.length > 0) {
       const totalM2 = fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary), 0);
       totalAcres = totalM2 / 4046.86;
-    } else if (p.boundary) {
-      totalAcres = turfArea(p.boundary) / 4046.86;
     }
 
     return {
