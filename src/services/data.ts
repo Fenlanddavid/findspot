@@ -85,24 +85,27 @@ export async function importData(json: string) {
   } catch {
     throw new Error("Invalid backup file: could not parse JSON.");
   }
-  
+
   if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
+
+  // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
+  // IndexedDB operation and awaiting it inside a transaction causes IDB to
+  // auto-commit, silently dropping everything written afterwards.
+  const mediaItems: Media[] = data.media
+    ? await Promise.all(data.media.map(async (m: any) => ({
+        ...m,
+        blob: await base64ToBlob(m.blob)
+      })))
+    : [];
 
   await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.settings], async () => {
     await db.projects.bulkPut(data.projects);
-    if(data.permissions) await db.permissions.bulkPut(data.permissions);
-    if(data.fields) await db.fields.bulkPut(data.fields);
-    if(data.sessions) await db.sessions.bulkPut(data.sessions);
-    if(data.finds) await db.finds.bulkPut(data.finds);
-    if(data.settings) await db.settings.bulkPut(data.settings);
-    
-    if (data.media) {
-      const mediaItems = await Promise.all(data.media.map(async (m: any) => ({
-        ...m,
-        blob: await base64ToBlob(m.blob)
-      })));
-      await db.media.bulkPut(mediaItems as Media[]);
-    }
+    if (data.permissions) await db.permissions.bulkPut(data.permissions);
+    if (data.fields) await db.fields.bulkPut(data.fields);
+    if (data.sessions) await db.sessions.bulkPut(data.sessions);
+    if (data.finds) await db.finds.bulkPut(data.finds);
+    if (data.settings) await db.settings.bulkPut(data.settings);
+    if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
   });
 }
 
