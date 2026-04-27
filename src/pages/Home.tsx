@@ -285,7 +285,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
             <span>📍</span> <span className="hidden xs:inline">New</span> Permission
         </button>
         <button onClick={() => setShowClubRallyModal(true)} className="bg-gray-100/70 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
-            <span>🏟️</span> Club/Rally
+            <span>🏟️</span> Club Day / Rally
         </button>
       </div>
 
@@ -575,6 +575,11 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           onClose={() => setShowClubRallyModal(false)}
           onSolo={() => { setShowClubRallyModal(false); props.goPermissionWithParam("rally"); }}
           onJoinUrl={(url) => { setShowClubRallyModal(false); nav(url); }}
+          onOrganiseNew={() => { setShowClubRallyModal(false); nav("/permission?type=rally&organiserSetup=true"); }}
+          onOrganiseExisting={(id) => { setShowClubRallyModal(false); nav(`/permission/${id}?openClubDay=true`); }}
+          permissions={(permissions || [])
+            .filter(p => !p.isClubDayMember && !p.isDefault)
+            .map(p => ({ id: p.id, name: p.name, type: p.type }))}
         />
       )}
     </div>

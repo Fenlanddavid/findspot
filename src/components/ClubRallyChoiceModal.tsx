@@ -1,16 +1,26 @@
 import React, { useState } from "react";
 import Modal from "./Modal";
 
+type PermissionSummary = { id: string; name: string; type: string };
+
+type Step = "choice" | "join" | "organise";
+
 export function ClubRallyChoiceModal({
   onClose,
   onSolo,
   onJoinUrl,
+  onOrganiseNew,
+  onOrganiseExisting,
+  permissions = [],
 }: {
   onClose: () => void;
   onSolo: () => void;
   onJoinUrl: (url: string) => void;
+  onOrganiseNew: () => void;
+  onOrganiseExisting: (id: string) => void;
+  permissions?: PermissionSummary[];
 }) {
-  const [showPaste, setShowPaste] = useState(false);
+  const [step, setStep] = useState<Step>("choice");
   const [pastedUrl, setPastedUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
 
@@ -27,7 +37,6 @@ export function ClubRallyChoiceModal({
           searchString = parsed.search;
         }
       } else {
-        // Could be a relative path like /join?sid=... or just the query string
         const queryIndex = trimmed.indexOf("?");
         if (queryIndex !== -1) {
           const qs = trimmed.slice(queryIndex);
@@ -49,7 +58,7 @@ export function ClubRallyChoiceModal({
     onJoinUrl(`/join${searchString}`);
   }
 
-  if (showPaste) {
+  if (step === "join") {
     return (
       <Modal onClose={onClose} title="Join a club day">
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
@@ -76,7 +85,7 @@ export function ClubRallyChoiceModal({
 
         <div className="flex gap-3">
           <button
-            onClick={() => { setShowPaste(false); setUrlError(null); setPastedUrl(""); }}
+            onClick={() => { setStep("choice"); setUrlError(null); setPastedUrl(""); }}
             className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
           >
             Back
@@ -93,27 +102,85 @@ export function ClubRallyChoiceModal({
     );
   }
 
+  if (step === "organise") {
+    return (
+      <Modal onClose={onClose} title="Set up your club/rally">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
+          Use an existing permission or create a new one.
+        </p>
+
+        {permissions.length > 0 && (
+          <>
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
+              Choose existing
+            </div>
+            <div className="max-h-52 overflow-y-auto space-y-1.5 mb-4 -mx-1 px-1">
+              {permissions.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => onOrganiseExisting(p.id)}
+                  className="w-full text-left flex items-center gap-3 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-teal-400 dark:hover:border-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950/30 transition-colors group"
+                >
+                  <span className="flex-1 text-sm font-bold text-gray-800 dark:text-gray-100 truncate">
+                    {p.name || "Unnamed"}
+                  </span>
+                  {p.type === "rally" && (
+                    <span className="text-[8px] font-black uppercase tracking-widest bg-teal-100 dark:bg-teal-900/60 text-teal-600 dark:text-teal-400 px-1.5 py-0.5 rounded shrink-0">
+                      Rally
+                    </span>
+                  )}
+                  <svg className="w-4 h-4 text-gray-400 group-hover:text-teal-500 shrink-0 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex items-center gap-3 mb-4">
+              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">or</span>
+              <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+            </div>
+          </>
+        )}
+
+        <button
+          onClick={onOrganiseNew}
+          className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mb-3"
+        >
+          Create New Permission
+        </button>
+
+        <button
+          onClick={() => setStep("choice")}
+          className="w-full px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
+        >
+          Back
+        </button>
+      </Modal>
+    );
+  }
+
+  // "choice" step — three paths
   return (
     <Modal onClose={onClose} title="Club Day / Rally">
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">How are you joining?</p>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">How are you taking part?</p>
 
-      {/* Option 1 — Primary */}
+      {/* Option 1 — Join organiser event */}
       <div className="mb-3 p-4 bg-teal-50 dark:bg-teal-950/30 border-2 border-teal-200 dark:border-teal-800 rounded-2xl">
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Organiser-led event</div>
-        <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Join a club day</h3>
+        <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Join a club/rally dig</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
           Scan a QR code or open a link from your organiser.
         </p>
         <button
-          onClick={() => setShowPaste(true)}
+          onClick={() => setStep("join")}
           className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
         >
           Scan / Paste Link
         </button>
       </div>
 
-      {/* Option 2 — Secondary */}
-      <div className="p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
+      {/* Option 2 — Solo */}
+      <div className="mb-3 p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
         <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Solo</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Going solo</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
@@ -124,6 +191,21 @@ export function ClubRallyChoiceModal({
           className="w-full bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
         >
           Create Rally Permission
+        </button>
+      </div>
+
+      {/* Option 3 — Organise */}
+      <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl">
+        <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-1">Organiser</div>
+        <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Organising a club/rally dig</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
+          Set up the land once, then share a QR code or link with members.
+        </p>
+        <button
+          onClick={() => setStep("organise")}
+          className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+        >
+          Set Up Club Day
         </button>
       </div>
     </Modal>

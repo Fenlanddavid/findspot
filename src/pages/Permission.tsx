@@ -35,6 +35,8 @@ export default function PermissionPage(props: {
 
   const [name, setName] = useState("");
   const typeParam = searchParams.get("type");
+  const organiserSetupParam = searchParams.get("organiserSetup") === "true";
+  const openClubDayParam = searchParams.get("openClubDay") === "true";
   const [type, setType] = useState<Permission["type"]>(typeParam === "rally" ? "rally" : "individual");
   const [collector, setCollector] = useState("");
   const [lat, setLat] = useState<number | null>(null);
@@ -634,6 +636,12 @@ export default function PermissionPage(props: {
     }
   }, [id]);
 
+  // Auto-open club day pack modal when navigating from global organiser flow
+  useEffect(() => {
+    if (!loading && isEdit && openClubDayParam) {
+      setShowCreatePack(true);
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function doGPS() {
     setError(null);
@@ -793,12 +801,12 @@ export default function PermissionPage(props: {
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
                   </h2>
-                  {isEdit && !isEditing && !isClubDayMember && (
+                  {isEdit && !isEditing && !isClubDayMember && isSharedPermission && (
                     <button
                       onClick={() => setShowCreatePack(true)}
                       className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
                     >
-                      Club/Rally
+                      Club Day / QR
                     </button>
                   )}
                 </div>
@@ -963,6 +971,20 @@ export default function PermissionPage(props: {
                     {isFirstPermission && (
                       <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-800 dark:text-emerald-400">
                         Just add a name to get started — fields, boundaries, and landowner details can all be added later.
+                      </div>
+                    )}
+                    {organiserSetupParam && (
+                      <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl px-4 py-3.5">
+                        <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-1.5">Setting up a club/rally?</div>
+                        <p className="text-sm font-bold text-amber-900 dark:text-amber-200 mb-2">Your landowner details and private notes are never shared.</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed mb-1">Members will only see:</p>
+                        <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 mb-2 ml-1">
+                          <li>· Event name and date</li>
+                          <li>· Field boundaries</li>
+                          <li>· Organiser contact details</li>
+                          <li>· Significant find instructions</li>
+                        </ul>
+                        <p className="text-xs text-amber-600 dark:text-amber-500">You stay in full control of the permission.</p>
                       </div>
                     )}
                     <label className="block">
