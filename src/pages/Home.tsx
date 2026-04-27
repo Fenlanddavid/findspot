@@ -506,7 +506,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                     View
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }); }}
+                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }).catch(console.error); }}
                     title={l.isPinned ? "Unpin" : "Pin to top"}
                     className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
                   >

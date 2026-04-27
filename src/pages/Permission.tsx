@@ -641,7 +641,7 @@ export default function PermissionPage(props: {
     if (!loading && isEdit && openClubDayParam) {
       setShowCreatePack(true);
     }
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, isEdit, openClubDayParam]);
 
   async function doGPS() {
     setError(null);

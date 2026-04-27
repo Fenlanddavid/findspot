@@ -457,21 +457,22 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
   const fixedSessions = newSessions.map((s: any) => ({ ...s, projectId: permission.projectId, permissionId: permission.id }));
   const fixedFinds = newFinds.map((f: any) => ({ ...f, projectId: permission.projectId, permissionId: permission.id }));
 
+  // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
+  // IndexedDB operation and awaiting it inside a transaction causes IDB to
+  // auto-commit, silently dropping everything written afterwards.
+  const mediaItems: Media[] = data.media?.length
+    ? await Promise.all((data.media as any[]).map(async m => ({ ...m, blob: await base64ToBlob(m.blob) })))
+    : [];
+
+  // Upsert by recorderId so re-exports from the same member don't create duplicate rows
+  const existingEntry = data.recorderId
+    ? await db.importedPackages.filter(p => p.sharedPermissionId === data.sharedPermissionId && p.recorderId === data.recorderId).first()
+    : undefined;
+
   await db.transaction("rw", [db.sessions, db.finds, db.media, db.importedPackages], async () => {
     if (fixedSessions.length > 0) await db.sessions.bulkPut(fixedSessions);
     if (fixedFinds.length > 0) await db.finds.bulkPut(fixedFinds);
-
-    if (data.media?.length) {
-      const mediaItems = await Promise.all(
-        (data.media as any[]).map(async m => ({ ...m, blob: await base64ToBlob(m.blob) }))
-      );
-      await db.media.bulkPut(mediaItems as Media[]);
-    }
-
-    // Upsert by recorderId so re-exports from the same member don't create duplicate rows
-    const existingEntry = data.recorderId
-      ? await db.importedPackages.filter(p => p.sharedPermissionId === data.sharedPermissionId && p.recorderId === data.recorderId).first()
-      : undefined;
+    if (mediaItems.length > 0) await db.media.bulkPut(mediaItems);
     await db.importedPackages.put({
       id: existingEntry?.id ?? uuid(),
       packageHash: hash,
