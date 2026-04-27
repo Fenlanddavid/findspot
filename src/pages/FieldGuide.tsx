@@ -264,7 +264,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
         hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes,
-        fieldBoundaries: fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
+        fieldBoundaries: [
+            ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
+            // Fall back to the permission's own boundary when no fields have been drawn
+            ...permissions.filter(p => p.boundary && !fields.some(f => f.permissionId === p.id)).map(p => ({ id: p.id, name: p.name, permissionId: p.id, boundary: p.boundary! })),
+        ],
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
         initLat, initLng,
         callbacks: {
@@ -615,7 +619,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         >
                                             Off
                                         </button>
-                                        {fields.some(f => f.boundary) && (
+                                        {(fields.some(f => f.boundary) || permissions.some(p => p.boundary && !fields.some(f => f.permissionId === p.id))) && (
                                             <button
                                                 onClick={() => { setShowFields('all'); setShowFieldsPicker(false); }}
                                                 className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-1 ${showFields === 'all' ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
@@ -625,7 +629,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         )}
                                         {realPermissions.map(p => {
                                                 const permFieldCount = fields.filter(f => f.permissionId === p.id && f.boundary).length;
-                                                const hasBoundaries = permFieldCount > 0;
+                                                const hasBoundaries = permFieldCount > 0 || (permFieldCount === 0 && !!p.boundary);
                                                 const isActive = showFields === p.id || (typeof showFields === 'string' && showFields.startsWith('field:') && fields.find(f => f.id === showFields.slice(6))?.permissionId === p.id);
                                                 return (
                                                     <button
