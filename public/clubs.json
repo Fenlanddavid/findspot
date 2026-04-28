@@ -360,5 +360,13 @@
     "postcode": "KY12",
     "facebookUrl": "https://www.facebook.com/groups/1910807836430509",
     "verificationStatus": "community"
+  },
+  {
+    "id": "club-044",
+    "name": "Leicester Search Society",
+    "town": "Leicester",
+    "county": "Leicestershire",
+    "facebookUrl": "https://www.facebook.com/share/g/1Gxh2WpaAk/",
+    "verificationStatus": "community"
   }
 ]
