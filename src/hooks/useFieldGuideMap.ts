@@ -41,6 +41,7 @@ type MapCallbacks = {
     onPASFindLog: (msg: string) => void;
     onPASFindSelect: (find: HistoricFind) => void;
     onCrossingsLog: (msg: string) => void;
+    onMonumentClick: (name: string | null) => void;
 };
 
 export type UseFieldGuideMapOptions = {
@@ -203,8 +204,9 @@ export function useFieldGuideMap({
                 if (props) showLabel(`${props.objectType || 'Find'} · ${props.period || 'Unknown'}`);
             });
             map.on('click', (e) => {
-                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-circles'] });
+                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-circles', 'monuments-fill'] });
                 if (hits.length > 0) return;
+                callbacksRef.current.onMonumentClick(null);
                 callbacksRef.current.onDeselect();
             });
             map.on('dragstart', () => callbacksRef.current.onDragStart());
@@ -223,8 +225,8 @@ export function useFieldGuideMap({
                 showLabel(`Route Crossing: ${a} × ${b}`);
             });
             map.on('click', 'monuments-fill', (e) => {
-                const name = e.features?.[0]?.properties?.Name;
-                showLabel(name ? `Scheduled Monument: ${name}` : 'Scheduled Monument');
+                const name = e.features?.[0]?.properties?.Name as string | undefined;
+                callbacksRef.current.onMonumentClick(name ?? '');
             });
             map.on('click', 'aim-fill', (e) => {
                 const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;

@@ -81,6 +81,7 @@ type EngineAction =
     | { type: 'SCAN_SUCCESS'; features: Cluster[]; hotspots: Hotspot[]; monumentPoints: [number, number][]; routes: HistoricRoute[]; heritageCount: number }
     | { type: 'SCAN_FAIL' }
     | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] }
+    | { type: 'SET_HERITAGE_COUNT'; count: number; monumentPoints: [number, number][] }
     | { type: 'SET_HAS_SCANNED' }
     | { type: 'CLEAR_SCAN' };
 
@@ -111,6 +112,8 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
             return { ...state, analyzing: false, scanPhase: 'idle' };
         case 'HISTORIC_ENHANCE':
             return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
+        case 'SET_HERITAGE_COUNT':
+            return { ...state, heritageCount: action.count, monumentPoints: action.monumentPoints };
         case 'SET_HAS_SCANNED':
             return { ...state, hasScanned: true };
         case 'CLEAR_SCAN':
@@ -185,6 +188,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [intelLayersOpen,        setIntelLayersOpen]        = useState(false);
     const [targetPeriod,           setTargetPeriod]           = useState<'All' | 'Bronze Age' | 'Roman' | 'Medieval'>('All');
     const [isLocating,             setIsLocating]             = useState(false);
+    const [selectedMonument,       setSelectedMonument]       = useState<string | null | undefined>(undefined); // undefined = not clicked, null = no name, string = named
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, userFinds: true });
@@ -329,13 +333,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         callbacks: {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
             onHotspotClick:  (id)  => { setShowSuggestion(false); setSelectedHotspotId(id); },
-            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); },
+            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
             onPASFindLog:    (msg) => addLog(msg, 'historic'),
             onPASFindSelect: (f)   => setSelectedPASFind(f),
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
+            onMonumentClick: (name) => setSelectedMonument(name === null ? undefined : (name || null)),
         },
     });
 
@@ -363,6 +368,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
         setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, userFinds: true });
         setMapClickLabel(null);
+        setSelectedMonument(undefined);
         terrainScanCenterRef.current = null;
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
@@ -400,6 +406,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
+
+        dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints });
 
         if (!result.drifted && result.enhancedHotspots.length > 0) {
             setSelectedHotspotId(null);   // dismiss the terrain-phase selection; user chooses from enhanced list
@@ -772,11 +780,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 {mapClickLabel}
                             </div>
                         )}
-                        {heritageCount > 0 && !historicMode && (
-                            <div className="bg-red-600 text-white px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20 animate-bounce">
-                                ⛔ Scheduled Monument
-                            </div>
-                        )}
                         {zoomWarning && !historicLayerToggles.lidar && (
                             <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20">
                                 ⚠️ MAX SCAN ZOOM
@@ -811,6 +814,22 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <span className="text-[12px] font-black tracking-tight">{h.score}%</span>
                                     </button>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Scheduled Monument Card — on boundary click */}
+                    {selectedMonument !== undefined && (
+                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
+                            <div className="bg-black/95 border border-red-500/60 rounded-3xl p-5 shadow-2xl">
+                                <div className="flex items-start justify-between mb-3">
+                                    <span className="bg-black/90 border border-red-500/60 text-white px-3 py-1 rounded-full text-[8px] font-black tracking-widest uppercase">Scheduled Monument</span>
+                                    <button onClick={() => setSelectedMonument(undefined)} className="text-white/30 hover:text-white/60 transition-colors -mt-0.5 -mr-1 p-1">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                                {selectedMonument && <p className="text-white font-black text-sm leading-snug mb-2">{selectedMonument}</p>}
+                                <p className="text-white/50 text-[10px] leading-snug">This area is legally protected. Detecting is not permitted here.</p>
                             </div>
                         </div>
                     )}
@@ -973,25 +992,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     'Supporting Signal': 'border-white/20',
                                 };
                                 return (
-                                    <div key={f.id} className={`p-5 rounded-3xl border-2 bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : borderColour[tInterp.signalStrength]}`}>
-                                        {/* Centred target label */}
-                                        <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Target {f.number}</p>
-                                        {/* Header */}
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="flex-1 min-w-0 pr-3">
-                                                <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
-                                                {!f.isProtected && <p className={`text-[11px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
-                                            </div>
-                                            <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                            </button>
-                                        </div>
+                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-5'} rounded-3xl border-2 bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : borderColour[tInterp.signalStrength]}`}>
                                         {f.isProtected ? (
-                                            /* Protected monument — no detecting guidance shown */
-                                            <div className="border-t border-red-500/20 pt-3 space-y-3">
-                                                <div className="p-3 bg-red-600/20 rounded-2xl border border-red-500/50 text-center">
-                                                    <p className="text-[11px] font-black uppercase tracking-widest text-red-300 mb-1">⚠️ Scheduled Monument</p>
-                                                    <p className="text-[10px] text-red-200/70 leading-snug">Detecting on or near this site is illegal. Do not disturb.</p>
+                                            /* Protected — compact layout, no dead space */
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-[9px] font-black text-white uppercase tracking-[0.2em]">Target {f.number}</p>
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                    </button>
+                                                </div>
+                                                <div className="p-3 bg-black/60 rounded-2xl border border-red-500/50">
+                                                    <p className="text-[11px] font-black uppercase tracking-widest text-white mb-1">Scheduled Monument</p>
+                                                    <p className="text-[10px] text-white/50 leading-snug">This result sits within a protected site. No detecting guidance is provided here.</p>
                                                 </div>
                                                 {f.aimInfo && (
                                                     <div className="p-2 rounded-xl border bg-white/5 border-white/10">
@@ -1001,6 +1014,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 )}
                                             </div>
                                         ) : (
+                                            <>
+                                            {/* Centred target label */}
+                                            <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Target {f.number}</p>
+                                            {/* Header */}
+                                            <div className="flex justify-between items-start mb-4">
+                                                <div className="flex-1 min-w-0 pr-3">
+                                                    <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
+                                                    <p className={`text-[11px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                </button>
+                                            </div>
                                             <>
                                                 {/* Hook */}
                                                 <p className="text-[12px] font-bold text-white/80 leading-snug mb-3">{tInterp.hook}</p>
@@ -1071,8 +1097,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     )}
                                                 </div>
                                             </>
+                                            <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                            </>
                                         )}
-                                        <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                     </div>
                                 );
                             })}
@@ -1582,7 +1609,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     {/* Header row: type + source dots */}
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex-1 min-w-0 pr-2">
-                                            <h3 className={`text-[10px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>
+                                            {!f.isProtected && <h3 className={`text-[10px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>}
                                             {!f.isProtected && <p className={`text-[9px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
                                         </div>
                                         <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
@@ -1597,9 +1624,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     {f.isProtected ? (
                                         /* Protected monument — no detecting guidance shown */
                                         <div className="border-t border-red-500/20 pt-2 space-y-2">
-                                            <div className="p-2 bg-red-600/20 rounded-xl border border-red-500/40 text-center">
-                                                <p className="text-[9px] font-black uppercase tracking-widest text-red-300 mb-0.5">⚠️ Scheduled Monument</p>
-                                                <p className="text-[9px] text-red-200/70 leading-snug">Detecting here is illegal. Do not disturb.</p>
+                                            <div className="p-2 bg-black/60 rounded-xl border border-red-500/50">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-white mb-0.5">Scheduled Monument</p>
+                                                <p className="text-[9px] text-white/50 leading-snug">This result sits within a protected site. No detecting guidance is provided here.</p>
                                             </div>
                                             {f.aimInfo && (
                                                 <div className="px-2 py-1 bg-white/5 border border-white/10 rounded-lg">
@@ -1693,52 +1720,36 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
             </div>
 
-            {/* Heritage Feature Card Modal */}
+            {/* Heritage Feature Card */}
             {selectedPASFind && (
-                <div className="absolute inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-slate-900 border border-emerald-500/30 w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="relative h-32 bg-emerald-600/20 flex items-center justify-center border-b border-white/5">
-                            <div className="absolute top-4 right-4">
-                                <button onClick={() => setSelectedPASFind(null)} className="p-2 bg-black/40 hover:bg-black/60 rounded-full text-white transition-all border border-white/10">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="18" x2="18" y2="6"></line></svg>
+                <>
+                    <div className="absolute inset-0 z-[199]" onClick={() => setSelectedPASFind(null)} />
+                    <div className="absolute bottom-6 left-4 right-4 z-[200] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="p-5 rounded-3xl border-2 border-emerald-500/40 bg-slate-900 shadow-2xl shadow-emerald-900/20">
+                            <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Heritage Feature</p>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex-1 min-w-0 pr-3">
+                                    <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{selectedPASFind.objectType}</h3>
+                                    <p className="text-[11px] font-black text-emerald-400">{selectedPASFind.broadperiod}</p>
+                                </div>
+                                <button onClick={() => setSelectedPASFind(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </button>
                             </div>
-                            <div className="flex flex-col items-center">
-                                <div className="w-12 h-12 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.5)] mb-2">
-                                    <span className="text-xl font-black text-white italic">H</span>
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Heritage Feature</span>
+                            <div className="border-t border-white/8 pt-3 space-y-3">
+                                <p className="text-[11px] font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
+                                <a
+                                    href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
+                                    target="_blank" rel="noreferrer"
+                                    className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.98]"
+                                >
+                                    View on OpenStreetMap
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                </a>
                             </div>
-                        </div>
-                        <div className="p-6 space-y-6">
-                            <div className="space-y-1">
-                                <h3 className="text-xl font-black text-white uppercase tracking-tight">{selectedPASFind.objectType}</h3>
-                                <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-400 uppercase tracking-widest">{selectedPASFind.broadperiod}</span>
-                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest font-mono">{selectedPASFind.id}</span>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5"><span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Source</span><span className="text-[10px] font-black text-white uppercase italic">OSM Heritage</span></div>
-                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5"><span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Status</span><span className="text-[10px] font-black text-white uppercase italic">Standing Remains</span></div>
-                            </div>
-                            <div className="bg-emerald-500/5 p-4 rounded-2xl border border-emerald-500/10 space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                    <p className="text-[11px] font-bold text-slate-300 leading-tight">High-precision coordinates from the OpenStreetMap community heritage dataset.</p>
-                                </div>
-                            </div>
-                            <a
-                                href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
-                                target="_blank" rel="noreferrer"
-                                className="flex items-center justify-center gap-2 w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20 active:scale-[0.98]"
-                            >
-                                View on OpenStreetMap
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                            </a>
                         </div>
                     </div>
-                </div>
+                </>
             )}
         </div>
     );
