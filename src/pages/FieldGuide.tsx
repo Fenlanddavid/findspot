@@ -1,4 +1,4 @@
-import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getHotspotHook, HotspotSignalStrength } from '../utils/hotspotInterpreter';
 import { buildTargetInterpretation, TargetSignalStrength } from '../utils/targetInterpreter';
+import { getDistance } from '../utils/fieldGuideAnalysis';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -186,7 +187,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [isLocating,             setIsLocating]             = useState(false);
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
-    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
+    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, userFinds: true });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
     const [fieldPickerStep,        setFieldPickerStep]        = useState<'top' | string>('top'); // string = permId drilling into its fields
@@ -218,6 +219,59 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         const sessions = await db.sessions.where('projectId').equals(projectId).filter(s => !s.isFinished).toArray();
         return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
     }, [projectId]);
+
+    // ─── Find context for hotspot annotation ─────────────────────────────────
+    const projectFinds = useLiveQuery(
+        () => db.finds.where('projectId').equals(projectId).toArray(),
+        [projectId]
+    ) ?? [];
+
+    const hotspotFindContext = useMemo((): Map<string, 'within' | 'nearby'> => {
+        const map = new Map<string, 'within' | 'nearby'>();
+        const geoFinds = projectFinds.filter(f => f.lat !== null && f.lon !== null);
+        if (!geoFinds.length || !hotspots.length) return map;
+        for (const h of hotspots) {
+            const [[minLon, minLat], [maxLon, maxLat]] = h.bounds;
+            let hasWithin = false;
+            let hasNearby = false;
+            for (const f of geoFinds) {
+                const lon = f.lon!;
+                const lat = f.lat!;
+                if (lon >= minLon && lon <= maxLon && lat >= minLat && lat <= maxLat) {
+                    hasWithin = true; break;
+                }
+                if (!hasNearby && getDistance([lon, lat], h.center) <= 150) {
+                    hasNearby = true;
+                }
+            }
+            if (hasWithin) map.set(h.id, 'within');
+            else if (hasNearby) map.set(h.id, 'nearby');
+        }
+        return map;
+    }, [projectFinds, hotspots]);
+
+    const sortedHotspots = useMemo(() => {
+        return [...hotspots].sort((a, b) => b.score - a.score);
+    }, [hotspots]);
+
+    const targetFindContext = useMemo((): Map<string, 'within' | 'nearby'> => {
+        const map = new Map<string, 'within' | 'nearby'>();
+        const geoFinds = projectFinds.filter(f => f.lat !== null && f.lon !== null);
+        if (!geoFinds.length || !detectedFeatures.length) return map;
+        for (const t of detectedFeatures) {
+            let hasWithin = false;
+            let hasNearby = false;
+            for (const f of geoFinds) {
+                const d = getDistance([f.lon!, f.lat!], t.center);
+                if (d <= 35) { hasWithin = true; break; }
+                if (!hasNearby && d <= 100) hasNearby = true;
+            }
+            if (hasWithin) map.set(t.id, 'within');
+            else if (hasNearby) map.set(t.id, 'nearby');
+        }
+        return map;
+    }, [projectFinds, detectedFeatures]);
+
 
     function handleStartSession() {
         if (activeSession) { nav(`/session/${activeSession.id}`); return; }
@@ -270,6 +324,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             ...permissions.filter(p => p.boundary && !fields.some(f => f.permissionId === p.id)).map(p => ({ id: p.id, name: p.name, permissionId: p.id, boundary: p.boundary! })),
         ],
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
+        userFinds: projectFinds,
         initLat, initLng,
         callbacks: {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
@@ -306,7 +361,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setScanConfidence(null);
         setHistoricMode(false);
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
-        setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true });
+        setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, userFinds: true });
         setMapClickLabel(null);
         terrainScanCenterRef.current = null;
         clearMapSources();
@@ -743,7 +798,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 {isHistoricScanning ? 'Enhancing...' : hotspotVersion === 'enhanced' ? 'Enhanced Hotspot' : 'Terrain Hotspot'}
                             </div>
                             <div className="flex flex-col gap-2 pointer-events-auto max-h-[40vh] overflow-y-auto scrollbar-hide pb-4">
-                                {hotspots.slice(0, 3).map(h => (
+                                {sortedHotspots.slice(0, 3).map(h => (
                                     <button
                                         key={h.id}
                                         onClick={() => {
@@ -789,6 +844,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                                 </div>
                                             )}
+                                            {hotspotFindContext.get(h.id) === 'within' && <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mt-1.5">Recorded finds support this signal</p>}
+                                            {hotspotFindContext.get(h.id) === 'nearby' && <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mt-1.5">Activity recorded nearby</p>}
                                             {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest mt-1.5 block">DETECT HERE</span>}
                                         </div>
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
@@ -947,6 +1004,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <>
                                                 {/* Hook */}
                                                 <p className="text-[12px] font-bold text-white/80 leading-snug mb-3">{tInterp.hook}</p>
+                                                {targetFindContext.get(f.id) === 'within' && <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mb-2">Recorded finds support this signal</p>}
+                                                {targetFindContext.get(f.id) === 'nearby' && <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mb-2">Activity recorded nearby</p>}
                                                 {/* Crossing badge */}
                                                 {f.isHighConfidenceCrossing && (
                                                     <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-3 animate-pulse">
@@ -1022,17 +1081,20 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Historic Field Intelligence Banner — compact pill */}
                     {historicMode && !isIntelOpen && (
-                        <div className="absolute top-4 left-4 z-[90] pointer-events-auto">
                             <button
                                 onClick={() => setIsIntelOpen(true)}
-                                className="bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-2xl flex items-center gap-2 active:scale-95 transition-all"
+                                className="absolute top-14 left-4 z-[90] bg-slate-900/90 px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-lg flex items-center gap-2 active:scale-95 transition-all"
                             >
                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">
                                     {loadingPAS ? 'Scanning...' : 'Historic Intel'}
                                 </span>
+                                {!loadingPAS && (() => {
+                                    const c = mapRef.current?.getCenter();
+                                    const n = c ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [c.lng, c.lat]) <= 500).length : 0;
+                                    return n > 0 ? <span className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{n} find{n !== 1 ? 's' : ''}</span> : null;
+                                })()}
                             </button>
-                        </div>
                     )}
 
                     {/* Mobile Historic Intelligence Panel */}
@@ -1041,6 +1103,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.signals } : null);
                         const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.signals } : null);
                         const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
+                        const mc = mapRef.current?.getCenter();
+                        const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
                         return (
                         <>
                         {/* Tap-behind to dismiss */}
@@ -1075,6 +1139,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 ))}
                                             </div>
                                         </div>
+                                    )}
+
+                                    {/* Your finds nearby */}
+                                    {nearbyProjectFinds.length > 0 && (
+                                        <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
                                     )}
 
                                     {/* Summary counts */}
@@ -1124,7 +1193,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                                             {intelLayersOpen && (
                                                 <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
-                                                    {[{ key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }].map(({ key, label }) => (
+                                                    {[{ key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }, { key: 'userFinds', label: 'Your Finds' }].map(({ key, label }) => (
                                                         <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                                                             {label}
                                                         </button>
@@ -1144,6 +1213,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                     <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
                                                                         <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
                                                                         <span className="text-sm font-black text-blue-400">{count}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Your Recorded Finds */}
+                                                    {nearbyProjectFinds.length > 0 && (
+                                                        <div className="space-y-2">
+                                                            <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
+                                                            <div className="space-y-1.5">
+                                                                {nearbyProjectFinds.map(f => (
+                                                                    <div key={f.id} className="bg-emerald-500/5 border border-emerald-500/10 px-3 py-2 rounded-xl flex justify-between items-center">
+                                                                        <span className="text-[10px] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
+                                                                        <span className="text-[9px] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -1322,7 +1406,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             {selectedHotspotId && <button onClick={() => setSelectedHotspotId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
                         </div>
                         <div className="flex flex-col gap-4">
-                            {hotspots.length > 0 ? hotspots.map(h => {
+                            {sortedHotspots.length > 0 ? sortedHotspots.map(h => {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hHook = getHotspotHook(hStrength);
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
@@ -1357,6 +1441,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 {(h.linkedCount ?? 0) > 0 && <span className="text-[7px] font-bold text-white/25 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                             </div>
                                         )}
+                                        {/* 6. Find activity annotation */}
+                                        {hotspotFindContext.get(h.id) === 'within' && <p className="text-[7px] font-black text-emerald-400/70 uppercase tracking-widest mt-1">Recorded finds support this signal</p>}
+                                        {hotspotFindContext.get(h.id) === 'nearby' && <p className="text-[7px] font-black text-emerald-400/70 uppercase tracking-widest mt-1">Activity recorded nearby</p>}
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-3 animate-pulse">
@@ -1524,6 +1611,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <>
                                             {/* Hook */}
                                             <p className="text-[10px] font-bold text-white/70 leading-snug mb-2">{tInterp.hook}</p>
+                                            {targetFindContext.get(f.id) === 'within' && <p className="text-[7px] font-black text-emerald-400/70 uppercase tracking-widest mb-1.5">Recorded finds support this signal</p>}
+                                            {targetFindContext.get(f.id) === 'nearby' && <p className="text-[7px] font-black text-emerald-400/70 uppercase tracking-widest mb-1.5">Activity recorded nearby</p>}
                                             {/* Crossing badge */}
                                             {f.isHighConfidenceCrossing && (<div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-2 animate-pulse"><p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p></div>)}
                                             {/* Why this matters */}

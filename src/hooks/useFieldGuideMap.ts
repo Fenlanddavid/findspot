@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Find } from '../db';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,8 @@ export type UseFieldGuideMapOptions = {
     isSatellite: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean };
+    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; userFinds: boolean };
+    userFinds: Find[];
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
     // Initial fly-to coordinates
     initLat?: number;
@@ -67,7 +69,7 @@ export type UseFieldGuideMapOptions = {
 
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes, fieldBoundaries,
-    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
+    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
     initLat, initLng, callbacks,
 }: UseFieldGuideMapOptions) {
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -172,6 +174,10 @@ export function useFieldGuideMap({
             map.addLayer({ id: 'permission-fields-labels',  type: 'symbol', source: 'permission-fields', layout: { visibility: 'none', 'text-field': ['get', 'name'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-anchor': 'center', 'text-max-width': 8 }, paint: { 'text-color': '#5eead4', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
 
 
+            // ── User recorded finds overlay ───────────────────────────────────
+            map.addSource('user-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({ id: 'user-finds-circles', type: 'circle', source: 'user-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 4, 'circle-color': '#34d399', 'circle-opacity': 0.5, 'circle-stroke-width': 1, 'circle-stroke-color': '#000', 'circle-stroke-opacity': 0.3 } });
+
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
                 if (e.features?.[0]) callbacksRef.current.onFeatureClick(e.features[0].properties?.id);
@@ -192,8 +198,12 @@ export function useFieldGuideMap({
             map.on('click', 'hotspots-fill', (e) => {
                 if (e.features?.[0]) callbacksRef.current.onHotspotClick(e.features[0].properties?.id);
             });
+            map.on('click', 'user-finds-circles', (e) => {
+                const props = e.features?.[0]?.properties as Record<string, unknown> | undefined;
+                if (props) showLabel(`${props.objectType || 'Find'} · ${props.period || 'Unknown'}`);
+            });
             map.on('click', (e) => {
-                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill'] });
+                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-circles'] });
                 if (hits.length > 0) return;
                 callbacksRef.current.onDeselect();
             });
@@ -461,6 +471,37 @@ export function useFieldGuideMap({
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
         });
     }, [showFields]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── User finds data ───────────────────────────────────────────────────────
+    useEffect(() => {
+        const geoJSON: GeoJSON.FeatureCollection = {
+            type: 'FeatureCollection',
+            features: userFinds
+                .filter(f => f.lat !== null && f.lon !== null)
+                .map(f => ({
+                    type: 'Feature' as const,
+                    geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
+                    properties: { id: f.id, objectType: f.objectType, period: f.period },
+                })),
+        };
+        let canceled = false;
+        const updateSource = () => {
+            if (canceled) return;
+            const src = mapRef.current?.getSource('user-finds') as maplibregl.GeoJSONSource | undefined;
+            if (src) { src.setData(geoJSON); }
+            else if (!mapRef.current?.loaded()) { setTimeout(updateSource, 500); }
+        };
+        updateSource();
+        return () => { canceled = true; };
+    }, [userFinds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── User finds visibility ─────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const vis = historicMode && historicLayerVisibility.userFinds ? 'visible' : 'none';
+        if (map.getLayer('user-finds-circles')) map.setLayoutProperty('user-finds-circles', 'visibility', vis);
+    }, [historicLayerVisibility.userFinds, historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 
