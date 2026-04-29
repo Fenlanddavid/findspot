@@ -234,6 +234,7 @@ export default function FindPage(props: {
 
   // #14 — draft restore flag
   const [draftRestored, setDraftRestored] = useState(false);
+  const [loadedFindIsPending, setLoadedFindIsPending] = useState(false);
 
   // Collapsible section state — Basic open by default, rest collapsed
   const [openSections, setOpenSections] = useState({
@@ -294,6 +295,7 @@ export default function FindPage(props: {
       db.finds.get(props.quickId).then(f => {
         if (f) {
           setSavedId(f.id);
+          setLoadedFindIsPending(!!f.isPending);
           const grid = (f.lat && f.lon) ? toOSGridRef(f.lat, f.lon) || "" : "";
           const src = f.foundAt ? new Date(f.foundAt) : null;
           setForm(prev => ({
@@ -911,7 +913,7 @@ export default function FindPage(props: {
         </div>
       )}
 
-      {props.quickId && (
+      {props.quickId && loadedFindIsPending && (
         <div className="border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 p-4 rounded-xl flex items-center gap-3">
           <span className="text-xl">🟠</span>
           <div className="text-sm">

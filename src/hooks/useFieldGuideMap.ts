@@ -42,6 +42,7 @@ type MapCallbacks = {
     onPASFindSelect: (find: HistoricFind) => void;
     onCrossingsLog: (msg: string) => void;
     onMonumentClick: (name: string | null) => void;
+    onUserFindClick: (id: string) => void;
 };
 
 export type UseFieldGuideMapOptions = {
@@ -178,6 +179,8 @@ export function useFieldGuideMap({
             // ── User recorded finds overlay ───────────────────────────────────
             map.addSource('user-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'user-finds-circles', type: 'circle', source: 'user-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 4, 'circle-color': '#34d399', 'circle-opacity': 0.5, 'circle-stroke-width': 1, 'circle-stroke-color': '#000', 'circle-stroke-opacity': 0.3 } });
+            // Transparent hitbox layer with larger radius for easier tapping
+            map.addLayer({ id: 'user-finds-hitbox', type: 'circle', source: 'user-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 16, 'circle-color': 'transparent', 'circle-opacity': 0 } });
 
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
@@ -199,12 +202,12 @@ export function useFieldGuideMap({
             map.on('click', 'hotspots-fill', (e) => {
                 if (e.features?.[0]) callbacksRef.current.onHotspotClick(e.features[0].properties?.id);
             });
-            map.on('click', 'user-finds-circles', (e) => {
+            map.on('click', 'user-finds-hitbox', (e) => {
                 const props = e.features?.[0]?.properties as Record<string, unknown> | undefined;
-                if (props) showLabel(`${props.objectType || 'Find'} · ${props.period || 'Unknown'}`);
+                if (props?.id) callbacksRef.current.onUserFindClick(String(props.id));
             });
             map.on('click', (e) => {
-                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-circles', 'monuments-fill'] });
+                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill'] });
                 if (hits.length > 0) return;
                 callbacksRef.current.onMonumentClick(null);
                 callbacksRef.current.onDeselect();
@@ -503,6 +506,7 @@ export function useFieldGuideMap({
         if (!map) return;
         const vis = historicMode && historicLayerVisibility.userFinds ? 'visible' : 'none';
         if (map.getLayer('user-finds-circles')) map.setLayoutProperty('user-finds-circles', 'visibility', vis);
+        if (map.getLayer('user-finds-hitbox'))  map.setLayoutProperty('user-finds-hitbox',  'visibility', vis);
     }, [historicLayerVisibility.userFinds, historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────

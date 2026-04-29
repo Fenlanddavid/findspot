@@ -3,7 +3,8 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import { db, Find, Media } from '../db';
+import { ScaledImage } from '../components/ScaledImage';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
@@ -203,6 +204,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
     const [selectedPASFind, setSelectedPASFind] = useState<HistoricFind | null>(null);
+    const [selectedUserFind, setSelectedUserFind] = useState<Find | null>(null);
     const [placeSignals,    setPlaceSignals]    = useState<PlaceSignal[]>([]);
 
     // Terrain scan centre — for drift guard in historic phase
@@ -229,6 +231,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         () => db.finds.where('projectId').equals(projectId).toArray(),
         [projectId]
     ) ?? [];
+
+    const selectedUserFindMedia = useLiveQuery<Media | undefined>(
+        () => selectedUserFind
+            ? db.media.where('findId').equals(selectedUserFind.id).filter(m => m.type === 'photo').first()
+            : Promise.resolve(undefined),
+        [selectedUserFind?.id]
+    );
 
     const hotspotFindContext = useMemo((): Map<string, 'within' | 'nearby'> => {
         const map = new Map<string, 'within' | 'nearby'>();
@@ -333,7 +342,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         callbacks: {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
             onHotspotClick:  (id)  => { setShowSuggestion(false); setSelectedHotspotId(id); },
-            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); },
+            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); setSelectedUserFind(null); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
@@ -341,6 +350,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             onPASFindSelect: (f)   => setSelectedPASFind(f),
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
             onMonumentClick: (name) => setSelectedMonument(name === null ? undefined : (name || null)),
+            onUserFindClick: (id)   => setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null),
         },
     });
 
@@ -1719,6 +1729,87 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     </div>
                 </div>
             </div>
+
+            {/* Your Find Card */}
+            {selectedUserFind && (() => {
+                const PERIOD_CHIP: Record<string, string> = {
+                    'Prehistoric': 'bg-gray-700/60 text-gray-300', 'Bronze Age': 'bg-orange-900/50 text-orange-300',
+                    'Iron Age': 'bg-red-900/50 text-red-300', 'Celtic': 'bg-teal-900/50 text-teal-300',
+                    'Roman': 'bg-purple-900/50 text-purple-300', 'Anglo-Saxon': 'bg-amber-900/50 text-amber-300',
+                    'Early Medieval': 'bg-emerald-900/50 text-emerald-300', 'Medieval': 'bg-blue-900/50 text-blue-300',
+                    'Post-medieval': 'bg-indigo-900/50 text-indigo-300', 'Modern': 'bg-green-900/50 text-green-300',
+                    'Unknown': 'bg-white/5 text-white/40',
+                };
+                const chipClass = PERIOD_CHIP[selectedUserFind.period] ?? PERIOD_CHIP['Unknown'];
+                const foundDate = selectedUserFind.foundAt ?? selectedUserFind.createdAt;
+                const dateLabel = foundDate ? new Date(foundDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+                return (
+                <>
+                    <div className="absolute inset-0 z-[199]" onClick={() => setSelectedUserFind(null)} />
+                    <div className="absolute bottom-6 left-4 right-4 z-[200] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="p-5 rounded-3xl border-2 border-emerald-500/40 bg-slate-900 shadow-2xl shadow-emerald-900/20">
+                            <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Your Find</p>
+
+                            {/* Top row: photo + main details */}
+                            <div className="flex items-start gap-3 mb-4">
+                                {/* Photo / placeholder */}
+                                <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 border border-white/10">
+                                    {selectedUserFindMedia
+                                        ? <ScaledImage media={selectedUserFindMedia} className="w-full h-full" imgClassName="object-cover" showScale={false} />
+                                        : <div className="w-full h-full border border-dashed border-white/15 rounded-xl grid place-items-center text-[9px] font-black text-white/20 uppercase tracking-wider">No Photo</div>
+                                    }
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between">
+                                        <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1 pr-2">
+                                            {selectedUserFind.objectType || 'Unknown Object'}
+                                        </h3>
+                                        <button onClick={() => setSelectedUserFind(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0 -mt-0.5">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        </button>
+                                    </div>
+                                    {/* Period chip + material */}
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${chipClass}`}>{selectedUserFind.period}</span>
+                                        {selectedUserFind.material && <span className="text-[10px] text-white/40">{selectedUserFind.material}</span>}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Meta chips row */}
+                            <div className="flex items-center gap-2 flex-wrap mb-3">
+                                {dateLabel && (
+                                    <span className="flex items-center gap-1 text-[10px] text-white/40">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                        {dateLabel}
+                                    </span>
+                                )}
+                                {selectedUserFind.depthCm != null && (
+                                    <span className="flex items-center gap-1 text-[10px] text-white/40">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><polyline points="6 16 12 22 18 16"/></svg>
+                                        {selectedUserFind.depthCm} cm
+                                    </span>
+                                )}
+                                {selectedUserFind.weightG != null && (
+                                    <span className="text-[10px] text-white/40">{selectedUserFind.weightG} g</span>
+                                )}
+                            </div>
+
+                            {/* Notes snippet */}
+                            {selectedUserFind.notes?.trim() && (
+                                <p className="text-[11px] text-white/40 italic leading-snug line-clamp-2 mb-3">{selectedUserFind.notes.trim()}</p>
+                            )}
+
+                            {/* Footer: find code */}
+                            <div className="border-t border-white/8 pt-3">
+                                <span className="text-[10px] text-white/25 font-mono">{selectedUserFind.findCode}</span>
+                            </div>
+                        </div>
+                    </div>
+                </>
+                );
+            })()}
 
             {/* Heritage Feature Card */}
             {selectedPASFind && (
