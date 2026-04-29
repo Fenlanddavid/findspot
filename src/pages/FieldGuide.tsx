@@ -379,6 +379,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, userFinds: true });
         setMapClickLabel(null);
         setSelectedMonument(undefined);
+        setSelectedUserFind(null);
         terrainScanCenterRef.current = null;
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
