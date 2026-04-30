@@ -806,7 +806,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Mobile Tactical Tray (Hotspot Selection) */}
                     {hotspots.length > 0 && !historicMode && (
-                        <div className="absolute top-4 left-4 z-[100] pointer-events-none flex flex-col gap-2">
+                        <div className="absolute top-4 left-4 z-[100] pointer-events-none flex flex-col gap-2 items-start">
                             <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase shadow-2xl backdrop-blur-md w-fit pointer-events-auto flex items-center gap-2 ${isHistoricScanning ? 'bg-slate-900/90 border border-amber-500/40 text-amber-400' : 'bg-slate-900/90 border border-emerald-500/30 text-emerald-400'}`}>
                                 <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isHistoricScanning ? 'bg-amber-400' : 'bg-emerald-500'}`} />
                                 {isHistoricScanning ? 'Enhancing...' : hotspotVersion === 'enhanced' ? 'Enhanced Hotspot' : 'Terrain Hotspot'}
