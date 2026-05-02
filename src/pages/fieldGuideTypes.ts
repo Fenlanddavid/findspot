@@ -86,7 +86,7 @@ export interface Hotspot {
     id: string;
     number: number;
     score: number;
-    confidence: 'Low Confidence' | 'Emerging Signal' | 'Strong Signal' | 'High Probability';
+    confidence: 'Weak Signal' | 'Developing Signal' | 'Strong Signal' | 'Strongest Signal';
     type: 'Likely Settlement Edge' | 'Water Interaction Zone' | 'Movement Corridor (Likely)' | 'Raised Dry Area (Likely)' | 'General Activity Zone';
     classification:       HotspotClassification;
     classificationReason: string;
@@ -101,13 +101,15 @@ export interface Hotspot {
     scale?: 'Micro' | 'Local' | 'Landscape';
     isOnCorridor?: boolean;
     linkedCount?: number;
+    disturbanceRisk?: 'Low' | 'Medium' | 'High';
     metrics: {
-        anomaly:     number;
-        context:     number;
-        convergence: number;
-        behaviour:   number;
-        penalty:     number;
-        signalCount: number;
+        anomaly:          number;
+        context:          number;
+        convergence:      number;
+        behaviour:        number;
+        penalty:          number;
+        signalCount:      number;
+        signalClassCount: number;
     };
 }
 
@@ -193,11 +195,11 @@ export const SCAN_PROFILE = {
 
 // ─── Score / label helpers ────────────────────────────────────────────────────
 
-export function getConfidenceLabel(score: number): 'Low Confidence' | 'Emerging Signal' | 'Strong Signal' | 'High Probability' {
-    if (score > 80) return 'High Probability';
+export function getConfidenceLabel(score: number): 'Weak Signal' | 'Developing Signal' | 'Strong Signal' | 'Strongest Signal' {
+    if (score > 80) return 'Strongest Signal';
     if (score > 60) return 'Strong Signal';
-    if (score > 35) return 'Emerging Signal';
-    return 'Low Confidence';
+    if (score > 35) return 'Developing Signal';
+    return 'Weak Signal';
 }
 
 export const HOTSPOT_INTERPRETATION: Record<string, string> = {

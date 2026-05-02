@@ -243,6 +243,20 @@ export type ImportedPackage = {
   recorderName?: string;
 };
 
+// ─── FieldGuide scan cache ────────────────────────────────────────────────────
+// Caches raw cluster data from the tile workers so that identical viewports
+// skip the expensive pixel processing on revisit. TTL: 24 hours.
+// rawClusters is typed as any[] to avoid importing Cluster from fieldGuideTypes
+// (which would couple db.ts to the domain layer).
+
+export type FieldGuideScanCache = {
+  id: string;           // '${zoom}-${tX_start}-${tY_start}' — deterministic tile key
+  createdAt: number;    // Unix ms
+  rawClusters: any[];
+  sourceAvailability: Record<string, boolean>;
+  engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -253,6 +267,7 @@ export class FindSpotDB extends Dexie {
   tracks!: Table<Track, string>;
   settings!: Table<Setting, string>;
   importedPackages!: Table<ImportedPackage, string>;
+  fieldGuideCache!: Table<FieldGuideScanCache, string>;
 
   constructor() {
     super("findspot_uk");
@@ -401,6 +416,15 @@ export class FindSpotDB extends Dexie {
     this.version(20).stores({
       importedPackages: "id, packageHash, sharedPermissionId, importedAt",
     });
+
+    this.version(21).stores({
+      fieldGuideCache: "id, createdAt",
+    });
+
+    // v22: engineVersion added to FieldGuideScanCache — stale caches are
+    // discarded when scoring logic changes rather than silently serving old results.
+    // No schema change needed; Dexie stores the field automatically.
+    this.version(22).stores({});
   }
 }
 

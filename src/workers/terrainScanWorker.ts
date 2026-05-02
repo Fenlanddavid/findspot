@@ -38,6 +38,41 @@ async function fetchBitmapTimed(url: string): Promise<ImageBitmap | null> {
     }
 }
 
+// ─── Convex hull perimeter ────────────────────────────────────────────────────
+// Andrew's monotone chain. Returns the perimeter of the convex hull of the
+// given points, or 0 on degenerate input. Used to replace the bounding-box
+// perimeter in the circularity formula — avoids overestimating circularity
+// for irregular or elongated blobs.
+
+function hullCross(O: {x: number; y: number}, A: {x: number; y: number}, B: {x: number; y: number}): number {
+    return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+}
+
+function convexHullPerimeter(pts: {x: number; y: number}[]): number {
+    if (pts.length < 3) return 0;
+    const s = [...pts].sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y);
+    const lo: {x: number; y: number}[] = [];
+    const hi: {x: number; y: number}[] = [];
+    for (const p of s) {
+        while (lo.length >= 2 && hullCross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop();
+        lo.push(p);
+    }
+    for (let i = s.length - 1; i >= 0; i--) {
+        const p = s[i];
+        while (hi.length >= 2 && hullCross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop();
+        hi.push(p);
+    }
+    hi.pop(); lo.pop();
+    const hull = [...lo, ...hi];
+    if (hull.length < 2) return 0;
+    let perim = 0;
+    for (let i = 0; i < hull.length; i++) {
+        const a = hull[i], b = hull[(i + 1) % hull.length];
+        perim += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    }
+    return perim;
+}
+
 // ─── Main processing function ─────────────────────────────────────────────────
 
 async function processSource(params: WorkerParams): Promise<Cluster[]> {
@@ -375,7 +410,11 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 // Bounds check
                 if (lon < bounds.west || lon > bounds.east || lat < bounds.south || lat > bounds.north) continue;
 
-                const perimeterPx  = w * 2 + h * 2;
+                // Convex hull perimeter is more accurate for irregular shapes.
+                // Falls back to bounding-box perimeter if hull computation fails.
+                const bbPerimeter  = w * 2 + h * 2;
+                const hullPerim    = cluster.points.length >= 3 ? convexHullPerimeter(cluster.points) : 0;
+                const perimeterPx  = hullPerim > 0 ? hullPerim : bbPerimeter;
                 const circularity  = (4 * Math.PI * areaPx) / Math.pow(perimeterPx, 2);
 
                 const centerBox = {

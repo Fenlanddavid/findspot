@@ -32,14 +32,31 @@ export function getHotspotHook(strength: HotspotSignalStrength): string {
     }
 }
 
+// ─── Signal type summary ──────────────────────────────────────────────────────
+// Derives a plain-language signal category from the hotspot's dominant signal class.
+// Used as a quick orientation badge on the hotspot card.
+
+export type SignalTypeSummary = 'Terrain-led' | 'Multi-source' | 'Spectral-led' | 'Historic-led';
+
+export function getSignalTypeSummary(h: Hotspot): SignalTypeSummary {
+    const signalClassCount = h.metrics.signalClassCount ?? 0;
+    if (signalClassCount >= 3) return 'Multi-source';
+    const hasLidar     = h.explanation.some(e => e.includes('LiDAR') || e.includes('relief') || e.includes('earthwork'));
+    const hasSatellite = h.explanation.some(e => e.includes('cropmark') || e.includes('Spectral') || e.includes('vegetation anomaly'));
+    const hasHistoric  = h.explanation.some(e => e.includes('heritage') || e.includes('monument') || e.includes('period') || e.includes('Roman') || e.includes('Place-name'));
+    if (hasHistoric && !hasLidar && !hasSatellite) return 'Historic-led';
+    if (hasSatellite && !hasLidar) return 'Spectral-led';
+    return 'Terrain-led';
+}
+
 // ─── Confidence tier (internal — simplified from Hotspot confidence labels) ───
 
 type ConfidenceTier = 'High' | 'Strong' | 'Moderate' | 'Low';
 
 function toTier(confidence: Hotspot['confidence']): ConfidenceTier {
-    if (confidence === 'High Probability') return 'High';
-    if (confidence === 'Strong Signal')    return 'Strong';
-    if (confidence === 'Emerging Signal')  return 'Moderate';
+    if (confidence === 'Strongest Signal')  return 'High';
+    if (confidence === 'Strong Signal')     return 'Strong';
+    if (confidence === 'Developing Signal') return 'Moderate';
     return 'Low';
 }
 

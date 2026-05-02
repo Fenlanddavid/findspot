@@ -17,7 +17,7 @@ import {
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
-import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getHotspotHook, HotspotSignalStrength } from '../utils/hotspotInterpreter';
+import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getHotspotHook, getSignalTypeSummary, HotspotSignalStrength } from '../utils/hotspotInterpreter';
 import { buildTargetInterpretation, TargetSignalStrength } from '../utils/targetInterpreter';
 import { getDistance } from '../utils/fieldGuideAnalysis';
 
@@ -136,6 +136,34 @@ function getSupportingSignal(explanation: string[]): string | null {
     return null;
 }
 
+// ─── Target evidence gates ────────────────────────────────────────────────────
+// Two independent checks are AND-ed together in displayTargets:
+//
+// hasTargetEvidence  — broad gate: at least one hard physical or archaeological signal.
+//                      Route proximity, raised ground, and context alone do not qualify.
+// hasLocalPhysicalEvidence — strict gate: the target must have its own physical sensor
+//                      signal, not just inherited context from the surrounding hotspot.
+//                      AIM-enrichment-only targets are excluded here — they are known
+//                      sites, not fresh detections.
+
+function hasTargetEvidence(f: Cluster): boolean {
+    return (
+        f.sources.includes('terrain') ||
+        f.sources.includes('terrain_global') ||
+        (f.sources.includes('satellite_summer') && f.sources.includes('satellite_spring')) ||
+        f.aimInfo !== undefined
+    );
+}
+
+function hasLocalPhysicalEvidence(f: Cluster): boolean {
+    return (
+        f.sources.includes('terrain') ||
+        f.sources.includes('terrain_global') ||
+        (f.sources.includes('satellite_spring') && f.sources.includes('satellite_summer')) ||
+        f.multiScale === true
+    );
+}
+
 // ─── Historic interpretation helpers ─────────────────────────────────────────
 
 function getHistoricInterpretation(breakdown: { terrain: number; historic: number; spectral: number } | null): { title: string; subtitle: string } {
@@ -200,6 +228,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
     const [showPermissionPicker,   setShowPermissionPicker]   = useState(false);
+    const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
+    const [scanFromCache,          setScanFromCache]          = useState(false);
 
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
@@ -264,8 +294,33 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }, [projectFinds, hotspots]);
 
     const sortedHotspots = useMemo(() => {
-        return [...hotspots].sort((a, b) => b.score - a.score);
+        const sorted = [...hotspots].sort((a, b) => b.score - a.score);
+        // Suppress General Activity Zone below score 35 unless fewer than 3 stronger
+        // hotspots exist — prevents weak fallback classifications from dominating the list.
+        const strong = sorted.filter(h => !(h.classification === 'General Activity Zone' && h.score < 35));
+        if (strong.length >= 3) return strong;
+        const fallback = sorted.filter(h => h.classification === 'General Activity Zone' && h.score >= 25);
+        return [...strong, ...fallback];
     }, [hotspots]);
+
+    // Source usability: three-state model distinguishing data-present vs signal-useful.
+    // Satellite is only usable when both seasons loaded (enables multi-season agreement).
+    // All other sources are usable if they loaded AND produced hotspot results.
+    const sourceUsability = useMemo((): Record<string, 'usable' | 'loaded' | 'none'> => {
+        if (!sourceAvailability) return {};
+        const hasResults = sortedHotspots.length > 0;
+        const bothSat = sourceAvailability.satellite_spring && sourceAvailability.satellite_summer;
+        const result: Record<string, 'usable' | 'loaded' | 'none'> = {};
+        for (const key of ['terrain', 'terrain_global', 'slope', 'hydrology', 'satellite_spring', 'satellite_summer']) {
+            if (!sourceAvailability[key]) { result[key] = 'none'; continue; }
+            if (key === 'satellite_spring' || key === 'satellite_summer') {
+                result[key] = bothSat ? 'usable' : 'loaded';
+            } else {
+                result[key] = hasResults ? 'usable' : 'loaded';
+            }
+        }
+        return result;
+    }, [sourceAvailability, sortedHotspots]);
 
     const targetFindContext = useMemo((): Map<string, 'within' | 'nearby'> => {
         const map = new Map<string, 'within' | 'nearby'>();
@@ -285,6 +340,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return map;
     }, [projectFinds, detectedFeatures]);
 
+    // Targets that pass both evidence gates — shown in sidebar and list.
+    // Protected targets always show regardless of evidence (they carry their own warning).
+    // Capped at 12 per scan to keep the list actionable.
+    const displayTargets = useMemo(() => {
+        return detectedFeatures
+            .filter(f => f.isProtected || (hasTargetEvidence(f) && hasLocalPhysicalEvidence(f)))
+            .sort((a, b) => b.findPotential - a.findPotential)
+            .slice(0, 12);
+    }, [detectedFeatures]);
 
     function handleStartSession() {
         if (activeSession) { nav(`/session/${activeSession.id}`); return; }
@@ -381,6 +445,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
         terrainScanCenterRef.current = null;
+        setSourceAvailability(null);
+        setScanFromCache(false);
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
 
@@ -446,6 +512,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         // Push NHLE and AIM data to map sources
         applyNhleToMap(result.nhleData);
         applyAimToMap(result.aimData);
+
+        setSourceAvailability(result.sourceAvailability ?? null);
+        setScanFromCache(result.fromCache);
 
         dispatch({
             type: 'SCAN_SUCCESS',
@@ -860,8 +929,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <div className="flex-1 min-w-0 pr-3">
                                             {/* 1. Title */}
                                             <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{HOTSPOT_TITLES[h.classification]}</h3>
-                                            {/* 2. Signal strength */}
-                                            <p className={`text-[11px] font-black mb-1 ${hStrengthColour}`}>{hStrength}</p>
+                                            {/* 2. Signal strength + type summary */}
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className={`text-[11px] font-black ${hStrengthColour}`}>{hStrength}</p>
+                                                <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{getSignalTypeSummary(h)}</span>
+                                            </div>
                                             {/* 3. Hook */}
                                             <p className="text-[11px] font-bold text-white/70 leading-snug mb-2">{hHook}</p>
                                             {/* 4. classificationReason — muted, below hook */}
@@ -885,6 +957,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-4 animate-pulse">
                                             <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
+                                        </div>
+                                    )}
+                                    {h.disturbanceRisk === 'High' && (
+                                        <div className="bg-red-500/15 p-2 rounded-2xl border border-red-400/30 mb-4">
+                                            <p className="m-0 text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
                                         </div>
                                     )}
                                     <div className="border-t border-white/8 pt-3 mb-3">
@@ -913,6 +990,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
+                                            const breakdown = [
+                                                { label: 'Anomaly',     val: h.metrics.anomaly,     cap: 30 },
+                                                { label: 'Context',     val: h.metrics.context,     cap: 25 },
+                                                { label: 'Convergence', val: h.metrics.convergence, cap: 20 },
+                                                { label: 'Behaviour',   val: h.metrics.behaviour,   cap: 15 },
+                                            ];
                                             return (
                                                 <div className="mt-4 space-y-4 animate-in fade-in duration-200">
                                                     <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
@@ -927,6 +1010,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     <div>
                                                         <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
                                                         <p className="text-[11px] text-white/85 leading-relaxed">{interp.strategy}</p>
+                                                    </div>
+                                                    <div className="border-t border-white/8 pt-3">
+                                                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                        <div className="space-y-1.5">
+                                                            {breakdown.map(({ label, val, cap }) => (
+                                                                <div key={label} className="flex items-center gap-2">
+                                                                    <span className="text-[7px] text-white/30 w-16 flex-shrink-0">{label}</span>
+                                                                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500/40 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
+                                                                    </div>
+                                                                    <span className="text-[7px] text-white/25 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                </div>
+                                                            ))}
+                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/25 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1049,6 +1147,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                         <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
                                                     </div>
                                                 )}
+                                                {/* Edge-of-scan notice */}
+                                                {(() => {
+                                                    const EDGE_PX = 768 * 0.1;
+                                                    const isEdge = f.minX < EDGE_PX || f.minY < EDGE_PX || f.maxX > 768 - EDGE_PX || f.maxY > 768 - EDGE_PX;
+                                                    return isEdge ? (
+                                                        <div className="bg-amber-500/10 p-2 rounded-xl border border-amber-400/25 mb-3">
+                                                            <p className="text-[9px] font-black uppercase text-amber-300/80 tracking-widest">Near scan edge — wider scan may improve confidence</p>
+                                                        </div>
+                                                    ) : null;
+                                                })()}
                                                 {/* Why this matters */}
                                                 <div className="border-t border-white/8 pt-3 mb-3">
                                                     <p className="text-[8px] font-medium text-white/65 mb-2.5">Why this matters</p>
@@ -1211,6 +1319,35 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </>
                                     )}
 
+                                    {/* Source coverage — three-state: usable / loaded-only / not present */}
+                                    {sourceAvailability && (
+                                        <div className="border-t border-white/8 pt-3">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Scan Source Coverage</p>
+                                                {scanFromCache && <span className="text-[7px] font-black text-amber-500/60 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Cached</span>}
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {[
+                                                    { key: 'terrain',          label: 'LiDAR' },
+                                                    { key: 'terrain_global',   label: 'Global Terrain' },
+                                                    { key: 'slope',            label: 'Slope' },
+                                                    { key: 'hydrology',        label: 'Hydrology' },
+                                                    { key: 'satellite_spring', label: 'Spring SAT' },
+                                                    { key: 'satellite_summer', label: 'Summer SAT' },
+                                                ].map(({ key, label }) => {
+                                                    const usability = sourceUsability[key] ?? 'none';
+                                                    return (
+                                                        <div key={key} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border ${usability === 'usable' ? 'bg-emerald-500/10 border-emerald-500/25' : usability === 'loaded' ? 'bg-white/5 border-white/15' : 'bg-white/3 border-white/8'}`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${usability === 'usable' ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]' : usability === 'loaded' ? 'bg-slate-400' : 'bg-slate-600'}`} />
+                                                            <span className={`text-[7px] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-[7px] text-white/20 mt-1.5 text-center italic">Green = signal contributed · Grey = data present · Dark = no data</p>
+                                        </div>
+                                    )}
+
                                     {/* Further details + Layers on same row */}
                                     {(hasData || potentialScore) && (
                                         <div className="mt-4 pt-3 border-t border-white/8">
@@ -1354,6 +1491,60 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     )}
                                                 </div>
                                             )}
+
+                                            {/* Export scan data — for validation / debugging */}
+                                            {sourceAvailability && sortedHotspots.length > 0 && (
+                                                <div className="pt-2 border-t border-white/8">
+                                                    <button
+                                                        onClick={() => {
+                                                            const mc  = mapRef.current?.getCenter();
+                                                            const mb  = mapRef.current?.getBounds();
+                                                            const payload = {
+                                                                exportedAt:        new Date().toISOString(),
+                                                                engineVersion:     'FG-2026.05.02',
+                                                                fromCache:         scanFromCache,
+                                                                scanCenter:        mc ? { lat: mc.lat, lng: mc.lng } : null,
+                                                                viewportBounds:    mb ? { west: mb.getWest(), south: mb.getSouth(), east: mb.getEast(), north: mb.getNorth() } : null,
+                                                                sourceAvailability,
+                                                                totalTargetCount:  displayTargets.length,
+                                                                hotspots: sortedHotspots.map(h => ({
+                                                                    id:                   h.id,
+                                                                    classification:       h.classification,
+                                                                    score:                h.score,
+                                                                    confidence:           h.confidence,
+                                                                    center:               h.center,
+                                                                    metrics:              h.metrics,
+                                                                    signalClassCount:     h.metrics.signalClassCount,
+                                                                    disturbanceRisk:      h.disturbanceRisk,
+                                                                    passedPrimaryEvidence: true,
+                                                                    survivedDisturbanceGate: h.disturbanceRisk === 'High',
+                                                                    explanation:          h.explanation,
+                                                                })),
+                                                                targets: displayTargets.map(t => ({
+                                                                    id:            t.id,
+                                                                    type:          t.type,
+                                                                    findPotential: t.findPotential,
+                                                                    confidence:    t.confidence,
+                                                                    center:        t.center,
+                                                                    sources:       t.sources,
+                                                                    disturbanceRisk: t.disturbanceRisk,
+                                                                })),
+                                                            };
+                                                            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                                                            const url  = URL.createObjectURL(blob);
+                                                            const a    = Object.assign(document.createElement('a'), { href: url, download: `fieldguide-scan-${Date.now()}.json` });
+                                                            document.body.appendChild(a); a.click();
+                                                            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+                                                        }}
+                                                        className="w-full text-center text-[9px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-colors py-1"
+                                                    >
+                                                        ↓ Export scan data
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {/* Principle statement */}
+                                            <p className="text-[7px] text-white/15 text-center italic pt-2">Signal agreement, not direct detection</p>
                                         </div>
                                     )}
 
@@ -1488,6 +1679,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
                                         </div>
                                     )}
+                                    {h.disturbanceRisk === 'High' && (
+                                        <div className="bg-red-500/15 px-2 py-1.5 rounded-xl border border-red-400/30 mb-3">
+                                            <p className="m-0 text-[8px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
+                                        </div>
+                                    )}
                                     <div className="space-y-1.5 mt-3">
                                         <p className="text-[7px] font-medium text-white/25 mb-1.5">Why this matters</p>
                                         {h.explanation.slice(0, 3).map((reason, idx) => (
@@ -1515,6 +1711,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
+                                            const breakdown = [
+                                                { label: 'Anomaly',     val: h.metrics.anomaly,     cap: 30 },
+                                                { label: 'Context',     val: h.metrics.context,     cap: 25 },
+                                                { label: 'Convergence', val: h.metrics.convergence, cap: 20 },
+                                                { label: 'Behaviour',   val: h.metrics.behaviour,   cap: 15 },
+                                            ];
                                             return (
                                                 <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
                                                     <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
@@ -1529,6 +1731,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     <div>
                                                         <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
                                                         <p className="text-[10px] text-white/80 leading-relaxed">{interp.strategy}</p>
+                                                    </div>
+                                                    <div className="border-t border-white/8 pt-2.5">
+                                                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                        <div className="space-y-1.5">
+                                                            {breakdown.map(({ label, val, cap }) => (
+                                                                <div key={label} className="flex items-center gap-2">
+                                                                    <span className="text-[7px] text-white/30 w-16 flex-shrink-0">{label}</span>
+                                                                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500/40 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
+                                                                    </div>
+                                                                    <span className="text-[7px] text-white/25 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                </div>
+                                                            ))}
+                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/25 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1600,7 +1817,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     </div>
 
                     <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 scrollbar-hide space-y-4">
-                        {detectedFeatures.map((f) => {
+                        {displayTargets.map((f) => {
                             const tInterp = buildTargetInterpretation(f);
                             const isSelected = selectedId === f.id;
                             const strengthColour: Record<TargetSignalStrength, string> = {

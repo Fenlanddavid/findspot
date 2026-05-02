@@ -7,6 +7,7 @@
 
 import { Cluster, Hotspot, HotspotClassification, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight } from './fieldGuideAnalysis';
+import { computeLandscapeReading } from './landscapeReadingEngine';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,
@@ -28,18 +29,18 @@ function evaluateHotspotConfidence(params: {
     const hasStrongAgreement   = signalCount >= 3;
     const hasModerateAgreement = signalCount >= 2;
 
-    let confidence: Hotspot['confidence'] = 'Low Confidence';
-    if      (score > 80 && hasStrongAgreement)   confidence = 'High Probability';
+    let confidence: Hotspot['confidence'] = 'Weak Signal';
+    if      (score > 80 && hasStrongAgreement)   confidence = 'Strongest Signal';
     else if (score > 60 && hasModerateAgreement) confidence = 'Strong Signal';
-    else if (score > 35)                         confidence = 'Emerging Signal';
+    else if (score > 35)                         confidence = 'Developing Signal';
 
     // Downgrade checks: strong route/hydrology context is required to hold
     // upper labels — pure score is not enough.
-    if (confidence === 'Strong Signal'    && behaviour < 5 && context < 5 && convergence < 5) confidence = 'Emerging Signal';
-    if (confidence === 'High Probability' && behaviour < 8 && convergence < 8)                confidence = 'Strong Signal';
+    if (confidence === 'Strong Signal'    && behaviour < 5 && context < 5 && convergence < 5) confidence = 'Developing Signal';
+    if (confidence === 'Strongest Signal' && behaviour < 8 && convergence < 8)                confidence = 'Strong Signal';
 
     // Upgrade: strong convergence evidence can lift a borderline Developing Signal.
-    if (confidence === 'Emerging Signal' && convergence >= 10 && score > 30) confidence = 'Strong Signal';
+    if (confidence === 'Developing Signal' && convergence >= 10 && score > 30) confidence = 'Strong Signal';
 
     return confidence;
 }
@@ -74,6 +75,11 @@ const EXPLANATION_PRIORITY: [string, number][] = [
     ['Strategic dry point',               35],
     ['Historic movement corridor',        25],
     ['Near probable Roman',               25],
+    ['Subtle earthwork signature',        22],
+    ['Dry ground beside former wet zone', 20],
+    ['Landscape edge detected',           18],
+    ['Likely movement corridor',          16],
+    ['Favourable slope and aspect',       14],
 ];
 
 function prioritiseExplanations(items: string[], limit: number): string[] {
@@ -123,6 +129,7 @@ interface ClassifyContext {
     convergence:            number;
     behaviour:              number;
     signalCount:            number;
+    signalClassCount:       number;
 }
 
 function classifyHotspot(ctx: ClassifyContext): {
@@ -150,9 +157,10 @@ function classifyHotspot(ctx: ClassifyContext): {
     }
 
     // 3. Settlement Edge Candidate — raised LiDAR anomaly with meaningful context.
-    // P2: anomaly 15 → 12. P3 lean: context 8 → 6 so hotspots leaning toward
-    // settlement edge are classified as such; confidence provides the honesty layer.
+    // Requires 2+ signal classes so a single LiDAR feature on raised ground alone
+    // cannot trigger this classification.
     if (ctx.anomaly >= 12 && ctx.context >= 6 && ctx.isRaised && ctx.hasLidar &&
+        ctx.signalClassCount >= 2 &&
         (ctx.behaviour >= 4 || ctx.convergence >= 4)) {
         return {
             classification: 'Settlement Edge Candidate',
@@ -315,9 +323,15 @@ export function buildTerrainHotspots(
         const sources = new Set(members.flatMap(m => m.sources));
 
         // ── Signal presence flags (what data exists) ──────────────────────────
-        const hasLidar     = sources.has('terrain') || sources.has('terrain_global');
-        const hasSatellite = sources.has('satellite_spring') || sources.has('satellite_summer');
-        const hasHydrology = sources.has('hydrology');
+        const hasLidar              = sources.has('terrain') || sources.has('terrain_global');
+        const hasSatellite          = sources.has('satellite_spring') || sources.has('satellite_summer');
+        const hasHydrology          = sources.has('hydrology');
+        const hasMultiSeasonSat     = sources.has('satellite_summer') && sources.has('satellite_spring');
+        const hasAimEnrichment      = members.some(m => m.aimInfo !== undefined);
+        // Primary evidence: at least one hard physical or archaeological signal.
+        // Context-only hotspots (route proximity, place-names, raised ground alone)
+        // are excluded by this gate — they cannot create a hotspot by themselves.
+        const hasPrimaryEvidence    = hasLidar || hasMultiSeasonSat || hasAimEnrichment;
 
         // ── Signal weighting roles (how each signal contributes) ──────────────
         // Satellite is either the primary terrain signal (no LiDAR) or a
@@ -389,7 +403,7 @@ export function buildTerrainHotspots(
         // hotspot-level signal so it appears in output and gets a score contribution.
         // For satellite-primary mode the base scoring already accounts for dual
         // season (+3 extra); only the supporting-LiDAR case adds anomaly here.
-        if (sources.has('satellite_summer') && sources.has('satellite_spring')) {
+        if (hasMultiSeasonSat) {
             if (!satelliteIsPrimary) anomaly += 4;
             explanation.push('Multi-season cropmark agreement');
         }
@@ -422,6 +436,12 @@ export function buildTerrainHotspots(
         // Base proximity → behaviour.
         // Junction / crossing / convergence bonuses → convergence metric,
         // since these represent multi-signal agreement rather than a single route.
+        //
+        // Roman roads: only score when a physical signal (LiDAR, satellite,
+        // hydrology, or raised ground) is already present. A Roman road nearby
+        // is context; it should strengthen a signal, not create one.
+        const hasPhysicalSignal = hasLidar || hasSatellite || hasHydrology || isRaised;
+
         let routeScore = 0;
         const routeReasons: string[] = [];
         let hasRomanProximity = false;
@@ -431,9 +451,14 @@ export function buildTerrainHotspots(
         for (const route of routes) {
             const dist = getDistanceToLine(center, route.geometry, route.bbox);
             if (route.type === 'roman_road') {
-                if (dist < 100)       { routeScore += 8; hasRomanProximity = true; routeCount++; }
-                else if (dist < 250)  { routeScore += 6; hasRomanProximity = true; routeCount++; }
-                else if (dist < 500)  { routeScore += 3; hasRomanProximity = true; routeCount++; }
+                // Always track proximity for classification and convergence bonuses.
+                if (dist < 500) { hasRomanProximity = true; }
+                // Only add to behaviour score when a physical signal is present.
+                if (hasPhysicalSignal) {
+                    if (dist < 100)       { routeScore += 5; routeCount++; }
+                    else if (dist < 250)  { routeScore += 4; routeCount++; }
+                    else if (dist < 500)  { routeScore += 2; routeCount++; }
+                }
             } else {
                 // Route type hierarchy: trackways/holloways > green lanes > suspected routes
                 const tw = getRouteTypeWeight(route);
@@ -466,17 +491,25 @@ export function buildTerrainHotspots(
             else if (hasHistProximity) { convergence += 4; routeReasons.push('Raised ground beside movement corridor'); }
         }
 
-        // Scale base route score by all independent signal presence (including spring satellite)
-        const independentSignals = [hasLidar, hasSatellite, hasHydrology, isRaised].filter(Boolean).length;
-        if (routeScore > 0) {
-            if (independentSignals === 0)     routeScore = Math.round(routeScore * 0.7);
-            else if (independentSignals >= 2) routeScore = Math.round(routeScore * 1.3);
-        }
-
         if (hasRomanProximity && routeScore > 5)     explanation.push('Near probable Roman road corridor');
         else if (hasHistProximity && routeScore > 3)  explanation.push('Historic movement corridor nearby');
         routeReasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
         behaviour += routeScore;
+
+        // ── Signal class diversity ─────────────────────────────────────────────
+        // Rewards independent breadth of evidence across five signal classes.
+        // Applied to convergence — combines with junction/crossing bonuses.
+        // Classes: terrain (LiDAR/slope), hydrology, spectral (satellite),
+        //          historic (AIM), movement (routes).
+        const signalClasses = new Set<string>();
+        if (sources.has('terrain') || sources.has('terrain_global') || sources.has('slope')) signalClasses.add('terrain');
+        if (sources.has('hydrology'))                                                          signalClasses.add('hydrology');
+        if (sources.has('satellite_spring') || sources.has('satellite_summer'))               signalClasses.add('spectral');
+        if (hasAimEnrichment)                                                                 signalClasses.add('historic');
+        if (hasRomanProximity || hasHistProximity)                                            signalClasses.add('movement');
+        const signalClassCount = signalClasses.size;
+        const diversityBonus   = signalClassCount >= 4 ? 10 : signalClassCount === 3 ? 6 : signalClassCount === 2 ? 3 : 0;
+        convergence += diversityBonus;
 
         // ── Slope break scoring ───────────────────────────────────────────────
         // Slope clusters were present in sources but had no explicit scoring.
@@ -507,6 +540,14 @@ export function buildTerrainHotspots(
             }
         }
 
+        // ── Landscape reading (microTopo + dryMargin score, others explanation) ─
+        // Runs after all primary signals are scored. Capped at +10 here so landscape
+        // context supports signal rather than dominating it — a series of micro-topo
+        // indicators should not outweigh a physical LiDAR or satellite detection.
+        const landscape = computeLandscapeReading(members, routes);
+        if (landscape.score > 0) context += Math.min(landscape.score, 10);
+        landscape.reasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
+
         // ── Penalties (hotspot-level with caps to prevent over-stacking) ──────
         // Applied once per hotspot rather than per member, so a merged group of
         // disturbed clusters isn't penalised multiple times for the same issue.
@@ -524,9 +565,54 @@ export function buildTerrainHotspots(
             if (featurelessCount / members.length > 0.5) explanation.push('IGNORE: Uniform/Featureless terrain');
         }
 
-        const score       = Math.min(98, Math.max(0, anomaly + context + convergence + behaviour + penalty));
+        // ── Disturbance gate ──────────────────────────────────────────────────
+        // High-disturbance hotspots are only kept if there is strong independent
+        // evidence — AIM data, 3+ sources, multi-season satellite, or LiDAR +
+        // hydrology agreement. Without this they are dropped entirely rather
+        // than appearing as a penalised but still-surfaced result.
+        if (highDisturbanceCount > 0) {
+            const hasStrongEvidence = hasAimEnrichment || sources.size >= 3 || hasMultiSeasonSat || (hasLidar && hasHydrology);
+            if (!hasStrongEvidence) continue;
+        }
+
+        // Hotspot-level disturbance label (for display badge).
+        const hotspotDisturbanceRisk: 'Low' | 'Medium' | 'High' =
+            highDisturbanceCount > 0 ? 'High' :
+            members.some(m => m.disturbanceRisk === 'Medium') ? 'Medium' : 'Low';
+
+        // ── Low disturbance reward ────────────────────────────────────────────
+        // Quiet, undisturbed land is archaeologically meaningful — low context
+        // means the ground is more likely to retain its original character.
+        if (hotspotDisturbanceRisk === 'Low') context += 2;
+
+        // ── Dimension caps ────────────────────────────────────────────────────
+        // Prevents any one dimension from stacking into a false high-confidence
+        // result. Raw values are preserved in metrics for the debug breakdown.
+        const cappedAnomaly     = Math.min(anomaly,     30);
+        const cappedContext     = Math.min(context,     25);
+        const cappedConvergence = Math.min(convergence, 20);
+        const cappedBehaviour   = Math.min(behaviour,   15);
+        const cappedPenalty     = Math.max(penalty,    -20);
+        const score       = Math.min(98, Math.max(0, cappedAnomaly + cappedContext + cappedConvergence + cappedBehaviour + cappedPenalty));
         const signalCount = sources.size;
-        const confidence  = evaluateHotspotConfidence({ score, signalCount, behaviour, context, convergence });
+        let confidence    = evaluateHotspotConfidence({ score, signalCount, behaviour, context, convergence });
+
+        // ── Edge-of-scan check ────────────────────────────────────────────────
+        // Clusters within 10% of the 768px canvas edge may be partial features.
+        // Downgrade confidence one tier and flag for the user.
+        const CANVAS_EDGE_PX = 768 * 0.1; // 77px
+        const isEdgeOfScan = members.some(m =>
+            m.minX < CANVAS_EDGE_PX ||
+            m.minY < CANVAS_EDGE_PX ||
+            m.maxX > 768 - CANVAS_EDGE_PX ||
+            m.maxY > 768 - CANVAS_EDGE_PX
+        );
+        if (isEdgeOfScan) {
+            if      (confidence === 'Strongest Signal')  confidence = 'Strong Signal';
+            else if (confidence === 'Strong Signal')     confidence = 'Developing Signal';
+            else if (confidence === 'Developing Signal') confidence = 'Weak Signal';
+            explanation.push('Feature near scan edge — wider scan may improve confidence');
+        }
 
         // ── Legacy type field (kept for call-site compatibility) ──────────────
         let type: Hotspot['type'] = 'General Activity Zone';
@@ -541,6 +627,7 @@ export function buildTerrainHotspots(
             routeCount, isHighConfidenceCrossing,
             anomaly, context, convergence, behaviour,
             signalCount: sources.size,
+            signalClassCount,
         });
 
         // ── Suggested focus ───────────────────────────────────────────────────
@@ -572,6 +659,12 @@ export function buildTerrainHotspots(
         }
         // satelliteIsPrimary: spectral signal is not visible in the field — no suggestion shown
 
+        // ── Primary evidence gate ─────────────────────────────────────────────
+        // Drop context-only hotspots: must have LiDAR, multi-season satellite,
+        // or AIM/known archaeology. Route proximity, raised ground, and
+        // place-name signals alone cannot create a hotspot.
+        if (!hasPrimaryEvidence) continue;
+
         let minLon = members[0].center[0], maxLon = members[0].center[0];
         let minLat = members[0].center[1], maxLat = members[0].center[1];
         members.forEach(m => {
@@ -598,13 +691,15 @@ export function buildTerrainHotspots(
             scale:       members.find(m => m.scale)?.scale,
             isOnCorridor: members.some(m => m.isOnCorridor),
             linkedCount: (() => { const ids = new Set<string>(); members.forEach(m => (m.linkedClusterIds ?? []).forEach(id => ids.add(id))); return ids.size; })(),
-            metrics:              { anomaly, context, convergence, behaviour, penalty, signalCount },
+            disturbanceRisk:      hotspotDisturbanceRisk === 'Low' ? undefined : hotspotDisturbanceRisk,
+            metrics:              { anomaly, context, convergence, behaviour, penalty, signalCount, signalClassCount },
         });
     }
 
     return results
-        .filter(h => h.score >= 15)
+        .filter(h => h.score >= 25)
         .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
         .map((h, i) => ({ ...h, number: i + 1 }));
 }
 
