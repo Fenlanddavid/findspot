@@ -1,7 +1,7 @@
 // ─── Pure analysis functions: consensus merging, context analysis,
 //     disturbance suppression, asset enrichment, drift detection ──────────────
 
-import { Cluster, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Cluster, HistoricRoute, ModernWay } from '../pages/fieldGuideTypes';
 
 // ─── Polygon hit test (used by NHLE protection and AIM enrichment) ────────────
 
@@ -526,3 +526,64 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 // generateHotspots has moved to hotspotEngine.ts.
 // Import { buildTerrainHotspots, enhanceHotspotsWithHistoric, generateHotspots }
 // from '../utils/hotspotEngine' instead.
+
+// ─── Route artefact suppression ───────────────────────────────────────────────
+// Marks clusters that sit on, or align tightly with, a modern road / track /
+// path and lack independent physical evidence. These targets are likely scanner
+// artefacts caused by the road surface or embankment rather than archaeology.
+//
+// The flag is set in-place on each cluster; callers then filter on it for display.
+// Routes/hotspots are intentionally unaffected — proximity context is still valid
+// at the landscape level.
+
+function hasStrongIndependentEvidence(c: Cluster): boolean {
+    return (
+        c.sources.includes('terrain') ||
+        c.sources.includes('terrain_global') ||
+        (c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer')) ||
+        c.multiScale === true ||
+        c.aimInfo !== undefined
+    );
+}
+
+export function applyRouteArtefactSuppression(
+    clusters: Cluster[],
+    modernWays: ModernWay[],
+    historicRoutes: HistoricRoute[],
+): void {
+    if (modernWays.length === 0 && historicRoutes.length === 0) return;
+
+    for (const c of clusters) {
+        if (c.isProtected || hasStrongIndependentEvidence(c)) continue;
+
+        // ── Proximity check: centroid within 15m of any modern way ───────────
+        let flagged = false;
+
+        for (const way of modernWays) {
+            const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
+            if (dist <= 15) { flagged = true; break; }
+        }
+
+        // ── Linear alignment check: high-ratio target whose bearing matches ──
+        // a nearby way within 15°. Catches road-following linear scanner artefacts
+        // that just miss the centroid threshold.
+        if (!flagged && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
+            const allWays: { geometry: [number, number][]; bbox: [[number, number], [number, number]] }[] = [
+                ...modernWays,
+                ...historicRoutes,
+            ];
+            for (const way of allWays) {
+                const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
+                if (dist > 20) continue;
+                const wayBearing = computeRouteBearing(way.geometry);
+                // Linear targets can run parallel in either direction — check both
+                if (bearingDiff(c.bearing, wayBearing) <= 15 || bearingDiff(c.bearing, (wayBearing + 180) % 360) <= 15) {
+                    flagged = true;
+                    break;
+                }
+            }
+        }
+
+        if (flagged) c.isRouteArtefactRisk = true;
+    }
+}

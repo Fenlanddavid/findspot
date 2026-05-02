@@ -32,6 +32,17 @@ export interface Cluster {
     isOnCorridor?: boolean;
     linkedClusterIds?: string[];
     scale?: 'Micro' | 'Local' | 'Landscape';
+    // Set when a target centroid or linear form aligns too closely with a road,
+    // track, or path without independent physical evidence. Suppressed from display.
+    isRouteArtefactRisk?: boolean;
+}
+
+// A modern mapped way (road, track, path) from OSM — used only for target
+// artefact suppression; never displayed or scored archaeologically.
+export interface ModernWay {
+    geometry: [number, number][];
+    bbox:     [[number, number], [number, number]];
+    highwayTag: string;
 }
 
 export interface HistoricFind {
@@ -71,6 +82,8 @@ export type HotspotClassification =
     | 'Crossing Point Candidate'
     | 'Junction / Convergence Zone'
     | 'Settlement Edge Candidate'
+    | 'Burial / Barrow Candidate'
+    | 'Organised Field System Candidate'
     | 'Wetland Margin Activity Zone'
     | 'Route-Side Activity Zone'
     | 'Terrain Structure Candidate'

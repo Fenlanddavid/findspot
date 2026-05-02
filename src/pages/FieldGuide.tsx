@@ -44,19 +44,21 @@ function getPotentialTierShort(score: number): string {
 // The underlying classification value is preserved for all logic — only the
 // display string changes, so nothing breaks if we adjust these later.
 const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
-    'Crossing Point Candidate':    'Crossing Point',
-    'Junction / Convergence Zone': 'Route Junction',
-    'Settlement Edge Candidate':   'Settlement Edge',
-    'Wetland Margin Activity Zone':'Wetland Margin',
-    'Route-Side Activity Zone':    'Movement Corridor',
-    'Terrain Structure Candidate': 'Structural Feature',
-    'Spectral Activity Candidate': 'Cropmark Signal',
-    'Lowland Activity Zone':       'Lowland Activity Zone',
-    'Raised Activity Area':        'Raised Activity Area',
-    'Route-Influenced Area':       'Route-Influenced Area',
-    'Cropmark Activity Zone':      'Cropmark Activity Zone',
-    'Multi-Signal Activity Zone':  'Multi-Signal Activity Zone',
-    'General Activity Zone':       'Supporting Activity Zone',
+    'Crossing Point Candidate':         'Crossing Point',
+    'Junction / Convergence Zone':      'Route Junction',
+    'Settlement Edge Candidate':        'Settlement Edge',
+    'Burial / Barrow Candidate':        'Burial / Barrow',
+    'Organised Field System Candidate': 'Field System',
+    'Wetland Margin Activity Zone':     'Wetland Margin',
+    'Route-Side Activity Zone':         'Movement Corridor',
+    'Terrain Structure Candidate':      'Structural Feature',
+    'Spectral Activity Candidate':      'Cropmark Signal',
+    'Lowland Activity Zone':            'Lowland Activity Zone',
+    'Raised Activity Area':             'Raised Activity Area',
+    'Route-Influenced Area':            'Route-Influenced Area',
+    'Cropmark Activity Zone':           'Cropmark Activity Zone',
+    'Multi-Signal Activity Zone':       'Multi-Signal Activity Zone',
+    'General Activity Zone':            'Supporting Activity Zone',
 };
 
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
@@ -345,7 +347,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Capped at 12 per scan to keep the list actionable.
     const displayTargets = useMemo(() => {
         return detectedFeatures
-            .filter(f => f.isProtected || (hasTargetEvidence(f) && hasLocalPhysicalEvidence(f)))
+            .filter(f => f.isProtected || (
+                hasTargetEvidence(f) &&
+                hasLocalPhysicalEvidence(f) &&
+                !f.isRouteArtefactRisk
+            ))
             .sort((a, b) => b.findPotential - a.findPotential)
             .slice(0, 12);
     }, [detectedFeatures]);
@@ -1011,19 +1017,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                         <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
                                                         <p className="text-[11px] text-white/85 leading-relaxed">{interp.strategy}</p>
                                                     </div>
-                                                    <div className="border-t border-white/8 pt-3">
-                                                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                    <div className="border-t border-white/10 pt-3">
+                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
                                                         <div className="space-y-1.5">
                                                             {breakdown.map(({ label, val, cap }) => (
                                                                 <div key={label} className="flex items-center gap-2">
-                                                                    <span className="text-[7px] text-white/30 w-16 flex-shrink-0">{label}</span>
-                                                                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
-                                                                        <div className="h-full bg-emerald-500/40 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
+                                                                    <span className="text-[7px] text-white/55 w-16 flex-shrink-0">{label}</span>
+                                                                    <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
                                                                     </div>
-                                                                    <span className="text-[7px] text-white/25 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                    <span className="text-[7px] text-white/50 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
                                                                 </div>
                                                             ))}
-                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/25 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
+                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1150,7 +1156,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 {/* Edge-of-scan notice */}
                                                 {(() => {
                                                     const EDGE_PX = 768 * 0.1;
-                                                    const isEdge = f.minX < EDGE_PX || f.minY < EDGE_PX || f.maxX > 768 - EDGE_PX || f.maxY > 768 - EDGE_PX;
+                                                    const cxPx = (f.minX + f.maxX) / 2;
+                                                    const cyPx = (f.minY + f.maxY) / 2;
+                                                    const isEdge = cxPx < EDGE_PX || cyPx < EDGE_PX || cxPx > 768 - EDGE_PX || cyPx > 768 - EDGE_PX;
                                                     return isEdge ? (
                                                         <div className="bg-amber-500/10 p-2 rounded-xl border border-amber-400/25 mb-3">
                                                             <p className="text-[9px] font-black uppercase text-amber-300/80 tracking-widest">Near scan edge — wider scan may improve confidence</p>
@@ -1732,19 +1740,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                         <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
                                                         <p className="text-[10px] text-white/80 leading-relaxed">{interp.strategy}</p>
                                                     </div>
-                                                    <div className="border-t border-white/8 pt-2.5">
-                                                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                    <div className="border-t border-white/10 pt-2.5">
+                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
                                                         <div className="space-y-1.5">
                                                             {breakdown.map(({ label, val, cap }) => (
                                                                 <div key={label} className="flex items-center gap-2">
-                                                                    <span className="text-[7px] text-white/30 w-16 flex-shrink-0">{label}</span>
-                                                                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
-                                                                        <div className="h-full bg-emerald-500/40 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
+                                                                    <span className="text-[7px] text-white/55 w-16 flex-shrink-0">{label}</span>
+                                                                    <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                                                        <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
                                                                     </div>
-                                                                    <span className="text-[7px] text-white/25 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                    <span className="text-[7px] text-white/50 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
                                                                 </div>
                                                             ))}
-                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/25 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
+                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
                                                         </div>
                                                     </div>
                                                 </div>

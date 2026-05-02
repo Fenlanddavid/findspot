@@ -10,12 +10,13 @@ import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
     NHLEResponse, AIMResponse, OverpassElement,
-    parseOverpassRoutes, fetchScanRoutes,
+    parseOverpassRoutes, fetchScanRoutes, fetchModernWays,
 } from '../services/historicScanService';
 import { scanDataSource } from '../utils/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
+    applyRouteArtefactSuppression,
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
@@ -108,7 +109,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.02';
+        const ENGINE_VERSION = 'FG-2026.05.02b';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -174,6 +175,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
                     .map((c, i) => ({ ...c, number: i + 1 }));
+                // Suppress targets that sit on roads/paths and lack independent evidence
+                try {
+                    const modernWays = await fetchModernWays(center.lat, center.lng, signal);
+                    applyRouteArtefactSuppression(contextualized, modernWays, routes);
+                } catch { /* non-critical */ }
                 const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
                 return {
@@ -194,9 +200,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
         const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
 
-        const nhlePromise  = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
-        const aimPromise   = fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse);
-        const routePromise = fetchScanRoutes(center.lat, center.lng, signal);
+        const nhlePromise       = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
+        const aimPromise        = fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse);
+        const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
+        const modernWaysPromise = fetchModernWays(center.lat, center.lng, signal).catch(() => []);
 
         onStatusChange('Scanning Terrain...');
 
@@ -302,6 +309,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const contextualized = analyzeContext(suppressed, routes)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
+
+            // Suppress targets that sit on roads/paths and lack independent evidence.
+            // modernWaysPromise was started in parallel with other fetches.
+            const modernWays = await modernWaysPromise;
+            applyRouteArtefactSuppression(contextualized, modernWays, routes);
 
             const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
 

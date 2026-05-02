@@ -130,6 +130,11 @@ interface ClassifyContext {
     behaviour:              number;
     signalCount:            number;
     signalClassCount:       number;
+    // New flags for Burial/Barrow and Field System classifications
+    hasCircularFeature:     boolean;
+    hasLinearPattern:       boolean;
+    hasSettlementContext:   boolean;
+    disturbanceIsHigh:      boolean;
 }
 
 function classifyHotspot(ctx: ClassifyContext): {
@@ -169,7 +174,31 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 4. Wetland Margin Activity Zone — raised dry island in wet context, no dominant junction
+    // 4. Burial / Barrow Candidate — isolated compact circular raised feature confirmed by LiDAR.
+    // Requires the cluster to have a circular earthwork type and high circularity, but must NOT
+    // sit within a settlement cluster (which would indicate a domestic rather than funerary feature).
+    if (ctx.hasLidar && ctx.isRaised && ctx.hasCircularFeature &&
+        !ctx.hasSettlementContext && ctx.anomaly >= 10) {
+        return {
+            classification: 'Burial / Barrow Candidate',
+            reason:         'Compact circular raised feature — check heritage records before investigating',
+        };
+    }
+
+    // 5. Organised Field System Candidate — 2+ parallel or rectilinear linear features without
+    // strong settlement or route-junction context. Suppressed when disturbance is high (risk of
+    // confusing modern ridge-and-furrow) unless independent physical evidence is present.
+    if (ctx.hasLinearPattern && !ctx.hasSettlementContext &&
+        !ctx.disturbanceIsHigh &&
+        (ctx.hasLidar || ctx.hasSatellite) &&
+        (ctx.convergence >= 4 || ctx.signalClassCount >= 2)) {
+        return {
+            classification: 'Organised Field System Candidate',
+            reason:         'Repeated linear signals suggest an organised field or boundary system',
+        };
+    }
+
+    // 6. Wetland Margin Activity Zone — raised dry island in wet context, no dominant junction
     if (ctx.hasHydrology && ctx.isRaised && ctx.context >= 8 && ctx.convergence < 6) {
         return {
             classification: 'Wetland Margin Activity Zone',
@@ -177,7 +206,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 5. Route-Side Activity Zone — route-led but not a junction or crossing
+    // 7. Route-Side Activity Zone — route-led but not a junction or crossing
     // P2: behaviour threshold 8 → 6
     if (ctx.behaviour >= 6 && (ctx.hasRomanProximity || ctx.hasHistProximity) && ctx.convergence < 6) {
         return {
@@ -187,7 +216,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 6. Terrain Structure Candidate — LiDAR anomaly without route or hydrology reinforcement.
+    // 9. Terrain Structure Candidate — LiDAR anomaly without route or hydrology reinforcement.
     // P2: anomaly 15 → 12, behaviour guard 8 → 6
     if (ctx.hasLidar && ctx.anomaly >= 12 && ctx.context >= 4 && !ctx.hasHydrology && ctx.behaviour < 6) {
         return {
@@ -196,7 +225,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 7. Spectral Activity Candidate — satellite only, no LiDAR confirmation
+    // 10. Spectral Activity Candidate — satellite only, no LiDAR confirmation
     if (ctx.satelliteIsPrimary && !ctx.hasLidar) {
         return {
             classification: 'Spectral Activity Candidate',
@@ -204,11 +233,11 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // ── Contextual fallbacks (P1) ─────────────────────────────────────────────
-    // Replace the generic single fallback with signal-derived labels so outputs
-    // feel distinct and meaningful even when primary thresholds are not met.
+    // ── Contextual fallbacks ──────────────────────────────────────────────────
+    // Signal-derived labels so outputs feel distinct and meaningful even when
+    // primary thresholds are not met.
 
-    // 8. Lowland Activity Zone — hydrology present but below Wetland Margin threshold
+    // 11. Lowland Activity Zone — hydrology present but below Wetland Margin threshold
     if (ctx.hasHydrology && ctx.convergence < 6) {
         return {
             classification: 'Lowland Activity Zone',
@@ -216,7 +245,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 9. Raised Activity Area — elevated terrain without strong structural signal
+    // 12. Raised Activity Area — elevated terrain without strong structural signal
     if (ctx.isRaised) {
         return {
             classification: 'Raised Activity Area',
@@ -224,7 +253,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 10. Route-Influenced Area — route nearby but below route-side threshold
+    // 13. Route-Influenced Area — route nearby but below route-side threshold
     if (ctx.hasRomanProximity || ctx.hasHistProximity) {
         return {
             classification: 'Route-Influenced Area',
@@ -233,7 +262,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 11. Cropmark Activity Zone — satellite signal present without exclusive spectral trigger
+    // 14. Cropmark Activity Zone — satellite signal present without exclusive spectral trigger
     if (ctx.hasSatellite && !ctx.hasLidar) {
         return {
             classification: 'Cropmark Activity Zone',
@@ -241,7 +270,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 12. Multi-Signal Activity Zone — multiple weak signals from different sources
+    // 15. Multi-Signal Activity Zone — multiple weak signals from different sources
     if (ctx.signalCount >= 2) {
         return {
             classification: 'Multi-Signal Activity Zone',
@@ -249,7 +278,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 13. General Activity Zone — ultimate fallback
+    // 16. General Activity Zone — ultimate fallback
     return {
         classification: 'General Activity Zone',
         reason:         'Multiple independent signals detected',
@@ -598,14 +627,18 @@ export function buildTerrainHotspots(
         let confidence    = evaluateHotspotConfidence({ score, signalCount, behaviour, context, convergence });
 
         // ── Edge-of-scan check ────────────────────────────────────────────────
-        // Clusters within 10% of the 768px canvas edge may be partial features.
-        // Downgrade confidence one tier and flag for the user.
+        // Flag only when the hotspot's own pixel centre is within 10% of the
+        // canvas edge. Using `some` over member bounds was too aggressive —
+        // a single outlier cluster at the edge would flag hotspots centred
+        // in the scan area. Centre-based check matches user expectation.
         const CANVAS_EDGE_PX = 768 * 0.1; // 77px
-        const isEdgeOfScan = members.some(m =>
-            m.minX < CANVAS_EDGE_PX ||
-            m.minY < CANVAS_EDGE_PX ||
-            m.maxX > 768 - CANVAS_EDGE_PX ||
-            m.maxY > 768 - CANVAS_EDGE_PX
+        const cxPx = members.reduce((s, m) => s + (m.minX + m.maxX) / 2, 0) / members.length;
+        const cyPx = members.reduce((s, m) => s + (m.minY + m.maxY) / 2, 0) / members.length;
+        const isEdgeOfScan = (
+            cxPx < CANVAS_EDGE_PX ||
+            cyPx < CANVAS_EDGE_PX ||
+            cxPx > 768 - CANVAS_EDGE_PX ||
+            cyPx > 768 - CANVAS_EDGE_PX
         );
         if (isEdgeOfScan) {
             if      (confidence === 'Strongest Signal')  confidence = 'Strong Signal';
@@ -620,6 +653,19 @@ export function buildTerrainHotspots(
         else if (members.some(m => m.type.includes('Corridor'))) type = 'Movement Corridor (Likely)';
 
         // ── Classification layer ──────────────────────────────────────────────
+        const hasCircularFeature   = members.some(m =>
+            m.type.includes('Roundhouse') || m.type.includes('Barrow') ||
+            m.type.includes('Ring Ditch') || (m.metrics?.circularity ?? 0) > 0.7
+        );
+        const hasLinearPattern     = members.filter(m =>
+            m.type.includes('Linear') || m.type.includes('Ditch') ||
+            m.type.includes('Boundary') || m.type.includes('Enclosure')
+        ).length >= 2;
+        const hasSettlementContext = members.some(m =>
+            m.type.includes('Settlement') || m.type.includes('Building') || m.type.includes('Structure')
+        );
+        const disturbanceIsHigh    = hotspotDisturbanceRisk === 'High';
+
         const { classification, reason: classificationReason, secondaryTag } = classifyHotspot({
             hasLidar, hasSatellite, satelliteIsPrimary,
             hasHydrology, isRaised,
@@ -628,6 +674,7 @@ export function buildTerrainHotspots(
             anomaly, context, convergence, behaviour,
             signalCount: sources.size,
             signalClassCount,
+            hasCircularFeature, hasLinearPattern, hasSettlementContext, disturbanceIsHigh,
         });
 
         // ── Suggested focus ───────────────────────────────────────────────────

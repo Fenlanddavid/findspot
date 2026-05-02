@@ -137,6 +137,30 @@ const pools: Record<HotspotClassification, { summaries: string[]; strategies: st
             'focus on the transition line before covering the wider area.',
         ],
     },
+    'Burial / Barrow Candidate': {
+        summaries: [
+            'a compact circular raised feature consistent with a burial mound or barrow.',
+            'an isolated elevated form that matches the signature of a burial monument.',
+            'a circular raised signal without settlement context — typical of a funerary feature.',
+        ],
+        strategies: [
+            'check heritage records before investigating — this type of feature is often protected.',
+            'focus on the edges of the feature rather than the centre.',
+            'if confirmed as a barrow, work the surrounding area rather than the mound itself.',
+        ],
+    },
+    'Organised Field System Candidate': {
+        summaries: [
+            'a repeated linear pattern suggesting an organised field or boundary system.',
+            'parallel signals consistent with prehistoric or medieval field boundaries.',
+            'a structured landscape feature rather than a single activity point.',
+        ],
+        strategies: [
+            'work along the boundary lines rather than the field interiors.',
+            'focus on corners and junctions within the field system.',
+            'start where linear signals are strongest, then follow them outward.',
+        ],
+    },
     'Wetland Margin Activity Zone': {
         summaries: [
             'activity focused around lower, wetter ground.',

@@ -248,3 +248,32 @@ export async function fetchScanRoutes(
     const query = `[out:json][timeout:25];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng}););out geom;`;
     return overpassFetch(query, signal);
 }
+
+/**
+ * Overpass query for modern roads, tracks, and paths within 300m of a point.
+ * Used exclusively for route-artefact target suppression — never scored
+ * archaeologically. Fetches highway types that could generate false-positive
+ * linear or proximity signals in the terrain scanner.
+ */
+export async function fetchModernWays(
+    lat: number,
+    lng: number,
+    signal?: AbortSignal
+): Promise<import('../pages/fieldGuideTypes').ModernWay[]> {
+    const r = 300;
+    const query = `[out:json][timeout:15];(way["highway"="track"](around:${r},${lat},${lng});way["highway"="path"](around:${r},${lat},${lng});way["highway"="footway"](around:${r},${lat},${lng});way["highway"="bridleway"](around:${r},${lat},${lng});way["highway"="unclassified"](around:${r},${lat},${lng});way["highway"="residential"](around:${r},${lat},${lng});way["highway"="tertiary"](around:${r},${lat},${lng});way["highway"="service"](around:${r},${lat},${lng}););out geom;`;
+    const result = await overpassFetch(query, signal);
+    if (!result?.elements) return [];
+    return result.elements
+        .filter(el => el.geometry && el.geometry.length >= 2)
+        .map(el => {
+            const geom: [number, number][] = (el.geometry || []).map(g => [g.lon, g.lat]);
+            const lons = geom.map(g => g[0]);
+            const lats = geom.map(g => g[1]);
+            return {
+                geometry: geom,
+                bbox:     [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]] as [[number, number], [number, number]],
+                highwayTag: el.tags?.highway || 'unknown',
+            };
+        });
+}
