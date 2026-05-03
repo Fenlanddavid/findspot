@@ -500,6 +500,9 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{toFarmerLabel(find)}</div>
                           {detail && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, fontFamily: "sans-serif" }}>{detail}</div>}
+                          {!hasGps && (
+                            <div style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", marginTop: 2 }}>No GPS</div>
+                          )}
                         </div>
                         {photoUrls.has(find.id) && (
                           <img
@@ -508,17 +511,16 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                             style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 4, border: "1px solid #e5e7eb", objectFit: "cover", display: "block" }}
                           />
                         )}
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                          {hasMultipleSessions && sessionDate && (
-                            <span style={{ fontSize: 9, color: "#059669", fontFamily: "sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>{sessionDate}</span>
-                          )}
-                          {recorder && (
-                            <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "sans-serif", whiteSpace: "nowrap" }}>{recorder}</span>
-                          )}
-                          {!hasGps && (
-                            <span style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic" }}>No GPS</span>
-                          )}
-                        </div>
+                        {(hasMultipleSessions && sessionDate || recorder) && (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                            {hasMultipleSessions && sessionDate && (
+                              <span style={{ fontSize: 9, color: "#059669", fontFamily: "sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>{sessionDate}</span>
+                            )}
+                            {recorder && (
+                              <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "sans-serif", whiteSpace: "nowrap" }}>{recorder}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

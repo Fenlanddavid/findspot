@@ -595,11 +595,14 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                         }}>
                           {num}
                         </div>
-                        {/* Label + detail */}
+                        {/* Label + detail + no-GPS note */}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{toFarmerLabel(find)}</div>
                           {detail && (
                             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, fontFamily: "sans-serif" }}>{detail}</div>
+                          )}
+                          {!hasGps && (
+                            <div style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", marginTop: 2 }}>Recorded without GPS</div>
                           )}
                         </div>
                         {/* Photo thumbnail */}
@@ -609,10 +612,6 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                             alt=""
                             style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 4, border: "1px solid #e5e7eb", objectFit: "cover", display: "block" }}
                           />
-                        )}
-                        {/* No-GPS note */}
-                        {!hasGps && (
-                          <span style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", flexShrink: 0, marginTop: 3 }}>Recorded without GPS</span>
                         )}
                       </div>
                     );
