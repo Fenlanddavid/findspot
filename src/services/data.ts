@@ -327,7 +327,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     // Import the selected fields, re-keyed to the synthetic permission
     const fieldRecords = pack.fields.map(f => ({
       ...f,
-      permissionId: pack.sharedPermissionId,
+      permissionId: localPermissionId,
     }));
     if (fieldRecords.length > 0) {
       await db.fields.bulkPut(fieldRecords);
