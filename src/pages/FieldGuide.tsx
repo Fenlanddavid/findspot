@@ -758,7 +758,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {/* My Fields Picker */}
                     {showFieldsPicker && (
                         <div className="absolute top-2 left-2 z-[65] animate-in fade-in slide-in-from-top-2 duration-150">
-                            <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-md p-2 min-w-[170px] max-w-[220px]">
+                            <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-md p-2 min-w-[170px] max-w-[220px] max-h-[60vh] overflow-y-auto">
                                 {fieldPickerStep === 'top' ? (
                                     <>
                                         <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1 mb-1.5">Show fields</p>
@@ -790,6 +790,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             } else {
                                                                 setShowFields(p.id);
                                                                 setShowFieldsPicker(false);
+                                                                const boundary = permFieldCount === 1
+                                                                    ? fields.find(f => f.permissionId === p.id && f.boundary)?.boundary
+                                                                    : p.boundary;
+                                                                if (boundary?.coordinates?.[0] && mapRef.current) {
+                                                                    const bounds = new maplibregl.LngLatBounds();
+                                                                    (boundary.coordinates[0] as [number, number][]).forEach(pt => bounds.extend(pt));
+                                                                    mapRef.current.fitBounds(bounds, { padding: 60 });
+                                                                }
                                                             }
                                                         }}
                                                         className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : hasBoundaries ? 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10' : 'bg-white/5 border border-white/5 text-white/25 cursor-default'}`}
@@ -825,7 +833,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             .map(f => (
                                                 <button
                                                     key={f.id}
-                                                    onClick={() => { setShowFields(`field:${f.id}`); setShowFieldsPicker(false); setFieldPickerStep('top'); }}
+                                                    onClick={() => {
+                                                        setShowFields(`field:${f.id}`);
+                                                        setShowFieldsPicker(false);
+                                                        setFieldPickerStep('top');
+                                                        if (f.boundary?.coordinates?.[0] && mapRef.current) {
+                                                            const bounds = new maplibregl.LngLatBounds();
+                                                            (f.boundary.coordinates[0] as [number, number][]).forEach(pt => bounds.extend(pt));
+                                                            mapRef.current.fitBounds(bounds, { padding: 60 });
+                                                        }
+                                                    }}
                                                     className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 ${showFields === `field:${f.id}` ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
                                                 >
                                                     {f.name || '(Unnamed)'}
