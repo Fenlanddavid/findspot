@@ -8,6 +8,7 @@ import { v4 as uuid } from "uuid";
 
 type EventType = "rally" | "club_dig" | "other";
 type VerificationStatus = "verified" | "community" | "unconfirmed";
+type DistanceBand = "all" | "nearby" | "10-25" | "25-50";
 
 export type DetectingEvent = {
   id: string;
@@ -54,9 +55,16 @@ const RADIUS_OPTIONS = [10, 25, 50, 100] as const;
 type Radius = (typeof RADIUS_OPTIONS)[number];
 
 const TYPE_OPTIONS: { value: EventType | "all"; label: string }[] = [
-  { value: "all", label: "All Events" },
+  { value: "all", label: "All" },
   { value: "rally", label: "Rallies" },
   { value: "club_dig", label: "Club Digs" },
+];
+
+const DISTANCE_BANDS: { value: DistanceBand; label: string; minKm?: number; maxKm?: number }[] = [
+  { value: "all",    label: "All" },
+  { value: "nearby", label: "Under 50m", maxKm: 80.47 },
+  { value: "10-25",  label: "50–100m",  minKm: 80.47, maxKm: 160.93 },
+  { value: "25-50",  label: "100m+",    minKm: 160.93 },
 ];
 
 // JSON files served from /public — update these paths when you move to a hosted API.
@@ -67,6 +75,7 @@ const LOCAL_CLUB_SUBMISSIONS_KEY = "fs_club_submissions";
 const EVENTS_CACHE_KEY = "fs_events_cache";
 const CLUBS_CACHE_KEY = "fs_clubs_cache";
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const GOING_KEY = "fs_going_events";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +94,7 @@ function isThisWeekend(dateStr: string): boolean {
   const d = new Date(dateStr);
   const now = new Date();
   now.setHours(0, 0, 0, 0);
-  const day = now.getDay(); // 0=Sun, 6=Sat
-  // Find the upcoming Saturday
+  const day = now.getDay();
   const daysToSat = day === 6 ? 0 : (6 - day);
   const sat = new Date(now);
   sat.setDate(now.getDate() + daysToSat);
@@ -94,6 +102,85 @@ function isThisWeekend(dateStr: string): boolean {
   sun.setDate(sat.getDate() + 1);
   sun.setHours(23, 59, 59, 999);
   return d >= sat && d <= sun;
+}
+
+function isWithinDays(dateStr: string, days: number): boolean {
+  const d = new Date(dateStr);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const future = new Date(now);
+  future.setDate(now.getDate() + days);
+  return d >= now && d <= future;
+}
+
+function timeBucket(dateStr: string): "weekend" | "soon" | "later" {
+  if (isThisWeekend(dateStr)) return "weekend";
+  if (isWithinDays(dateStr, 14)) return "soon";
+  return "later";
+}
+
+function scoreEvent(event: DetectingEvent, distanceKm?: number): number {
+  let score = 0;
+  // Distance
+  if (distanceKm !== undefined) {
+    if (distanceKm < 80.47)        score += 20; // <50 m
+    else if (distanceKm < 160.93)  score += 12; // 50–100 m
+    else                           score += 4;  // 100m+
+  }
+  // Date proximity
+  const bucket = timeBucket(event.startDate);
+  if (bucket === "weekend")       score += 20;
+  else if (bucket === "soon")     score += 12;
+  else                            score += 5;
+  // Type
+  if (event.type === "rally")         score += 10;
+  else if (event.type === "club_dig") score += 8;
+  else                                score += 3;
+  // Verification
+  if (event.verificationStatus === "verified") score += 10;
+  // Information quality
+  if (event.description)                           score += 5;
+  if (event.sourceUrl || event.facebookUrl)        score += 5;
+  if (event.lat != null && event.lon != null)      score += 5;
+  return score;
+}
+
+function getScoreLabel(score: number): { label: string; cls: string } {
+  if (score >= 55) return {
+    label: "Worth checking",
+    cls: "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800",
+  };
+  if (score >= 35) return {
+    label: "Local interest",
+    cls: "text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800",
+  };
+  return {
+    label: "New / untested",
+    cls: "text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700",
+  };
+}
+
+function getQualityLabel(event: DetectingEvent): { label: string; style: string } {
+  const hasDesc = !!event.description;
+  const hasLink = !!(event.sourceUrl || event.facebookUrl);
+  if (event.verificationStatus === "verified") {
+    return { label: "Verified", style: verificationStyle("verified") };
+  }
+  if (hasDesc && hasLink) {
+    return { label: "Well documented", style: verificationStyle("community") };
+  }
+  if (!hasDesc && !hasLink) {
+    return { label: "Basic info", style: "text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700" };
+  }
+  return { label: "Unverified", style: verificationStyle("unconfirmed") };
+}
+
+function loadGoingIds(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(GOING_KEY) || "[]") as string[]);
+  } catch {
+    return new Set();
+  }
 }
 
 function formatDate(dateStr: string): string {
@@ -118,17 +205,17 @@ function verificationStyle(s: VerificationStatus): string {
 
 function verificationLabel(s: VerificationStatus): string {
   switch (s) {
-    case "verified": return "✓ Verified";
-    case "community": return "Community Added";
+    case "verified":    return "✓ Verified";
+    case "community":   return "Community Added";
     case "unconfirmed": return "? Unconfirmed";
   }
 }
 
 function typeLabel(t: EventType): string {
   switch (t) {
-    case "rally": return "Rally";
+    case "rally":    return "Rally";
     case "club_dig": return "Club Dig";
-    case "other": return "Event";
+    case "other":    return "Event";
   }
 }
 
@@ -137,7 +224,7 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
     const cached = localStorage.getItem(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
-      if (Array.isArray(parsed?.data) && typeof parsed?.ts === 'number') {
+      if (Array.isArray(parsed?.data) && typeof parsed?.ts === "number") {
         if (Date.now() - parsed.ts < CACHE_TTL) return parsed.data as T[];
       } else {
         localStorage.removeItem(cacheKey);
@@ -164,8 +251,6 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
 }
 
 // Resolve postcodes → lat/lon via postcodes.io (free, no key needed).
-// Items that already have lat+lon are left untouched.
-// Accepts full postcodes ("PE13 1AA") or outward codes ("PE13").
 async function resolveCoordinates<T extends { lat?: number; lon?: number; postcode?: string }>(
   items: T[]
 ): Promise<T[]> {
@@ -234,16 +319,20 @@ function saveLocalClubSubmission(c: ClubListing) {
 function EventCard({
   event,
   distanceKm,
+  score,
   going,
   onClick,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
+  score: number;
   going?: boolean;
   onClick: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
+  const scoreTag = getScoreLabel(score);
+  const qualityTag = getQualityLabel(event);
 
   return (
     <div
@@ -303,10 +392,11 @@ function EventCard({
             ✓ Going
           </span>
         )}
-        <span
-          className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${verificationStyle(event.verificationStatus)}`}
-        >
-          {verificationLabel(event.verificationStatus)}
+        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${scoreTag.cls}`}>
+          {scoreTag.label}
+        </span>
+        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${qualityTag.style}`}>
+          {qualityTag.label}
         </span>
         {event.entryFee && (
           <span className="text-[9px] text-gray-400 dark:text-gray-500">{event.entryFee}</span>
@@ -381,16 +471,26 @@ function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number
 function EventDetailModal({
   event,
   distanceKm,
+  score,
+  going,
+  planned,
   onClose,
-  onRecordRally,
+  onPlanSession,
+  onToggleGoing,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
+  score: number;
+  going: boolean;
+  planned: boolean;
   onClose: () => void;
-  onRecordRally: () => void;
+  onPlanSession: () => void;
+  onToggleGoing: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi away` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
+  const scoreTag = getScoreLabel(score);
+  const qualityTag = getQualityLabel(event);
 
   return (
     <div
@@ -411,6 +511,19 @@ function EventDetailModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mt-1 shrink-0 text-lg">✕</button>
         </div>
 
+        {/* Score + quality badges */}
+        <div className="flex items-center gap-2 flex-wrap mb-4">
+          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${scoreTag.cls}`}>
+            {scoreTag.label}
+          </span>
+          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${qualityTag.style}`}>
+            {qualityTag.label}
+          </span>
+          <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${verificationStyle(event.verificationStatus)}`}>
+            {verificationLabel(event.verificationStatus)}
+          </span>
+        </div>
+
         <div className="grid gap-3 text-sm">
           <Row label="Date">
             {formatDate(event.startDate)}
@@ -427,54 +540,71 @@ function EventDetailModal({
           )}
         </div>
 
-        <div className="mt-3">
-          <span
-            className={`text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full border ${verificationStyle(event.verificationStatus)}`}
-          >
-            {verificationLabel(event.verificationStatus)}
-          </span>
-        </div>
+        <p className="text-[9px] text-gray-400 dark:text-gray-600 mt-3 leading-relaxed">
+          Score based on distance, date, event details, and verification.
+        </p>
 
-        <div className="mt-5 flex gap-2">
-          {event.sourceUrl && (
-            <a
-              href={event.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
-            >
-              Website
-            </a>
-          )}
-          {event.facebookUrl && (
-            <a
-              href={event.facebookUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
-            >
-              Facebook
-            </a>
-          )}
-          {event.lat != null && event.lon != null && (
-            <a
-              href={`https://maps.google.com/?q=${event.lat},${event.lon}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
-            >
-              Directions
-            </a>
-          )}
+        <div className="mt-5 flex flex-col gap-2">
+          {/* Primary actions row */}
+          <div className="flex gap-2">
+            {event.sourceUrl && (
+              <a
+                href={event.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
+              >
+                Website
+              </a>
+            )}
+            {event.facebookUrl && (
+              <a
+                href={event.facebookUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
+              >
+                Facebook
+              </a>
+            )}
+            {event.lat != null && event.lon != null && (
+              <a
+                href={`https://maps.google.com/?q=${event.lat},${event.lon}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
+              >
+                Directions
+              </a>
+            )}
+          </div>
+
+          {/* Plan session */}
           <button
-            onClick={onRecordRally}
-            className="flex-1 bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl transition-colors"
+            onClick={onPlanSession}
+            className="w-full bg-amber-500 hover:bg-amber-400 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl transition-colors"
           >
-            I'm Going
+            {planned ? "Session planned ✓" : "Plan session"}
           </button>
+
+          {/* I'm going toggle */}
+          <button
+            onClick={onToggleGoing}
+            className={`w-full text-[10px] font-black uppercase tracking-widest py-3 rounded-xl transition-colors border ${
+              going
+                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/50"
+                : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            }`}
+          >
+            {going ? "Marked as going ✓" : "I'm going"}
+          </button>
+          {going && (
+            <p className="text-[9px] text-center text-gray-400 dark:text-gray-600 -mt-1">Saved on this device only</p>
+          )}
+
           <button
             onClick={onClose}
-            className="px-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-[10px] font-black uppercase tracking-widest"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-[10px] font-black uppercase tracking-widest py-2"
           >
             Close
           </button>
@@ -549,10 +679,8 @@ function SubmitEventModal({
       createdAt: new Date().toISOString(),
     };
 
-    // Save locally so it appears in their own Discover screen immediately
     saveLocalSubmission(newEvent);
 
-    // Send via Web3Forms — silent POST, no email app needed
     const typeLabelMap: Record<EventType, string> = {
       rally: "Rally",
       club_dig: "Club Dig",
@@ -611,10 +739,10 @@ function SubmitEventModal({
   }
 
   const canProceed = [
-    true, // step 1 — type always selected
+    true,
     !!draft.title.trim() && !!draft.startDate,
     !!(draft.town.trim() || draft.county.trim() || draft.postcode.trim()),
-    true, // step 4 — organiser optional
+    true,
   ][step - 1];
 
   const inputClass =
@@ -630,26 +758,18 @@ function SubmitEventModal({
         className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="p-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
           <div>
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-              Step {step} of 4
-            </div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Step {step} of 4</div>
             <h2 className="font-black text-gray-900 dark:text-gray-100">Submit an Event</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
 
-        {/* Progress bar */}
         <div className="h-1 bg-gray-100 dark:bg-gray-800 shrink-0">
-          <div
-            className="h-full bg-emerald-500 transition-all duration-300"
-            style={{ width: `${(step / 4) * 100}%` }}
-          />
+          <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${(step / 4) * 100}%` }} />
         </div>
 
-        {/* Body */}
         <div className="p-5 grid gap-4 overflow-y-auto flex-1">
           {step === 1 && (
             <>
@@ -746,7 +866,6 @@ function SubmitEventModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="p-5 pt-3 border-t border-gray-100 dark:border-gray-800 flex gap-3 shrink-0">
           {step > 1 && (
             <button
@@ -810,7 +929,6 @@ function SubmitClubModal({
   const [done, setDone] = useState(false);
 
   const update = (patch: Partial<DraftClub>) => setDraft((p) => ({ ...p, ...patch }));
-
   const canSubmit = !!draft.name.trim() && !!(draft.town.trim() || draft.county.trim() || draft.postcode.trim());
 
   async function submit() {
@@ -832,14 +950,14 @@ function SubmitClubModal({
 
     const details = [
       `Club Name: ${newClub.name}`,
-      newClub.town         ? `Town: ${newClub.town}`              : null,
-      newClub.county       ? `County: ${newClub.county}`          : null,
-      draft.postcode       ? `Postcode Area: ${draft.postcode}`   : null,
-      newClub.digDays      ? `Dig Days: ${newClub.digDays}`       : null,
-      newClub.facebookUrl  ? `Facebook: ${newClub.facebookUrl}`   : null,
-      newClub.websiteUrl   ? `Website: ${newClub.websiteUrl}`     : null,
-      newClub.contactName  ? `Contact: ${newClub.contactName}`    : null,
-      newClub.description  ? `About: ${newClub.description}`      : null,
+      newClub.town        ? `Town: ${newClub.town}`            : null,
+      newClub.county      ? `County: ${newClub.county}`        : null,
+      draft.postcode      ? `Postcode Area: ${draft.postcode}` : null,
+      newClub.digDays     ? `Dig Days: ${newClub.digDays}`     : null,
+      newClub.facebookUrl ? `Facebook: ${newClub.facebookUrl}` : null,
+      newClub.websiteUrl  ? `Website: ${newClub.websiteUrl}`   : null,
+      newClub.contactName ? `Contact: ${newClub.contactName}`  : null,
+      newClub.description ? `About: ${newClub.description}`    : null,
     ].filter(Boolean).join("\n");
 
     try {
@@ -892,7 +1010,6 @@ function SubmitClubModal({
         className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="p-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
           <div>
             <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Club Directory</div>
@@ -901,27 +1018,22 @@ function SubmitClubModal({
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
 
-        {/* Body */}
         <div className="p-5 grid gap-4 overflow-y-auto flex-1">
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Add your club to the directory so other detectorists nearby can find you.
           </p>
-
           <div>
             <label className={labelClass}>Club Name *</label>
             <input value={draft.name} onChange={(e) => update({ name: e.target.value })} placeholder="e.g. Fenland Detecting Club" className={inputClass} />
           </div>
-
           <div>
             <label className={labelClass}>About the Club</label>
             <textarea value={draft.description} onChange={(e) => update({ description: e.target.value })} rows={3} placeholder="Brief description — experience levels, area covered, etc." className={`${inputClass} resize-none`} />
           </div>
-
           <div>
             <label className={labelClass}>Nearest Town *</label>
             <input value={draft.town} onChange={(e) => update({ town: e.target.value })} placeholder="e.g. Spalding" className={inputClass} />
           </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>County</label>
@@ -932,33 +1044,27 @@ function SubmitClubModal({
               <input value={draft.postcode} onChange={(e) => update({ postcode: e.target.value })} placeholder="e.g. PE11" className={inputClass} />
             </div>
           </div>
-
           <div>
             <label className={labelClass}>Dig Days</label>
             <input value={draft.digDays} onChange={(e) => update({ digDays: e.target.value })} placeholder="e.g. First Sunday of each month" className={inputClass} />
           </div>
-
           <div>
             <label className={labelClass}>Facebook Page URL</label>
             <input value={draft.facebookUrl} onChange={(e) => update({ facebookUrl: e.target.value })} placeholder="https://www.facebook.com/yourclub" className={inputClass} />
           </div>
-
           <div>
             <label className={labelClass}>Website (optional)</label>
             <input value={draft.websiteUrl} onChange={(e) => update({ websiteUrl: e.target.value })} placeholder="https://yourclub.co.uk" className={inputClass} />
           </div>
-
           <div>
             <label className={labelClass}>Your Name (optional)</label>
             <input value={draft.contactName} onChange={(e) => update({ contactName: e.target.value })} placeholder="Contact name for verification" className={inputClass} />
           </div>
-
           <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
             Your club will appear immediately on your device with an <strong>Unconfirmed</strong> badge. Once we've verified it, it'll show as <strong>Verified</strong> for everyone nearby.
           </div>
         </div>
 
-        {/* Footer */}
         <div className="p-5 pt-3 border-t border-gray-100 dark:border-gray-800 shrink-0">
           <button
             onClick={submit}
@@ -977,13 +1083,54 @@ function SubmitClubModal({
 
 function SectionHeader({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
-    <h3
-      className={`text-[10px] font-black uppercase tracking-widest mb-3 ${
-        accent ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"
-      }`}
-    >
+    <h3 className={`text-[10px] font-black uppercase tracking-widest mb-3 ${accent ? "text-emerald-500" : "text-gray-500 dark:text-gray-400"}`}>
       {children}
     </h3>
+  );
+}
+
+// ─── EventSection ─────────────────────────────────────────────────────────────
+
+function EventSection({
+  title,
+  entries,
+  goingIds,
+  plannedKeys,
+  onSelect,
+}: {
+  title: string;
+  entries: { event: DetectingEvent; distanceKm?: number; score: number }[];
+  goingIds: Set<string>;
+  plannedKeys: Set<string>;
+  onSelect: (event: DetectingEvent) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? entries : entries.slice(0, 4);
+
+  return (
+    <div className="mb-6">
+      <SectionHeader accent={title === "This Weekend"}>{title}</SectionHeader>
+      <div className="grid gap-3">
+        {visible.map(({ event, distanceKm, score }) => (
+          <EventCard
+            key={event.id}
+            event={event}
+            distanceKm={distanceKm}
+            score={score}
+            going={goingIds.has(event.id) || plannedKeys.has(`${event.title}|${event.startDate}`)}
+            onClick={() => onSelect(event)}
+          />
+        ))}
+      </div>
+      {entries.length > 4 && (
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline"
+        >
+          {showAll ? "Show less" : `Show ${entries.length - 4} more`}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -996,13 +1143,15 @@ export default function Discover({ projectId }: { projectId: string }) {
   const [locating, setLocating] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [radius, setRadius] = useState<Radius>(() => {
-    const v = Number(localStorage.getItem('fs_discover_radius'));
+    const v = Number(localStorage.getItem("fs_discover_radius"));
     return (RADIUS_OPTIONS as readonly number[]).includes(v) ? v as Radius : 25;
   });
   const [typeFilter, setTypeFilter] = useState<EventType | "all">(() => {
-    const v = localStorage.getItem('fs_discover_type');
-    return (v === 'rally' || v === 'club_dig' || v === 'all') ? v : 'all';
+    const v = localStorage.getItem("fs_discover_type");
+    return (v === "rally" || v === "club_dig" || v === "all") ? v : "all";
   });
+  const [distanceBand, setDistanceBand] = useState<DistanceBand>("all");
+  const [goingIds, setGoingIds] = useState<Set<string>>(() => loadGoingIds());
 
   const [remoteEvents, setRemoteEvents] = useState<DetectingEvent[]>([]);
   const [remoteClubs, setRemoteClubs] = useState<ClubListing[]>([]);
@@ -1016,13 +1165,21 @@ export default function Discover({ projectId }: { projectId: string }) {
   const [clubSubmissionTick, setClubSubmissionTick] = useState(0);
   const [localClubs, setLocalClubs] = useState<ClubListing[]>([]);
   const [showAllClubs, setShowAllClubs] = useState(false);
-  const [showAllEvents, setShowAllEvents] = useState(false);
 
-  // Build a Set of "name|date" keys for saved rally permissions so we can badge matching events
-  const savedRallyKeys = useLiveQuery(async () => {
+  // Track rally permissions created from Discover events (title|date key)
+  const plannedKeys = useLiveQuery(async () => {
     const rallies = await db.permissions.where("projectId").equals(projectId).filter(p => p.type === "rally").toArray();
     return new Set(rallies.map(r => `${r.name}|${r.validFrom ?? ""}`));
   }, [projectId]) ?? new Set<string>();
+
+  function toggleGoingId(id: string) {
+    setGoingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem(GOING_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
 
   function requestLocation() {
     setLocating(true);
@@ -1047,12 +1204,8 @@ export default function Discover({ projectId }: { projectId: string }) {
     setLocationError(false);
   }
 
-  // Auto-request location on mount
-  useEffect(() => {
-    requestLocation();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { requestLocation(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch remote data on mount, resolving any postcode fields to lat/lon
   useEffect(() => {
     setLoadingRemote(true);
     const today = new Date().toISOString().slice(0, 10);
@@ -1068,42 +1221,40 @@ export default function Discover({ projectId }: { projectId: string }) {
     });
   }, []);
 
-  // Reload local submissions after each submit
-  useEffect(() => {
-    setLocalEvents(loadLocalSubmissions());
-  }, [submissionTick]);
-
-  useEffect(() => {
-    setLocalClubs(loadLocalClubSubmissions());
-  }, [clubSubmissionTick]);
+  useEffect(() => { setLocalEvents(loadLocalSubmissions()); }, [submissionTick]);
+  useEffect(() => { setLocalClubs(loadLocalClubSubmissions()); }, [clubSubmissionTick]);
 
   const radiusKm = radius * 1.60934;
 
-  // Process events: merge remote + local, filter by type, sort nearest first then by date
+  // Merge, score, filter, sort events
   const processedEvents = useMemo(() => {
     const all = [...remoteEvents, ...localEvents];
     return all
-      .map((event) => ({
-        event,
-        distanceKm:
+      .map((event) => {
+        const distanceKm =
           userLocation && event.lat != null && event.lon != null
             ? haversineKm(userLocation.lat, userLocation.lon, event.lat, event.lon)
-            : undefined,
-      }))
+            : undefined;
+        return { event, distanceKm, score: scoreEvent(event, distanceKm) };
+      })
       .filter(({ event }) => typeFilter === "all" || event.type === typeFilter)
-      .sort((a, b) => {
-        // If we have distances for both, nearest first
-        if (a.distanceKm !== undefined && b.distanceKm !== undefined)
-          return a.distanceKm - b.distanceKm;
-        // Events with a known distance sort before those without
-        if (a.distanceKm !== undefined) return -1;
-        if (b.distanceKm !== undefined) return 1;
-        // Fall back to date order
-        return a.event.startDate.localeCompare(b.event.startDate);
-      });
-  }, [remoteEvents, localEvents, userLocation, typeFilter]);
+      .filter(({ distanceKm }) => {
+        if (!userLocation || distanceBand === "all") return true;
+        if (distanceKm === undefined) return false;
+        const band = DISTANCE_BANDS.find((b) => b.value === distanceBand);
+        if (!band) return true;
+        if (band.minKm !== undefined && distanceKm < band.minKm) return false;
+        if (band.maxKm !== undefined && distanceKm >= band.maxKm) return false;
+        return true;
+      })
+      .sort((a, b) => b.score - a.score);
+  }, [remoteEvents, localEvents, userLocation, typeFilter, distanceBand]);
 
-  // Process clubs: merge remote + local, filter by radius, sort by distance
+  // Split into time buckets (already score-sorted within each)
+  const weekendEvents = processedEvents.filter((e) => timeBucket(e.event.startDate) === "weekend");
+  const soonEvents    = processedEvents.filter((e) => timeBucket(e.event.startDate) === "soon");
+  const laterEvents   = processedEvents.filter((e) => timeBucket(e.event.startDate) === "later");
+
   const processedClubs = useMemo(() => {
     return [...remoteClubs, ...localClubs]
       .map((club) => ({
@@ -1115,16 +1266,19 @@ export default function Discover({ projectId }: { projectId: string }) {
       }))
       .filter(({ distanceKm }) => !userLocation || (distanceKm !== undefined && distanceKm <= radiusKm))
       .sort((a, b) => {
-        if (a.distanceKm !== undefined && b.distanceKm !== undefined)
-          return a.distanceKm - b.distanceKm;
+        if (a.distanceKm !== undefined && b.distanceKm !== undefined) return a.distanceKm - b.distanceKm;
         return a.club.name.localeCompare(b.club.name);
       });
   }, [remoteClubs, localClubs, userLocation, radiusKm]);
 
-  const selectedEventDistance = useMemo(() => {
-    if (!selectedEvent) return undefined;
-    return processedEvents.find((p) => p.event.id === selectedEvent.id)?.distanceKm;
-  }, [selectedEvent, processedEvents]);
+  const selectedEventEntry = useMemo(
+    () => processedEvents.find((p) => p.event.id === selectedEvent?.id),
+    [selectedEvent, processedEvents]
+  );
+
+  const chipBase = "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all";
+  const chipActive = "bg-emerald-600 border-emerald-600 text-white";
+  const chipInactive = "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-emerald-300 dark:hover:border-emerald-700";
 
   const selectClass =
     "appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl pl-4 pr-8 py-2 text-[10px] font-black uppercase tracking-widest focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer";
@@ -1142,10 +1296,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         </p>
         <div className="mt-3">
           {!locationEnabled ? (
-            <button
-              onClick={requestLocation}
-              className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors"
-            >
+            <button onClick={requestLocation} className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 dark:hover:bg-amber-950/50 transition-colors">
               Location off — tap to enable
             </button>
           ) : locating ? (
@@ -1153,17 +1304,11 @@ export default function Discover({ projectId }: { projectId: string }) {
               Locating…
             </div>
           ) : locationError ? (
-            <button
-              onClick={requestLocation}
-              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors"
-            >
+            <button onClick={requestLocation} className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
               Location unavailable — tap to retry
             </button>
           ) : (
-            <button
-              onClick={disableLocation}
-              className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors"
-            >
+            <button onClick={disableLocation} className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-950/50 transition-colors">
               Location on — tap to disable
             </button>
           )}
@@ -1172,31 +1317,22 @@ export default function Discover({ projectId }: { projectId: string }) {
 
       {/* ── CLUBS ────────────────────────────────────────────── */}
 
-      {/* Got a local club? CTA */}
       <div className="bg-gradient-to-br from-blue-950/10 to-indigo-950/10 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Got a local club?</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Add your club so detectorists nearby can find you
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add your club so detectorists nearby can find you</p>
         </div>
-        <button
-          onClick={() => setShowSubmitClub(true)}
-          className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors"
-        >
+        <button onClick={() => setShowSubmitClub(true)} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
           List Club
         </button>
       </div>
 
-      {/* Local clubs list */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <SectionHeader>Local Clubs</SectionHeader>
           <div className="relative shrink-0 -mt-3">
-            <select value={radius} onChange={(e) => { const v = Number(e.target.value) as Radius; setRadius(v); localStorage.setItem('fs_discover_radius', String(v)); setShowAllClubs(false); }} className={selectClass}>
-              {RADIUS_OPTIONS.map((r) => (
-                <option key={r} value={r}>{r} miles</option>
-              ))}
+            <select value={radius} onChange={(e) => { const v = Number(e.target.value) as Radius; setRadius(v); localStorage.setItem("fs_discover_radius", String(v)); setShowAllClubs(false); }} className={selectClass}>
+              {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{r} miles</option>)}
             </select>
             <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[8px]">▼</span>
           </div>
@@ -1206,7 +1342,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         ) : processedClubs.length === 0 ? (
           <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-6 text-center">
             <p className="text-sm font-bold text-gray-500 dark:text-gray-400">No clubs found within {radius} miles</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try a larger radius or list yours above</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try a larger radius, or list yours above</p>
           </div>
         ) : (
           <>
@@ -1216,10 +1352,7 @@ export default function Discover({ projectId }: { projectId: string }) {
               ))}
             </div>
             {processedClubs.length > 4 && (
-              <button
-                onClick={() => setShowAllClubs((v) => !v)}
-                className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline"
-              >
+              <button onClick={() => setShowAllClubs((v) => !v)} className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline">
                 {showAllClubs ? "Show less" : `See all ${processedClubs.length} clubs`}
               </button>
             )}
@@ -1229,73 +1362,93 @@ export default function Discover({ projectId }: { projectId: string }) {
 
       {/* ── EVENTS ───────────────────────────────────────────── */}
 
-      {/* Run a rally or club dig? CTA */}
       <div className="bg-gradient-to-br from-emerald-950/10 to-teal-950/10 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Run a rally or club dig?</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Add it so other detectorists can find it
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add it so other detectorists can find it</p>
         </div>
-        <button
-          onClick={() => setShowSubmit(true)}
-          className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors"
-        >
+        <button onClick={() => setShowSubmit(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
           Add Event
         </button>
       </div>
 
-      {/* Events list */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <SectionHeader>Upcoming Events</SectionHeader>
-          <div className="relative shrink-0 -mt-3">
-            <select value={typeFilter} onChange={(e) => { const v = e.target.value as EventType | "all"; setTypeFilter(v); localStorage.setItem('fs_discover_type', v); setShowAllEvents(false); }} className={selectClass}>
-              {TYPE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[8px]">▼</span>
-          </div>
+      {/* Filters */}
+      <div className="mb-4 flex flex-col gap-2">
+        {/* Type filter chips */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {TYPE_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              onClick={() => { setTypeFilter(o.value); localStorage.setItem("fs_discover_type", o.value); }}
+              className={`${chipBase} ${typeFilter === o.value ? chipActive : chipInactive}`}
+            >
+              {o.label}
+            </button>
+          ))}
         </div>
-        {loadingRemote ? (
-          <div className="text-center py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Loading…</div>
-        ) : processedEvents.length === 0 ? (
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-6 text-center">
-            <div className="text-3xl mb-2 opacity-20">🗺️</div>
-            <p className="text-sm font-bold text-gray-500 dark:text-gray-400">No upcoming events</p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Be the first to add one above</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-3">
-              {(showAllEvents ? processedEvents : processedEvents.slice(0, 4)).map(({ event, distanceKm }) => (
-                <EventCard key={event.id} event={event} distanceKm={distanceKm} going={savedRallyKeys.has(`${event.title}|${event.startDate}`)} onClick={() => setSelectedEvent(event)} />
-              ))}
-            </div>
-            {processedEvents.length > 4 && (
+        {/* Distance band chips — only when location is available */}
+        {userLocation && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {DISTANCE_BANDS.map((b) => (
               <button
-                onClick={() => setShowAllEvents((v) => !v)}
-                className="mt-3 w-full text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline"
+                key={b.value}
+                onClick={() => setDistanceBand(b.value)}
+                className={`${chipBase} ${distanceBand === b.value ? chipActive : chipInactive}`}
               >
-                {showAllEvents ? "Show less" : `See all ${processedEvents.length} events`}
+                {b.label}
               </button>
-            )}
-          </>
+            ))}
+          </div>
         )}
-        <p className="text-[9px] text-gray-400 dark:text-gray-600 text-center mt-3 leading-relaxed">
-          Events listed for information only. FindSpot is not affiliated with any organiser, club, or rally.
-          Always verify details directly with the organiser before attending.
-        </p>
-      </section>
+      </div>
+
+      {/* Events sections */}
+      {loadingRemote ? (
+        <div className="text-center py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Loading…</div>
+      ) : processedEvents.length === 0 ? (
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-8 text-center mb-8">
+          <p className="text-sm font-bold text-gray-500 dark:text-gray-400">
+            {distanceBand !== "all" ? "Nothing in that distance range" : "No upcoming events"}
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            {distanceBand !== "all" ? "Try a different distance band, or check All" : "Be the first to add one above"}
+          </p>
+        </div>
+      ) : (
+        <>
+          {weekendEvents.length > 0 ? (
+            <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+          ) : (
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl text-center">
+              <p className="text-xs font-bold text-gray-400 dark:text-gray-500">Nothing nearby this weekend</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5">Check what's coming up below</p>
+            </div>
+          )}
+          {soonEvents.length > 0 && (
+            <EventSection title="Next 14 Days" entries={soonEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+          )}
+          {laterEvents.length > 0 && (
+            <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+          )}
+        </>
+      )}
+
+      <p className="text-[9px] text-gray-400 dark:text-gray-600 text-center mt-2 mb-8 leading-relaxed">
+        Events listed for information only. FindSpot is not affiliated with any organiser, club, or rally.
+        Always verify details directly with the organiser before attending.
+      </p>
 
       {/* Modals */}
       {selectedEvent && (
         <EventDetailModal
           event={selectedEvent}
-          distanceKm={selectedEventDistance}
+          distanceKm={selectedEventEntry?.distanceKm}
+          score={selectedEventEntry?.score ?? 0}
+          going={goingIds.has(selectedEvent.id)}
+          planned={plannedKeys.has(`${selectedEvent.title}|${selectedEvent.startDate}`)}
           onClose={() => setSelectedEvent(null)}
-          onRecordRally={() => {
+          onToggleGoing={() => toggleGoingId(selectedEvent.id)}
+          onPlanSession={() => {
             const e = selectedEvent;
             const params = new URLSearchParams({ type: "rally" });
             if (e.title) params.set("name", e.title);
@@ -1304,23 +1457,19 @@ export default function Discover({ projectId }: { projectId: string }) {
             if (e.lat != null) params.set("lat", String(e.lat));
             if (e.lon != null) params.set("lon", String(e.lon));
             const location = [e.town, e.county].filter(Boolean).join(", ");
-            if (location) params.set("notes", location);
+            const urlNote = e.sourceUrl || e.facebookUrl || "";
+            const notes = [location, urlNote].filter(Boolean).join("\n");
+            if (notes) params.set("notes", notes);
             setSelectedEvent(null);
             nav(`/permission?${params.toString()}`);
           }}
         />
       )}
       {showSubmit && (
-        <SubmitEventModal
-          onClose={() => setShowSubmit(false)}
-          onSubmitted={() => setSubmissionTick((t) => t + 1)}
-        />
+        <SubmitEventModal onClose={() => setShowSubmit(false)} onSubmitted={() => setSubmissionTick((t) => t + 1)} />
       )}
       {showSubmitClub && (
-        <SubmitClubModal
-          onClose={() => setShowSubmitClub(false)}
-          onSubmitted={() => setClubSubmissionTick((t) => t + 1)}
-        />
+        <SubmitClubModal onClose={() => setShowSubmitClub(false)} onSubmitted={() => setClubSubmissionTick((t) => t + 1)} />
       )}
     </div>
   );
