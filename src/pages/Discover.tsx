@@ -8,7 +8,7 @@ import { v4 as uuid } from "uuid";
 
 type EventType = "rally" | "club_dig" | "other";
 type VerificationStatus = "verified" | "community" | "unconfirmed";
-type DistanceBand = "all" | "nearby" | "10-25" | "25-50";
+type DistanceBand = "all" | "under-50" | "50-100" | "100-plus";
 
 export type DetectingEvent = {
   id: string;
@@ -61,10 +61,10 @@ const TYPE_OPTIONS: { value: EventType | "all"; label: string }[] = [
 ];
 
 const DISTANCE_BANDS: { value: DistanceBand; label: string; minKm?: number; maxKm?: number }[] = [
-  { value: "all",    label: "All" },
-  { value: "nearby", label: "Under 50m", maxKm: 80.47 },
-  { value: "10-25",  label: "50–100m",  minKm: 80.47, maxKm: 160.93 },
-  { value: "25-50",  label: "100m+",    minKm: 160.93 },
+  { value: "all",       label: "All" },
+  { value: "under-50",  label: "Under 50 mi", maxKm: 80.47 },
+  { value: "50-100",    label: "50–100 mi",   minKm: 80.47, maxKm: 160.93 },
+  { value: "100-plus",  label: "100 mi+",     minKm: 160.93 },
 ];
 
 // JSON files served from /public — update these paths when you move to a hosted API.
@@ -123,9 +123,9 @@ function scoreEvent(event: DetectingEvent, distanceKm?: number): number {
   let score = 0;
   // Distance
   if (distanceKm !== undefined) {
-    if (distanceKm < 80.47)        score += 20; // <50 m
-    else if (distanceKm < 160.93)  score += 12; // 50–100 m
-    else                           score += 4;  // 100m+
+    if (distanceKm < 80.47)        score += 20; // <50 mi
+    else if (distanceKm < 160.93)  score += 12; // 50–100 mi
+    else                           score += 4;  // 100 mi+
   }
   // Date proximity
   const bucket = timeBucket(event.startDate);
@@ -321,12 +321,14 @@ function EventCard({
   distanceKm,
   score,
   going,
+  planned,
   onClick,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
   score: number;
   going?: boolean;
+  planned?: boolean;
   onClick: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi` : "";
@@ -337,7 +339,11 @@ function EventCard({
   return (
     <div
       onClick={onClick}
-      className={`bg-white dark:bg-gray-800 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all group ${going ? "border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-500" : "border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700"}`}
+      className={`bg-white dark:bg-gray-800 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all group ${
+  going || planned
+    ? "border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-500"
+    : "border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700"
+}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-black text-sm text-gray-900 dark:text-gray-100 leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
@@ -390,6 +396,11 @@ function EventCard({
         {going && (
           <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
             ✓ Going
+          </span>
+        )}
+        {planned && (
+          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
+            ✓ Planned
           </span>
         )}
         <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${scoreTag.cls}`}>
@@ -540,9 +551,7 @@ function EventDetailModal({
           )}
         </div>
 
-        <p className="text-[9px] text-gray-400 dark:text-gray-600 mt-3 leading-relaxed">
-          Score based on distance, date, event details, and verification.
-        </p>
+
 
         <div className="mt-5 flex flex-col gap-2">
           {/* Primary actions row */}
@@ -1117,7 +1126,8 @@ function EventSection({
             event={event}
             distanceKm={distanceKm}
             score={score}
-            going={goingIds.has(event.id) || plannedKeys.has(`${event.title}|${event.startDate}`)}
+            going={goingIds.has(event.id)}
+            planned={plannedKeys.has(`${event.title}|${event.startDate}`)}
             onClick={() => onSelect(event)}
           />
         ))}
@@ -1403,6 +1413,9 @@ export default function Discover({ projectId }: { projectId: string }) {
       </div>
 
       {/* Events sections */}
+      {userLocation && !loadingRemote && processedEvents.length > 0 && (
+        <p className="text-[9px] text-gray-400 dark:text-gray-600 mb-3">Showing events near you, sorted by relevance</p>
+      )}
       {loadingRemote ? (
         <div className="text-center py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Loading…</div>
       ) : processedEvents.length === 0 ? (
