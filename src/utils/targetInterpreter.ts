@@ -78,6 +78,18 @@ function buildHowToApproach(strength: TargetSignalStrength): string {
     }
 }
 
+// ─── Verdict ──────────────────────────────────────────────────────────────────
+// Top-line decision label shown before any reasoning.
+
+export function getTargetVerdict(signalStrength: TargetSignalStrength, isPrimary: boolean): string {
+    if (isPrimary) return 'Start here';
+    switch (signalStrength) {
+        case 'Strong Signal':     return 'Also worth investigating';
+        case 'Moderate Signal':   return 'Also worth investigating';
+        case 'Supporting Signal': return 'Secondary target';
+    }
+}
+
 // ─── Public entry point ───────────────────────────────────────────────────────
 
 export function buildTargetInterpretation(f: Cluster): TargetInterpretation {

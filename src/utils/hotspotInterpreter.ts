@@ -28,7 +28,15 @@ export function getHotspotHook(strength: HotspotSignalStrength): string {
     switch (strength) {
         case 'Strong Zone':     return 'Strong alignment across the area — begin in this area';
         case 'Moderate Zone':   return 'Signals align across this area — worth working through';
-        case 'Developing Zone': return 'Weaker alignment — use to guide wider coverage';
+        case 'Developing Zone': return 'Developing signal — useful for guiding wider coverage';
+    }
+}
+
+export function getHotspotVerdict(strength: HotspotSignalStrength): string {
+    switch (strength) {
+        case 'Strong Zone':     return 'Worth investigating';
+        case 'Moderate Zone':   return 'Developing area';
+        case 'Developing Zone': return 'Secondary zone';
     }
 }
 

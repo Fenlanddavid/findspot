@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { computeSessionOutcomeResult, SessionOutcomeResult } from "../utils/sessionOutcomeEngine";
 import { db, Permission, Session, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
@@ -27,6 +28,7 @@ function SessionSummary({
   sharedPermissionId,
   isClubDayMember,
   fieldId,
+  outcomeResult,
   onClose,
   onFieldReport,
   onLandownerReport,
@@ -41,6 +43,7 @@ function SessionSummary({
   sharedPermissionId: string | undefined,
   isClubDayMember: boolean,
   fieldId: string | null,
+  outcomeResult: SessionOutcomeResult | null,
   onClose: () => void,
   onFieldReport: () => void,
   onLandownerReport: (forField: boolean) => void,
@@ -59,9 +62,30 @@ function SessionSummary({
     fourthStat = { label: "Result", value: "Good hunt" };
   }
 
+  const outcomeColours = {
+    emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', label: 'text-emerald-700 dark:text-emerald-300', sub: 'text-emerald-600 dark:text-emerald-400' },
+    amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',   border: 'border-amber-200 dark:border-amber-800',   label: 'text-amber-700 dark:text-amber-300',   sub: 'text-amber-600 dark:text-amber-400' },
+    gray:    { bg: 'bg-gray-50 dark:bg-gray-900/30',     border: 'border-gray-200 dark:border-gray-700',     label: 'text-gray-700 dark:text-gray-300',     sub: 'text-gray-500 dark:text-gray-400' },
+  };
+
   return (
       <Modal title="Session Complete" onClose={onClose}>
-          <div className="flex flex-col gap-6 py-2">
+          <div className="flex flex-col gap-5 py-2">
+              {/* Phase 2 — Session Outcome card */}
+              {outcomeResult && (
+                <div className={`rounded-2xl border p-4 ${outcomeColours[outcomeResult.outcome.colour].bg} ${outcomeColours[outcomeResult.outcome.colour].border}`}>
+                  <p className={`text-xs font-black uppercase tracking-widest opacity-50 mb-1`}>Session result</p>
+                  <p className={`text-lg font-black leading-tight mb-1 ${outcomeColours[outcomeResult.outcome.colour].label}`}>{outcomeResult.outcome.label}</p>
+                  <p className={`text-xs font-bold leading-snug ${outcomeColours[outcomeResult.outcome.colour].sub}`}>{outcomeResult.outcome.subtitle}</p>
+                  {outcomeResult.spread && outcomeResult.spread !== null && (
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-2">
+                      Spread: {outcomeResult.spread === 'clustered' ? 'Finds clustered' : outcomeResult.spread === 'linear' ? 'Linear pattern' : 'Spread across field'}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Stats grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
                       <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Finds</span>
@@ -80,6 +104,15 @@ function SessionSummary({
                     </div>
                   )}
               </div>
+
+              {/* Phase 3 — Next Move */}
+              {outcomeResult?.nextMove && (
+                <div className="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 rounded-2xl p-4">
+                  <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Next move</p>
+                  <p className="text-sm font-black text-gray-800 dark:text-gray-100 mb-1">{outcomeResult.nextMove.action}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{outcomeResult.nextMove.reason}</p>
+                </div>
+              )}
 
               {permissionId && isClubDayMember && sharedPermissionId && (
                 <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 flex flex-col gap-3">
@@ -195,7 +228,7 @@ export default function SessionPage(props: {
   const [trimming, setTrimming] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showExportClubDay, setShowExportClubDay] = useState(false);
-  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null });
+  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null, outcomeResult: SessionOutcomeResult | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null, outcomeResult: null });
   const [showFieldReport, setShowFieldReport] = useState(false);
   const [showLandownerReport, setShowLandownerReport] = useState(false);
   const [landownerReportForField, setLandownerReportForField] = useState(false);
@@ -670,11 +703,35 @@ export default function SessionPage(props: {
         }
     }
 
+    // Phase 2+3 — compute outcome + next move
+    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+    const findPoints = sessionFinds
+        .filter(f => f.lat !== null && f.lon !== null)
+        .map(f => ({ lat: f.lat!, lon: f.lon! }));
+
+    let prevSessionSummaries: { findsCount: number }[] = [];
+    const currentSession = await db.sessions.get(sessionId);
+    const resolvedPermId = currentSession?.permissionId;
+    if (resolvedPermId) {
+        const prevSessions = await db.sessions
+            .where("permissionId").equals(resolvedPermId)
+            .filter(s => s.id !== sessionId && !!s.isFinished)
+            .toArray();
+        prevSessionSummaries = await Promise.all(
+            prevSessions.map(async ps => ({
+                findsCount: await db.finds.where("sessionId").equals(ps.id).count(),
+            }))
+        );
+    }
+
+    const outcomeResult = computeSessionOutcomeResult(count, finalCoverage, durationMins, findPoints, prevSessionSummaries);
+
     setSummaryData({
         coverage: finalCoverage,
         findsCount: count,
         durationMins,
-        totalTime: durationStr
+        totalTime: durationStr,
+        outcomeResult,
     });
     
     if (sessionId) {
@@ -1149,6 +1206,7 @@ export default function SessionPage(props: {
           sharedPermissionId={(permission as any)?.sharedPermissionId}
           isClubDayMember={!!(permission as any)?.isClubDayMember}
           fieldId={fieldId}
+          outcomeResult={summaryData.outcomeResult}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
           onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}
           onLandownerReport={(forField) => {
