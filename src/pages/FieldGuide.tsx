@@ -717,19 +717,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </button>
                         <button
                             onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
-                            aria-label="Toggle 1880 Ordnance Survey overlay"
+                            aria-label="Toggle OS 1895 overlay"
                             className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                         >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                            1880 OS
+                            OS 1895
                         </button>
                         <button
                             onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
-                            aria-label="Toggle 1930 Ordnance Survey overlay"
+                            aria-label="Toggle OS 1900 overlay"
                             className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
                         >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                            1930 OS
+                            OS 1900
                         </button>
                     </div>
                 </div>
@@ -744,19 +744,23 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                             }}
                             disabled={analyzing}
-                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-slate-600 text-white border-slate-500' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                         >
-                            {analyzing ? 'Terrain...' : (loadingPAS && historicMode) ? 'Loading...' : 'Historic Intel'}
+                            {(loadingPAS && historicMode) ? 'Loading...' : historicMode ? 'Clear' : 'Historic Intel'}
                         </button>
-                        <button onClick={clearScan} className="text-[10px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-2 whitespace-nowrap">Clear</button>
                     </div>
 
                     <div className="flex gap-2 items-center shrink-0 relative">
                         <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap">
                             {isLocating ? '...' : 'GPS'}
                         </button>
-                        <button onClick={executeScan} disabled={analyzing || isTerrainScanning} title="Scan area locked to Z16 for precision" className="bg-emerald-500 text-white px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse whitespace-nowrap">
-                            {analyzing || isTerrainScanning ? '...' : 'Scan Terrain'}
+                        <button
+                            onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
+                            disabled={analyzing || isTerrainScanning}
+                            title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
+                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-600 text-white hover:bg-slate-500' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'}`}
+                        >
+                            {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Scan Terrain'}
                         </button>
                     </div>
                 </div>

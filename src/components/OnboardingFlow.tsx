@@ -413,7 +413,7 @@ export default function OnboardingFlow() {
                                     <span className="text-base shrink-0">📡</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">LiDAR &amp; historic maps</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Toggle LiDAR to see a detailed elevation relief — often reveals features invisible on satellite. Historic map overlays (OS 1880, OS 1930) show how the landscape looked in the past.</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Toggle LiDAR to see a detailed elevation relief — often reveals features invisible on satellite. Historic map overlays (OS 1895, OS 1900) show how the landscape looked in the past.</p>
                                     </div>
                                 </div>
                             </div>
