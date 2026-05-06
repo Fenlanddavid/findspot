@@ -779,7 +779,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
 
                 {/* Bottom Row: Primary FieldGuide Actions */}
-                <div className="flex justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative lg:hidden">
+                <div className="hidden justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">
                     <div className="flex gap-2 items-center min-w-0 relative">
                         <button
                             onClick={() => {
@@ -990,6 +990,51 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
                         )}
                     </div>
+
+                    {/* Mobile Scan Sheet */}
+                    {!selectedHotspotId && !selectedId && selectedMonument === undefined && !isIntelOpen && !selectedUserFind && !selectedPASFind && (
+                        <div className="absolute bottom-3 left-3 right-3 z-[85] lg:hidden">
+                            <div className="bg-slate-950/92 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl p-3">
+                                <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-white/15" />
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                    <div className="min-w-0">
+                                        <p className="text-[8px] font-black text-emerald-400 uppercase tracking-[0.2em]">Scan Panel</p>
+                                        <p className="text-[12px] font-black text-white leading-tight truncate">
+                                            {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : hasScanned ? 'Landscape Review' : 'Ready to Scan'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <span className="text-[8px] font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">{sortedHotspots.length} H</span>
+                                        <span className="text-[8px] font-black text-white/70 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">{displayTargets.length} T</span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                        {isLocating ? '...' : 'GPS'}
+                                    </button>
+                                    <button
+                                        onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
+                                        disabled={analyzing || isTerrainScanning}
+                                        title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
+                                        className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
+                                    >
+                                        {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Scan'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (analyzing) return;
+                                            if (!historicMode) { clearScan(); setHistoricMode(true); }
+                                            else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
+                                        }}
+                                        disabled={analyzing}
+                                        className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                                    >
+                                        {(loadingPAS && historicMode) ? '...' : historicMode ? 'Layers' : 'Layers'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Mobile Hotspot Tray */}
                     {hotspots.length > 0 && !historicMode && (
