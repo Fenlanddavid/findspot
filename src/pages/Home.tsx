@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
+import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 import { StaticMapPreview } from "../components/StaticMapPreview";
@@ -24,22 +25,45 @@ export default function Home(props: {
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
+  const [usedActions, setUsedActions] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem('fs_used_actions');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
 const [privacyExpanded, setPrivacyExpanded] = useState(false);
-  const [dismissedNextMoves, setDismissedNextMoves] = useState<Set<string>>(() => {
+  const [dismissedNextMoves, setDismissedNextMoves] = useState<Record<string, number>>(() => {
     try {
       const stored = localStorage.getItem('fs_nextmove_dismissed');
-      return new Set(stored ? JSON.parse(stored) : []);
-    } catch { return new Set(); }
+      if (!stored) return {};
+      const parsed = JSON.parse(stored);
+      // Migrate old array format to timestamp object
+      if (Array.isArray(parsed)) {
+        const migrated: Record<string, number> = {};
+        for (const k of parsed) migrated[k] = Date.now();
+        return migrated;
+      }
+      return parsed;
+    } catch { return {}; }
   });
 
   const dismissNextMove = useCallback((key: string) => {
     setDismissedNextMoves(prev => {
-      const next = new Set(prev);
-      next.add(key);
-      try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify([...next])); } catch {}
+      const next = { ...prev, [key]: Date.now() };
+      try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify(next)); } catch {}
       return next;
     });
   }, []);
+
+  const isDismissed = useCallback((key: string, type: string): boolean => {
+    if (type === 'active_session') return false;
+    const ts = dismissedNextMoves[key];
+    if (!ts) return false;
+    if (type === 'stale_permission') {
+      return Date.now() - ts < 7 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  }, [dismissedNextMoves]);
 
   const permissions = useLiveQuery(
     async () => {
@@ -95,6 +119,17 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
+
+  const appSettings = useLiveQuery(async () => {
+    const [detectorist, lastBackupDate] = await Promise.all([
+      db.settings.get('detectorist'),
+      db.settings.get('lastBackupDate'),
+    ]);
+    return {
+      detectorist: (detectorist?.value as string) || '',
+      lastBackupDate: (lastBackupDate?.value as string) || null,
+    };
+  });
 
   const nextMoveItems = useMemo(() => {
     const items: Array<{
@@ -175,22 +210,12 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         });
       }
     }
-    if (permissions && permissions.length === 0) {
-      items.push({
-        type: 'no_permissions',
-        dismissKey: `no_permissions`,
-        message: 'Scan the land first — find where activity likely was before you start detecting',
-        detail: 'No setup needed',
-        cta: 'Open FieldGuide',
-        action: () => props.goFieldGuide(),
-      });
-    }
     return items;
   }, [pendingFinds, activeSession, permissions, nav, props]);
 
-  const nextMove = nextMoveItems.find(item => !dismissedNextMoves.has(item.dismissKey)) ?? null;
+  const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
 
-  const finds2026Stats = useMemo(() => {
+  const currentYearFindStats = useMemo(() => {
     if (!finds) return null;
     const currentYear = new Date().getFullYear().toString();
     const thisYear = finds.filter(f => !f.isPending && (f.createdAt || "").startsWith(currentYear));
@@ -216,6 +241,78 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const findIds = useMemo(() => recentFinds?.slice(0, 3).map(s => s.id) ?? [], [recentFinds]);
 
+  const adaptiveActions = useMemo(() => {
+    if (!permissions || !appSettings) return [];
+
+    const realPerms = permissions.filter(p => !p.isDefault);
+    const totalFinds = finds?.filter(f => !f.isPending).length ?? 0;
+    const hasSessions = realPerms.some(p => p.sessionCount > 0);
+    const isEstablished = realPerms.length > 0 && totalFinds > 0 && hasSessions;
+    const isNewUser = realPerms.length === 0 && totalFinds === 0;
+
+    const backupAge = appSettings.lastBackupDate
+      ? (Date.now() - new Date(appSettings.lastBackupDate).getTime()) / 86400000
+      : Infinity;
+    const backupNeeded = backupAge > 30;
+    const nameNotSet = !appSettings.detectorist;
+    const permsWithoutBoundary = realPerms.filter(p => !p.boundary && !p.fields?.length);
+
+    // Detect dominant find period (5+ finds required)
+    const dominantPeriod = (() => {
+      if (!finds || finds.length < 5) return null;
+      const counts: Record<string, number> = {};
+      for (const f of finds) { if (f.period) counts[f.period] = (counts[f.period] ?? 0) + 1; }
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      return sorted[0] && sorted[0][1] >= 5 ? sorted[0][0] : null;
+    })();
+
+    type Action = { label: string; action: () => void } | null;
+
+    // ── Action pool ──────────────────────────────────────────────────────────
+    // Only shown when "Your Next Move" has no content.
+    // Each entry is null when its condition isn't met — nulls are filtered out.
+    // Add, rotate, or remove entries here to adapt to user behaviour.
+    // The first 2 non-null entries are shown; order determines priority.
+    const pool: Action[] = isNewUser ? [
+      { label: 'Create Permission',    action: props.goPermission },
+      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
+      { label: 'Search for a Rally',   action: () => setShowClubRallyModal(true) },
+    ] : isEstablished ? [
+      backupNeeded   ? { label: 'Back Up Your Data',   action: () => nav('/settings') } : null,
+      nameNotSet     ? { label: 'Set Your Name',        action: () => nav('/settings') } : null,
+      permsWithoutBoundary.length > 0
+                     ? { label: 'Add a Field Boundary', action: () => nav(`/permission/${permsWithoutBoundary[0].id}`) } : null,
+      dominantPeriod ? { label: `View ${dominantPeriod} Finds`, action: () => props.goFindsWithFilter(`period=${dominantPeriod}`) } : null,
+      totalFinds >= 10
+                     ? { label: 'Export to CSV',        action: () => nav('/settings') } : null,
+      realPerms.length > 0
+                     ? { label: 'Share a Permission',   action: () => setShowClubRallyModal(true) } : null,
+      { label: 'Search for a Rally',   action: () => setShowClubRallyModal(true) },
+      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
+    ] : [
+      { label: 'Record Find',          action: () => props.goFind() },
+      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
+      { label: 'Create Permission',    action: props.goPermission },
+    ];
+    // ────────────────────────────────────────────────────────────────────────
+
+    return (pool.filter(Boolean) as NonNullable<Action>[])
+      .filter(a => !usedActions.has(a.label))
+      .slice(0, 2)
+      .map(a => ({
+        ...a,
+        action: () => {
+          try {
+            const stored = sessionStorage.getItem('fs_used_actions');
+            const current: string[] = stored ? JSON.parse(stored) : [];
+            sessionStorage.setItem('fs_used_actions', JSON.stringify([...current, a.label]));
+          } catch {}
+          setUsedActions(prev => new Set(prev).add(a.label));
+          a.action();
+        },
+      }));
+  }, [permissions, finds, appSettings, usedActions, nav, props]);
+
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
@@ -232,7 +329,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
   }, [findIds]);
 
   return (
-    <div className="grid gap-7 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
+    <div className="grid gap-6 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
       <button
         onClick={() => setPrivacyExpanded(v => !v)}
         className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
@@ -247,7 +344,14 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         )}
       </button>
 
-      {nextMove && !dismissedNextMoves.has(nextMove.dismissKey) && (
+      <section className="grid gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 m-0">Today</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Continue where you left off</p>
+        </div>
+      </section>
+
+      {nextMove ? (
         <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
           {nextMove.type !== 'active_session' && (
             <button
@@ -259,12 +363,12 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
             </button>
           )}
           <div className="min-w-0 flex-1">
-            <p className={`text-[9px] font-black mb-1 ${
+            <p className={`text-xs font-black mb-1 ${
               nextMove.type === 'active_session'
                 ? 'uppercase tracking-widest text-amber-600 dark:text-amber-400'
                 : 'uppercase tracking-widest ' + (nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')
             }`}>
-              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next step'}
+              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next move'}
             </p>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
             {'detail' in nextMove && nextMove.detail && (
@@ -273,31 +377,52 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           </div>
           <button
             onClick={nextMove.action}
-            className={`shrink-0 text-white text-[10px] font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
+            className={`shrink-0 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
           >
             {nextMove.cta}
           </button>
         </div>
+      ) : (
+        <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+          <div className="flex gap-2">
+            {adaptiveActions.map(item => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                className="shrink-0 px-4 py-2.5 rounded-full text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:border-emerald-400 dark:hover:border-emerald-500 transition-all active:scale-[0.98] whitespace-nowrap"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
-      <div className="flex gap-2 flex-wrap mt-1">
-        <button onClick={props.goPermission} className="bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white px-4 sm:px-6 py-2 rounded-xl font-semibold shadow transition-all duration-200 ease-out flex items-center gap-2 active:translate-y-0 text-sm sm:text-base">
-            <span>📍</span> <span className="hidden xs:inline">New</span> Permission
-        </button>
-        <button onClick={() => setShowClubRallyModal(true)} className="bg-gray-100/70 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-2 rounded-xl font-medium transition-all duration-200 ease-out flex items-center gap-2 hover:border-emerald-400 hover:bg-gray-200/60 dark:hover:bg-gray-700/60 hover:shadow-sm active:translate-y-0 text-sm sm:text-base">
-            <span>🏟️</span> Club Day / Rally
-        </button>
-      </div>
 
       {hasOnlyDefault && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-          <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">
-            You're recording to a general permission.{" "}
-            <span className="opacity-70">Add your own to track sessions and field coverage.</span>
-          </p>
-          <button onClick={props.goPermission} className="shrink-0 text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:underline whitespace-nowrap">
-            Add Permission →
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+          <div>
+            <p className="text-xs font-bold text-gray-600 dark:text-gray-300">
+              Start with FieldGuide
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5">
+              Scan the land before setting up permissions. Find where activity likely was, then record properly when you're ready.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={props.goFieldGuide}
+              className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2 rounded-xl hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all whitespace-nowrap"
+            >
+              Open FieldGuide
+            </button>
+            <button
+              onClick={props.goPermission}
+              className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl hover:border-emerald-400 transition-all whitespace-nowrap"
+            >
+              Add Permission
+            </button>
+          </div>
         </div>
       )}
 
@@ -312,50 +437,50 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
               {pendingFinds.length} pending {pendingFinds.length === 1 ? 'find' : 'finds'}
             </span>
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
+          <span className="text-xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
             View Queue →
           </span>
         </button>
       )}
 
-      {finds2026Stats && (
+      {currentYearFindStats && (
         <section className="min-w-0 overflow-hidden">
-          <div className="flex items-baseline justify-between mb-2">
+          <button onClick={props.goFindsBox} className="flex items-baseline justify-between w-full mb-2 hover:opacity-70 transition-opacity">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Finds {new Date().getFullYear()}</h3>
-            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{finds2026Stats.total} Total</span>
-          </div>
+            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{currentYearFindStats.total} Total</span>
+          </button>
           <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 [mask-image:linear-gradient(to_right,black_0,black_calc(100%-48px),transparent_100%)]" title="Scroll to see more">
 
-            {finds2026Stats.gold > 0 && (
+            {currentYearFindStats.gold > 0 && (
               <button onClick={() => props.goFindsWithFilter("material=Gold")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg px-3 py-1.5 hover:border-yellow-500 transition-colors shrink-0">
-                <span className="text-sm font-black text-yellow-700 dark:text-yellow-400">{finds2026Stats.gold}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-500">Gold</span>
+                <span className="text-sm font-black text-yellow-700 dark:text-yellow-400">{currentYearFindStats.gold}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-yellow-600 dark:text-yellow-500">Gold</span>
               </button>
             )}
-            {finds2026Stats.silver > 0 && (
+            {currentYearFindStats.silver > 0 && (
               <button onClick={() => props.goFindsWithFilter("material=Silver")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-slate-100 dark:bg-slate-400/10 border border-blue-200 dark:border-blue-400/30 rounded-lg px-3 py-1.5 hover:border-blue-300 transition-colors shrink-0 shadow-[0_0_8px_rgba(148,163,184,0.3)]">
-                <span className="text-sm font-black text-slate-500 dark:text-slate-200">{finds2026Stats.silver}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Silver</span>
+                <span className="text-sm font-black text-slate-500 dark:text-slate-200">{currentYearFindStats.silver}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-slate-400">Silver</span>
               </button>
             )}
-            {finds2026Stats.hammered > 0 && (
+            {currentYearFindStats.hammered > 0 && (
               <button onClick={() => props.goFindsWithFilter("type=Hammered")} className="whitespace-nowrap flex items-baseline gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-emerald-500 transition-colors shadow-sm shrink-0">
-                <span className="text-sm font-black text-gray-800 dark:text-gray-100">{finds2026Stats.hammered}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Hammered</span>
+                <span className="text-sm font-black text-gray-800 dark:text-gray-100">{currentYearFindStats.hammered}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-gray-400">Hammered</span>
               </button>
             )}
-            {finds2026Stats.periodCounts.length > 0 && (finds2026Stats.gold > 0 || finds2026Stats.silver > 0 || finds2026Stats.hammered > 0) && (
+            {currentYearFindStats.periodCounts.length > 0 && (currentYearFindStats.gold > 0 || currentYearFindStats.silver > 0 || currentYearFindStats.hammered > 0) && (
               <div className="w-px bg-gray-200 dark:bg-gray-700 self-stretch mx-1 shrink-0" />
             )}
-            {finds2026Stats.periodCounts.map(({ period, count }) => (
+            {currentYearFindStats.periodCounts.map(({ period, count }) => (
               <button key={period} onClick={() => props.goFindsWithFilter(`period=${period}`)} className="whitespace-nowrap flex items-baseline gap-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 hover:border-emerald-500 transition-colors shadow-sm shrink-0">
                 <span className="text-sm font-black text-gray-800 dark:text-gray-100">{count}</span>
-                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">{period}</span>
+                <span className="text-xs font-black uppercase tracking-widest text-gray-400">{period}</span>
               </button>
             ))}
           </div>
-          {(finds2026Stats.periodCounts.length + (finds2026Stats.gold > 0 ? 1 : 0) + (finds2026Stats.silver > 0 ? 1 : 0) + (finds2026Stats.hammered > 0 ? 1 : 0)) > 4 && (
-            <p className="text-[9px] text-gray-400 dark:text-gray-500 italic ml-1 mt-1 opacity-40">Scroll for more</p>
+          {(currentYearFindStats.periodCounts.length + (currentYearFindStats.gold > 0 ? 1 : 0) + (currentYearFindStats.silver > 0 ? 1 : 0) + (currentYearFindStats.hammered > 0 ? 1 : 0)) > 4 && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 italic ml-1 mt-1">Scroll for more</p>
           )}
         </section>
       )}
@@ -382,11 +507,11 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         </svg>
         <div className="flex-1 min-w-0">
           <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
-          <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand your land. Start smarter.</div>
+          <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
-          className="shrink-0 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+          className="shrink-0 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
         >
           Open
         </button>
@@ -395,7 +520,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       <section className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
+                <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
                 <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All →</button>
             </div>
             <div className="flex items-center gap-3 w-full md:max-w-md">
@@ -411,22 +536,24 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                         className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-emerald-400/40 focus:border-emerald-400 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.1)] outline-none transition-all"
                     />
                 </div>
-                <div className="text-sm text-gray-500 font-mono hidden sm:block whitespace-nowrap">{permissions?.length ?? 0} total</div>
+                <div className="text-sm text-gray-500 font-mono hidden sm:block whitespace-nowrap">{permissions?.filter(p => !p.isDefault).length ?? 0} total</div>
 
             </div>
         </div>
         
         {(!filteredPermissions || filteredPermissions.length === 0) && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-2xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
                 {searchQuery ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-3">
-                        <button onClick={props.goPermission} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
-                            📍 Add Permission
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-bold">No real permissions yet.</p>
+                        <p className="text-sm text-emerald-700/70 dark:text-emerald-400/80 max-w-md">Start with FieldGuide to understand the land, or add a permission if you already have access.</p>
+                        <button onClick={props.goFieldGuide} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
+                            Open FieldGuide
                         </button>
-                        <button onClick={() => props.goPermissionWithParam("rally")} className="text-teal-600 dark:text-teal-400 text-sm font-bold hover:underline">
-                            or join a club rally →
+                        <button onClick={props.goPermission} className="text-emerald-700 dark:text-emerald-400 text-sm font-bold hover:underline">
+                            Add permission instead →
                         </button>
                     </div>
                 )}
@@ -449,12 +576,12 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                         {l.name || "(Unnamed)"}
                     </button>
                     {l.createdAt && (
-                        <div className="text-[10px] opacity-40 font-mono mt-0.5">
+                        <div className="text-xs opacity-60 font-mono mt-0.5">
                             {new Date(l.createdAt).toLocaleDateString()}
                         </div>
                     )}
                   </div>
-                  <span className="flex items-center gap-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
+                  <span className="flex items-center gap-1 text-xs font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
                     <span className="text-[8px]">◈</span>{l.findCount} <span className="opacity-50">finds</span>
                   </span>
                 </div>
@@ -473,36 +600,36 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
                             <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
                                 <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
-                                <span className={`text-[10px] font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
+                                <span className={`text-xs font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
                             </div>
                         </div>
                     )}
 
                     <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm border border-white/20 px-1.5 py-0.5 rounded text-[8px] font-mono text-white/60">
-                        {l.lat && l.lon ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
+                        {l.lat != null && l.lon != null ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
                     </div>
                 </div>
                 
                 <div className="grid gap-2 mb-4 flex-1">
                   {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">👤 {l.landownerName}</div>}
                   <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                    <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
                         {l.sessionCount} {l.sessionCount === 1 ? 'Visit' : 'Visits'}
                     </div>
                     <div className="flex flex-col items-end gap-1">
                       {l.totalAcres !== null && (
-                        <div className="text-[10px] font-bold text-emerald-700/60 dark:text-emerald-400/60">{l.totalAcres.toFixed(1)} acres</div>
+                        <div className="text-xs font-bold text-emerald-700/70 dark:text-emerald-400/80">{l.totalAcres.toFixed(1)} acres</div>
                       )}
-                      {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
+                      {l.landType && <div className="text-xs font-medium opacity-70 uppercase tracking-tighter">{l.landType}</div>}
                     </div>
                   </div>
                 </div>
                 
                 <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
-                  <button onClick={(e) => { e.stopPropagation(); props.goFind(l.id); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-[10px] font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
+                  <button onClick={(e) => { e.stopPropagation(); props.goFind(l.id); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-xs font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
                     Add find
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
+                  <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
                     View
                   </button>
                   <button
@@ -521,11 +648,17 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
       <section>
         <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
             <button onClick={props.goAllFinds} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All Finds →</button>
         </div>
 
-        {(!recentFinds || recentFinds.length === 0) && <div className="text-gray-500 italic bg-gray-50 dark:bg-gray-800/50 p-10 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">No finds recorded yet.</div>}
+        {(!recentFinds || recentFinds.length === 0) && (
+          <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+            <p className="text-sm font-bold text-gray-700 dark:text-gray-200">No finds recorded yet.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When you record your first find, it will appear here.</p>
+            <button onClick={() => props.goFind()} className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-black transition-colors">Record First Find</button>
+          </div>
+        )}
         
         {recentFinds && recentFinds.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -585,4 +718,3 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
     </div>
   );
 }
-

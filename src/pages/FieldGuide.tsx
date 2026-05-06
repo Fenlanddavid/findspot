@@ -212,6 +212,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [systemLog,              setSystemLog]              = useState<LogEntry[]>([makeLog('SYSTEM READY. Execute Scan.')]);
     const [zoomWarning,            setZoomWarning]            = useState(false);
     const [isSatellite,            setIsSatellite]            = useState(false);
+    const [scanCount,              setScanCount]              = useState(() => {
+        try { return parseInt(localStorage.getItem('fs_fg_scan_count') || '0', 10); } catch { return 0; }
+    });
     const [searchQuery,            setSearchQuery]            = useState('');
     const [isSearchOpen,           setIsSearchOpen]           = useState(false);
     const [isIntelOpen,            setIsIntelOpen]            = useState(false);
@@ -526,6 +529,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const executeScan = async () => {
         if (!mapRef.current || analyzing) return;
 
+        setScanCount(prev => {
+            const next = prev + 1;
+            try { localStorage.setItem('fs_fg_scan_count', String(next)); } catch {}
+            return next;
+        });
         clearScan();
         dispatch({ type: 'SCAN_START' });
         addLog('> Engine Initiating (Fixed Z16)...', 'terrain');
@@ -684,66 +692,51 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     return (
         <div className="flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
             <header className="bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md">
-                {/* Top Row: Overlay Toggles & Search Toggle */}
-                <div className="flex justify-between items-center px-4 py-2 pb-3 border-b border-white/5">
-                    {!isSearchOpen ? (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setShowFieldsPicker(v => !v)}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
-                                {showFields !== false && showFields !== 'all'
-                                    ? showFields.startsWith('field:')
-                                        ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
-                                        : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
-                                    : showFields === 'all' ? 'All Fields' : 'My Fields'}
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                1880 OS
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
-                                className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                1888 OS
-                            </button>
-                        </div>
-                    ) : (
-                        <form onSubmit={searchLocation} className="flex gap-2 flex-1 mr-2">
-                            <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search place..." className="bg-black/40 border border-white/10 text-white px-3 py-1 rounded-lg flex-1 text-xs outline-none focus:ring-1 focus:ring-emerald-500" />
-                        </form>
-                    )}
-                    <button onClick={() => setIsSearchOpen(!isSearchOpen)} className="text-slate-400 hover:text-white p-1">
-                        {isSearchOpen ? (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        ) : '🔍'}
-                    </button>
+                {/* Top Row: Overlay Toggles */}
+                <div className="flex items-center gap-2 px-3 sm:px-4 py-2 pb-3 border-b border-white/5 overflow-hidden">
+                    <div className="flex flex-1 items-center gap-2 overflow-x-auto scrollbar-hide min-w-0">
+                        <button
+                            onClick={() => setShowFieldsPicker(v => !v)}
+                            aria-label="Choose visible fields"
+                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
+                            {showFields !== false && showFields !== 'all'
+                                ? showFields.startsWith('field:')
+                                    ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
+                                    : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
+                                : showFields === 'all' ? 'All Fields' : 'My Fields'}
+                        </button>
+                        <button
+                            onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
+                            aria-label="Toggle LiDAR overlay"
+                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                            LiDAR
+                        </button>
+                        <button
+                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
+                            aria-label="Toggle 1880 Ordnance Survey overlay"
+                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                            1880 OS
+                        </button>
+                        <button
+                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
+                            aria-label="Toggle 1930 Ordnance Survey overlay"
+                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                            1930 OS
+                        </button>
+                    </div>
                 </div>
 
-                {/* Bottom Row: Dual Actions */}
-                <div className="flex justify-between items-center px-4 py-2 bg-black/20 relative">
-                    <div className="flex gap-2 items-center relative">
-                        {!historicMode && pasFinds.length === 0 && !loadingPAS && !potentialScore && (
-                            <div className="absolute bottom-full left-1 mb-1 pointer-events-none animate-pulse">
-                                <span className="text-[7px] font-black text-blue-400/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-blue-500/20">Historic</span>
-                            </div>
-                        )}
+                {/* Bottom Row: Primary FieldGuide Actions */}
+                <div className="flex justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">
+                    <div className="flex gap-2 items-center min-w-0 relative">
                         <button
                             onClick={() => {
                                 if (analyzing) return;
@@ -751,24 +744,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                             }}
                             disabled={analyzing}
-                            className={`px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all shadow-lg ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500 text-white border-blue-300 shadow-[0_0_18px_rgba(59,130,246,0.6)] ring-2 ring-blue-400/40' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                         >
-                            {analyzing ? 'Terrain scanning...' : (loadingPAS && historicMode) ? 'Scanning...' : 'Historic'}
+                            {analyzing ? 'Terrain...' : (loadingPAS && historicMode) ? 'Loading...' : 'Historic Intel'}
                         </button>
-                        <button onClick={clearScan} className="text-[9px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-1.5">Clear</button>
+                        <button onClick={clearScan} className="text-[10px] font-black text-slate-400 hover:text-white transition-colors tracking-widest uppercase px-2 py-2 whitespace-nowrap">Clear</button>
                     </div>
 
-                    <div className="flex gap-2 items-center relative">
-                        {!analyzing && detectedFeatures.length === 0 && (
-                            <div className="absolute bottom-full right-1 mb-1 pointer-events-none animate-pulse text-right">
-                                <span className="text-[7px] font-black text-emerald-500/80 uppercase tracking-[0.2em] whitespace-nowrap bg-slate-900/80 px-1.5 py-0.5 rounded border border-emerald-500/20">Terrain Scan</span>
-                            </div>
-                        )}
-                        <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50">
+                    <div className="flex gap-2 items-center shrink-0 relative">
+                        <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap">
                             {isLocating ? '...' : 'GPS'}
                         </button>
-                        <button onClick={executeScan} disabled={analyzing || isTerrainScanning} title="Scan area locked to Z16 for precision" className="bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-[9px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse">
-                            {analyzing || isTerrainScanning ? '...' : 'Scan'}
+                        <button onClick={executeScan} disabled={analyzing || isTerrainScanning} title="Scan area locked to Z16 for precision" className="bg-emerald-500 text-white px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase hover:bg-emerald-400 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:animate-pulse whitespace-nowrap">
+                            {analyzing || isTerrainScanning ? '...' : 'Scan Terrain'}
                         </button>
                     </div>
                 </div>
@@ -780,7 +768,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* My Fields Picker */}
                     {showFieldsPicker && (
-                        <div className="absolute top-2 left-2 z-[65] animate-in fade-in slide-in-from-top-2 duration-150">
+                        <div className="absolute top-2 left-2 z-[110] animate-in fade-in slide-in-from-top-2 duration-150">
                             <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-md p-2 min-w-[170px] max-w-[220px] max-h-[60vh] overflow-y-auto">
                                 {fieldPickerStep === 'top' ? (
                                     <>
@@ -878,8 +866,25 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                     )}
 
-                    {/* Map Layer Toggle */}
+                    {/* Map Layer Toggle + Search */}
                     <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
+                        <button
+                            onClick={() => setIsSearchOpen(!isSearchOpen)}
+                            aria-label={isSearchOpen ? 'Close search' : 'Search place'}
+                            className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSearchOpen ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
+                        >
+                            {isSearchOpen ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18" />
+                                    <line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                            ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="11" cy="11" r="8" />
+                                    <path d="m21 21-4.3-4.3" />
+                                </svg>
+                            )}
+                        </button>
                         <button
                             onClick={() => setIsSatellite(!isSatellite)}
                             className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSatellite ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
@@ -892,6 +897,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </button>
                     </div>
 
+                    {/* Floating Search Input */}
+                    {isSearchOpen && (
+                        <div className="absolute top-4 left-4 right-16 z-[60]">
+                            <form onSubmit={searchLocation}>
+                                <input
+                                    autoFocus
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search place..."
+                                    className="w-full bg-slate-900/90 border border-white/10 text-white px-3 py-2.5 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500 shadow-xl backdrop-blur-md"
+                                />
+                            </form>
+                        </div>
+                    )}
+
                     {/* Center Reticle */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20">
                         <div className="w-10 h-10 border-2 border-emerald-500/50 rounded-full flex items-center justify-center">
@@ -901,6 +921,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Floating Alerts */}
                     <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none w-[90%] max-w-sm">
+                        {!analyzing && !historicMode && detectedFeatures.length === 0 && hotspots.length === 0 && scanCount < 5 && (
+                            <div className="bg-slate-700/60 text-slate-200 px-4 py-2 rounded-full text-[9px] sm:text-[10px] font-black tracking-widest uppercase shadow-lg border border-white/10 backdrop-blur-md">
+                                Navigate, search or GPS to your area · then scan
+                            </div>
+                        )}
                         {mapClickLabel && (
                             <div className="bg-slate-900/95 text-white px-4 py-1.5 rounded-full text-[9px] font-black tracking-widest uppercase shadow-2xl border border-blue-500/40">
                                 {mapClickLabel}
@@ -968,29 +993,35 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hHook = getHotspotHook(hStrength);
                                 const hBorder = hStrength === 'Strong Zone' ? 'bg-slate-900 border-amber-500/50 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : hStrength === 'Moderate Zone' ? 'bg-slate-900 border-emerald-500/50' : 'bg-slate-900 border-white/20';
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
+                                const isPrimaryHotspot = h.number === 1;
                                 return (
                                 <div key={h.id} className={`p-5 rounded-3xl border-2 shadow-2xl transition-all ${hBorder}`}>
-                                    <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Hotspot {h.number}</p>
+                                    <div className="flex items-center justify-between gap-2 mb-3">
+                                        {isPrimaryHotspot && (
+                                            <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(16,185,129,0.45)]">Start Here</span>
+                                        )}
+                                        <p className="text-[9px] font-black text-white/70 uppercase tracking-[0.2em] ml-auto">Hotspot {h.number}</p>
+                                    </div>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex-1 min-w-0 pr-3">
                                             {/* 1. Title */}
                                             <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{HOTSPOT_TITLES[h.classification]}</h3>
                                             {/* 2. Signal strength + type summary */}
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <p className={`text-[11px] font-black ${hStrengthColour}`}>{hStrength}</p>
-                                                <span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{getSignalTypeSummary(h)}</span>
+                                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                <p className={`text-xs font-black ${hStrengthColour}`}>{hStrength}</p>
+                                                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{getSignalTypeSummary(h)}</span>
                                             </div>
                                             {/* 3. Verdict + hook */}
-                                            <p className="text-[11px] font-bold text-white/70 leading-snug mb-0.5">{getHotspotVerdict(hStrength)}</p>
-                                            <p className="text-[10px] font-bold text-white/40 leading-snug mb-2">{hHook}</p>
+                                            {!isPrimaryHotspot && <p className="text-sm font-black text-white/85 leading-snug mb-0.5">{getHotspotVerdict(hStrength)}</p>}
+                                            <p className="text-[11px] font-bold text-white/50 leading-snug mb-2">{hHook}</p>
                                             {/* 4. classificationReason */}
-                                            {h.classificationReason && <p className="text-[9px] text-white/35 leading-tight mb-1.5">{h.classificationReason}</p>}
+                                            {h.classificationReason && <p className="text-[10px] text-white/45 leading-tight mb-1.5">{h.classificationReason}</p>}
                                             {/* 5. Meta badges */}
                                             {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
                                                 <div className="flex items-center gap-2.5 flex-wrap mt-1">
-                                                    {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/50 uppercase tracking-widest">{h.secondaryTag}</span>}
-                                                    {h.isOnCorridor && <span className="text-[8px] font-bold text-emerald-500/50 uppercase tracking-widest">On corridor</span>}
-                                                    {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/30 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
+                                                    {h.secondaryTag && <span className="text-[9px] font-bold text-amber-300/60 uppercase tracking-widest">{h.secondaryTag}</span>}
+                                                    {h.isOnCorridor && <span className="text-[9px] font-bold text-emerald-500/60 uppercase tracking-widest">On corridor</span>}
+                                                    {(h.linkedCount ?? 0) > 0 && <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                                 </div>
                                             )}
                                             {/* 6. Find context with count */}
@@ -998,10 +1029,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 const ctx = hotspotFindContext.get(h.id);
                                                 if (!ctx) return null;
                                                 return ctx.status === 'within'
-                                                    ? <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                                    : <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                                    ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                                    : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
                                             })()}
-                                            {showSuggestion && <span className="text-emerald-400 text-[9px] font-black animate-pulse tracking-widest mt-1.5 block">DETECT HERE</span>}
                                         </div>
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -1018,29 +1048,29 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="border-t border-white/8 pt-3 mb-3">
-                                        <p className="text-[8px] font-medium text-white/65 mb-2.5">Why this matters</p>
+                                        <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-2.5">Evidence summary</p>
                                         <div className="space-y-2">
                                             {h.explanation.slice(0, 3).map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                                    <p className="text-xs font-bold text-white leading-tight flex-1">{reason}</p>
+                                                    <p className="text-[13px] font-bold text-white leading-tight flex-1">{reason}</p>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                     {h.suggestedFocus && (
                                         <div className="mt-3 pt-3 border-t border-emerald-500/15">
-                                            <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus area</p>
-                                            <p className="text-[11px] font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
+                                            <p className="text-[9px] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Field focus</p>
+                                            <p className="text-xs font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                         </div>
                                     )}
                                     {/* Full reasoning */}
                                     <div className="mt-3 pt-3 border-t border-white/8">
                                         <span
                                             onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
-                                            className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
+                                            className="text-xs font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
                                         >
-                                            {expandedInterpretationId === h.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                            {expandedInterpretationId === h.id ? '▲ Hide evidence breakdown' : '▼ See full evidence breakdown'}
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
@@ -1052,21 +1082,21 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             ];
                                             return (
                                                 <div className="mt-4 space-y-4 animate-in fade-in duration-200">
-                                                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
                                                     <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.summary}</p>
+                                                        <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
+                                                        <p className="text-xs text-white/85 leading-relaxed">{interp.summary}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.reasoning}</p>
+                                                        <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
+                                                        <p className="text-xs text-white/85 leading-relaxed">{interp.reasoning}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{interp.strategy}</p>
+                                                        <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
+                                                        <p className="text-xs text-white/85 leading-relaxed">{interp.strategy}</p>
                                                     </div>
                                                     <div className="border-t border-white/10 pt-3">
-                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
                                                         <div className="space-y-1.5">
                                                             {breakdown.map(({ label, val, cap }) => (
                                                                 <div key={label} className="flex items-center gap-2">
@@ -1096,6 +1126,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] lg:overflow-y-auto lg:scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {detectedFeatures.filter(f => f.id === selectedId).map(f => {
                                 const tInterp = buildTargetInterpretation(f);
+                                const isPrimaryTarget = f.id === primaryTargetId;
                                 const strengthColour: Record<TargetSignalStrength, string> = {
                                     'Strong Signal':     'text-amber-400',
                                     'Moderate Signal':   'text-emerald-400',
@@ -1130,13 +1161,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             </div>
                                         ) : (
                                             <>
-                                            {/* Centred target label */}
-                                            <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-3">Target {f.number}</p>
+                                            <div className="flex items-center justify-between gap-2 mb-3">
+                                                {isPrimaryTarget && (
+                                                    <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(16,185,129,0.45)]">Primary Target</span>
+                                                )}
+                                                <p className="text-[9px] font-black text-white/70 uppercase tracking-[0.2em] ml-auto">Target {f.number}</p>
+                                            </div>
                                             {/* Header */}
                                             <div className="flex justify-between items-start mb-4">
                                                 <div className="flex-1 min-w-0 pr-3">
                                                     <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
-                                                    <p className={`text-[11px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
+                                                    <p className={`text-xs font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
                                                 </div>
                                                 <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -1144,15 +1179,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             </div>
                                             <>
                                                 {/* Verdict + hook */}
-                                                <p className="text-[12px] font-bold text-white/80 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, f.id === primaryTargetId)}</p>
-                                                <p className="text-[10px] font-bold text-white/40 leading-snug mb-3">{tInterp.hook}</p>
+                                                <p className="text-sm font-black text-white/85 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
+                                                <p className="text-[11px] font-bold text-white/50 leading-snug mb-3">{tInterp.hook}</p>
                                                 {/* Find context with count */}
                                                 {(() => {
                                                     const ctx = targetFindContext.get(f.id);
                                                     if (!ctx) return null;
                                                     return ctx.status === 'within'
-                                                        ? <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                                        : <p className="text-[8px] font-black text-emerald-400/70 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                                        ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                                        : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
                                                 })()}
                                                 {/* Crossing badge */}
                                                 {f.isHighConfidenceCrossing && (
@@ -1174,13 +1209,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 })()}
                                                 {/* Why this matters */}
                                                 <div className="border-t border-white/8 pt-3 mb-3">
-                                                    <p className="text-[8px] font-medium text-white/65 mb-2.5">Why this matters</p>
+                                                    <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-2.5">Why this matters</p>
                                                     {f.explanationLines && f.explanationLines.length > 0 ? (
                                                         <div className="space-y-2">
                                                             {f.explanationLines.slice(0, 3).map((line, idx) => (
                                                                 <div key={idx} className="flex items-start gap-3">
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                                                    <p className="text-xs font-bold text-white leading-tight flex-1">{line}</p>
+                                                                    <p className="text-[13px] font-bold text-white leading-tight flex-1">{line}</p>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -1202,14 +1237,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 </div>
                                                 {/* Focus area */}
                                                 <div className="mt-3 pt-3 border-t border-emerald-500/15">
-                                                    <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-[0.12em] mb-1">Focus area</p>
-                                                    <p className="text-[11px] font-bold text-emerald-300 leading-snug">{tInterp.focus}</p>
+                                                    <p className="text-[9px] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Search focus</p>
+                                                    <p className="text-xs font-bold text-emerald-300 leading-snug">{tInterp.focus}</p>
                                                 </div>
                                                 {/* Full reasoning */}
                                                 <div className="mt-3 pt-3 border-t border-white/8">
                                                     <span
                                                         onClick={() => setExpandedTargetId(expandedTargetId === f.id ? null : f.id)}
-                                                        className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
+                                                        className="text-xs font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer flex items-center gap-1"
                                                     >
                                                         {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
                                                     </span>
@@ -1655,6 +1690,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hHook = getHotspotHook(hStrength);
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
                                 const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : hStrength === 'Moderate Zone' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20';
+                                const isPrimaryHotspot = h.number === 1;
                                 return (
                                 <div
                                     key={h.id}
@@ -1668,21 +1704,22 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="mb-3">
                                         {/* 1. Title */}
                                         <div className="flex justify-between items-start mb-1">
-                                            <h3 className={`text-[10px] font-black tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{HOTSPOT_TITLES[h.classification]}</h3>
-                                            {showSuggestion && h.number === 1 && <span className="text-[7px] font-black text-emerald-400 animate-pulse tracking-widest flex-shrink-0">DETECT HERE</span>}
+                                            <h3 className={`text-[11px] font-black tracking-tight leading-tight flex-1 pr-2 ${selectedHotspotId === h.id ? 'text-white' : 'text-slate-200'}`}>{HOTSPOT_TITLES[h.classification]}</h3>
+                                            {isPrimaryHotspot && <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Start Here</span>}
                                         </div>
                                         {/* 2. Signal strength */}
-                                        <p className={`text-[9px] font-black mb-0.5 ${hStrengthColour}`}>{hStrength}</p>
+                                        <p className={`text-[10px] font-black mb-0.5 ${hStrengthColour}`}>{hStrength}</p>
+                                        {!isPrimaryHotspot && <p className="text-[10px] font-black text-white/75 leading-snug mb-0.5">{getHotspotVerdict(hStrength)}</p>}
                                         {/* 3. Hook */}
-                                        <p className="text-[9px] font-bold text-white/60 leading-snug mb-1.5">{hHook}</p>
+                                        <p className="text-[10px] font-bold text-white/60 leading-snug mb-1.5">{hHook}</p>
                                         {/* 4. classificationReason — muted, below hook */}
-                                        {h.classificationReason && <p className="text-[8px] text-white/30 leading-tight mb-1">{h.classificationReason}</p>}
+                                        {h.classificationReason && <p className="text-[9px] text-white/40 leading-tight mb-1">{h.classificationReason}</p>}
                                         {/* 5. Meta badges */}
                                         {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
                                             <div className="flex items-center gap-2 flex-wrap mt-1 mb-1">
-                                                {h.secondaryTag && <span className="text-[7px] font-bold text-amber-300/45 uppercase tracking-widest">{h.secondaryTag}</span>}
-                                                {h.isOnCorridor && <span className="text-[7px] font-bold text-emerald-500/45 uppercase tracking-widest">On corridor</span>}
-                                                {(h.linkedCount ?? 0) > 0 && <span className="text-[7px] font-bold text-white/25 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
+                                                {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/55 uppercase tracking-widest">{h.secondaryTag}</span>}
+                                                {h.isOnCorridor && <span className="text-[8px] font-bold text-emerald-500/55 uppercase tracking-widest">On corridor</span>}
+                                                {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/35 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                             </div>
                                         )}
                                         {/* 6. Find activity annotation */}
@@ -1706,11 +1743,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     )}
                                     <div className="space-y-1.5 mt-3">
-                                        <p className="text-[7px] font-medium text-white/25 mb-1.5">Why this matters</p>
+                                        <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1.5">Evidence summary</p>
                                         {h.explanation.slice(0, 3).map((reason, idx) => (
                                             <div key={idx} className="flex items-center gap-2">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                                                <p className="text-[10px] font-bold text-slate-300 leading-tight">{reason}</p>
+                                                <p className="text-[11px] font-bold text-slate-200 leading-tight">{reason}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -1718,7 +1755,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
                                             <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
                                             <p className="text-[9px] leading-tight">
-                                                <span className="font-black text-emerald-500/50 uppercase tracking-widest">Focus: </span>
+                                                <span className="font-black text-emerald-500/60 uppercase tracking-widest">Field focus: </span>
                                                 <span className="font-bold text-emerald-300/80">{h.suggestedFocus}</span>
                                             </p>
                                         </div>
@@ -1728,7 +1765,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
                                             className="text-[10px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
                                         >
-                                            {expandedInterpretationId === h.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                            {expandedInterpretationId === h.id ? '▲ Hide evidence breakdown' : '▼ See full evidence breakdown'}
                                         </span>
                                         {expandedInterpretationId === h.id && (() => {
                                             const interp = buildInterpretation(h);
@@ -1740,18 +1777,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             ];
                                             return (
                                                 <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
-                                                    <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
                                                     <div>
-                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
-                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.summary}</p>
+                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
+                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.summary}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
-                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.reasoning}</p>
+                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
+                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.reasoning}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
-                                                        <p className="text-[10px] text-white/80 leading-relaxed">{interp.strategy}</p>
+                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
+                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.strategy}</p>
                                                     </div>
                                                     <div className="border-t border-white/10 pt-2.5">
                                                         <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
@@ -1841,6 +1878,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         {displayTargets.map((f) => {
                             const tInterp = buildTargetInterpretation(f);
                             const isSelected = selectedId === f.id;
+                            const isPrimaryTarget = f.id === primaryTargetId;
                             const strengthColour: Record<TargetSignalStrength, string> = {
                                 'Strong Signal':     'text-amber-400',
                                 'Moderate Signal':   'text-emerald-400',
@@ -1853,13 +1891,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
                                     className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? 'bg-white/10 border-white ring-4 ring-white/10' : f.isProtected ? 'bg-slate-900/40 border-red-500/40 hover:border-red-500/70' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
                                 >
-                                    {/* Centred target label */}
-                                    <p className="text-[9px] font-black text-white uppercase tracking-[0.2em] text-center mb-2">Target {f.number}</p>
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                        {isPrimaryTarget && (
+                                            <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Primary Target</span>
+                                        )}
+                                        <p className="text-[9px] font-black text-white/70 uppercase tracking-[0.2em] ml-auto">Target {f.number}</p>
+                                    </div>
                                     {/* Header row: type + source dots */}
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex-1 min-w-0 pr-2">
-                                            {!f.isProtected && <h3 className={`text-[10px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>}
-                                            {!f.isProtected && <p className={`text-[9px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
+                                            {!f.isProtected && <h3 className={`text-[11px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>}
+                                            {!f.isProtected && <p className={`text-[10px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
                                         </div>
                                         <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
                                             {[{ ids: ['terrain', 'terrain_global'], label: 'Lidar' }, { ids: ['slope'], label: 'Slope' }, { ids: ['hydrology'], label: 'Hydro' }, { ids: ['satellite', 'satellite_spring', 'satellite_summer'], label: 'Aerial' }, { ids: ['historic'], label: 'Historic' }].map(s => (
@@ -1885,6 +1927,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     ) : (
                                         <>
+                                            <p className="text-[10px] font-black text-white/75 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                                             {/* Hook */}
                                             <p className="text-[10px] font-bold text-white/70 leading-snug mb-2">{tInterp.hook}</p>
                                             {(() => {
@@ -1899,12 +1942,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             {f.isHighConfidenceCrossing && (<div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-2 animate-pulse"><p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p></div>)}
                                             {/* Why this matters */}
                                             <div className="space-y-1.5 mt-2 border-t border-white/8 pt-2">
-                                                <p className="text-[7px] font-medium text-white/25 mb-1.5">Why this matters</p>
+                                                <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1.5">Why this matters</p>
                                                 {f.explanationLines && f.explanationLines.length > 0 ? (
                                                     f.explanationLines.slice(0, 3).map((line, idx) => (
                                                         <div key={idx} className="flex items-center gap-2">
                                                             <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                                                            <p className="text-[10px] font-bold text-slate-300 leading-tight">{line}</p>
+                                                            <p className="text-[11px] font-bold text-slate-200 leading-tight">{line}</p>
                                                         </div>
                                                     ))
                                                 ) : (
@@ -1922,7 +1965,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
                                                 <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
                                                 <p className="text-[9px] leading-tight">
-                                                    <span className="font-black text-emerald-500/50 uppercase tracking-widest">Focus: </span>
+                                                    <span className="font-black text-emerald-500/60 uppercase tracking-widest">Search focus: </span>
                                                     <span className="font-bold text-emerald-300/80">{tInterp.focus}</span>
                                                 </p>
                                             </div>
