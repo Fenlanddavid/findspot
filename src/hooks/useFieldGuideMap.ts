@@ -8,7 +8,7 @@ import { Find } from '../db';
 
 interface LayerState {
     historicMode: boolean;
-    visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean };
+    visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean };
 }
 
 const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) => boolean }> = [
@@ -21,6 +21,8 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'aim-outline',                     visibleWhen: s => s.historicMode && s.visibility.aim },
     { id: 'corridors-fill',                  visibleWhen: s => s.historicMode && s.visibility.corridors },
     { id: 'corridors-outline',               visibleWhen: s => s.historicMode && s.visibility.corridors },
+    { id: 'landscape-context-fill',          visibleWhen: s => s.historicMode && s.visibility.context },
+    { id: 'landscape-context-outline',       visibleWhen: s => s.historicMode && s.visibility.context },
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
@@ -57,7 +59,7 @@ export type UseFieldGuideMapOptions = {
     isSatellite: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; userFinds: boolean };
+    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
     // Initial fly-to coordinates
@@ -167,6 +169,10 @@ export function useFieldGuideMap({
             map.addLayer({ id: 'corridors-fill',    type: 'fill', source: 'corridors', layout: { visibility: 'none' }, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });
             map.addLayer({ id: 'corridors-outline', type: 'line', source: 'corridors', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1, 'line-opacity': 0.3, 'line-dasharray': [3, 3] } });
 
+            map.addSource('landscape-context', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({ id: 'landscape-context-fill', type: 'fill', source: 'landscape-context', layout: { visibility: 'none' }, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.08 } });
+            map.addLayer({ id: 'landscape-context-outline', type: 'line', source: 'landscape-context', layout: { visibility: 'none', 'line-join': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 1, 'line-opacity': 0.35, 'line-dasharray': [2, 4] } });
+
             map.addSource('crossings', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'crossings-halo',   type: 'circle', source: 'crossings', layout: { visibility: 'none' }, paint: { 'circle-radius': 14, 'circle-color': '#f59e0b', 'circle-opacity': 0.25, 'circle-stroke-width': 0 } });
             map.addLayer({ id: 'crossings-circle', type: 'circle', source: 'crossings', layout: { visibility: 'none' }, paint: { 'circle-radius': 6, 'circle-color': '#f59e0b', 'circle-opacity': 0.95, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
@@ -222,6 +228,10 @@ export function useFieldGuideMap({
             map.on('click', 'corridors-fill', (e) => {
                 const type = e.features?.[0]?.properties?.type;
                 showLabel(type === 'roman_road' ? 'Roman Road Corridor' : 'Historic Trackway Corridor');
+            });
+            map.on('click', 'landscape-context-fill', (e) => {
+                const label = e.features?.[0]?.properties?.label;
+                showLabel(String(label || 'Landscape Context'));
             });
             map.on('click', 'crossings-circle', (e) => {
                 const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
@@ -430,6 +440,53 @@ export function useFieldGuideMap({
         else map.once('load', doUpdate);
     }, [historicRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // ── Landscape context layer ─────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const doUpdate = () => {
+            const src = map.getSource('landscape-context') as maplibregl.GeoJSONSource | undefined;
+            if (!src) return;
+
+            const features: GeoJSON.Feature[] = [];
+
+            for (const r of historicRoutes) {
+                try {
+                    const line = turf.lineString(r.geometry);
+                    const buffered = turf.buffer(line, r.type === 'roman_road' ? 0.55 : 0.35, { units: 'kilometers' });
+                    if (buffered) {
+                        buffered.properties = {
+                            kind: 'route_context',
+                            label: r.type === 'roman_road' ? 'Historic route corridor' : 'Historic movement corridor',
+                            color: '#60a5fa',
+                        };
+                        features.push(buffered as GeoJSON.Feature);
+                    }
+                } catch { /* skip malformed geometry */ }
+            }
+
+            if (pasFinds.length >= 3) {
+                try {
+                    const points = turf.featureCollection(pasFinds.map(f => turf.point([f.lon, f.lat])));
+                    const center = turf.center(points);
+                    const buffered = turf.buffer(center, 0.5, { units: 'kilometers' });
+                    if (buffered) {
+                        buffered.properties = {
+                            kind: 'historic_density',
+                            label: 'Historic record density',
+                            color: '#f59e0b',
+                        };
+                        features.push(buffered as GeoJSON.Feature);
+                    }
+                } catch { /* skip malformed density context */ }
+            }
+
+            src.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
+        };
+        if (map.loaded()) doUpdate();
+        else map.once('load', doUpdate);
+    }, [historicRoutes, pasFinds]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ── Config-driven layer visibility ────────────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
@@ -517,7 +574,7 @@ export function useFieldGuideMap({
     const clearMapSources = () => {
         const map = mapRef.current;
         if (!map) return;
-        const sources = ['monuments', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'crossings'];
+        const sources = ['monuments', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'landscape-context', 'crossings'];
         sources.forEach(id => {
             const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
             if (src) src.setData({ type: 'FeatureCollection', features: [] });
