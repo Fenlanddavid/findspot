@@ -779,7 +779,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
 
                 {/* Bottom Row: Primary FieldGuide Actions */}
-                <div className="flex justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">
+                <div className="flex justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative lg:hidden">
                     <div className="flex gap-2 items-center min-w-0 relative">
                         <button
                             onClick={() => {
@@ -1656,25 +1656,68 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
 
                 {/* Sidebar */}
-                <div className="hidden flex-col bg-slate-900/80 backdrop-blur-xl border-l border-white/5 shrink-0 relative z-50 overflow-y-auto scrollbar-hide">
+                <div className="hidden lg:flex lg:w-96 flex-col bg-slate-900/80 backdrop-blur-xl border-l border-white/5 shrink-0 relative z-50 overflow-y-auto scrollbar-hide">
 
-                    {/* Archaeological Potential Section */}
-                    <div className="p-6 border-b border-white/10 bg-emerald-500/5">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em]">Archaeological Potential</h2>
+                    {/* Unified Scan Panel - Desktop */}
+                    <div className="p-5 border-b border-white/10 bg-slate-950/35">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Scan Panel</p>
+                                <h2 className="text-lg font-black text-white tracking-tight leading-tight mt-1">
+                                    {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : hasScanned ? 'Landscape Review' : 'Ready to Scan'}
+                                </h2>
+                            </div>
                             {potentialScore && (
-                                <span className="text-[10px] font-black text-white bg-emerald-500 px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.4)]">{potentialScore.score}%</span>
+                                <span className="text-[10px] font-black text-white bg-emerald-500 px-2.5 py-1 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.35)] shrink-0">{potentialScore.score}%</span>
                             )}
                         </div>
+
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            <button
+                                onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
+                                disabled={analyzing || isTerrainScanning}
+                                title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
+                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
+                            >
+                                {analyzing || isTerrainScanning ? 'Reading...' : detectedFeatures.length > 0 ? 'Clear Scan' : 'Scan Terrain'}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (analyzing) return;
+                                    if (!historicMode) { clearScan(); setHistoricMode(true); }
+                                    else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
+                                }}
+                                disabled={analyzing}
+                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                            >
+                                {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Layers Active' : 'Historic Layers'}
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                                <span className="block text-sm font-black text-emerald-300">{sortedHotspots.length}</span>
+                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Hotspots</span>
+                            </div>
+                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                                <span className="block text-sm font-black text-white">{displayTargets.length}</span>
+                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Targets</span>
+                            </div>
+                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                                <span className="block text-sm font-black text-blue-300">{pasFinds.length + historicRoutes.length + placeSignals.length}</span>
+                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Context</span>
+                            </div>
+                        </div>
+
                         {potentialScore ? (
                             <div className="space-y-3">
                                 <div className="relative h-2 bg-black/40 rounded-full overflow-hidden">
-                                    <div className="absolute inset-y-0 left-0 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.6)] transition-all duration-1000" style={{ width: `${potentialScore.score}%` }} />
+                                    <div className="absolute inset-y-0 left-0 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all duration-1000" style={{ width: `${potentialScore.score}%` }} />
                                 </div>
                                 <div className="space-y-1.5">
-                                    {potentialScore.reasons.map((reason, i) => (
+                                    {potentialScore.reasons.slice(0, 3).map((reason, i) => (
                                         <div key={i} className="flex items-start gap-2">
-                                            <span className="text-emerald-500 mt-0.5 font-bold text-[10px]">✓</span>
+                                            <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
                                             <p className="text-[10px] font-bold text-slate-300 leading-tight">{reason}</p>
                                         </div>
                                     ))}
@@ -1682,41 +1725,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
                         ) : (
                             <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">Run a scan to read landscape signals.</p>
-                        )}
-                    </div>
-
-                    {/* Historic Landscape Context Section - Desktop Only */}
-                    <div className="hidden lg:block p-6 border-b border-white/10 bg-blue-500/5">
-                        <div className="flex justify-between items-baseline mb-4">
-                            <h2 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">Landscape Context</h2>
-                            <button
-                                onClick={() => { clearScan(); setHistoricMode(true); }}
-                                disabled={loadingPAS}
-                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded border transition-all ${loadingPAS ? 'bg-slate-800 text-slate-500 border-white/5' : historicMode ? 'bg-amber-500 text-black border-amber-300' : 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500 hover:text-white'}`}
-                            >
-                                {loadingPAS ? 'Reading...' : historicMode ? 'Active' : 'Scan Layers'}
-                            </button>
-                        </div>
-                        {pasFinds.length > 0 ? (
-                            <div className="space-y-3">
-                                <p className="text-[9px] font-black text-blue-400/60 uppercase tracking-widest mb-2">{pasFinds.length} Recorded Finds Nearby</p>
-                                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
-                                    {pasFinds.map(f => (
-                                        <div key={f.id} onClick={() => { setSelectedPASFind(f); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-black/30 p-2.5 rounded-xl border border-blue-500/10 hover:border-blue-500/30 transition-all cursor-crosshair">
-                                            <div className="flex justify-between items-start mb-1">
-                                                <span className="text-[10px] font-black text-white truncate pr-2 uppercase">{f.objectType}</span>
-                                                <span className="text-[8px] font-bold text-blue-400 shrink-0">{f.broadperiod}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-[8px] font-black text-slate-500 tracking-tighter font-mono">{f.id}</span>
-                                                <span className="text-[8px] font-bold text-slate-400">{f.county}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">No historic records loaded. Click scan to fetch data.</p>
                         )}
                     </div>
 
