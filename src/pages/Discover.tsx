@@ -1329,11 +1329,11 @@ export default function Discover({ projectId }: { projectId: string }) {
 
       <div className="bg-gradient-to-br from-blue-950/10 to-indigo-950/10 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
-          <p className="text-sm font-black text-gray-900 dark:text-gray-100">Got a local club?</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add your club so detectorists nearby can find you</p>
+          <p className="text-sm font-black text-gray-900 dark:text-gray-100">Local club directory</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">List a club so nearby detectorists can find it</p>
         </div>
         <button onClick={() => setShowSubmitClub(true)} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
-          List Club
+          List a Club
         </button>
       </div>
 
@@ -1374,11 +1374,11 @@ export default function Discover({ projectId }: { projectId: string }) {
 
       <div className="bg-gradient-to-br from-emerald-950/10 to-teal-950/10 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
-          <p className="text-sm font-black text-gray-900 dark:text-gray-100">Run a rally or club dig?</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Add it so other detectorists can find it</p>
+          <p className="text-sm font-black text-gray-900 dark:text-gray-100">Rallies and club digs</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Submit an event so other detectorists can find it</p>
         </div>
         <button onClick={() => setShowSubmit(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
-          Add Event
+          Submit Event
         </button>
       </div>
 

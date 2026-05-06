@@ -113,7 +113,7 @@ export default function PendingFinds(props: { projectId: string }) {
                   disabled={savingId === f.id}
                   className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
                 >
-                  {savingId === f.id ? "Saving…" : "Save As-Is"}
+                  {savingId === f.id ? "Saving…" : "Mark Complete"}
                 </button>
                 {confirmingDeleteId === f.id ? (
                   <div className="flex gap-1.5">

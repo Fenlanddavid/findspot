@@ -62,12 +62,12 @@ export function PermissionPanel(props: {
   let previewLat = selected.lat;
   let previewLon = selected.lon;
 
-  if (!previewLat || !previewLon) {
+  if (previewLat == null || previewLon == null) {
       if (fields && fields.length > 0 && fields[0].boundary?.coordinates?.[0]) {
           const coords = fields[0].boundary.coordinates[0];
           previewLat = coords[0][1];
           previewLon = coords[0][0];
-      } else if (recentFind && recentFind.lat && recentFind.lon) {
+      } else if (recentFind && recentFind.lat != null && recentFind.lon != null) {
           previewLat = recentFind.lat;
           previewLon = recentFind.lon;
       }

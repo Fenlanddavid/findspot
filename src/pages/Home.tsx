@@ -4,10 +4,13 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
 import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
-import { FindModal } from "../components/FindModal";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions, EnrichedPermission } from "../services/permissions";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
+
+const FindModal = React.lazy(() =>
+  import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
+);
 
 export default function Home(props: {
   projectId: string;
@@ -438,7 +441,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
             </span>
           </div>
           <span className="text-xs font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
-            View Queue →
+            Open Queue
           </span>
         </button>
       )}
@@ -521,7 +524,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
-                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All →</button>
+                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All</button>
             </div>
             <div className="flex items-center gap-3 w-full md:max-w-md">
                 <div className="relative flex-1">
@@ -553,7 +556,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                             Open FieldGuide
                         </button>
                         <button onClick={props.goPermission} className="text-emerald-700 dark:text-emerald-400 text-sm font-bold hover:underline">
-                            Add permission instead →
+                            Add Permission
                         </button>
                     </div>
                 )}
@@ -582,7 +585,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                     )}
                   </div>
                   <span className="flex items-center gap-1 text-xs font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
-                    <span className="text-[8px]">◈</span>{l.findCount} <span className="opacity-50">finds</span>
+                    {l.findCount} <span className="opacity-50">finds</span>
                   </span>
                 </div>
 
@@ -611,7 +614,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                 </div>
                 
                 <div className="grid gap-2 mb-4 flex-1">
-                  {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">👤 {l.landownerName}</div>}
+                  {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">{l.landownerName}</div>}
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
                         {l.sessionCount} {l.sessionCount === 1 ? 'Visit' : 'Visits'}
@@ -637,7 +640,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                     title={l.isPinned ? "Unpin" : "Pin to top"}
                     className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
                   >
-                    📌
+                    {l.isPinned ? "Pinned" : "Pin"}
                   </button>
                 </div>
               </div>
@@ -649,7 +652,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       <section>
         <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
-            <button onClick={props.goAllFinds} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">View All Finds →</button>
+            <button onClick={props.goAllFinds} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All Finds</button>
         </div>
 
         {(!recentFinds || recentFinds.length === 0) && (
@@ -700,7 +703,9 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       </section>
 
       {openFindId && (
-        <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />
+        <React.Suspense fallback={null}>
+          <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />
+        </React.Suspense>
       )}
 
       {showClubRallyModal && (

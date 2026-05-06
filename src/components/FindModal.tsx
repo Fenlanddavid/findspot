@@ -383,7 +383,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 <div className="col-span-2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent mb-1" />
                 <div className="col-span-2 flex justify-between items-center">
                   <span className="text-[11px] font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
-                  {draft.lat && draft.lon && (
+                  {draft.lat != null && draft.lon != null && (
                     <button
                       onClick={() => window.open(`https://www.google.com/maps?q=${draft.lat},${draft.lon}`, "_blank")}
                       className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-all duration-[140ms] hover:-translate-y-px flex items-center gap-1"
@@ -394,7 +394,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 </div>
                 <DetailItem label="OS Grid Ref" value={draft.osGridRef} mono />
                 <DetailItem label="What3Words" value={draft.w3w} />
-                {draft.lat && draft.lon && (
+                {draft.lat != null && draft.lon != null && (
                   <div className="col-span-2">
                     <DetailItem label="Coordinates" value={`${draft.lat.toFixed(6)}, ${draft.lon.toFixed(6)} ${draft.gpsAccuracyM ? `(±${Math.round(draft.gpsAccuracyM)}m)` : ""}`} mono />
                   </div>

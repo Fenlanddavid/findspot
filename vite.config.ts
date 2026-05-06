@@ -48,6 +48,10 @@ export default defineConfig({
     })
   ],
   build: {
+    // Map rendering and PDF export are deliberately isolated into cacheable
+    // vendor chunks. Keep the warning threshold aligned with those libraries
+    // so real growth in the app chunk remains visible.
+    chunkSizeWarningLimit: 850,
     rollupOptions: {
       output: {
         manualChunks: {

@@ -256,10 +256,10 @@ export default function Settings() {
           disabled={exporting}
           className="col-span-2 sm:col-span-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-black uppercase tracking-widest py-3 rounded-xl transition-colors shadow-sm"
         >
-          {exporting ? "Saving…" : "Backup"}
+          {exporting ? "Saving…" : "Backup JSON"}
         </button>
         <label className={`flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 transition-colors shadow-sm ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
-          {importing ? "Restoring…" : "Restore"}
+          {importing ? "Restoring…" : "Restore Backup"}
           {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
         </label>
         <button
@@ -267,7 +267,7 @@ export default function Settings() {
           disabled={exportingCSV}
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
         >
-          {exportingCSV ? "Exporting…" : "CSV"}
+          {exportingCSV ? "Exporting…" : "Export CSV"}
         </button>
       </div>
 

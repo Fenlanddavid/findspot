@@ -59,7 +59,6 @@ export default function AllPermissions(props: { projectId: string }) {
               onClick={() => navigate(viewMode === "rallies" ? "/permission?type=rally" : "/permission")}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold shadow-md transition-all whitespace-nowrap text-sm flex items-center gap-2"
             >
-              <span>{viewMode === "rallies" ? "🏟️" : "📍"}</span>
               {viewMode === "rallies" ? "New Rally" : "New Permission"}
             </button>
           </div>
@@ -71,13 +70,13 @@ export default function AllPermissions(props: { projectId: string }) {
               onClick={() => setViewMode("permissions")}
               className={`px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${viewMode === "permissions" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
             >
-              📍 Permissions
+              Permissions
             </button>
             <button
               onClick={() => setViewMode("rallies")}
               className={`px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${viewMode === "rallies" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
             >
-              🏟️ Rallies
+              Rallies
             </button>
           </div>
           <div className="relative w-full">
@@ -94,15 +93,37 @@ export default function AllPermissions(props: { projectId: string }) {
       </div>
 
       {(!filteredByMode || filteredByMode.length === 0) ? (
-        <div className="text-center py-20 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700">
-          <div className="text-4xl mb-4">{viewMode === "rallies" ? "🏟️" : "📍"}</div>
-          <p className="text-gray-500 italic">
+        <div className="text-center py-16 px-6 bg-gray-50 dark:bg-gray-800/50 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700">
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200">
             {searchQuery
               ? `No ${viewMode === "rallies" ? "rallies" : "permissions"} match your search.`
               : viewMode === "rallies"
                 ? "No rallies recorded yet. Find one in Discover and add it."
                 : "No permissions recorded yet."}
           </p>
+          {!searchQuery && (
+            <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
+              {viewMode === "permissions" ? (
+                <>
+                  <button onClick={() => navigate("/fieldguide")} className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-colors">
+                    Open FieldGuide
+                  </button>
+                  <button onClick={() => navigate("/permission")} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-400 transition-colors">
+                    New Permission
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => navigate("/discover")} className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-colors">
+                    Open Discover
+                  </button>
+                  <button onClick={() => navigate("/permission?type=rally")} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-400 transition-colors">
+                    New Rally
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -129,8 +150,8 @@ export default function AllPermissions(props: { projectId: string }) {
                         : l.createdAt ? new Date(l.createdAt).toLocaleDateString() : ""}
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 text-[9px] font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
-                    <span className="text-[8px]">◈</span>{l.findCount} <span className="opacity-50">finds</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
+                    {l.findCount} <span className="opacity-50">finds</span>
                   </span>
                 </div>
 
@@ -152,28 +173,28 @@ export default function AllPermissions(props: { projectId: string }) {
                     </div>
                   )}
                   <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm border border-white/20 px-1.5 py-0.5 rounded text-[8px] font-mono text-white/60">
-                    {l.lat && l.lon ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
+                    {l.lat != null && l.lon != null ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
                   </div>
                 </div>
 
                 <div className="grid gap-2 mb-4 flex-1">
                   {l.landownerName && (
                     <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">
-                      {isRally ? "🏟️" : "👤"} {l.landownerName}
+                      {l.landownerName}
                     </div>
                   )}
                   {!isRally && (
                     <div className="flex items-center justify-between">
-                      <div className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                      <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
                         {l.fields?.length || 0} {l.fields?.length === 1 ? 'Field' : 'Fields'}
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         {l.totalAcres !== null && (
-                          <div className="text-[10px] font-bold text-emerald-700/60 dark:text-emerald-400/60">
+                          <div className="text-xs font-bold text-emerald-700/70 dark:text-emerald-400/80">
                             {l.totalAcres.toFixed(1)} acres
                           </div>
                         )}
-                        {l.landType && <div className="text-[10px] font-medium opacity-40 uppercase tracking-tighter">{l.landType}</div>}
+                        {l.landType && <div className="text-xs font-medium opacity-70 uppercase tracking-tighter">{l.landType}</div>}
                       </div>
                     </div>
                   )}
@@ -181,20 +202,20 @@ export default function AllPermissions(props: { projectId: string }) {
 
                 <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
                   {!isRally && (
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/find?permissionId=${l.id}`); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-[10px] font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
+                    <button onClick={(e) => { e.stopPropagation(); navigate(`/find?permissionId=${l.id}`); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-xs font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
                       Add find
                     </button>
                   )}
-                  <button onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }} className="flex-1 px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
+                  <button onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }} className="flex-1 px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
                     View
                   </button>
-                  {l.lat && l.lon && (
+                  {l.lat != null && l.lon != null && (
                     <button
-                      title="Open in Field Guide"
+                      title="Open in FieldGuide"
                       onClick={(e) => { e.stopPropagation(); navigate(`/fieldguide?lat=${l.lat}&lng=${l.lon}`); }}
-                      className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700"
+                      className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase"
                     >
-                      🗺
+                      FieldGuide
                     </button>
                   )}
                   <button
@@ -202,7 +223,7 @@ export default function AllPermissions(props: { projectId: string }) {
                     title={l.isPinned ? "Unpin" : "Pin to top"}
                     className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
                   >
-                    📌
+                    {l.isPinned ? "Pinned" : "Pin"}
                   </button>
                 </div>
               </div>

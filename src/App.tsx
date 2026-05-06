@@ -7,17 +7,16 @@ import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
 import { requestPersistentStorage, setSetting, getSetting } from "./services/data";
 import { closeStaleActiveTracks } from "./services/tracking";
 import { UPDATE_NOTES } from "./version";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 // Eagerly loaded — core navigation paths
 import Home from "./pages/Home";
-import PermissionPage from "./pages/Permission";
-import FindPage from "./pages/Find";
-import Settings from "./pages/Settings";
-import JoinClubDay from "./pages/JoinClubDay";
 import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
 
 // Lazily loaded — heavy pages (map, PDF, turf)
+const PermissionPage = React.lazy(() => import("./pages/Permission"));
+const FindPage = React.lazy(() => import("./pages/Find"));
 const SessionPage = React.lazy(() => import("./pages/Session"));
 const AllFinds = React.lazy(() => import("./pages/AllFinds"));
 const FindsBox = React.lazy(() => import("./pages/FindsBox"));
@@ -25,6 +24,8 @@ const PendingFinds = React.lazy(() => import("./pages/PendingFinds"));
 const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
 const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
 const Discover = React.lazy(() => import("./pages/Discover"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 
 export function Logo() {
   return (

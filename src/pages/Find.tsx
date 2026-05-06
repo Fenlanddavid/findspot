@@ -7,7 +7,10 @@ import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
-import { LocationPickerModal } from "../components/LocationPickerModal";
+
+const LocationPickerModal = React.lazy(() =>
+  import("../components/LocationPickerModal").then((mod) => ({ default: mod.LocationPickerModal }))
+);
 
 const periods: Find["period"][] = [
   "Prehistoric", "Bronze Age", "Iron Age", "Celtic", "Roman", "Anglo-Saxon", "Early Medieval", "Medieval", "Post-medieval", "Modern", "Unknown",
@@ -701,9 +704,9 @@ export default function FindPage(props: {
     if (gpsCapturing) return { label: "Acquiring GPS…", color: "text-gray-500 dark:text-gray-400" };
     if (form.lat == null || form.lon == null) return null;
     const acc = form.acc;
-    if (acc === null) return { label: "📍 Location set", color: "text-emerald-600 dark:text-emerald-400" };
-    if (acc <= 10) return { label: `📍 Strong fix · ±${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
-    if (acc <= 30) return { label: `📍 Captured · ±${Math.round(acc)}m`, color: "text-amber-600 dark:text-amber-400" };
+    if (acc === null) return { label: "Location set", color: "text-emerald-600 dark:text-emerald-400" };
+    if (acc <= 10) return { label: `Strong fix · ±${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
+    if (acc <= 30) return { label: `Captured · ±${Math.round(acc)}m`, color: "text-amber-600 dark:text-amber-400" };
     return { label: `⚠ Weak signal · ±${Math.round(acc)}m`, color: "text-red-600 dark:text-red-400" };
   }, [gpsCapturing, form.lat, form.lon, form.acc]);
 
@@ -742,7 +745,7 @@ export default function FindPage(props: {
             onClick={() => setIsPickingLocation(true)}
             className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:bg-emerald-600 hover:text-white"
           >
-            🗺️ Map
+            Map
           </button>
           {/* #5 — pulse animation while acquiring */}
           <button
@@ -751,7 +754,7 @@ export default function FindPage(props: {
             disabled={gpsCapturing}
             className={`bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2 ${gpsCapturing ? "animate-pulse" : ""}`}
           >
-            📍 {gpsCapturing ? "Acquiring…" : form.lat != null ? "Update Spot" : "Capture Spot"}
+            {gpsCapturing ? "Acquiring..." : form.lat != null ? "Update Spot" : "Capture Spot"}
           </button>
         </div>
       </div>
@@ -832,23 +835,23 @@ export default function FindPage(props: {
   return (
     <div className="grid gap-6 max-w-4xl mx-auto pb-24">
       {/* Header */}
-      <div className="flex justify-between items-center px-1">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-1">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
           {props.permissionId ? "Add Find" : "Record Find"}
         </h2>
-        <div className="flex gap-3">
+        <div className="flex gap-2 sm:gap-3 flex-wrap">
           <button
             onClick={() => navigate("/finds")}
-            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all"
+            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all text-sm"
           >
-            View All Finds
+            Open All Finds
           </button>
           {savedId && sessionId && (
             <button
               onClick={() => navigate(`/session/${sessionId}`)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2 text-sm"
             >
-              <span>←</span> Back to Session
+              Back to Session
             </button>
           )}
         </div>
@@ -963,13 +966,13 @@ export default function FindPage(props: {
               onClick={resetForm}
               className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl font-bold text-sm transition-colors"
             >
-              + Record Another
+              Record Another
             </button>
             <button
               onClick={() => navigate("/finds")}
               className="bg-white text-emerald-700 hover:bg-emerald-50 px-4 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm"
             >
-              View Finds →
+              Open Finds
             </button>
           </div>
         </div>
@@ -1379,28 +1382,27 @@ export default function FindPage(props: {
             {/* #4 — photo buttons always active; auto-saves find if not yet saved */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
-                <span className="text-xl">🕳️</span>
-                <span>Photo 1</span>
+                <span>In Situ Photo</span>
                 <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} className="hidden" />
               </label>
               <label className="px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-100">
-                <span className="text-xl">🧼</span>
-                <span>Photo 2</span>
+                <span>Cleaned Photo</span>
                 <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} className="hidden" />
               </label>
             </div>
 
             <div className="flex gap-2">
               <label className="flex-1 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200">
-                📁 Upload Files
+                Upload Files
                 <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} className="hidden" />
               </label>
             </div>
           </div>
 
           {(!media || media.length === 0) && (
-            <div className="text-center py-8 opacity-40 italic text-sm border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-2xl">
-              Tap a button above to add photos.
+            <div className="text-center py-6 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50/60 dark:bg-gray-900/30">
+              <p className="font-bold text-gray-500 dark:text-gray-400">No photos yet</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Add an in situ photo first, then a cleaned photo when available.</p>
             </div>
           )}
 
@@ -1422,7 +1424,7 @@ export default function FindPage(props: {
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-3 sm:px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
         {/* Quick photo shortcut — always active (#4) */}
         <label className="flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 cursor-pointer bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
-          📸 <span className="hidden sm:inline">Add Photo</span><span className="sm:hidden">Photo</span>
+          <span className="hidden sm:inline">Add Photo</span><span className="sm:hidden">Photo</span>
           <input
             ref={stickyPhotoRef}
             type="file"
@@ -1435,7 +1437,7 @@ export default function FindPage(props: {
 
         {gpsCapturing && !savedId && (
           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold absolute -top-6 left-0 right-0 text-center bg-amber-50 dark:bg-amber-900/30 py-1">
-            ⚠️ GPS still locating — you can save without a location or wait
+            GPS still locating. You can save without a location or wait.
           </p>
         )}
 
@@ -1458,21 +1460,23 @@ export default function FindPage(props: {
             savedId ? "bg-green-600 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"
           }`}
         >
-          {saving ? "Saving…" : savedId ? "Saved ✓" : "Save Find"}
+          {saving ? "Saving..." : savedId ? "Saved" : "Save Find"}
         </button>
       </div>
 
       {isPickingLocation && (
-        <LocationPickerModal
-          initialLat={form.lat}
-          initialLon={form.lon}
-          onClose={() => setIsPickingLocation(false)}
-          onSelect={(pickedLat, pickedLon) => {
-            const grid = toOSGridRef(pickedLat, pickedLon);
-            update({ lat: pickedLat, lon: pickedLon, acc: null, osGridRef: grid || "" });
-            setIsPickingLocation(false);
-          }}
-        />
+        <React.Suspense fallback={<div className="fixed inset-0 z-50 bg-black/40" />}>
+          <LocationPickerModal
+            initialLat={form.lat}
+            initialLon={form.lon}
+            onClose={() => setIsPickingLocation(false)}
+            onSelect={(pickedLat, pickedLon) => {
+              const grid = toOSGridRef(pickedLat, pickedLon);
+              update({ lat: pickedLat, lon: pickedLon, acc: null, osGridRef: grid || "" });
+              setIsPickingLocation(false);
+            }}
+          />
+        </React.Suspense>
       )}
     </div>
   );

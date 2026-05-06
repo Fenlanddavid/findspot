@@ -793,7 +793,7 @@ export default function SessionPage(props: {
                         onClick={() => setIsEditing(true)}
                         className="text-xs font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
                     >
-                        ✎ Edit Details
+                        Edit Details
                     </button>
                 )}
             </div>
@@ -823,7 +823,7 @@ export default function SessionPage(props: {
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
                         <div className="min-w-0 flex-1">
-                            <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">📍 {permission?.name || "Unknown Location"}</p>
+                            <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">{permission?.name || "Unknown Location"}</p>
                             <div className="flex flex-wrap items-center gap-3">
                                 <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
                                 {isFinished && (
@@ -838,7 +838,7 @@ export default function SessionPage(props: {
                                         onClick={toggleTracking}
                                         className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
                                     >
-                                        <span className="text-sm">{isTracking ? '⏹️ STOP MAPPING' : '👣 MAP SESSION'}</span>
+                                        <span className="text-sm">{isTracking ? 'Stop Mapping' : 'Map Session'}</span>
                                     </button>
                                     {isTracking && (
                                         <button
@@ -846,41 +846,48 @@ export default function SessionPage(props: {
                                             className="bg-black text-white px-4 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 border-2 border-gray-800"
                                             title="Fullscreen Tracking Mode"
                                         >
-                                            <span className="text-lg">📱</span>
-                                            <span className="sm:hidden text-xs uppercase tracking-widest">Fullscreen</span>
+                                            <span className="text-xs uppercase tracking-widest">Fullscreen</span>
                                         </button>
                                     )}
                                 </div>
                                 {isTracking && (
-                                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-1">
-                                        ⚠️ Keep your screen on — locking it will stop GPS recording
+                                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 mt-1 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-lg px-2 py-1">
+                                        Keep screen awake while mapping. Locking the phone can stop GPS recording.
                                     </p>
                                 )}
                             </>
                         )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {!isFinished ? (
                             <button 
                                 onClick={finishSession}
-                                className="bg-emerald-50 dark:bg-emerald-950/20 border-2 border-emerald-100 dark:border-emerald-800 p-4 rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-600 hover:border-emerald-600 transition-all shadow-sm"
+                                className="bg-emerald-600 border-2 border-emerald-500 p-4 min-h-[4.5rem] rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-500 hover:border-emerald-400 transition-all shadow-md shadow-emerald-600/20 text-white"
                             >
-                                <span className="text-xl group-hover:scale-110 transition-transform">✓</span>
-                                <span className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 group-hover:text-white">Finish Session</span>
+                                <span className="text-xs font-black uppercase tracking-widest">Finish Session</span>
                             </button>
                         ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center gap-1 group">
-                                <div className="flex flex-col items-center justify-center opacity-60">
-                                    <span className="text-xl">🔒</span>
+                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-stretch justify-center gap-2 group">
+                                <div className="text-center opacity-70">
                                     <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
                                 </div>
-                                <button
-                                    onClick={() => setShowFieldReport(true)}
-                                    className="mt-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                                >
-                                    Field Report
-                                </button>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <button
+                                        onClick={() => setShowFieldReport(true)}
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                    >
+                                        Field Report
+                                    </button>
+                                    {permission && (
+                                        <button
+                                            onClick={() => { setLandownerReportForField(false); setShowLandownerReport(true); }}
+                                            className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover:border-emerald-400"
+                                        >
+                                            Landowner
+                                        </button>
+                                    )}
+                                </div>
                                 <button
                                     onClick={async () => {
                                         if (sessionId && confirm("Re-open this session?")) {
@@ -896,16 +903,17 @@ export default function SessionPage(props: {
                         )}
 
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Session Data</h4>
-                            <div className="flex flex-col gap-2 mt-2">
-                                <div className="flex flex-wrap gap-1">
-                                    {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🌾 Stubble</span>}
-                                    {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🚜 {landUse}</span>}
+                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Session Data</h4>
+                            <div className="flex flex-col gap-2">
+                                <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
+                                    {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">Stubble</span>}
+                                    {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">{landUse}</span>}
+                                    {!isStubble && !landUse && <span className="text-[9px] text-gray-400 dark:text-gray-500 font-bold">No ground condition set</span>}
                                 </div>
                                 {lat != null && lon != null ? (
                                     <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
                                 ) : (
-                                    <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">📍 Get GPS</button>
+                                    <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">Get GPS</button>
                                 )}
                             </div>
                         </div>
@@ -961,7 +969,7 @@ export default function SessionPage(props: {
                             </div>
                         </div>
                         <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 whitespace-nowrap">
-                            📍 {lat != null ? "Update GPS" : "Get Current GPS"}
+                            {lat != null ? "Update GPS" : "Get Current GPS"}
                         </button>
                     </div>
 
@@ -974,21 +982,21 @@ export default function SessionPage(props: {
                                     onClick={() => setIsStubble(!isStubble)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${isStubble ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
                                 >
-                                    {isStubble ? '🌾 Stubble ✓' : '🌾 Stubble'}
+                                    Stubble
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={() => setLandUse(landUse === 'Ploughed' ? '' : 'Ploughed')}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Ploughed' ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
                                 >
-                                    {landUse === 'Ploughed' ? '🚜 Ploughed ✓' : '🚜 Ploughed'}
+                                    Ploughed
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={() => setLandUse(landUse === 'Pasture' ? '' : 'Pasture')}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${landUse === 'Pasture' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'}`}
                                 >
-                                    {landUse === 'Pasture' ? '🍃 Pasture ✓' : '🍃 Pasture'}
+                                    Pasture
                                 </button>
                             </div>
                         </div>
@@ -1003,7 +1011,7 @@ export default function SessionPage(props: {
                                             onClick={toggleTracking}
                                             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
                                         >
-                                            <span>{isTracking ? '⏹️ Stop' : '👣 Map Session'}</span>
+                                            <span>{isTracking ? 'Stop Mapping' : 'Map Session'}</span>
                                         </button>
                                         {isTracking && (
                                             <button 
@@ -1012,7 +1020,7 @@ export default function SessionPage(props: {
                                                 className="bg-black text-white px-3 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs border border-gray-700"
                                                 title="Fullscreen Tracking Mode"
                                             >
-                                                <span>📱</span>
+                                                <span>Fullscreen</span>
                                             </button>
                                         )}
                                     </>
@@ -1029,7 +1037,7 @@ export default function SessionPage(props: {
 
                     <div className="flex gap-4">
                         <button onClick={save} disabled={saving} className="mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50">
-                            {saving ? "Saving..." : isEdit ? "Save Details ✓" : "Start Session →"}
+                            {saving ? "Saving..." : isEdit ? "Save Details" : "Start Session"}
                         </button>
                         {isEdit && (
                             <button 
@@ -1056,14 +1064,14 @@ export default function SessionPage(props: {
                                         onClick={() => setShowCoverage(!showCoverage)}
                                         className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-[10px] border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
                                     >
-                                        <span>{showCoverage ? '🧭 Gaps On' : '🧭 Show Gaps'}</span>
+                                        <span>{showCoverage ? 'Gaps On' : 'Show Gaps'}</span>
                                         {showCoverage && coverageResult && (
                                             <span className="bg-white/20 px-1 rounded text-[8px]">
                                                 {Math.round(100 - coverageResult.percentCovered)}%
                                             </span>
                                         )}
                                         {showCoverage && coverageError && (
-                                            <span className="text-[8px]">⚠️ Failed</span>
+                                            <span className="text-[8px]">Failed</span>
                                         )}
                                     </button>
                                 )}
@@ -1073,7 +1081,7 @@ export default function SessionPage(props: {
                                         onClick={() => setShowTrimUI(!showTrimUI)}
                                         className={`px-3 py-1 rounded-lg font-bold text-[10px] border transition-all ${showTrimUI ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400'}`}
                                     >
-                                        ✂️ Trim
+                                        Trim
                                     </button>
                                 )}
                                 {tracks && tracks.map(t => (

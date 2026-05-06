@@ -816,7 +816,7 @@ export default function PermissionPage(props: {
                     onClick={() => setIsEditing(true)}
                     className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors border-0 bg-transparent p-0 self-start"
                   >
-                    ✎ Edit Details
+                    Edit Details
                   </button>
                 )}
             </div>
@@ -829,7 +829,7 @@ export default function PermissionPage(props: {
                                 onClick={() => setReportDropdownOpen(v => !v)}
                                 className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5"
                             >
-                                📄 Landowner Report
+                                Landowner Report
                                 <svg className={`w-3 h-3 shrink-0 transition-transform ${reportDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                             </button>
                             {reportDropdownOpen && (
@@ -845,7 +845,6 @@ export default function PermissionPage(props: {
                                         onClick={() => { setReportTarget(undefined); setReportDropdownOpen(false); }}
                                         className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-2"
                                     >
-                                        <span className="text-base">🗂️</span>
                                         <div>
                                             <div>All Finds</div>
                                             <div className="text-[11px] font-normal text-gray-400">Entire permission</div>
@@ -862,7 +861,6 @@ export default function PermissionPage(props: {
                                                     onClick={() => { setReportTarget(field.id); setReportDropdownOpen(false); }}
                                                     className="w-full text-left px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-2"
                                                 >
-                                                    <span className="text-base">🌿</span>
                                                     {field.name}
                                                 </button>
                                             ))}
@@ -878,7 +876,7 @@ export default function PermissionPage(props: {
                             onClick={() => setShowExportClubDay(true)}
                             className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
                           >
-                            📤 Export Club Day Data
+                            Export Club Day Data
                           </button>
                         )}
                         {isClubDayMember && organiserContactNumber && (
@@ -886,7 +884,7 @@ export default function PermissionPage(props: {
                             href={`tel:${organiserContactNumber}`}
                             className="text-xs sm:text-sm font-black text-gray-600 dark:text-gray-400 hover:text-white hover:bg-gray-600 dark:hover:bg-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 transition-all flex-1 sm:flex-none text-center"
                           >
-                            📞 Contact Organiser
+                            Contact Organiser
                           </a>
                         )}
                         {isClubDayMember && (
@@ -1137,7 +1135,6 @@ export default function PermissionPage(props: {
                                     onClick={() => setIsPickingBoundary(true)}
                                     className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
                                 >
-                                    <span>📐</span>
                                     <span>{boundary ? "Boundary Set ✓" : "Define Boundary"}</span>
                                 </button>
                             )}
@@ -1146,7 +1143,6 @@ export default function PermissionPage(props: {
                                 onClick={() => setIsPickingLocation(true)}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-2 border-gray-200 dark:border-gray-700 shadow-sm hover:border-emerald-400 hover:text-emerald-600 transition-all"
                             >
-                                <span>🗺️</span>
                                 <span>Pick Location</span>
                             </button>
                             <button
@@ -1154,7 +1150,6 @@ export default function PermissionPage(props: {
                                 onClick={doGPS}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-600 shadow-sm transition-all"
                             >
-                                <span>📍</span>
                                 <span>{lat != null ? "Refresh GPS" : "Get GPS"}</span>
                             </button>
                         </div>
@@ -1195,7 +1190,7 @@ export default function PermissionPage(props: {
                                                 <div className="min-w-0 flex-1">
                                                     <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
                                                     <div className="text-[10px] mt-0.5 font-medium text-emerald-600/70 dark:text-emerald-400/70">
-                                                        {f.boundary ? "📐 Boundary mapped" : "No boundary yet"}
+                                                        {f.boundary ? "Boundary mapped" : "No boundary yet"}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1212,7 +1207,7 @@ export default function PermissionPage(props: {
                                                         className="text-[10px] font-bold text-red-400 hover:text-red-600 px-1.5 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
                                                         title="Delete sub-field"
                                                     >
-                                                        ✕
+                                                        Delete
                                                     </button>
                                                 </div>
                                             </div>
@@ -1314,7 +1309,7 @@ export default function PermissionPage(props: {
                             disabled={saving || !name.trim()} 
                             className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50`}
                         >
-                            {saving ? "Saving..." : isEdit ? (isRally ? "Update Rally ✓" : "Update Details ✓") : (isRally ? "Save Rally →" : "Create Record →")}
+                            {saving ? "Saving..." : isEdit ? (isRally ? "Update Rally" : "Update Details") : (isRally ? "Save Rally" : "Create Record")}
                         </button>
                         {isEdit && (
                             <button 
@@ -1359,7 +1354,6 @@ export default function PermissionPage(props: {
                             </div>
                             {/* Finds count right */}
                             <span className="flex items-center gap-1 text-[10px] font-bold text-amber-500 dark:text-amber-400 whitespace-nowrap">
-                                <span className="text-[9px]">◈</span>
                                 {finds?.length ?? 0} {(finds?.length ?? 0) === 1 ? 'find' : 'finds'}
                             </span>
                         </div>
@@ -1426,7 +1420,7 @@ export default function PermissionPage(props: {
                                     onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
                                     className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
                                 >
-                                    🗺 Field Guide
+                                    FieldGuide
                                 </button>
                             )}
                             {!isRally && (
@@ -1434,7 +1428,7 @@ export default function PermissionPage(props: {
                                 onClick={() => setAgreementModalOpen(true)}
                                 className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                             >
-                                🤝 {agreementId ? "Update Agreement" : "Generate Agreement"}
+                                {agreementId ? "Update Agreement" : "Generate Agreement"}
                             </button>
                             )}
                         </div>
@@ -1516,7 +1510,7 @@ export default function PermissionPage(props: {
                                     onClick={() => setProofModalOpen(true)}
                                     className="absolute bottom-0 right-0 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border-2 border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100 transition-all flex items-center gap-1 shadow-sm"
                                 >
-                                    🛡️ PROOF
+                                    Proof
                                 </button>
                                 )}
                             </div>
@@ -1551,7 +1545,7 @@ export default function PermissionPage(props: {
                                     <div className="absolute bottom-3 left-3 right-3 bg-gray-900/90 backdrop-blur-sm rounded-xl border border-emerald-500/40 p-3 shadow-lg">
                                         <div className="flex items-center justify-between mb-2">
                                             <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Permission Area</p>
-                                            <button onClick={() => setPermissionSelected(false)} className="text-white/40 hover:text-white/80 text-xs leading-none">×</button>
+                                            <button onClick={() => setPermissionSelected(false)} aria-label="Close permission area summary" className="text-white/40 hover:text-white/80 text-xs leading-none">×</button>
                                         </div>
                                         <div className="flex gap-4">
                                             <div>
@@ -1630,7 +1624,7 @@ export default function PermissionPage(props: {
                                                         <div className="min-w-0">
                                                             <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
                                                             <div className="text-[10px] font-medium text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
-                                                                {f.boundary ? "📐 Boundary mapped" : "No boundary"}
+                                                                {f.boundary ? "Boundary mapped" : "No boundary"}
                                                             </div>
                                                         </div>
                                                         {f.boundary && (
@@ -1656,7 +1650,7 @@ export default function PermissionPage(props: {
                                                                 }}
                                                                 className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${selectedFieldId === f.id ? "bg-emerald-600 border-emerald-600 text-white" : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:border-emerald-400"}`}
                                                             >
-                                                                ◎ Locate
+                                                                Locate
                                                             </button>
                                                         )}
                                                         <button
@@ -1668,12 +1662,12 @@ export default function PermissionPage(props: {
                                                             }}
                                                             className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900 text-orange-700 dark:text-orange-400 hover:border-orange-400'}`}
                                                         >
-                                                            🧭 {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
+                                                            {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
                                                             {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
                                                                 <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left</span>
                                                             )}
                                                             {shownFieldGapIds.has(f.id) && fieldGapErrors.has(f.id) && (
-                                                                <span className="ml-1">⚠️</span>
+                                                                <span className="ml-1">Error</span>
                                                             )}
                                                         </button>
                                                     </div>
@@ -1698,7 +1692,7 @@ export default function PermissionPage(props: {
                                                             className="py-1.5 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
                                                             title="Delete sub-field"
                                                         >
-                                                            ✕
+                                                            Delete
                                                         </button>
                                                       </>
                                                     )}
@@ -1730,7 +1724,7 @@ export default function PermissionPage(props: {
                                     onClick={() => nav(`/find?quickId=${f.id}`)}
                                     className="w-full text-left bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-800/50 p-3 rounded-xl shadow-sm hover:border-amber-500 transition-all flex items-center gap-3 group"
                                 >
-                                    <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-lg flex items-center justify-center text-xl">📸</div>
+                                    <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-lg flex items-center justify-center text-[9px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300">Quick</div>
                                     <div className="min-w-0 flex-1">
                                         <div className="font-black text-[10px] text-amber-700 dark:text-amber-500 uppercase tracking-widest leading-none mb-1">Quick Recorded</div>
                                         <div className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate">
@@ -1772,7 +1766,7 @@ export default function PermissionPage(props: {
                                                 {thumb ? (
                                                     <ScaledImage media={thumb} className="w-full h-full" imgClassName="object-cover" />
                                                 ) : (
-                                                    <span className="text-xl">💎</span>
+                                                    <span className="text-[9px] font-black uppercase tracking-wide text-sky-700 dark:text-sky-300">Find</span>
                                                 )}
                                             </div>
                                             <div className="min-w-0 flex-1">
@@ -1794,7 +1788,7 @@ export default function PermissionPage(props: {
                                             {sessions && sessions.length > 0 ? (
                                                 <div className="relative flex-1 group/link">
                                                     <button className="w-full bg-sky-600 text-white text-[9px] font-black py-2 rounded-lg shadow-sm hover:bg-sky-700 transition-all uppercase tracking-widest text-center flex items-center justify-center gap-1">
-                                                        <span>🔗 Link to Visit</span>
+                                                        <span>Link to Visit</span>
                                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                                                     </button>
                                                     
@@ -1820,7 +1814,7 @@ export default function PermissionPage(props: {
                                                                     className="w-full text-left p-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0 group/item"
                                                                 >
                                                                     <div className="text-[10px] font-black text-gray-800 dark:text-gray-100 group-hover/item:text-emerald-600 transition-colors leading-tight">
-                                                                        🗓️ {new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                                                                        {new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
                                                                     </div>
                                                                     <div className="text-[8px] opacity-60 truncate font-bold mt-0.5">
                                                                         {s.fieldName || "General Location"}
@@ -1904,7 +1898,7 @@ export default function PermissionPage(props: {
                                                     </div>
                                                     <div className="flex items-center gap-1.5">
                                                         <span className={`text-[10px] font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
-                                                            📍 {s.fieldName || "No specific field"}
+                                                            {s.fieldName || "No specific field"}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1919,7 +1913,7 @@ export default function PermissionPage(props: {
 
                                             <div className="text-[10px] opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
                                                 <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
-                                                {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">⏱️ {formatDuration(s.durationMs)}</span>}
+                                                {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">{formatDuration(s.durationMs)}</span>}
                                             </div>
                                         </button>
                                     ))}
