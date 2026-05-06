@@ -737,7 +737,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         <div className="flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
             <header className="bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md">
                 {/* Top Row: Overlay Toggles */}
-                <div className="flex items-center gap-2 px-3 sm:px-4 py-2 pb-3 border-b border-white/5 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 sm:px-4 py-2 pb-3 border-b border-white/5 overflow-hidden lg:hidden">
                     <div className="flex flex-1 items-center gap-2 overflow-x-auto scrollbar-hide min-w-0">
                         <button
                             onClick={() => setShowFieldsPicker(v => !v)}
@@ -1691,6 +1691,45 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                             >
                                 {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Layers Active' : 'Historic Layers'}
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                            <button
+                                onClick={() => setShowFieldsPicker(v => !v)}
+                                aria-label="Choose visible fields"
+                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500/15 border-teal-400/40 text-teal-200' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
+                                {showFields !== false && showFields !== 'all'
+                                    ? showFields.startsWith('field:')
+                                        ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
+                                        : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
+                                    : showFields === 'all' ? 'All Fields' : 'My Fields'}
+                            </button>
+                            <button
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
+                                aria-label="Toggle LiDAR overlay"
+                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                LiDAR
+                            </button>
+                            <button
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
+                                aria-label="Toggle OS 1895 overlay"
+                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                OS 1895
+                            </button>
+                            <button
+                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
+                                aria-label="Toggle OS 1900 overlay"
+                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500/20 border-orange-400/50 text-orange-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
+                            >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                OS 1900
                             </button>
                         </div>
 
