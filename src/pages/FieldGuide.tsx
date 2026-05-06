@@ -921,7 +921,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Floating Alerts */}
                     <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none w-[90%] max-w-sm">
-                        {!analyzing && !historicMode && detectedFeatures.length === 0 && hotspots.length === 0 && scanCount < 5 && (
+                        {!analyzing && !historicMode && detectedFeatures.length === 0 && hotspots.length === 0 && scanCount < 1 && realPermissions.length === 0 && projectFinds.length === 0 && (
                             <div className="bg-slate-700/60 text-slate-200 px-4 py-2 rounded-full text-[9px] sm:text-[10px] font-black tracking-widest uppercase shadow-lg border border-white/10 backdrop-blur-md">
                                 Navigate, search or GPS to your area · then scan
                             </div>
