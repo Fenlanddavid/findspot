@@ -1062,7 +1062,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
                                         className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
                                     >
-                                        {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Scan'}
+                                        {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Terrain'}
                                     </button>
                                     <button
                                         onClick={() => {
@@ -1073,7 +1073,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         disabled={analyzing}
                                         className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                                     >
-                                        {(loadingPAS && historicMode) ? '...' : historicMode ? 'Layers' : 'Layers'}
+                                        {(loadingPAS && historicMode) ? '...' : 'Historic'}
                                     </button>
                                 </div>
                             </div>
@@ -1779,7 +1779,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
                                 className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
                             >
-                                {analyzing || isTerrainScanning ? 'Reading...' : detectedFeatures.length > 0 ? 'Clear Scan' : 'Scan Terrain'}
+                                {analyzing || isTerrainScanning ? 'Reading...' : detectedFeatures.length > 0 ? 'Clear Scan' : 'Terrain'}
                             </button>
                             <button
                                 onClick={() => {
@@ -1790,7 +1790,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 disabled={analyzing}
                                 className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                             >
-                                {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Layers Active' : 'Historic Layers'}
+                                {(loadingPAS && historicMode) ? 'Reading...' : 'Historic'}
                             </button>
                         </div>
 
