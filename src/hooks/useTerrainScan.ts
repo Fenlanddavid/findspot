@@ -136,6 +136,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
                 const ageMin = Math.round((Date.now() - cached.createdAt) / 60000);
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
+                onStatusChange('Checking protected archaeology...');
                 // Still run NHLE/AIM/routes so the historic phase has fresh data.
                 const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
                 const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
@@ -151,6 +152,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
                     return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
                 });
+                onStatusChange('Comparing landscape signals...');
                 const merged      = findConsensus(rawCombined);
                 const aimEnriched = applyAIMEnrichment(merged, aimData);
                 const updatedFeatures: Cluster[] = [];
@@ -166,12 +168,15 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     if (!anchored) updatedFeatures.push(newHit);
                 });
                 applyNHLEProtection(updatedFeatures, nhleData);
+                onStatusChange('Filtering disturbance patterns...');
                 const suppressed     = suppressDisturbance(updatedFeatures);
                 let routes: HistoricRoute[] = [];
                 try {
+                    onStatusChange('Reading route context...');
                     const routeRaw = await Promise.race([fetchScanRoutes(center.lat, center.lng, signal), new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
                     if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
                 } catch { /* routes unavailable */ }
+                onStatusChange('Building hotspot model...');
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
                     .map((c, i) => ({ ...c, number: i + 1 }));
@@ -205,17 +210,17 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
         const modernWaysPromise = fetchModernWays(center.lat, center.lng, signal).catch(() => []);
 
-        onStatusChange('Scanning Terrain...');
+        onStatusChange('Reading terrain...');
 
         // Non-satellite workers start immediately — no wayback dependency
         const terrainTask       = scanDataSource('terrain',       zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
         const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
         const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
 
-        onStatusChange('Scanning Hydrology...');
+        onStatusChange('Reading hydrology...');
         const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
 
-        onStatusChange('Spectral Sampling...');
+        onStatusChange('Comparing spectral layers...');
         // Satellite workers need waybackIds — await the (already in-flight) promise
         const waybackIds = await waybackPromise;
         if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
@@ -250,7 +255,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             if (aimData.features?.length > 0) onLog(`> AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`, 'terrain');
 
             // Routes — started in parallel, should already be done
-            onStatusChange('Syncing Routes...');
+            onStatusChange('Reading route context...');
             let routes: HistoricRoute[] = [];
             try {
                 const timeout  = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS));
@@ -266,7 +271,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             }
 
             // ── Cluster processing pipeline ───────────────────────────────────
-            onStatusChange('Locking Coordinates...');
+            onStatusChange('Comparing landscape signals...');
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
 
@@ -303,8 +308,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 if (!anchored) updatedFeatures.push(newHit);
             });
 
+            onStatusChange('Checking protected archaeology...');
             applyNHLEProtection(updatedFeatures, nhleData);
 
+            onStatusChange('Filtering disturbance patterns...');
             const suppressed     = suppressDisturbance(updatedFeatures);
             const contextualized = analyzeContext(suppressed, routes)
                 .sort((a, b) => b.findPotential - a.findPotential)
@@ -312,20 +319,22 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             // Suppress targets that sit on roads/paths and lack independent evidence.
             // modernWaysPromise was started in parallel with other fetches.
+            onStatusChange('Filtering modern route artefacts...');
             const modernWays = await modernWaysPromise;
             applyRouteArtefactSuppression(contextualized, modernWays, routes);
 
+            onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
-            onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} target${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
+            onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
 
             if (mountedRef.current) setIsScanning(false);
             return { terrainClusters: contextualized, detectedFeatures: contextualized, hotspots, nhleData, aimData, routes, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
 
         } catch (e) {
             if (tokenRef.current === token) {
-                onLog('> Engine error — scan could not complete.', 'terrain', 'error');
+                onLog('> Scan error — landscape signals could not be read.', 'terrain', 'error');
                 console.error(e);
             }
             if (mountedRef.current) setIsScanning(false);

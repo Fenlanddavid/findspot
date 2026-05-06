@@ -25,7 +25,7 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 export function usePotentialScore() {
     const [potentialScore, setPotentialScore] = useState<PotentialScore | null>(null);
-    const [scanConfidence, setScanConfidence] = useState<'High Probability' | 'Developing Signal' | 'Low Confidence' | null>(null);
+    const [scanConfidence, setScanConfidence] = useState<'Corroborated Signal' | 'Developing Signal' | 'Limited Signal' | null>(null);
 
     const calculatePotentialScore = (
         pas: HistoricFind[],
@@ -42,7 +42,7 @@ export function usePotentialScore() {
         // 2. Hydrology Strength
         const nearbyHydroSignals = signals.filter(s => (s.type.includes('stream') || s.type.includes('river') || s.type.includes('water')) && s.distance < 1.0);
         const hydroScore = Math.min(100, nearbyHydroSignals.length * 30 + 10);
-        if (nearbyHydroSignals.length > 0) reasons.push("Strategic water proximity");
+        if (nearbyHydroSignals.length > 0) reasons.push("Water-edge landscape signal");
 
         // 3. Historic Proximity (OSM + NHLE)
         const nearbyHeritage = pas.filter(f => haversineKm(centerLat, centerLng, f.lat, f.lon) < 1.5);
@@ -93,11 +93,11 @@ export function usePotentialScore() {
             }
         });
 
-        let confidence: 'High Probability' | 'Developing Signal' | 'Low Confidence' = 'Developing Signal';
+        let confidence: 'Corroborated Signal' | 'Developing Signal' | 'Limited Signal' = 'Developing Signal';
         const hasHistoricSupport = historicPoints > 0 || signalPoints > 15;
 
-        if (hasHistoricSupport && (pas.length + signals.length) > 5) confidence = 'High Probability';
-        else if (!hasHistoricSupport) confidence = 'Low Confidence';
+        if (hasHistoricSupport && (pas.length + signals.length) > 5) confidence = 'Corroborated Signal';
+        else if (!hasHistoricSupport) confidence = 'Limited Signal';
 
         setScanConfidence(confidence);
     };

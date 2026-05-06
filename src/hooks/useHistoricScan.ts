@@ -4,7 +4,7 @@
 //
 // When existingNhleData / existingAimData / existingRoutes are provided (i.e.
 // from a preceding terrain scan), those fetches are skipped to avoid redundancy.
-// When running standalone (Intel drawer, Historic button without terrain), all
+// When running standalone (context panel, Historic Layers button without terrain), all
 // data is fetched fresh.
 
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -90,7 +90,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         const { signal } = abort;
 
         if (mountedRef.current) setIsScanning(true);
-        onStatusChange("Loading Historic Data...");
+        onStatusChange('Reading historic layers...');
 
         const center = map.getCenter();
         const bounds = map.getBounds();
@@ -104,12 +104,13 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         const east  = Number(Math.min(center.lng + maxDelta, Math.max(bounds.getEast(),  center.lng + lonBuffer)).toFixed(6));
         const north = Number(Math.min(center.lat + maxDelta, Math.max(bounds.getNorth(), center.lat + latBuffer)).toFixed(6));
 
-        onLog(`> INITIALIZING HERITAGE SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 'historic');
-        onLog('> STAGE: Fetching location, heritage, monuments and routes...', 'historic');
+        onLog(`> LANDSCAPE CONTEXT SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 'historic');
+        onLog('> STAGE: Reading location, heritage records, monuments and routes...', 'historic');
 
         try {
             // Always fetch: location label, etymology signals, OSM heritage features
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
+            onStatusChange('Reading historic records...');
             const [geoData, etymData, osmData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
                 fetchLocationLabel(center.lat, center.lng, signal),
                 fetchEtymologySignals(center.lat, center.lng, signal),
@@ -133,6 +134,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             if (!geoData)  onLog('> LOCATION: Service unavailable.', 'historic', 'warn');
             if (!etymData) onLog('> ETYMOLOGY: Service unavailable.', 'historic', 'warn');
             if (!osmData)  onLog('> HERITAGE: Service unavailable.', 'historic', 'warn');
+
+            onStatusChange('Interpreting place-name signals...');
 
             // 1. Location label
             if (geoData?.address) {
@@ -172,6 +175,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 if (placeSignals.length > 0) onLog(`> ETYMOLOGY: ${placeSignals.length} place-name signal${placeSignals.length !== 1 ? 's' : ''} detected.`, 'historic');
             }
 
+            onStatusChange('Checking recorded archaeology...');
+
             // 3. OSM heritage features
             let pasFinds: HistoricFind[] = [];
             if (osmData?.elements) {
@@ -199,6 +204,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 }).filter(Boolean) as HistoricFind[];
                 onLog(`> HERITAGE: ${pasFinds.length} OSM feature${pasFinds.length !== 1 ? 's' : ''} found within 2km.`, 'historic');
             }
+
+            onStatusChange('Checking protected archaeology...');
 
             // 4. NHLE (fresh fetch or pass-through from terrain scan)
             const nhleData = opts.nhleData ?? nhleRaw ?? { features: [] };
@@ -253,11 +260,15 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             );
             pasFinds = [...dedupedNhle, ...pasFinds];
 
+            onStatusChange('Reading aerial monument data...');
+
             // 5. AIM (fresh fetch or pass-through from terrain scan)
             const aimData = opts.aimData ?? aimRaw ?? { features: [] };
             if (aimRaw && aimRaw.features?.length > 0) {
                 onLog(`> AIM: ${aimRaw.features.length} aerial monument${aimRaw.features.length !== 1 ? 's' : ''} mapped.`, 'historic');
             }
+
+            onStatusChange('Comparing route context...');
 
             // 6. Routes (fresh fetch or pass-through from terrain scan)
             let routes = opts.routes;
@@ -272,12 +283,14 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // ── Hotspot enhancement ───────────────────────────────────────────
             let enhancedHotspots: Hotspot[] = [];
             if (!drifted) {
-                onLog('> Historic data integrated — refining targets...', 'historic');
+                onLog('> Historic layers integrated — refining hotspots...', 'historic');
+                onStatusChange('Building hotspot model...');
 
                 // Stage 1: re-run terrain scoring with historic routes + monument suppression
                 const terrainHotspots = buildTerrainHotspots(opts.terrainClusters, routes, monumentPoints);
 
                 // Stage 2: additive historic enrichment (finds, monuments, place signals)
+                onStatusChange('Comparing landscape signals...');
                 enhancedHotspots = enhanceHotspotsWithHistoric(
                     terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod,
                 );
@@ -300,7 +313,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
 
         } catch (e) {
             if (tokenRef.current === token) {
-                onLog('> HERITAGE SCAN FAILED.', 'historic', 'error');
+                onLog('> LANDSCAPE CONTEXT SCAN FAILED.', 'historic', 'error');
                 console.error(e);
             }
             if (mountedRef.current) setIsScanning(false);

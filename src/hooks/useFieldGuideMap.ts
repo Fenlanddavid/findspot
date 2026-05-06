@@ -128,11 +128,11 @@ export function useFieldGuideMap({
             map.addSource('hotspots-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({
                 id: 'hotspots-outline', type: 'line', source: 'hotspots-overlay',
-                paint: { 'line-color': ['case', ['>=', ['get', 'score'], 80], '#f59e0b', ['>=', ['get', 'score'], 45], '#10b981', '#3b82f6'], 'line-width': 4, 'line-opacity': 1.0 },
+                paint: { 'line-color': ['case', ['>=', ['get', 'score'], 80], '#f59e0b', ['>=', ['get', 'score'], 45], '#10b981', '#3b82f6'], 'line-width': 2.5, 'line-opacity': 0.72 },
             });
             map.addLayer({
                 id: 'hotspots-fill', type: 'fill', source: 'hotspots-overlay',
-                paint: { 'fill-color': ['case', ['>=', ['get', 'score'], 80], '#f59e0b', ['>=', ['get', 'score'], 45], '#10b981', '#3b82f6'], 'fill-opacity': 0.15 },
+                paint: { 'fill-color': ['case', ['>=', ['get', 'score'], 80], '#f59e0b', ['>=', ['get', 'score'], 45], '#10b981', '#3b82f6'], 'fill-opacity': 0.10 },
             });
 
             map.addSource('cluster-links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -147,8 +147,10 @@ export function useFieldGuideMap({
                 id: 'targets-circle', type: 'circle', source: 'targets',
                 paint: {
                     'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 18, 2, 22, 3, 26],
-                    'circle-color':  ['case', ['get', 'isProtected'], '#ef4444', ['>=', ['get', 'consensus'], 2], '#f59e0b', ['==', ['get', 'source'], 'terrain'], '#10b981', ['==', ['get', 'source'], 'historic'], '#f59e0b', '#3b82f6'],
-                    'circle-stroke-width': 2, 'circle-stroke-color': '#fff',
+                    'circle-color':  ['case', ['get', 'isProtected'], '#7f1d1d', ['>=', ['get', 'consensus'], 2], '#f59e0b', ['==', ['get', 'source'], 'terrain'], '#10b981', ['==', ['get', 'source'], 'historic'], '#f59e0b', '#3b82f6'],
+                    'circle-opacity': ['case', ['get', 'isProtected'], 0.55, 0.9],
+                    'circle-stroke-width': ['case', ['get', 'isProtected'], 1.5, 2],
+                    'circle-stroke-color': ['case', ['get', 'isProtected'], '#fecaca', '#fff'],
                 },
             });
 

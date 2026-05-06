@@ -421,10 +421,10 @@ export default function OnboardingFlow() {
                             <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Confidence levels</p>
                             <div className="space-y-1.5">
                                 {[
-                                    { label: 'High Probability', colour: 'text-amber-400',   desc: 'Multiple strong signals agree — worth prioritising' },
+                                    { label: 'Corroborated Signal', colour: 'text-amber-400', desc: 'Multiple strong signals agree - worth prioritising' },
                                     { label: 'Strong Signal',    colour: 'text-emerald-400', desc: 'Good agreement across data sources' },
                                     { label: 'Emerging Signal',  colour: 'text-white/60',    desc: 'Some signals present — interesting but not confirmed' },
-                                    { label: 'Low Confidence',   colour: 'text-white/35',    desc: 'Weak signals only — treat as exploratory' },
+                                    { label: 'Limited Signal',   colour: 'text-white/35',    desc: 'Weak signals only - treat as exploratory' },
                                 ].map(({ label, colour, desc }) => (
                                     <div key={label} className="flex items-start gap-3">
                                         <span className={`text-[11px] font-black ${colour} w-28 shrink-0 leading-snug`}>{label}</span>

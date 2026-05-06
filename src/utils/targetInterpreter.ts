@@ -1,6 +1,6 @@
 // ─── Target interpretation layer ───────────────────────────────────────────────
 // Produces hook, why-focus, and expanded reasoning for a Cluster (target point).
-// Mirrors the structure of hotspotInterpreter.ts but tuned for precise, tactical
+// Mirrors the structure of hotspotInterpreter.ts but tuned for precise, practical
 // language — "start here" rather than "investigate this zone".
 
 import { Cluster } from '../pages/fieldGuideTypes';

@@ -72,7 +72,7 @@ const EXPLANATION_PRIORITY: [string, number][] = [
     ['Field system indicators',           38],
     ['Multiple independent sources',      36],
     ['Raised dry footing',                35],
-    ['Strategic dry point',               35],
+    ['Raised dry margin',                 35],
     ['Historic movement corridor',        25],
     ['Near probable Roman',               25],
     ['Subtle earthwork signature',        22],
@@ -394,7 +394,7 @@ export function buildTerrainHotspots(
         if (isRaised) {
             context += 8;
             explanation.push('Raised dry footing');
-            if (hasHydrology) { context += 4; explanation.push('Strategic dry point near water'); }
+            if (hasHydrology) { context += 4; explanation.push('Raised dry margin near water'); }
         }
 
         if (hasHydrology) {
