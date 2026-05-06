@@ -1038,11 +1038,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {/* Mobile Scan Sheet */}
                     {!selectedHotspotId && !selectedId && selectedMonument === undefined && !isIntelOpen && !selectedUserFind && !selectedPASFind && (
                         <div className="absolute bottom-3 left-3 right-3 z-[85] lg:hidden">
-                            <div className="bg-slate-950/92 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-xl p-3">
-                                <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-white/15" />
+                            <div className="bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl p-3">
+                                <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-white/20" />
                                 <div className="flex items-center justify-between gap-3 mb-2">
                                     <div className="min-w-0">
-                                        <p className="text-[8px] font-black text-emerald-400 uppercase tracking-[0.2em]">Scan Panel</p>
+                                        <p className="text-[8px] font-black text-emerald-300 uppercase tracking-[0.2em]">Scan Panel</p>
                                         <p className="text-[12px] font-black text-white leading-tight truncate">
                                             {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : hasScanned ? 'Landscape Review' : 'Ready to Scan'}
                                         </p>
