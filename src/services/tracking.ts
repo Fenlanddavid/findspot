@@ -1,4 +1,4 @@
-import { db, Track } from "../db";
+import { db } from "../db";
 import { v4 as uuid } from "uuid";
 
 let watchId: number | null = null;
@@ -6,6 +6,24 @@ let currentTrackId: string | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let isStarting = false;
 let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
+
+export async function closeStaleActiveTracks(staleAfterMs = 30 * 60 * 1000): Promise<number> {
+    if (watchId !== null || isStarting) return 0;
+
+    const cutoff = Date.now() - staleAfterMs;
+    const activeTracks = await db.tracks
+        .filter(track => !!track.isActive && new Date(track.updatedAt).getTime() < cutoff)
+        .toArray();
+    if (activeTracks.length === 0) return 0;
+
+    const now = new Date().toISOString();
+    await db.tracks.bulkPut(activeTracks.map(track => ({
+        ...track,
+        isActive: false,
+        updatedAt: now,
+    })));
+    return activeTracks.length;
+}
 
 export function isWakeLockSupported(): boolean {
   return 'wakeLock' in navigator;

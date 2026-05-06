@@ -902,7 +902,7 @@ export default function SessionPage(props: {
                                     {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🌾 Stubble</span>}
                                     {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">🚜 {landUse}</span>}
                                 </div>
-                                {lat && lon ? (
+                                {lat != null && lon != null ? (
                                     <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
                                 ) : (
                                     <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">📍 Get GPS</button>
@@ -950,7 +950,7 @@ export default function SessionPage(props: {
                         <div className="flex flex-col gap-1">
                             <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
                             <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
-                                {lat && lon ? (
+                                {lat != null && lon != null ? (
                                 <div className="flex items-center gap-2">
                                     {lat.toFixed(6)}, {lon.toFixed(6)}
                                     {acc ? <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full">±{Math.round(acc)}m</span> : ""}
@@ -961,7 +961,7 @@ export default function SessionPage(props: {
                             </div>
                         </div>
                         <button type="button" onClick={doGPS} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md flex items-center gap-2 whitespace-nowrap">
-                            📍 {lat ? "Update GPS" : "Get Current GPS"}
+                            📍 {lat != null ? "Update GPS" : "Get Current GPS"}
                         </button>
                     </div>
 

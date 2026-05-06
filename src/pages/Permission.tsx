@@ -749,12 +749,13 @@ export default function PermissionPage(props: {
         boundary,
         agreementId,
         notes,
-        createdAt: isEdit ? undefined as any : now, 
+        createdAt: now,
         updatedAt: now,
       };
 
       if (isEdit) {
-        await db.permissions.update(id, permission);
+        const { createdAt, ...updates } = permission;
+        await db.permissions.update(id, updates);
         
         setIsEditing(false);
         setSaved(true);
@@ -1154,7 +1155,7 @@ export default function PermissionPage(props: {
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-emerald-600 shadow-sm transition-all"
                             >
                                 <span>📍</span>
-                                <span>{lat ? "Refresh GPS" : "Get GPS"}</span>
+                                <span>{lat != null ? "Refresh GPS" : "Get GPS"}</span>
                             </button>
                         </div>
 
@@ -1420,7 +1421,7 @@ export default function PermissionPage(props: {
 
                         {/* Row 3 — action buttons */}
                         <div className="flex flex-wrap gap-2 items-center">
-                            {lat && lon && (
+                            {lat != null && lon != null && (
                                 <button
                                     onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
                                     className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
@@ -1487,7 +1488,7 @@ export default function PermissionPage(props: {
                         <div className="grid gap-4">
                             <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Base Location</h4>
-                                {lat && lon ? (
+                                {lat != null && lon != null ? (
                                     <div className="flex flex-col gap-1">
                                         <p className="font-mono font-bold text-emerald-600">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
                                         <button 

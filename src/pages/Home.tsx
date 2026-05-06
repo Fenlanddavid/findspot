@@ -445,7 +445,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
       {currentYearFindStats && (
         <section className="min-w-0 overflow-hidden">
-          <button onClick={props.goFindsBox} className="flex items-baseline justify-between w-full mb-2 hover:opacity-70 transition-opacity">
+          <button onClick={props.goFindsBox} className="flex items-baseline justify-between w-full mb-2 hover:opacity-70 transition-opacity border-0 bg-transparent p-0">
             <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 ml-1">Finds {new Date().getFullYear()}</h3>
             <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">{currentYearFindStats.total} Total</span>
           </button>

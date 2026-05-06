@@ -5,14 +5,7 @@
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
 a { color: inherit; }
-input, select, textarea, button {
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid #aaa;
-  font-size: 14px;
-}
 button { cursor: pointer; }
-label > div { margin-bottom: 6px; opacity: 0.85; }
 h2 { margin: 0 0 6px 0; }
 
 @media print {

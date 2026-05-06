@@ -9,7 +9,7 @@ export function StaticMapPreview({ lat, lon, boundary, tracks, className = "" }:
     const zoom = 15;
 
     // Guard: If no coordinates, show a placeholder
-    const isValid = typeof lat === "number" && typeof lon === "number" && lat !== 0 && lon !== 0;
+    const isValid = typeof lat === "number" && typeof lon === "number";
 
     const tileX = useMemo(() => isValid ? Math.floor(lonToTileFloat(lon!, zoom)) : 0, [lon, isValid, zoom]);
     const tileY = useMemo(() => isValid ? Math.floor(latToTileFloat(lat!, zoom)) : 0, [lat, isValid, zoom]);

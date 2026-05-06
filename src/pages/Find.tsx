@@ -103,6 +103,7 @@ function currentTime(): string {
 }
 
 function makeInitialForm(initialLat?: number | null, initialLon?: number | null): FormState {
+  const hasInitialLocation = initialLat != null && initialLon != null;
   return {
     findCode: makeFindCode(),
     objectType: "",
@@ -114,7 +115,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     lat: initialLat ?? null,
     lon: initialLon ?? null,
     acc: null,
-    osGridRef: (initialLat && initialLon) ? toOSGridRef(initialLat, initialLon) || "" : "",
+    osGridRef: hasInitialLocation ? toOSGridRef(initialLat, initialLon) || "" : "",
     w3w: "",
     period: "Roman",
     material: "Copper alloy",
@@ -296,7 +297,7 @@ export default function FindPage(props: {
         if (f) {
           setSavedId(f.id);
           setLoadedFindIsPending(!!f.isPending);
-          const grid = (f.lat && f.lon) ? toOSGridRef(f.lat, f.lon) || "" : "";
+          const grid = (f.lat != null && f.lon != null) ? toOSGridRef(f.lat, f.lon) || "" : "";
           const src = f.foundAt ? new Date(f.foundAt) : null;
           setForm(prev => ({
             ...prev,
@@ -339,7 +340,7 @@ export default function FindPage(props: {
 
   // Auto-capture GPS on mount if not editing and not manual entry mode
   useEffect(() => {
-    if (!form.lat && !props.quickId && !savedId && !props.manual) {
+    if (form.lat == null && !props.quickId && !savedId && !props.manual) {
       doGPS();
     }
   }, []);
@@ -376,7 +377,12 @@ export default function FindPage(props: {
   }
 
   // Shared permission resolution used by both saveFind and saveAsPending
-  async function resolvePermission(trimmedName: string, now: string): Promise<string> {
+  async function resolvePermission(trimmedName: string, now: string, preferredPermissionId?: string | null): Promise<string> {
+    if (preferredPermissionId) {
+      const preferred = await db.permissions.get(preferredPermissionId);
+      if (preferred?.projectId === props.projectId) return preferred.id;
+    }
+
     const existing = await db.permissions
       .where("projectId")
       .equals(props.projectId)
@@ -425,7 +431,7 @@ export default function FindPage(props: {
       const id = savedId || dbDraftId || props.quickId || uuid();
       const isEditMode = !!(savedId || dbDraftId || props.quickId);
       const now = new Date().toISOString();
-      const targetPermissionId = await resolvePermission(trimmedName, now);
+      const targetPermissionId = await resolvePermission(trimmedName, now, currentPermissionId);
 
       const foundAt = form.foundDate
         ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
@@ -519,7 +525,7 @@ export default function FindPage(props: {
       // If a photo draft already exists, update it rather than creating a duplicate
       const id = dbDraftId || uuid();
       const now = new Date().toISOString();
-      const targetPermissionId = await resolvePermission(trimmedName, now);
+      const targetPermissionId = await resolvePermission(trimmedName, now, currentPermissionId);
 
       const foundAt = form.foundDate
         ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
@@ -589,7 +595,7 @@ export default function FindPage(props: {
       const trimmedName = locationName.trim() || "No Location";
       const id = uuid();
       const now = new Date().toISOString();
-      const permId = await resolvePermission(trimmedName, now);
+      const permId = await resolvePermission(trimmedName, now, currentPermissionId);
       const clubDayAttribution = await getClubDayAttribution(permId);
       await db.finds.add({
         id,
@@ -693,7 +699,7 @@ export default function FindPage(props: {
   // #5 — GPS status line derived from current accuracy
   const gpsStatus = useMemo(() => {
     if (gpsCapturing) return { label: "Acquiring GPS…", color: "text-gray-500 dark:text-gray-400" };
-    if (!form.lat || !form.lon) return null;
+    if (form.lat == null || form.lon == null) return null;
     const acc = form.acc;
     if (acc === null) return { label: "📍 Location set", color: "text-emerald-600 dark:text-emerald-400" };
     if (acc <= 10) return { label: `📍 Strong fix · ±${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
@@ -745,7 +751,7 @@ export default function FindPage(props: {
             disabled={gpsCapturing}
             className={`bg-emerald-600 hover:bg-emerald-700 disabled:opacity-70 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-md transition-all flex items-center gap-2 ${gpsCapturing ? "animate-pulse" : ""}`}
           >
-            📍 {gpsCapturing ? "Acquiring…" : form.lat ? "Update Spot" : "Capture Spot"}
+            📍 {gpsCapturing ? "Acquiring…" : form.lat != null ? "Update Spot" : "Capture Spot"}
           </button>
         </div>
       </div>
@@ -807,7 +813,7 @@ export default function FindPage(props: {
         </label>
       </div>
 
-      {form.lat && form.lon && (
+      {form.lat != null && form.lon != null && (
         <div className="text-[10px] font-mono opacity-40 flex gap-3 items-center">
           <span>LAT: {form.lat.toFixed(6)}</span>
           <span>LON: {form.lon.toFixed(6)}</span>
@@ -850,27 +856,41 @@ export default function FindPage(props: {
 
       {/* #1 — Quick / Full mode toggle (hidden in quickId editing flow) */}
       {!props.quickId && (
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
-          <button
-            onClick={() => changeMode("quick")}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
-              recordMode === "quick"
-                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            }`}
-          >
-            Quick
-          </button>
-          <button
-            onClick={() => changeMode("full")}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
-              recordMode === "full"
-                ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-            }`}
-          >
-            Full Record
-          </button>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => changeMode("quick")}
+              className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+                recordMode === "quick"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
+            >
+              Quick
+            </button>
+            <button
+              onClick={() => changeMode("full")}
+              className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${
+                recordMode === "full"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              }`}
+            >
+              Full Record
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            {["Location", "Object", "Photo", "Save"].map((step, i) => (
+              <span key={step} className={`px-2 py-1 rounded-lg border ${
+                i === 0 && locationName.trim() ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300" :
+                i === 1 && form.objectType.trim() ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300" :
+                i === 2 && (media?.length ?? 0) > 0 ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300" :
+                "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+              }`}>
+                {step}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -936,7 +956,7 @@ export default function FindPage(props: {
         <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-2xl p-5 shadow-lg flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1">
             <div className="text-lg font-bold flex items-center gap-2">✓ Find recorded</div>
-            <div className="text-sm opacity-80 mt-0.5">Saved to your collection.</div>
+            <div className="text-sm opacity-80 mt-0.5">Saved to your finds.</div>
           </div>
           <div className="flex gap-3 shrink-0">
             <button
@@ -956,8 +976,8 @@ export default function FindPage(props: {
       )}
 
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Left column — form (order-2 on mobile so photos appear first) */}
-        <div className={`order-2 lg:order-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-5 h-fit transition-opacity ${savedId && !props.quickId ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* Left column — form */}
+        <div className={`order-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm grid gap-5 h-fit transition-opacity ${savedId && !props.quickId ? 'opacity-50 pointer-events-none' : ''}`}>
 
           {/* Location — always shown */}
           <label className="block">
@@ -1338,10 +1358,10 @@ export default function FindPage(props: {
           {/* #11 — record quality indicator */}
           {!savedId && (
             <div className="flex items-center justify-between pt-1">
-              <span className="text-xs text-gray-400 dark:text-gray-500 font-semibold">Record quality</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-semibold">Record quality</span>
               <div className="flex items-center gap-2">
                 {recordQuality.checks.map(c => (
-                  <span key={c.label} className={`text-[10px] font-bold flex items-center gap-0.5 ${c.met ? "text-emerald-500 dark:text-emerald-400" : "text-gray-300 dark:text-gray-600"}`}>
+                  <span key={c.label} className={`text-xs font-bold flex items-center gap-0.5 ${c.met ? "text-emerald-500 dark:text-emerald-400" : "text-gray-400 dark:text-gray-500"}`}>
                     {c.met ? "✓" : "·"} {c.label}
                   </span>
                 ))}
@@ -1351,8 +1371,8 @@ export default function FindPage(props: {
           )}
         </div>
 
-        {/* Right column — Photos (order-1 on mobile = appears above form on small screens) */}
-        <div className="order-1 lg:order-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-col gap-4 h-fit sticky top-4">
+        {/* Right column — Photos */}
+        <div className="order-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col gap-4 h-fit lg:sticky lg:top-4">
           <div className="flex flex-col gap-4 mb-2">
             <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Photos</h2>
 
@@ -1399,10 +1419,10 @@ export default function FindPage(props: {
       )}
 
       {/* #2 — Sticky bottom save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-4 py-3 flex gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] relative">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-3 sm:px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
         {/* Quick photo shortcut — always active (#4) */}
-        <label className="flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 cursor-pointer bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
-          📸 Add Photo
+        <label className="flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 cursor-pointer bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
+          📸 <span className="hidden sm:inline">Add Photo</span><span className="sm:hidden">Photo</span>
           <input
             ref={stickyPhotoRef}
             type="file"
@@ -1424,7 +1444,7 @@ export default function FindPage(props: {
           <button
             onClick={saveAsPending}
             disabled={saving}
-            className="px-4 py-3 rounded-xl font-bold text-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all shrink-0 disabled:opacity-50"
+            className="px-3 sm:px-4 py-3 rounded-xl font-bold text-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all shrink-0 disabled:opacity-50"
           >
             Finish Later
           </button>
@@ -1434,7 +1454,7 @@ export default function FindPage(props: {
         <button
           onClick={saveFind}
           disabled={saving}
-          className={`flex-1 px-6 py-3 rounded-xl font-bold text-base shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:transform-none ${
+          className={`min-w-[9rem] flex-1 px-4 sm:px-6 py-3 rounded-xl font-bold text-base shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:transform-none ${
             savedId ? "bg-green-600 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"
           }`}
         >

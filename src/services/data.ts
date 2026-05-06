@@ -6,7 +6,9 @@ export async function exportData(): Promise<string> {
   const permissions = await db.permissions.toArray();
   const sessions = await db.sessions.toArray();
   const finds = await db.finds.toArray();
+  const tracks = await db.tracks.toArray();
   const settings = await db.settings.toArray();
+  const importedPackages = await db.importedPackages.toArray();
   
   const media = await db.media.toArray();
   const mediaExport = await Promise.all(media.map(async (m) => {
@@ -26,8 +28,10 @@ export async function exportData(): Promise<string> {
     fields,
     sessions,
     finds,
+    tracks,
     media: mediaExport,
-    settings
+    settings,
+    importedPackages
   };
 
   return JSON.stringify(data, null, 2);
@@ -98,7 +102,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.settings], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.tracks, db.settings, db.importedPackages], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -107,15 +111,19 @@ export async function importData(json: string) {
     await db.fields.clear();
     await db.sessions.clear();
     await db.finds.clear();
+    await db.tracks.clear();
     await db.settings.clear();
     await db.media.clear();
+    await db.importedPackages.clear();
 
     await db.projects.bulkPut(data.projects);
     if (data.permissions) await db.permissions.bulkPut(data.permissions);
     if (data.fields) await db.fields.bulkPut(data.fields);
     if (data.sessions) await db.sessions.bulkPut(data.sessions);
     if (data.finds) await db.finds.bulkPut(data.finds);
+    if (data.tracks) await db.tracks.bulkPut(data.tracks);
     if (data.settings) await db.settings.bulkPut(data.settings);
+    if (data.importedPackages) await db.importedPackages.bulkPut(data.importedPackages);
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
   });
 }

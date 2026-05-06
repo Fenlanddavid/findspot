@@ -53,7 +53,7 @@ export const calculateRecordingScore = (find: Find, photoCount: number): { score
   if (find.heightMm || find.depthMm) score += 10; else reasons.push("Missing height/thickness");
 
   // Location (max 30) — all-or-nothing because a single coordinate is meaningless
-  if (find.lat && find.lon) {
+  if (find.lat != null && find.lon != null) {
     score += 30;
   } else {
     reasons.push("Missing GPS coordinates");

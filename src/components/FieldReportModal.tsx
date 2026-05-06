@@ -239,15 +239,15 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     // GPS-located finds, preserving their 1-based index from the full finds array
     const numberedGpsFinds = finds
       .map((f, i) => ({ find: f, num: i + 1 }))
-      .filter(({ find }) => find.lat && find.lon);
+      .filter(({ find }) => find.lat != null && find.lon != null);
 
     // All spatial points for fitting — boundary coords, track points, find points,
     // then session GPS as a last resort so the map is never stuck on the whole-UK view
     const allFitPoints: Array<{ lat: number; lon: number }> = [
       ...allTrackPoints,
       ...numberedGpsFinds.map(({ find }) => ({ lat: find.lat!, lon: find.lon! })),
-      ...(session.lat && session.lon ? [{ lat: session.lat, lon: session.lon }] : []),
-      ...(permission.lat && permission.lon ? [{ lat: permission.lat, lon: permission.lon }] : []),
+      ...(session.lat != null && session.lon != null ? [{ lat: session.lat, lon: session.lon }] : []),
+      ...(permission.lat != null && permission.lon != null ? [{ lat: permission.lat, lon: permission.lon }] : []),
     ];
 
     const setupMap = (map: maplibregl.Map) => {
@@ -457,11 +457,38 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
   const sessionDate = new Date(session.date).toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
-  const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat && f.lon));
+  const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat != null && f.lon != null));
 
   return (
     <Modal title="Field Report" onClose={onClose}>
       <div className="flex flex-col gap-6">
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 px-4 py-3 bg-white/95 dark:bg-gray-800/95 backdrop-blur border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-gray-800 dark:text-gray-100 m-0">Preview</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 m-0">{permission.name}{fieldName ? ` — ${fieldName}` : ""}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={generating || sharing || mapCapturing}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-4 py-2 rounded-xl shadow-sm transition-all uppercase tracking-wider text-xs"
+            >
+              {generating ? "Generating..." : mapCapturing ? "Rendering..." : "PDF"}
+            </button>
+            {canShare && (
+              <button
+                onClick={handleSharePDF}
+                disabled={generating || sharing || mapCapturing}
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-black px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-xs"
+              >
+                {sharing ? "Sharing..." : "Share"}
+              </button>
+            )}
+            <button onClick={onClose} className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300 font-bold px-4 py-2 rounded-xl transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-xs">
+              Close
+            </button>
+          </div>
+        </div>
 
         {/* Site Conduct Summary */}
         <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
@@ -582,7 +609,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {finds.map((find, i) => {
                     const num = i + 1;
-                    const hasGps = !!(find.lat && find.lon);
+                    const hasGps = find.lat != null && find.lon != null;
                     const detail = toFarmerDetail(find);
                     return (
                       <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", background: i % 2 === 0 ? "#f9fafb" : "#ffffff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
@@ -666,11 +693,11 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 justify-end">
           <button
             onClick={handleDownloadPDF}
             disabled={generating || sharing || mapCapturing}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+            className="hidden"
           >
             {generating ? (
               <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Generating...</>
@@ -680,7 +707,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             <button
               onClick={handleSharePDF}
               disabled={generating || sharing || mapCapturing}
-              className="flex-1 bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white font-black py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-wider text-sm"
+              className="hidden"
             >
               {sharing ? (
                 <><svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Sharing...</>

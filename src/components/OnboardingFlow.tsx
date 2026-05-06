@@ -68,7 +68,7 @@ export default function OnboardingFlow() {
     const skipBtn = (
         <button
             onClick={dismiss}
-            className="mt-6 text-[11px] text-white/30 hover:text-white/60 transition-colors duration-150 cursor-pointer"
+            className="mt-6 text-xs text-white/60 hover:text-white transition-colors duration-150 cursor-pointer"
         >
             Skip for now
         </button>
@@ -91,7 +91,7 @@ export default function OnboardingFlow() {
                                 </svg>
                             </div>
                             <h1 className="text-2xl font-black text-white tracking-tight mb-3">Welcome to FindSpot</h1>
-                            <p className="text-[13px] text-white/60 leading-relaxed">
+                            <p className="text-sm text-white/70 leading-relaxed">
                                 FindSpot helps you record your finds, manage landowner permissions, and analyse the landscape before you go out.
                             </p>
                         </div>
@@ -99,21 +99,21 @@ export default function OnboardingFlow() {
                         <div className="space-y-2.5 mb-4">
                             <div className="flex items-center gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                 <span className="text-lg">📍</span>
-                                <p className="text-[12px] text-white/70">Log exactly what you find and where</p>
+                                <p className="text-sm text-white/75">Log exactly what you find and where</p>
                             </div>
                             <div className="flex items-center gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                 <span className="text-lg">📋</span>
-                                <p className="text-[12px] text-white/70">Keep a clear record of your permissions</p>
+                                <p className="text-sm text-white/75">Keep a clear record of your permissions</p>
                             </div>
                             <div className="flex items-center gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                 <span className="text-lg">🗺️</span>
-                                <p className="text-[12px] text-white/70">Analyse land for signs of past activity</p>
+                                <p className="text-sm text-white/75">Analyse land for signs of past activity</p>
                             </div>
                         </div>
 
                         <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/25 rounded-2xl px-4 py-3">
                             <span className="text-base mt-0.5">🛡️</span>
-                            <p className="text-[12px] text-amber-300/80 leading-snug">
+                            <p className="text-sm text-amber-200 leading-snug">
                                 FindSpot stores everything locally on your device. <span className="font-bold text-amber-300">Back up regularly</span> using the Backup button in Settings — if you lose your device, your records go with it.
                             </p>
                         </div>
@@ -134,7 +134,7 @@ export default function OnboardingFlow() {
                         {dots(1)}
                         <div className="text-center mb-7">
                             <h2 className="text-xl font-black text-white tracking-tight mb-2">What do you want to do first?</h2>
-                            <p className="text-[12px] text-white/40">Pick a starting point — you can do everything else later.</p>
+                            <p className="text-sm text-white/60">Pick a starting point — you can do everything else later.</p>
                         </div>
 
                         <div className="space-y-3">
@@ -145,8 +145,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">📲</span>
                                     <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Install the app</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Add FindSpot to your home screen</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Install the app</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Add FindSpot to your home screen</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -159,8 +159,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">📍</span>
                                     <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Record finds</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Log what you find, where you found it</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Record finds</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Log what you find, where you found it</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -173,8 +173,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">🗺️</span>
                                     <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Analyse land</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Scan for signs of past activity</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Analyse land</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Scan for signs of past activity</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -187,8 +187,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">📋</span>
                                     <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Manage permissions</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Keep track of where you can detect</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Manage permissions</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Keep track of where you can detect</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -201,8 +201,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">⚙️</span>
                                     <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Set up your profile</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Recommended — other features depend on this</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Set up your profile</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Recommended — other features depend on this</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>

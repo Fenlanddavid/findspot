@@ -219,6 +219,19 @@ export default function Settings() {
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 pb-20 mt-4">
       <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
+      <div className="mb-6 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black text-emerald-900 dark:text-emerald-100 m-0">Backup & Restore</h2>
+            <p className="text-sm text-emerald-800/70 dark:text-emerald-300/80 mt-1">
+              FindSpot is local-only. Backups are the safety net for this device.
+            </p>
+          </div>
+          <span className={`hidden sm:inline-flex text-xs font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-600 text-white" : "bg-amber-100 text-amber-800"}`}>
+            {lastBackup ? "Protected" : "Needs Backup"}
+          </span>
+        </div>
+      </div>
 
       {dataError && (
         <div className="flex items-center justify-between gap-3 px-4 py-3 mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-300">
@@ -229,7 +242,7 @@ export default function Settings() {
 
       {importPendingFile && (
         <div className="px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <span><strong>Import "{importPendingFile.name}"?</strong> This will merge data into your current database.</span>
+          <span><strong>Restore "{importPendingFile.name}"?</strong> This will replace the current FindSpot data on this device.</span>
           <div className="flex gap-2 shrink-0">
             <button onClick={confirmImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing…" : "Confirm Import"}</button>
             <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
@@ -237,22 +250,22 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="flex gap-3 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1fr] gap-3 mb-8">
         <button
           onClick={handleExport}
           disabled={exporting}
-          className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black uppercase tracking-widest py-2.5 rounded-xl transition-colors shadow-sm"
+          className="col-span-2 sm:col-span-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-black uppercase tracking-widest py-3 rounded-xl transition-colors shadow-sm"
         >
           {exporting ? "Saving…" : "Backup"}
         </button>
-        <label className={`flex-1 flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 transition-colors shadow-sm ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
+        <label className={`flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 transition-colors shadow-sm ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
           {importing ? "Restoring…" : "Restore"}
           {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
         </label>
         <button
           onClick={handleCSVExport}
           disabled={exportingCSV}
-          className="flex-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-2.5 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
         >
           {exportingCSV ? "Exporting…" : "CSV"}
         </button>
@@ -261,27 +274,7 @@ export default function Settings() {
       <div className="space-y-8">
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span>🎨</span> Appearance
-          </h2>
-          <div className="flex justify-between items-center py-2">
-            <div>
-              <div className="font-medium text-gray-800 dark:text-gray-100">Interface Theme</div>
-              <div className="text-sm text-gray-500">
-                Default is Dark mode.
-              </div>
-            </div>
-            <button
-              onClick={toggleTheme}
-              className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-            </button>
-          </div>
-        </section>
-
-        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span>🔍</span> Detector Profiles
+            Detector Profiles
           </h2>
           
           <div className="space-y-4">
@@ -362,7 +355,7 @@ export default function Settings() {
 
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span>👤</span> User Preferences
+            Profile & Insurance
           </h2>
           <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -503,7 +496,7 @@ export default function Settings() {
 
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <span>💾</span> Local Data & Persistence
+            App Storage
           </h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
@@ -558,6 +551,26 @@ export default function Settings() {
           </div>
         </section>
 
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            App Appearance
+          </h2>
+          <div className="flex justify-between items-center py-2">
+            <div>
+              <div className="font-medium text-gray-800 dark:text-gray-100">Interface Theme</div>
+              <div className="text-sm text-gray-500">
+                Default is Dark mode.
+              </div>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className="flex items-center gap-2 bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            >
+              {theme === "dark" ? "Dark" : "Light"}
+            </button>
+          </div>
+        </section>
+
 
         <section className="bg-amber-50 dark:bg-amber-900/20 p-5 rounded-2xl border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-4">
           <div>
@@ -574,7 +587,7 @@ export default function Settings() {
 
         <section className="bg-emerald-50 dark:bg-emerald-900/20 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
           <h2 className="text-lg font-bold text-emerald-800 dark:text-emerald-300 mb-2 flex items-center gap-2">
-            <span>🛡️</span> Privacy Guarantee
+            Privacy Guarantee
           </h2>
           <p className="text-sm text-emerald-700 dark:text-emerald-400 leading-relaxed">
             FindSpot is built to be <strong>local-first</strong>. Your data never leaves this device unless you explicitly export it. 

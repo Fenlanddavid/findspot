@@ -93,7 +93,7 @@ export default function PendingFinds(props: { projectId: string }) {
                   <div className="text-[9px] font-mono text-gray-400">
                     {new Date(f.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>
-                  {f.lat && f.lon ? (
+                  {f.lat != null && f.lon != null ? (
                     <div className="text-[9px] text-emerald-500 font-bold mt-0.5">📍 GPS saved</div>
                   ) : (
                     <div className="text-[9px] text-gray-300 dark:text-gray-600 mt-0.5">No GPS</div>

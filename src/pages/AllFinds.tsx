@@ -118,7 +118,7 @@ export default function AllFinds(props: { projectId: string }) {
 
     map.on('load', () => {
         const seedFeatures = (findsRef.current ?? [])
-            .filter(f => f.lat && f.lon)
+            .filter(f => f.lat != null && f.lon != null)
             .map(f => ({
                 type: 'Feature' as const,
                 geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
@@ -185,7 +185,7 @@ export default function AllFinds(props: { projectId: string }) {
         const source = mapRef.current.getSource('finds') as maplibregl.GeoJSONSource;
         source.setData({
             type: 'FeatureCollection',
-            features: finds.filter(f => f.lat && f.lon).map(f => ({
+            features: finds.filter(f => f.lat != null && f.lon != null).map(f => ({
                 type: 'Feature',
                 geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
                 properties: {
@@ -229,8 +229,8 @@ export default function AllFinds(props: { projectId: string }) {
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 mt-4">
         <div className="flex items-center gap-6">
           <div>
-            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 tracking-tighter uppercase leading-none">Search Finds</h2>
-            <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest opacity-60 mt-1">Discovery Exploration</p>
+            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 tracking-tighter uppercase leading-none">Finds</h2>
+            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest opacity-70 mt-1">Search and map your recorded finds</p>
           </div>
           <div className="flex bg-gray-200 dark:bg-gray-800 p-1 rounded-2xl shadow-inner shrink-0">
               <button onClick={() => setViewMode("list")} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'list' ? 'bg-white dark:bg-emerald-600 shadow-md text-emerald-600 dark:text-white' : 'text-gray-500 hover:text-gray-700'}`}>List</button>
@@ -336,7 +336,7 @@ export default function AllFinds(props: { projectId: string }) {
                 </button>
             </div>
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase tracking-widest border border-white/10">
-                {finds?.length ?? 0} Discoveries Located
+                {finds?.length ?? 0} Finds Located
             </div>
         </div>
       )}
@@ -345,4 +345,3 @@ export default function AllFinds(props: { projectId: string }) {
     </div>
   );
 }
-

@@ -59,7 +59,7 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
           setDailyCount(count || 1);
       });
 
-      if (find.lat && find.lon) {
+      if (find.lat != null && find.lon != null) {
         getParishAndCounty(find.lat, find.lon).then(loc => {
             setLocation(loc);
             const matchedFlo = getFLOForCounty(loc.county);
@@ -184,7 +184,7 @@ Recorded via FindSpot
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
             <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Recording Checklist</h3>
             <div className="flex flex-col gap-2">
-                <CheckItem label="GPS Coordinates" status={!!(find.lat && find.lon)} />
+                <CheckItem label="GPS Coordinates" status={find.lat != null && find.lon != null} />
                 <CheckItem label="Object Weight" status={!!find.weightG} />
                 <CheckItem label="Dimensions (Width/Height)" status={!!(find.widthMm || find.heightMm)} />
                 <CheckItem label="Photos (Min 1)" status={photos.length >= 1} />
