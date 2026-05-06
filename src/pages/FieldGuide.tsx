@@ -285,6 +285,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
+    const [compareHotspotIds,        setCompareHotspotIds]        = useState<string[]>([]);
     const [showPermissionPicker,   setShowPermissionPicker]   = useState(false);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
@@ -400,6 +401,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             updatedAt: now,
         });
     }, [investigationMap, projectId]);
+
+    const toggleCompareHotspot = useCallback((hotspotId: string) => {
+        setCompareHotspotIds(prev => {
+            if (prev.includes(hotspotId)) return prev.filter(id => id !== hotspotId);
+            return [...prev.slice(-1), hotspotId];
+        });
+    }, []);
+
+    const compareHotspots = useMemo(() => {
+        return compareHotspotIds
+            .map(id => sortedHotspots.find(h => h.id === id))
+            .filter((h): h is Hotspot => Boolean(h));
+    }, [compareHotspotIds, sortedHotspots]);
 
     const targetFindContext = useMemo((): Map<string, { status: 'within' | 'nearby'; count: number }> => {
         const map = new Map<string, { status: 'within' | 'nearby'; count: number }>();
@@ -1861,6 +1875,56 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         )}
                     </div>
 
+                    <div className="p-5 border-b border-white/5 bg-white/[0.02]">
+                        <div className="flex items-baseline justify-between gap-3 mb-3">
+                            <h2 className="text-[10px] font-black text-blue-300 uppercase tracking-[0.2em]">Compare Hotspots</h2>
+                            {compareHotspotIds.length > 0 && (
+                                <button onClick={() => setCompareHotspotIds([])} className="text-[9px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest">Clear</button>
+                            )}
+                        </div>
+                        {compareHotspots.length === 2 ? (
+                            <div className="grid grid-cols-2 gap-2">
+                                {compareHotspots.map(h => {
+                                    const hStrength = getHotspotSignalStrength(h.score);
+                                    const hierarchy = getHotspotResultHierarchy(h, hStrength);
+                                    const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
+                                    return (
+                                        <button
+                                            key={h.id}
+                                            onClick={() => {
+                                                setSelectedHotspotId(h.id);
+                                                mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
+                                            }}
+                                            className="text-left rounded-2xl border border-white/10 bg-slate-950/45 p-3 hover:border-blue-400/40 transition-colors"
+                                        >
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                                <p className="text-[8px] font-black text-white/35 uppercase tracking-widest">{HOTSPOT_TITLES[h.classification]}</p>
+                                                <span className="text-[8px] font-black text-blue-300">#{h.number}</span>
+                                            </div>
+                                            <p className="text-xs font-black text-white leading-tight mb-1">{hierarchy.signalStrength}</p>
+                                            <p className="text-[9px] font-bold text-white/65 leading-tight mb-2">{hierarchy.whyItMatters}</p>
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                <div className="rounded-lg bg-white/[0.03] border border-white/8 px-2 py-1">
+                                                    <span className="block text-[10px] font-black text-emerald-300">{h.metrics.signalClassCount}</span>
+                                                    <span className="text-[6px] font-black text-white/35 uppercase tracking-widest">Signals</span>
+                                                </div>
+                                                <div className="rounded-lg bg-white/[0.03] border border-white/8 px-2 py-1">
+                                                    <span className="block text-[10px] font-black text-amber-300">{h.disturbanceRisk ?? 'Low'}</span>
+                                                    <span className="text-[6px] font-black text-white/35 uppercase tracking-widest">Disturbance</span>
+                                                </div>
+                                            </div>
+                                            <p className="mt-2 text-[8px] font-black text-blue-300/75 uppercase tracking-widest">{INVESTIGATION_STATUSES.find(s => s.value === investigationStatus)?.label}</p>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">
+                                Select two hotspots below to compare signal strength, evidence and status.
+                            </p>
+                        )}
+                    </div>
+
                     <div className="p-6 border-b border-white/5 shrink-0 overflow-y-auto max-h-[40%] scrollbar-hide">
                         <div className="flex justify-between items-baseline mb-4">
                             <div className="flex items-center gap-2">
@@ -1881,6 +1945,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/30 border-amber-500/20 hover:border-amber-500/40' : hStrength === 'Moderate Zone' ? 'bg-slate-950/30 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-slate-950/30 border-white/10 hover:border-white/20';
                                 const isPrimaryHotspot = h.number === 1;
                                 const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
+                                const isCompared = compareHotspotIds.includes(h.id);
                                 return (
                                 <div
                                     key={h.id}
@@ -1899,6 +1964,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <p className={`text-sm font-black leading-tight mb-1 ${hStrengthColour}`}>{hierarchy.signalStrength}</p>
                                         <p className="text-[10px] font-bold text-white/75 leading-snug mb-1.5">{hierarchy.whyItMatters}</p>
                                         <p className="text-[9px] font-black text-emerald-400/70 uppercase tracking-widest leading-tight mb-1.5">Cue: {hierarchy.nextAction}</p>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleCompareHotspot(h.id);
+                                            }}
+                                            className={`mb-1.5 w-full rounded-lg border px-2 py-1.5 text-[8px] font-black uppercase tracking-widest transition-colors ${isCompared ? 'bg-blue-500/20 border-blue-400/50 text-blue-200' : 'bg-white/[0.03] border-white/10 text-white/45 hover:text-white/70'}`}
+                                        >
+                                            {isCompared ? 'Selected for Compare' : 'Compare'}
+                                        </button>
                                         <select
                                             value={investigationStatus}
                                             onClick={(e) => e.stopPropagation()}
