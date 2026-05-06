@@ -257,6 +257,23 @@ export type FieldGuideScanCache = {
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
 };
 
+export type FieldGuideInvestigationStatus =
+  | "unreviewed"
+  | "investigating"
+  | "visited"
+  | "productive"
+  | "archived";
+
+export type FieldGuideInvestigation = {
+  id: string;
+  projectId: string;
+  hotspotId: string;
+  status: FieldGuideInvestigationStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -268,6 +285,7 @@ export class FindSpotDB extends Dexie {
   settings!: Table<Setting, string>;
   importedPackages!: Table<ImportedPackage, string>;
   fieldGuideCache!: Table<FieldGuideScanCache, string>;
+  fieldGuideInvestigations!: Table<FieldGuideInvestigation, string>;
 
   constructor() {
     super("findspot_uk");
@@ -425,6 +443,10 @@ export class FindSpotDB extends Dexie {
     // discarded when scoring logic changes rather than silently serving old results.
     // No schema change needed; Dexie stores the field automatically.
     this.version(22).stores({});
+
+    this.version(23).stores({
+      fieldGuideInvestigations: "id, projectId, hotspotId, status, updatedAt",
+    });
   }
 }
 

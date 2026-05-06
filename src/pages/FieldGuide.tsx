@@ -3,7 +3,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Find, Media } from '../db';
+import { db, FieldGuideInvestigationStatus, Find, Media } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
@@ -143,6 +143,14 @@ type HotspotResultHierarchy = {
     whyItMatters: string;
     nextAction: string;
 };
+
+const INVESTIGATION_STATUSES: Array<{ value: FieldGuideInvestigationStatus; label: string }> = [
+    { value: 'unreviewed',    label: 'Unreviewed' },
+    { value: 'investigating', label: 'Investigating' },
+    { value: 'visited',       label: 'Visited' },
+    { value: 'productive',    label: 'Productive' },
+    { value: 'archived',      label: 'Archived' },
+];
 
 function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength): HotspotResultHierarchy {
     const signalStrength =
@@ -311,6 +319,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         () => db.finds.where('projectId').equals(projectId).toArray(),
         [projectId]
     ) ?? [];
+    const investigations = useLiveQuery(
+        () => db.fieldGuideInvestigations.where('projectId').equals(projectId).toArray(),
+        [projectId]
+    ) ?? [];
 
     const selectedUserFindMedia = useLiveQuery<Media | undefined>(
         () => selectedUserFind
@@ -370,6 +382,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         }
         return result;
     }, [sourceAvailability, sortedHotspots]);
+
+    const investigationMap = useMemo(() => {
+        return new Map(investigations.map(i => [i.hotspotId, i]));
+    }, [investigations]);
+
+    const setHotspotInvestigationStatus = useCallback(async (hotspotId: string, status: FieldGuideInvestigationStatus) => {
+        const existing = investigationMap.get(hotspotId);
+        const now = new Date().toISOString();
+        await db.fieldGuideInvestigations.put({
+            id: `${projectId}:${hotspotId}`,
+            projectId,
+            hotspotId,
+            status,
+            notes: existing?.notes,
+            createdAt: existing?.createdAt ?? now,
+            updatedAt: now,
+        });
+    }, [investigationMap, projectId]);
 
     const targetFindContext = useMemo((): Map<string, { status: 'within' | 'nearby'; count: number }> => {
         const map = new Map<string, { status: 'within' | 'nearby'; count: number }>();
@@ -1086,6 +1116,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hBorder = hStrength === 'Strong Zone' ? 'bg-slate-900/95 border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-slate-900/95 border-emerald-500/35' : 'bg-slate-900/95 border-white/15';
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
                                 const isPrimaryHotspot = h.number === 1;
+                                const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 return (
                                 <div key={h.id} className={`p-5 rounded-3xl border shadow-2xl transition-all ${hBorder}`}>
                                     <div className="flex items-center justify-between gap-2 mb-3">
@@ -1129,6 +1160,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                         </button>
+                                    </div>
+                                    <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                        <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.18em]">Investigation</span>
+                                        <select
+                                            value={investigationStatus}
+                                            onChange={(e) => void setHotspotInvestigationStatus(h.id, e.target.value as FieldGuideInvestigationStatus)}
+                                            className="bg-slate-950/80 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider outline-none"
+                                        >
+                                            {INVESTIGATION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                        </select>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-4 animate-pulse">
@@ -1831,6 +1872,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
                                 const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/30 border-amber-500/20 hover:border-amber-500/40' : hStrength === 'Moderate Zone' ? 'bg-slate-950/30 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-slate-950/30 border-white/10 hover:border-white/20';
                                 const isPrimaryHotspot = h.number === 1;
+                                const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 return (
                                 <div
                                     key={h.id}
@@ -1849,6 +1891,17 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <p className={`text-sm font-black leading-tight mb-1 ${hStrengthColour}`}>{hierarchy.signalStrength}</p>
                                         <p className="text-[10px] font-bold text-white/75 leading-snug mb-1.5">{hierarchy.whyItMatters}</p>
                                         <p className="text-[9px] font-black text-emerald-400/70 uppercase tracking-widest leading-tight mb-1.5">Cue: {hierarchy.nextAction}</p>
+                                        <select
+                                            value={investigationStatus}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                void setHotspotInvestigationStatus(h.id, e.target.value as FieldGuideInvestigationStatus);
+                                            }}
+                                            className="mt-1 mb-1.5 w-full bg-slate-950/70 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] font-black text-white/80 uppercase tracking-wider outline-none"
+                                        >
+                                            {INVESTIGATION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                        </select>
                                         {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
                                             <div className="flex items-center gap-2 flex-wrap mt-1 mb-1">
                                                 {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/55 uppercase tracking-widest">{h.secondaryTag}</span>}
