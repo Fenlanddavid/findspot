@@ -277,7 +277,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicScanCompleted,  setHistoricScanCompleted]  = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
-    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: true });
+    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: false });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
     const [showLayerPicker,        setShowLayerPicker]        = useState(false);
@@ -596,6 +596,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     });
 
     useTilePrewarm(mapRef);
+
+    const focusTarget = useCallback((f: Cluster) => {
+        clearMapItemSelections('target');
+        setSelectedId(f.id);
+        setMobileSheetMode('targets');
+        persistSheetExpanded(true);
+        mapRef.current?.flyTo({ center: f.center, zoom: 17 });
+    }, [clearMapItemSelections, mapRef, persistSheetExpanded]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -1121,11 +1129,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId)) && (
                         <div
                             className={`absolute bottom-3 left-3 right-3 z-[85] lg:hidden flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'}`}
-                            onTouchStart={handleSheetTouchStart}
-                            onTouchEnd={handleSheetTouchEnd}
                         >
                             {/* Handle + Status + Actions — always visible */}
-                            <div className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) ? 'h-[180px]' : 'h-[136px]'}`} onClick={() => persistSheetExpanded(!sheetExpanded)}>
+                            <div
+                                className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) ? 'h-[180px]' : 'h-[136px]'}`}
+                                onClick={() => persistSheetExpanded(!sheetExpanded)}
+                                onTouchStart={handleSheetTouchStart}
+                                onTouchEnd={handleSheetTouchEnd}
+                            >
                                 <div className="mx-auto h-1 w-8 rounded-full bg-white/20" />
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
@@ -1327,7 +1338,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <div key={f.id} className="space-y-3">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
-                                                    {isPrimaryTarget && <span className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest mb-1 inline-block">Start Here</span>}
+                                                    {isPrimaryTarget && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); focusTarget(f); }}
+                                                            className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest mb-1 inline-block active:scale-[0.98]"
+                                                        >
+                                                            Start Here
+                                                        </button>
+                                                    )}
                                                     <p className="text-[8px] font-black text-white/35 uppercase tracking-[0.2em]">Target {f.number}</p>
                                                     <h3 className="text-sm font-black text-white tracking-tight leading-tight mt-0.5">{f.type}</h3>
                                                     <p className={`text-xs font-black mt-0.5 ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
@@ -1730,7 +1749,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 return (
                                                     <button
                                                         key={f.id}
-                                                        onClick={() => { clearMapItemSelections('target'); setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                                        onClick={() => focusTarget(f)}
                                                         className={`w-full text-left p-3 rounded-xl border active:scale-[0.98] transition-all ${f.isProtected ? 'bg-red-950/20 border-red-900/50' : isPrimary ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)]' : 'bg-slate-900/40 border-white/8 hover:border-white/15'}`}
                                                     >
                                                         <div className="flex items-start justify-between gap-2">
@@ -1981,7 +2000,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <>
                                             <div className="flex items-center justify-between gap-2 mb-3">
                                                 {isPrimaryTarget && (
-                                                    <span className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] lg:text-[8px] font-black uppercase tracking-widest">Start Here</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); focusTarget(f); }}
+                                                        className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] lg:text-[8px] font-black uppercase tracking-widest active:scale-[0.98]"
+                                                    >
+                                                        Start Here
+                                                    </button>
                                                 )}
                                                 <p className="text-[8px] lg:text-[9px] font-black text-white/55 uppercase tracking-[0.2em] ml-auto">Target {f.number}</p>
                                             </div>
@@ -2852,12 +2877,18 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 <div
                                     key={f.id}
                                     id={`card-${f.id}`}
-                                    onClick={() => { clearMapItemSelections('target'); setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                    onClick={() => focusTarget(f)}
                                     className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? (f.isProtected ? 'bg-red-950/20 border-red-800/80 ring-2 ring-red-950/50' : 'bg-white/10 border-white ring-4 ring-white/10') : f.isProtected ? 'bg-slate-950/50 border-red-900/60 hover:border-red-800/80' : isPrimaryTarget ? 'bg-slate-900/55 border-emerald-500/45 hover:border-emerald-500/65 shadow-[0_0_20px_rgba(16,185,129,0.07)]' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/50 border-amber-500/35 hover:border-amber-500/55' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/50 border-emerald-500/25 hover:border-emerald-500/45' : 'bg-slate-900/50 border-white/12 hover:border-white/22'}`}
                                 >
                                     <div className="flex items-center justify-between gap-2 mb-2">
                                         {!f.isProtected && isPrimaryTarget && (
-                                            <span className="bg-emerald-500/25 border border-emerald-500/50 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-[0_0_8px_rgba(16,185,129,0.15)]">Start Here</span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); focusTarget(f); }}
+                                                className="bg-emerald-500/25 border border-emerald-500/50 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-[0_0_8px_rgba(16,185,129,0.15)] active:scale-[0.98]"
+                                            >
+                                                Start Here
+                                            </button>
                                         )}
                                         {!f.isProtected && !isPrimaryTarget && (
                                             <span className="bg-white/[0.04] border border-white/10 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Target</span>
