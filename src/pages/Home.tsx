@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
@@ -50,12 +50,12 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
     } catch { return {}; }
   });
 
+  useEffect(() => {
+    try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify(dismissedNextMoves)); } catch {}
+  }, [dismissedNextMoves]);
+
   const dismissNextMove = useCallback((key: string) => {
-    setDismissedNextMoves(prev => {
-      const next = { ...prev, [key]: Date.now() };
-      try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify(next)); } catch {}
-      return next;
-    });
+    setDismissedNextMoves(prev => ({ ...prev, [key]: Date.now() }));
   }, []);
 
   const isDismissed = useCallback((key: string, type: string): boolean => {

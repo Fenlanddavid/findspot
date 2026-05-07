@@ -643,14 +643,18 @@ export default function SessionPage(props: {
         setIsTracking(false);
         setShowTrackingOverlay(false);
     } else {
-        await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
-        setIsTracking(true);
-        setShowTrackingOverlay(true);
+        try {
+            await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
+            setIsTracking(true);
+            setShowTrackingOverlay(true);
 
-        // Record start time if not already set
-        const s = await db.sessions.get(sessionId);
-        if (s && !s.startTime) {
-            await db.sessions.update(sessionId, { startTime: new Date().toISOString() });
+            // Record start time if not already set
+            const s = await db.sessions.get(sessionId);
+            if (s && !s.startTime) {
+                await db.sessions.update(sessionId, { startTime: new Date().toISOString() });
+            }
+        } catch (e: any) {
+            setError(e?.message ?? "Could not start tracking — check location permissions");
         }
     }
   }

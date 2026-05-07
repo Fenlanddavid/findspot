@@ -528,8 +528,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSystemLog(prev => [...prev, makeLog(msg, source, level)]);
     }, []);
 
-    const logContainerRef = useRef<HTMLDivElement>(null);
-    const scrollRef       = useRef<HTMLDivElement>(null);
+    const logContainerRef  = useRef<HTMLDivElement>(null);
+    const scrollRef        = useRef<HTMLDivElement>(null);
+    const sheetScrollRef   = useRef<HTMLDivElement>(null);
 
     useLayoutEffect(() => {
         if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -569,7 +570,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 const h = hotspots.find(h => h.id === id);
                 if (h) mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
             },
-            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); setSelectedUserFind(null); setSelectedPASFind(null); },
+            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); setSelectedUserFind(null); setSelectedPASFind(null); persistSheetExpanded(false); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
@@ -752,7 +753,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        if (historicMode && !isHistoricScanning) loadStandaloneHistoric();
+        if (historicMode && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
     }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -764,6 +765,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
         }
     }, [selectedId]);
+
+    // Reset sheet scroll to top whenever a card opens in the panel
+    useEffect(() => {
+        if (selectedId || selectedUserFind || selectedPASFind || selectedMonument !== undefined) {
+            sheetScrollRef.current?.scrollTo({ top: 0 });
+        }
+    }, [selectedId, selectedUserFind, selectedPASFind, selectedMonument]);
 
     useEffect(() => {
         setShowPermissionPicker(false);
@@ -1110,14 +1118,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <p className="text-[15px] font-black text-white leading-tight truncate">
-                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? 'Target Details' : selectedMonument !== undefined ? 'Protected Feature' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Hotspot Review') : 'Ready to Scan'}
+                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Scheduled Monument' : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Hotspot Review') : 'Ready to Scan'}
                                             </p>
                                             {selectedMonument === undefined && !analyzing && !isTerrainScanning && !loadingPAS && ((historicMode && historicScanComplete) || (!historicMode && hasScanned && mobileSheetMode === 'hotspots' && terrainScanComplete)) && (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
                                             )}
                                         </div>
                                         <p className="text-[10px] font-bold text-white/35 leading-tight truncate">
-                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? 'Signal analysis' : selectedMonument !== undefined ? 'Protected feature details' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
+                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Legal protection applies' : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
@@ -1168,7 +1176,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             </div>
 
                             {/* Scrollable content — inspector (when selected) or list */}
-                            <div className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
+                            <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
 
                                 {/* Your Find — in panel (mobile) */}
                                 {selectedUserFind && (() => {
@@ -1264,6 +1272,29 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     const strengthColour: Record<TargetSignalStrength, string> = {
                                         'Strong Signal': 'text-amber-400', 'Moderate Signal': 'text-emerald-400', 'Supporting Signal': 'text-white/40',
                                     };
+                                    if (f.isProtected) return (
+                                        <div key={f.id} className="space-y-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
+                                                    {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
+                                                </div>
+                                                <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                </button>
+                                            </div>
+                                            <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
+                                                <p className="text-xs font-bold text-stone-200/85 leading-snug">This area is protected as a Scheduled Monument.</p>
+                                                <p className="text-[11px] font-bold text-stone-300/60 leading-snug">Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.</p>
+                                            </div>
+                                            {f.aimInfo && (
+                                                <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
+                                                    <p className="text-[9px] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
+                                                    <p className="text-[10px] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
                                     return (
                                         <div key={f.id} className="space-y-3">
                                             <div className="flex items-start justify-between gap-2">
@@ -1314,6 +1345,30 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     <p className="text-[10px] font-bold text-white/80 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                 </div>
                                             )}
+                                            <div className="border-t border-white/8 pt-2">
+                                                <span
+                                                    onClick={() => setExpandedTargetId(expandedTargetId === f.id ? null : f.id)}
+                                                    className="text-xs font-black text-amber-400 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1"
+                                                >
+                                                    {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                                </span>
+                                                {expandedTargetId === f.id && (
+                                                    <div className="mt-3 space-y-3 animate-in fade-in duration-200">
+                                                        <div>
+                                                            <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1">Summary</p>
+                                                            <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.summary}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
+                                                            <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.whyItStandsOut}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1">How to approach it</p>
+                                                            <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.howToApproach}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -1322,15 +1377,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="space-y-3">
                                         <div className="flex items-start justify-between gap-3">
                                             <div className="min-w-0">
-                                                <p className="text-[8px] font-black text-red-300 uppercase tracking-[0.2em] mb-1">Protected Feature</p>
-                                                <h3 className="text-sm font-black text-white tracking-tight leading-tight">{selectedMonument || 'Scheduled Monument'}</h3>
+                                                <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
+                                                {selectedMonument && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{selectedMonument}</h3>}
                                             </div>
                                             <button onClick={() => setSelectedMonument(undefined)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                             </button>
                                         </div>
-                                        <div className="rounded-xl bg-red-950/25 border border-red-900/50 p-3">
-                                            <p className="text-xs font-bold text-red-100/80 leading-snug">Protected archaeological feature detected. Check the legal status before any fieldwork and avoid intrusive activity inside the boundary.</p>
+                                        <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
+                                            <p className="text-xs font-bold text-stone-200/85 leading-snug">This area is protected as a Scheduled Monument.</p>
+                                            <p className="text-[11px] font-bold text-stone-300/60 leading-snug">Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.</p>
                                         </div>
                                     </div>
                                 )}
@@ -1669,8 +1725,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                         <div className="flex items-start justify-between gap-2">
                                                             <div className="min-w-0">
                                                                 {!f.isProtected && <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-white' : 'text-white/85'}`}>{f.type}</p>}
-                                                                <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-red-300' : isPrimary ? 'text-emerald-300' : 'text-white/65'}`}>
-                                                                    {f.isProtected ? 'Protected Feature' : getTargetVerdict(tI.signalStrength, isPrimary)}
+                                                                <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-stone-400' : isPrimary ? 'text-emerald-300' : 'text-white/65'}`}>
+                                                                    {f.isProtected ? 'Scheduled Monument' : getTargetVerdict(tI.signalStrength, isPrimary)}
                                                                 </p>
                                                                 {!f.isProtected && <p className="text-[10px] font-bold text-white/65 leading-tight mt-0.5 line-clamp-2">{tI.hook}</p>}
                                                             </div>
@@ -1701,16 +1757,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Scheduled Monument Card — on boundary click */}
                     {selectedMonument !== undefined && (
-                        <div className="hidden lg:block absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
-                            <div className="bg-slate-950/95 border border-red-900/70 rounded-3xl p-5 shadow-2xl">
+                        <div className="hidden lg:block absolute bottom-6 left-auto right-6 w-96 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-200">
+                            <div className="bg-slate-950/98 border border-stone-700/50 rounded-3xl p-5 shadow-2xl">
                                 <div className="flex items-start justify-between mb-3">
-                                    <span className="bg-red-950/30 border border-red-900/70 text-red-200 px-3 py-1 rounded-full text-[8px] font-black tracking-widest uppercase">Protected Feature</span>
+                                    <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em]">Scheduled Monument</p>
                                     <button onClick={() => setSelectedMonument(undefined)} className="text-white/30 hover:text-white/60 transition-colors -mt-0.5 -mr-1 p-1">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                                     </button>
                                 </div>
-                                {selectedMonument && <p className="text-white font-black text-sm leading-snug mb-2">{selectedMonument}</p>}
-                                <p className="text-red-100/60 text-[10px] leading-snug">Protected archaeological feature detected. Check legal status before any fieldwork.</p>
+                                {selectedMonument && <p className="text-white/90 font-black text-sm leading-snug mb-3">{selectedMonument}</p>}
+                                <div className="space-y-1.5">
+                                    <p className="text-stone-200/80 text-xs font-bold leading-snug">This area is protected as a Scheduled Monument.</p>
+                                    <p className="text-stone-400/60 text-[11px] leading-snug">Metal detecting or intrusive activity may require legal consent. Check current protections before any fieldwork.</p>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1882,25 +1941,28 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     'Supporting Signal': 'border-white/20',
                                 };
                                 return (
-                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border-2 bg-black/95 shadow-2xl backdrop-blur-xl transition-all ${f.isProtected ? 'border-red-900/70' : borderColour[tInterp.signalStrength]}`}>
+                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border bg-slate-950/98 shadow-2xl backdrop-blur-xl transition-all ${f.isProtected ? 'border-stone-700/50' : borderColour[tInterp.signalStrength]}`}>
                                         <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
                                         {f.isProtected ? (
-                                            /* Protected — compact layout, no target guidance */
-                                            <div className="space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <p className="text-[9px] font-black text-red-200 uppercase tracking-[0.2em]">Protected Feature</p>
-                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-1.5 transition-colors border border-white/10">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            /* Scheduled Monument — restrained heritage warning, no investigation prompts */
+                                            <div className="space-y-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
+                                                        {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
+                                                    </div>
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                                     </button>
                                                 </div>
-                                                <div className="p-3 bg-red-950/20 rounded-2xl border border-red-900/70">
-                                                    <p className="text-[11px] font-black uppercase tracking-widest text-red-100 mb-1">Scheduled Monument</p>
-                                                    <p className="text-[10px] text-red-100/60 leading-snug">Protected archaeological feature detected. Check legal status before any fieldwork.</p>
+                                                <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
+                                                    <p className="text-xs font-bold text-stone-200/85 leading-snug">This area is protected as a Scheduled Monument.</p>
+                                                    <p className="text-[11px] font-bold text-stone-300/60 leading-snug">Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.</p>
                                                 </div>
                                                 {f.aimInfo && (
-                                                    <div className="p-2 rounded-xl border bg-white/[0.03] border-white/10">
-                                                        <p className="text-[9px] font-black uppercase text-white/40 leading-tight mb-0.5">Site type</p>
-                                                        <p className="text-[10px] font-bold text-white/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                                    <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
+                                                        <p className="text-[9px] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
+                                                        <p className="text-[10px] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -2787,8 +2849,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         {!f.isProtected && !isPrimaryTarget && (
                                             <span className="bg-white/[0.04] border border-white/10 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Target</span>
                                         )}
-                                        <p className={`text-[9px] font-black uppercase tracking-[0.2em] ml-auto ${f.isProtected ? 'text-red-200/80' : 'text-white/70'}`}>
-                                            {f.isProtected ? 'Protected Feature' : `Target ${f.number}`}
+                                        <p className={`text-[9px] font-black uppercase tracking-[0.2em] ml-auto ${f.isProtected ? 'text-stone-400/70' : 'text-white/70'}`}>
+                                            {f.isProtected ? 'Scheduled Monument' : `Target ${f.number}`}
                                         </p>
                                     </div>
                                     {/* Header row: type + source dots */}
@@ -2807,15 +2869,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     </div>
                                     {f.isProtected ? (
-                                        /* Protected monument — no target guidance shown */
-                                        <div className="border-t border-red-900/40 pt-2 space-y-2">
-                                            <div className="p-2 bg-red-950/20 rounded-xl border border-red-900/70">
-                                                <p className="text-[9px] font-black uppercase tracking-widest text-red-100 mb-0.5">Scheduled Monument</p>
-                                                <p className="text-[9px] text-red-100/60 leading-snug">Protected archaeological feature detected. Check legal status before any fieldwork.</p>
+                                        /* Scheduled Monument — no target guidance shown */
+                                        <div className="border-t border-stone-700/30 pt-2 space-y-2">
+                                            <div className="p-2 bg-stone-900/40 rounded-xl border border-stone-700/40 space-y-1">
+                                                <p className="text-[9px] font-bold text-stone-200/80 leading-snug">This area is protected as a Scheduled Monument.</p>
+                                                <p className="text-[9px] text-stone-400/55 leading-snug">Check legal protections before any fieldwork.</p>
                                             </div>
                                             {f.aimInfo && (
-                                                <div className="px-2 py-1 bg-white/[0.03] border border-white/10 rounded-lg">
-                                                    <p className="text-[8px] font-black uppercase text-white/40">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                                <div className="px-2 py-1 bg-stone-900/30 border border-stone-700/30 rounded-lg">
+                                                    <p className="text-[8px] font-black uppercase text-stone-400/60">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                 </div>
                                             )}
                                         </div>
