@@ -1261,37 +1261,39 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Hotspot Card Popup */}
                     {selectedHotspotId && !historicMode && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] lg:overflow-y-auto lg:scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="absolute bottom-3 left-3 right-3 z-[100] max-h-[68vh] overflow-y-auto scrollbar-hide lg:bottom-6 lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {hotspots.filter(h => h.id === selectedHotspotId).map(h => {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hierarchy = getHotspotResultHierarchy(h, hStrength);
-                                const hBorder = hStrength === 'Strong Zone' ? 'bg-slate-900/95 border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-slate-900/95 border-emerald-500/35' : 'bg-slate-900/95 border-white/15';
-                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
+                                const hBorder = hStrength === 'Strong Zone' ? 'bg-black/95 border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-black/95 border-emerald-500/35' : 'bg-black/95 border-white/15';
+                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-slate-200';
                                 const isPrimaryHotspot = h.number === 1;
                                 const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 return (
-                                <div key={h.id} className={`p-5 rounded-3xl border shadow-2xl transition-all ${hBorder}`}>
-                                    <div className="flex items-center justify-between gap-2 mb-3">
-                                        {isPrimaryHotspot && (
-                                            <span className="bg-white/5 border border-white/10 text-emerald-300 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest">Review First</span>
-                                        )}
-                                        <p className="text-[9px] font-black text-white/45 uppercase tracking-[0.2em] ml-auto">Interpretive Hotspot {h.number}</p>
-                                    </div>
-                                    <div className="flex justify-between items-start mb-4">
+                                <div key={h.id} className={`p-4 lg:p-5 rounded-2xl lg:rounded-3xl border shadow-2xl transition-all backdrop-blur-xl ${hBorder}`}>
+                                    <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
+                                    <div className="flex justify-between items-start mb-3 lg:mb-4">
                                         <div className="flex-1 min-w-0 pr-3">
-                                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">{getSignalTypeSummary(h)}</span>
-                                                <span className="text-[9px] font-black text-white/25 uppercase tracking-widest">{HOTSPOT_TITLES[h.classification]}</span>
+                                            <div className="mb-2.5">
+                                                <div className="flex items-start justify-between gap-2 mb-1">
+                                                    <h3 className="text-sm lg:text-base font-black text-white tracking-tight leading-tight">{HOTSPOT_TITLES[h.classification]}</h3>
+                                                    {isPrimaryHotspot && (
+                                                        <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shrink-0">Priority</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[8px] lg:text-[9px] font-black text-white/40 uppercase tracking-[0.16em]">Hotspot {h.number}</span>
+                                                    <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-black ${hStrength === 'Strong Zone' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : hStrength === 'Moderate Zone' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>{hierarchy.signalStrength}</span>
+                                                </div>
                                             </div>
-                                            <p className={`text-lg font-black tracking-tight leading-tight mb-2 ${hStrengthColour}`}>{hierarchy.signalStrength}</p>
-                                            <div className="space-y-2 mb-2.5">
+                                            <div className="space-y-2 mb-2">
                                                 <div>
                                                     <p className="text-[8px] font-black text-white/35 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
-                                                    <p className="text-[13px] font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
+                                                    <p className="text-xs lg:text-[13px] font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-[0.18em] mb-0.5">Interpretive cue</p>
-                                                    <p className="text-[12px] font-bold text-emerald-300 leading-snug">{hierarchy.nextAction}</p>
+                                                    <p className="text-[11px] lg:text-[12px] font-bold text-emerald-300 leading-snug">{hierarchy.nextAction}</p>
                                                 </div>
                                             </div>
                                             {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
@@ -1309,11 +1311,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
                                             })()}
                                         </div>
-                                        <button onClick={() => setSelectedHotspotId(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        <button onClick={() => setSelectedHotspotId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                         </button>
                                     </div>
-                                    <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                    <div className="mb-3 lg:mb-4 flex items-center justify-between gap-3 rounded-xl lg:rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
                                         <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.18em]">Investigation</span>
                                         <select
                                             value={investigationStatus}
@@ -1324,12 +1326,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </select>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
-                                        <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-4 animate-pulse">
-                                            <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
+                                        <div className="bg-blue-600/30 p-2 rounded-xl lg:rounded-2xl border border-blue-400/70 mb-3 lg:mb-4 animate-pulse">
+                                            <p className="m-0 text-[10px] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
                                         </div>
                                     )}
                                     {h.disturbanceRisk === 'High' && (
-                                        <div className="bg-red-500/15 p-2 rounded-2xl border border-red-400/30 mb-4">
+                                        <div className="bg-red-500/15 p-2 rounded-xl lg:rounded-2xl border border-red-400/30 mb-3 lg:mb-4">
                                             <p className="m-0 text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
                                         </div>
                                     )}
@@ -1339,7 +1341,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             {h.explanation.slice(0, 3).map((reason, idx) => (
                                                 <div key={idx} className="flex items-start gap-3">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                                    <p className="text-[13px] font-bold text-white leading-tight flex-1">{reason}</p>
+                                                    <p className="text-xs lg:text-[13px] font-bold text-white leading-tight flex-1">{reason}</p>
                                                 </div>
                                             ))}
                                         </div>
@@ -1409,7 +1411,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Target Card Popup */}
                     {selectedId && !selectedHotspotId && (
-                        <div className="absolute bottom-6 left-4 right-4 z-[100] lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] lg:overflow-y-auto lg:scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="absolute bottom-3 left-3 right-3 z-[100] max-h-[68vh] overflow-y-auto scrollbar-hide lg:bottom-6 lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {detectedFeatures.filter(f => f.id === selectedId).map(f => {
                                 const tInterp = buildTargetInterpretation(f);
                                 const isPrimaryTarget = f.id === primaryTargetId;
@@ -1424,13 +1426,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     'Supporting Signal': 'border-white/20',
                                 };
                                 return (
-                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-5'} rounded-3xl border-2 bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-red-900/70' : borderColour[tInterp.signalStrength]}`}>
+                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border-2 bg-black/95 shadow-2xl backdrop-blur-xl transition-all ${f.isProtected ? 'border-red-900/70' : borderColour[tInterp.signalStrength]}`}>
+                                        <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
                                         {f.isProtected ? (
                                             /* Protected — compact layout, no target guidance */
                                             <div className="space-y-2">
                                                 <div className="flex items-center justify-between">
                                                     <p className="text-[9px] font-black text-red-200 uppercase tracking-[0.2em]">Protected Feature</p>
-                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-1.5 transition-colors border border-white/10">
+                                                    <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-1.5 transition-colors border border-white/10">
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                                     </button>
                                                 </div>
@@ -1449,23 +1452,23 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             <>
                                             <div className="flex items-center justify-between gap-2 mb-3">
                                                 {isPrimaryTarget && (
-                                                    <span className="bg-emerald-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest shadow-[0_0_12px_rgba(16,185,129,0.45)]">Primary Target</span>
+                                                    <span className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] lg:text-[8px] font-black uppercase tracking-widest">Start Here</span>
                                                 )}
-                                                <p className="text-[9px] font-black text-white/70 uppercase tracking-[0.2em] ml-auto">Target {f.number}</p>
+                                                <p className="text-[8px] lg:text-[9px] font-black text-white/55 uppercase tracking-[0.2em] ml-auto">Target {f.number}</p>
                                             </div>
                                             {/* Header */}
-                                            <div className="flex justify-between items-start mb-4">
+                                            <div className="flex justify-between items-start mb-3 lg:mb-4">
                                                 <div className="flex-1 min-w-0 pr-3">
-                                                    <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
+                                                    <h3 className="text-sm lg:text-base font-black text-white tracking-tight leading-tight mb-1">{f.type}</h3>
                                                     <p className={`text-xs font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
                                                 </div>
-                                                <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                                <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                                 </button>
                                             </div>
                                             <>
                                                 {/* Verdict + hook */}
-                                                <p className="text-sm font-black text-white/85 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
+                                                <p className="text-xs lg:text-sm font-black text-white/85 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                                                 <p className="text-[11px] font-bold text-white/50 leading-snug mb-3">{tInterp.hook}</p>
                                                 {/* Find context with count */}
                                                 {(() => {
@@ -1477,8 +1480,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 })()}
                                                 {/* Crossing badge */}
                                                 {f.isHighConfidenceCrossing && (
-                                                    <div className="bg-blue-600/40 p-2 rounded-2xl border border-blue-400 mb-3 animate-pulse">
-                                                        <p className="m-0 text-xs font-black uppercase text-white text-center tracking-[0.2em]">🌊 Likely historic crossing point</p>
+                                                    <div className="bg-blue-600/30 p-2 rounded-xl lg:rounded-2xl border border-blue-400/70 mb-3 animate-pulse">
+                                                        <p className="m-0 text-[10px] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
                                                     </div>
                                                 )}
                                                 {/* Edge-of-scan notice */}
@@ -1501,7 +1504,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             {f.explanationLines.slice(0, 3).map((line, idx) => (
                                                                 <div key={idx} className="flex items-start gap-3">
                                                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                                                    <p className="text-[13px] font-bold text-white leading-tight flex-1">{line}</p>
+                                                                    <p className="text-xs lg:text-[13px] font-bold text-white leading-tight flex-1">{line}</p>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -2079,8 +2082,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             {sortedHotspots.length > 0 ? sortedHotspots.map(h => {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hierarchy = getHotspotResultHierarchy(h, hStrength);
-                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
-                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/15 border-amber-500/12 hover:border-amber-500/25' : hStrength === 'Moderate Zone' ? 'bg-slate-950/15 border-emerald-500/12 hover:border-emerald-500/25' : 'bg-slate-950/15 border-white/6 hover:border-white/12';
+                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-slate-200';
+                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/30 border-amber-500/20 hover:border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-slate-950/30 border-emerald-500/20 hover:border-emerald-500/35' : 'bg-slate-950/30 border-white/10 hover:border-white/18';
                                 const isPrimaryHotspot = h.number === 1;
                                 const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 const isCompared = compareHotspotIds.includes(h.id);
@@ -2095,12 +2098,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     className={`p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/[0.07] border-white/50 ring-2 ring-white/5' : hBorderIdle}`}
                                 >
                                     <div className="mb-3">
-                                        <p className="text-[6px] font-black text-white/18 uppercase tracking-[0.3em] mb-1.5">Landscape Reading</p>
-                                        <div className="flex justify-between items-start mb-1">
-                                            <p className="text-[8px] font-black text-white/35 uppercase tracking-widest pr-2">{HOTSPOT_TITLES[h.classification]}</p>
-                                            {isPrimaryHotspot && <span className="bg-white/5 border border-white/8 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Priority</span>}
+                                        <div className="flex justify-between items-start gap-2 mb-1.5">
+                                            <div className="min-w-0">
+                                                <h3 className="text-[12px] font-black text-white leading-tight">{HOTSPOT_TITLES[h.classification]}</h3>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                    <span className="text-[7px] font-black text-white/40 uppercase tracking-[0.16em]">Hotspot {h.number}</span>
+                                                    <span className={`rounded-full border px-1.5 py-0.5 text-[7px] font-black ${hStrength === 'Strong Zone' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : hStrength === 'Moderate Zone' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>{hierarchy.signalStrength}</span>
+                                                </div>
+                                            </div>
+                                            {isPrimaryHotspot && <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Priority</span>}
                                         </div>
-                                        <p className={`text-sm font-black leading-tight mb-1 ${hStrengthColour}`}>{hierarchy.signalStrength}</p>
                                         <p className="text-[10px] font-bold text-white/75 leading-snug mb-1.5">{hierarchy.whyItMatters}</p>
                                         <p className="text-[9px] font-black text-emerald-400/70 uppercase tracking-widest leading-tight mb-1.5">Cue: {hierarchy.nextAction}</p>
                                         <button
