@@ -85,7 +85,6 @@ type EngineAction =
     | { type: 'SCAN_FAIL' }
     | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] }
     | { type: 'SET_HERITAGE_COUNT'; count: number; monumentPoints: [number, number][] }
-    | { type: 'SET_HAS_SCANNED' }
     | { type: 'CLEAR_SCAN' };
 
 const initialEngineState: EngineState = {
@@ -110,6 +109,7 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
                 ...state, analyzing: false, scanPhase: 'terrain', hotspotVersion: 'terrain',
                 terrainClusters: action.features, detectedFeatures: action.features, hotspots: action.hotspots,
                 monumentPoints: action.monumentPoints, historicRoutes: action.routes, heritageCount: action.heritageCount,
+                hasScanned: true,
             };
         case 'SCAN_FAIL':
             return { ...state, analyzing: false, scanPhase: 'idle' };
@@ -117,8 +117,6 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
             return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
         case 'SET_HERITAGE_COUNT':
             return { ...state, heritageCount: action.count, monumentPoints: action.monumentPoints };
-        case 'SET_HAS_SCANNED':
-            return { ...state, hasScanned: true };
         case 'CLEAR_SCAN':
             return { ...initialEngineState };
         default:
@@ -277,6 +275,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [isLocating,             setIsLocating]             = useState(false);
     const [selectedMonument,       setSelectedMonument]       = useState<string | null | undefined>(undefined); // undefined = not clicked, null = no name, string = named
     const [historicMode,           setHistoricMode]           = useState(false);
+    const [historicScanCompleted,  setHistoricScanCompleted]  = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: true });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
@@ -393,6 +392,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const investigationMap = useMemo(() => {
         return new Map(investigations.map(i => [i.hotspotId, i]));
     }, [investigations]);
+
+    const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument') => {
+        if (keep !== 'target') setSelectedId(null);
+        if (keep !== 'hotspot') setSelectedHotspotId(null);
+        if (keep !== 'userFind') setSelectedUserFind(null);
+        if (keep !== 'pasFind') setSelectedPASFind(null);
+        if (keep !== 'monument') setSelectedMonument(undefined);
+    }, []);
 
     const persistSheetExpanded = useCallback((expanded: boolean) => {
         setSheetExpanded(expanded);
@@ -561,8 +568,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         userFinds: projectFinds,
         initLat, initLng,
         callbacks: {
-            onFeatureClick:  (id)  => { setMobileSheetMode('targets'); setSelectedHotspotId(null); setSelectedId(id); persistSheetExpanded(true); },
+            onFeatureClick:  (id)  => {
+                clearMapItemSelections('target');
+                setMobileSheetMode('targets');
+                setSelectedId(id);
+                persistSheetExpanded(true);
+            },
             onHotspotClick:  (id)  => {
+                clearMapItemSelections('hotspot');
                 setMobileSheetMode('hotspots');
                 setShowSuggestion(false);
                 setSelectedHotspotId(id);
@@ -570,15 +583,15 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 const h = hotspots.find(h => h.id === id);
                 if (h) mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
             },
-            onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); setSelectedUserFind(null); setSelectedPASFind(null); persistSheetExpanded(false); },
+            onDeselect:      ()    => { setShowSuggestion(false); clearMapItemSelections(); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
             onPASFindLog:    (msg) => addLog(msg, 'historic'),
-            onPASFindSelect: (f)   => { setSelectedPASFind(f); persistSheetExpanded(true); },
+            onPASFindSelect: (f)   => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); persistSheetExpanded(true); },
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
-            onMonumentClick: (name) => { setSelectedMonument(name === null ? undefined : (name || null)); if (name !== null) persistSheetExpanded(true); },
-            onUserFindClick: (id)   => { setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null); persistSheetExpanded(true); },
+            onMonumentClick: (name) => { clearMapItemSelections('monument'); setSelectedMonument(name === null ? undefined : (name || null)); if (name !== null) persistSheetExpanded(true); },
+            onUserFindClick: (id)   => { clearMapItemSelections('userFind'); setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null); persistSheetExpanded(true); },
         },
     });
 
@@ -612,8 +625,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setPotentialScore(null);
         setScanConfidence(null);
         setHistoricMode(false);
+        setHistoricScanCompleted(false);
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
-        setHistoricLayerVisibility({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: true });
+        setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: prev.userFinds }));
         setMapClickLabel(null);
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
@@ -655,6 +669,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
+        setHistoricScanCompleted(true);
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
         dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints });
@@ -678,6 +693,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         });
         clearScan();
         dispatch({ type: 'SCAN_START' });
+        setHistoricScanCompleted(false);
         addLog('> SCAN: Reading terrain at survey zoom.', 'terrain');
 
         const result = await runTerrainScan({ mapRef, permissions, fields, targetPeriod });
@@ -707,7 +723,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         if (!hasScanned && result.hotspots.length > 0) {
             setShowSuggestion(true);
             setSelectedHotspotId(result.hotspots[0].id);
-            dispatch({ type: 'SET_HAS_SCANNED' });
         }
 
         const scanCenter = {
@@ -732,6 +747,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     const loadStandaloneHistoric = useCallback(async () => {
         if (!mapRef.current || isHistoricScanning) return;
+        setHistoricScanCompleted(false);
         // Standalone: re-fetch NHLE/AIM, reuse any routes already loaded
         await runHistoricPhase({
             terrainClusters,
@@ -741,8 +757,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             aimData:    null,
             scanCenter: terrainScanCenterRef.current,
         });
-        // Open the intel panel after a user-triggered historic scan
-        setIsIntelOpen(true);
         setIntelDetailsOpen(false);
     }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase]);
 
@@ -834,8 +848,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     // loadingPAS used in JSX — maps to historic scan in-progress flag
     const loadingPAS = isHistoricScanning;
-    const terrainScanComplete = hasScanned && !analyzing && !isTerrainScanning && detectedFeatures.length > 0;
-    const historicScanComplete = historicMode && isIntelOpen && !loadingPAS;
+    const terrainScanComplete = hasScanned && !analyzing && !isTerrainScanning;
+    const historicScanComplete = historicMode && historicScanCompleted && !loadingPAS;
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -979,7 +993,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     )}
 
                     {/* Map Layer Toggle + Search */}
-                    {showLayerPicker && <div className="fixed inset-0 z-[58] lg:hidden" onClick={() => setShowLayerPicker(false)} />}
                     <div className="absolute top-4 right-4 z-[59] flex flex-col gap-2 lg:hidden">
                         <button
                             onClick={() => { setIsSearchOpen(!isSearchOpen); setShowLayerPicker(false); }}
@@ -1034,7 +1047,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         OS 1900
                                     </button>
                                     <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Finds</p>
-                                    <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${historicLayerVisibility.userFinds ? 'text-white/50 hover:text-white hover:bg-white/5' : 'bg-white/10 border border-white/20 text-white/70'}`}>
+                                    <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${historicLayerVisibility.userFinds ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         My Finds
                                     </button>
@@ -1112,7 +1125,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             onTouchEnd={handleSheetTouchEnd}
                         >
                             {/* Handle + Status + Actions — always visible */}
-                            <div className="shrink-0 h-[136px] px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5" onClick={() => persistSheetExpanded(!sheetExpanded)}>
+                            <div className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) ? 'h-[180px]' : 'h-[136px]'}`} onClick={() => persistSheetExpanded(!sheetExpanded)}>
                                 <div className="mx-auto h-1 w-8 rounded-full bg-white/20" />
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
@@ -1144,7 +1157,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-[auto_auto_1fr_1fr] gap-2" onClick={e => e.stopPropagation()}>
+                                <div className={`grid grid-cols-[auto_auto_1fr_1fr] gap-2 transition-[margin] duration-300 ${sheetExpanded ? '' : 'mt-3'}`} onClick={e => e.stopPropagation()}>
                                     <button onClick={findMe} disabled={isLocating} className="min-h-[34px] bg-slate-800/90 text-slate-200 px-2.5 rounded-xl text-[8px] font-black tracking-widest uppercase hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap border border-white/10 shrink-0">
                                         {isLocating ? '...' : 'GPS'}
                                     </button>
@@ -1173,11 +1186,26 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Historic'}
                                     </button>
                                 </div>
+                                {sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
+                                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-emerald-500/25 bg-slate-950/80 p-1 shadow-[0_0_14px_rgba(16,185,129,0.08)]" onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => { clearMapItemSelections(); setMobileSheetMode('hotspots'); }}
+                                            className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'hotspots' && !selectedId ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
+                                        >
+                                            Hotspots
+                                        </button>
+                                        <button
+                                            onClick={() => { clearMapItemSelections(); setMobileSheetMode('targets'); }}
+                                            className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'targets' || !!selectedId ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
+                                        >
+                                            Targets
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Scrollable content — inspector (when selected) or list */}
                             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
-
                                 {/* Your Find — in panel (mobile) */}
                                 {selectedUserFind && (() => {
                                     const PERIOD_CHIP: Record<string, string> = {
@@ -1520,7 +1548,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                     <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
                                                                     <div className="space-y-2">
                                                                         {pasFinds.map(f => (
-                                                                            <div key={f.id} onClick={() => { setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
+                                                                            <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
                                                                                 <div className="flex-1 min-w-0 pr-3">
                                                                                     <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
                                                                                     <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
@@ -1558,23 +1586,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         </div>
                                     );
                                 })()}
-
-                                {selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !(selectedId && !selectedHotspotId) && !historicMode && hasScanned && !selectedHotspotId && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
-                                    <div className="grid grid-cols-2 gap-1 rounded-xl border border-emerald-500/25 bg-slate-950/80 p-1 shadow-[0_0_14px_rgba(16,185,129,0.08)]">
-                                        <button
-                                            onClick={() => setMobileSheetMode('hotspots')}
-                                            className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'hotspots' ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
-                                        >
-                                            Hotspots
-                                        </button>
-                                        <button
-                                            onClick={() => setMobileSheetMode('targets')}
-                                            className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'targets' ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
-                                        >
-                                            Targets
-                                        </button>
-                                    </div>
-                                )}
 
                                 {/* Hotspot Inspector (mobile) */}
                                 {selectedMonument === undefined && selectedHotspotId && !historicMode && (() => {
@@ -1681,7 +1692,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 const isPrimary = h.number === 1;
                                                 const hStr = getHotspotSignalStrength(h.score);
                                                 const hier = getHotspotResultHierarchy(h, hStr);
-                                                const onClick = () => { persistSheetExpanded(true); setSelectedHotspotId(h.id); mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 }); };
+                                                const onClick = () => { clearMapItemSelections('hotspot'); persistSheetExpanded(true); setSelectedHotspotId(h.id); mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 }); };
                                                 if (isPrimary) return (
                                                     <button key={h.id} onClick={onClick} className="w-full text-left p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)] active:scale-[0.98] transition-all hover:border-emerald-500/50">
                                                         <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -1719,7 +1730,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 return (
                                                     <button
                                                         key={f.id}
-                                                        onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                                        onClick={() => { clearMapItemSelections('target'); setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
                                                         className={`w-full text-left p-3 rounded-xl border active:scale-[0.98] transition-all ${f.isProtected ? 'bg-red-950/20 border-red-900/50' : isPrimary ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)]' : 'bg-slate-900/40 border-white/8 hover:border-white/15'}`}
                                                     >
                                                         <div className="flex items-start justify-between gap-2">
@@ -2272,7 +2283,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
                                                             <div className="space-y-2">
                                                                 {pasFinds.map(f => (
-                                                                    <div key={f.id} onClick={() => { setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
+                                                                    <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
                                                                         <div className="flex-1 min-w-0 pr-4">
                                                                             <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
                                                                             <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
@@ -2556,6 +2567,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <button
                                             key={h.id}
                                             onClick={() => {
+                                                clearMapItemSelections('hotspot');
                                                 setSelectedHotspotId(h.id);
                                                 mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
                                             }}
@@ -2614,6 +2626,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 <div
                                     key={h.id}
                                     onClick={() => {
+                                        clearMapItemSelections('hotspot');
                                         setShowSuggestion(false);
                                         setSelectedHotspotId(h.id);
                                         mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
@@ -2839,7 +2852,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 <div
                                     key={f.id}
                                     id={`card-${f.id}`}
-                                    onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                    onClick={() => { clearMapItemSelections('target'); setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
                                     className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? (f.isProtected ? 'bg-red-950/20 border-red-800/80 ring-2 ring-red-950/50' : 'bg-white/10 border-white ring-4 ring-white/10') : f.isProtected ? 'bg-slate-950/50 border-red-900/60 hover:border-red-800/80' : isPrimaryTarget ? 'bg-slate-900/55 border-emerald-500/45 hover:border-emerald-500/65 shadow-[0_0_20px_rgba(16,185,129,0.07)]' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/50 border-amber-500/35 hover:border-amber-500/55' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/50 border-emerald-500/25 hover:border-emerald-500/45' : 'bg-slate-900/50 border-white/12 hover:border-white/22'}`}
                                 >
                                     <div className="flex items-center justify-between gap-2 mb-2">
