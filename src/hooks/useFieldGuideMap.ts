@@ -26,6 +26,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
+    { id: 'targets-halo',                    visibleWhen: s => !s.historicMode },
     { id: 'targets-circle',                  visibleWhen: s => !s.historicMode },
     { id: 'hotspots-outline',                visibleWhen: s => !s.historicMode },
     { id: 'hotspots-fill',                   visibleWhen: s => !s.historicMode },
@@ -52,6 +53,7 @@ export type UseFieldGuideMapOptions = {
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
+    primaryTargetId: string | null;
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
     fieldBoundaries: Array<{ id: string; name: string; permissionId: string; boundary: any }>;
@@ -72,7 +74,7 @@ export type UseFieldGuideMapOptions = {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useFieldGuideMap({
-    hotspots, selectedHotspotId, detectedFeatures, pasFinds, historicRoutes, fieldBoundaries,
+    hotspots, selectedHotspotId, detectedFeatures, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
     initLat, initLng, callbacks,
 }: UseFieldGuideMapOptions) {
@@ -145,6 +147,17 @@ export function useFieldGuideMap({
             });
 
             map.addSource('targets', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            // Primary target halo — static glow ring behind the primary target circle
+            map.addLayer({
+                id: 'targets-halo', type: 'circle', source: 'targets',
+                filter: ['==', ['get', 'isPrimary'], true],
+                paint: {
+                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 32, 2, 36, 3, 40],
+                    'circle-color':  ['case', ['>=', ['get', 'consensus'], 2], '#f59e0b', '#10b981'],
+                    'circle-opacity': 0.12,
+                    'circle-stroke-width': 0,
+                },
+            });
             map.addLayer({
                 id: 'targets-circle', type: 'circle', source: 'targets',
                 paint: {
@@ -208,6 +221,9 @@ export function useFieldGuideMap({
                 }
             });
             map.on('click', 'hotspots-fill', (e) => {
+                // If a target or other interactive feature is at this point, let it take priority
+                const priority = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'user-finds-hitbox', 'pas-circles'] });
+                if (priority.length > 0) return;
                 if (e.features?.[0]) callbacksRef.current.onHotspotClick(e.features[0].properties?.id);
             });
             map.on('click', 'user-finds-hitbox', (e) => {
@@ -289,15 +305,6 @@ export function useFieldGuideMap({
         } as GeoJSON.FeatureCollection);
     }, [hotspots, selectedHotspotId]);
 
-    // ── Hotspot outline filter ────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map || !map.getLayer('hotspots-outline')) return;
-        map.setFilter('hotspots-outline', selectedHotspotId
-            ? ['==', ['get', 'id'], selectedHotspotId]
-            : ['==', ['get', 'id'], '']);
-    }, [selectedHotspotId]);
-
     // ── Detected features (targets) source ───────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
@@ -309,10 +316,10 @@ export function useFieldGuideMap({
             features: detectedFeatures.map(f => ({
                 type: 'Feature' as const,
                 geometry: { type: 'Point' as const, coordinates: f.center },
-                properties: { id: f.id, number: f.number.toString(), isProtected: f.isProtected, source: f.sources[0], consensus: f.sources.length },
+                properties: { id: f.id, number: f.number.toString(), isProtected: f.isProtected, source: f.sources[0], consensus: f.sources.length, isPrimary: f.id === primaryTargetId },
             })),
         } as GeoJSON.FeatureCollection);
-    }, [detectedFeatures]);
+    }, [detectedFeatures, primaryTargetId]);
 
     // ── Cluster link lines ────────────────────────────────────────────────────
     useEffect(() => {
