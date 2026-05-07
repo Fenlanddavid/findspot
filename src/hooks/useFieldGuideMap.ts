@@ -563,10 +563,10 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        const vis = historicMode && historicLayerVisibility.userFinds ? 'visible' : 'none';
+        const vis = historicLayerVisibility.userFinds ? 'visible' : 'none';
         if (map.getLayer('user-finds-circles')) map.setLayoutProperty('user-finds-circles', 'visibility', vis);
         if (map.getLayer('user-finds-hitbox'))  map.setLayoutProperty('user-finds-hitbox',  'visibility', vis);
-    }, [historicLayerVisibility.userFinds, historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [historicLayerVisibility.userFinds]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 

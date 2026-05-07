@@ -281,11 +281,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: true });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
+    const [showLayerPicker,        setShowLayerPicker]        = useState(false);
     const [fieldPickerStep,        setFieldPickerStep]        = useState<'top' | string>('top'); // string = permId drilling into its fields
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
     const [compareHotspotIds,        setCompareHotspotIds]        = useState<string[]>([]);
+    const [sheetExpanded,          setSheetExpanded]          = useState(() => { try { return localStorage.getItem('fs_fg_sheet') === '1'; } catch { return false; } });
+    const [focusMode,              setFocusMode]              = useState(false);
+    const sheetDragStartY = useRef<number | null>(null);
+    const [pendingNotes,           setPendingNotes]           = useState<Record<string, string>>({});
     const [showPermissionPicker,   setShowPermissionPicker]   = useState(false);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
@@ -388,19 +393,50 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return new Map(investigations.map(i => [i.hotspotId, i]));
     }, [investigations]);
 
-    const setHotspotInvestigationStatus = useCallback(async (hotspotId: string, status: FieldGuideInvestigationStatus) => {
-        const existing = investigationMap.get(hotspotId);
+    const persistSheetExpanded = useCallback((expanded: boolean) => {
+        setSheetExpanded(expanded);
+        try { localStorage.setItem('fs_fg_sheet', expanded ? '1' : '0'); } catch {}
+    }, []);
+
+    const updateHotspotInvestigation = useCallback(async (
+        hotspotId: string,
+        changes: { status?: FieldGuideInvestigationStatus; notes?: string },
+    ) => {
+        const id = `${projectId}:${hotspotId}`;
         const now = new Date().toISOString();
-        await db.fieldGuideInvestigations.put({
-            id: `${projectId}:${hotspotId}`,
-            projectId,
-            hotspotId,
-            status,
-            notes: existing?.notes,
-            createdAt: existing?.createdAt ?? now,
-            updatedAt: now,
+        await db.transaction('rw', db.fieldGuideInvestigations, async () => {
+            const existing = await db.fieldGuideInvestigations.get(id);
+            await db.fieldGuideInvestigations.put({
+                id,
+                projectId,
+                hotspotId,
+                status: changes.status ?? existing?.status ?? 'unreviewed',
+                notes: changes.notes ?? existing?.notes,
+                createdAt: existing?.createdAt ?? now,
+                updatedAt: now,
+            });
         });
-    }, [investigationMap, projectId]);
+    }, [projectId]);
+
+    const setHotspotInvestigationStatus = useCallback(async (hotspotId: string, status: FieldGuideInvestigationStatus) => {
+        await updateHotspotInvestigation(hotspotId, { status });
+    }, [updateHotspotInvestigation]);
+
+    const saveHotspotNote = useCallback(async (hotspotId: string, notes: string) => {
+        await updateHotspotInvestigation(hotspotId, { notes });
+    }, [updateHotspotInvestigation]);
+
+    const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
+        sheetDragStartY.current = e.touches[0].clientY;
+    }, []);
+
+    const handleSheetTouchEnd = useCallback((e: React.TouchEvent) => {
+        if (sheetDragStartY.current === null) return;
+        const delta = sheetDragStartY.current - e.changedTouches[0].clientY;
+        sheetDragStartY.current = null;
+        if (Math.abs(delta) < 20) return;
+        persistSheetExpanded(delta > 0);
+    }, [persistSheetExpanded]);
 
     const toggleCompareHotspot = useCallback((hotspotId: string) => {
         setCompareHotspotIds(prev => {
@@ -526,7 +562,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             onFeatureClick:  (id)  => { setSelectedHotspotId(null); setSelectedId(id); },
             onHotspotClick:  (id)  => { setShowSuggestion(false); setSelectedHotspotId(id); },
             onDeselect:      ()    => { setShowSuggestion(false); setSelectedHotspotId(null); setSelectedId(null); setShowFieldsPicker(false); setFieldPickerStep('top'); setSelectedMonument(undefined); setSelectedUserFind(null); },
-            onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); },
+            onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
             onPASFindLog:    (msg) => addLog(msg, 'historic'),
@@ -538,6 +574,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     });
 
     useTilePrewarm(mapRef);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const timer = window.setTimeout(() => map.resize(), 320);
+        map.resize();
+        return () => window.clearTimeout(timer);
+    }, [focusMode, sheetExpanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Clear / Reset ────────────────────────────────────────────────────────
 
@@ -778,50 +822,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative">
-            <header className="bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md">
-                {/* Top Row: Overlay Toggles */}
-                <div className="flex items-center gap-2 px-3 sm:px-4 py-2 pb-3 border-b border-white/5 overflow-hidden lg:hidden">
-                    <div className="flex flex-1 items-center gap-2 overflow-x-auto scrollbar-hide min-w-0">
-                        <button
-                            onClick={() => setShowFieldsPicker(v => !v)}
-                            aria-label="Choose visible fields"
-                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500 border-teal-300 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                        >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
-                            {showFields !== false && showFields !== 'all'
-                                ? showFields.startsWith('field:')
-                                    ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
-                                    : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
-                                : showFields === 'all' ? 'All Fields' : 'My Fields'}
-                        </button>
-                        <button
-                            onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
-                            aria-label="Toggle LiDAR overlay"
-                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500 border-emerald-300 text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                        >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                            LiDAR
-                        </button>
-                        <button
-                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
-                            aria-label="Toggle OS 1895 overlay"
-                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500 border-amber-300 text-black shadow-[0_0_8px_rgba(245,158,11,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                        >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                            OS 1895
-                        </button>
-                        <button
-                            onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
-                            aria-label="Toggle OS 1900 overlay"
-                            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500 border-orange-300 text-black shadow-[0_0_8px_rgba(249,115,22,0.4)]' : 'bg-white/5 border-white/10 text-slate-400'}`}
-                        >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                            OS 1900
-                        </button>
-                    </div>
-                </div>
-
+        <div className={focusMode ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : 'flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
+            <header className={`bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md${focusMode ? ' hidden' : ''}`}>
                 {/* Bottom Row: Primary FieldGuide Actions */}
                 <div className="hidden justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">
                     <div className="flex gap-2 items-center min-w-0 relative">
@@ -857,6 +859,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             <div className="flex flex-1 overflow-hidden relative">
                 <div className="flex-1 relative bg-slate-900">
                     <div ref={mapContainerRef} className="absolute inset-0" />
+
                     {/* My Fields Picker */}
                     {showFieldsPicker && (
                         <div className="absolute top-2 left-2 z-[110] animate-in fade-in slide-in-from-top-2 duration-150">
@@ -958,9 +961,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     )}
 
                     {/* Map Layer Toggle + Search */}
-                    <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
+                    {showLayerPicker && <div className="fixed inset-0 z-[58] lg:hidden" onClick={() => setShowLayerPicker(false)} />}
+                    <div className="absolute top-4 right-4 z-[59] flex flex-col gap-2 lg:hidden">
                         <button
-                            onClick={() => setIsSearchOpen(!isSearchOpen)}
+                            onClick={() => { setIsSearchOpen(!isSearchOpen); setShowLayerPicker(false); }}
                             aria-label={isSearchOpen ? 'Close search' : 'Search place'}
                             className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSearchOpen ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
                         >
@@ -976,15 +980,68 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 </svg>
                             )}
                         </button>
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowLayerPicker(v => !v)}
+                                aria-label="Map layers"
+                                className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
+                            >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                    <polyline points="2 17 12 22 22 17"/>
+                                    <polyline points="2 12 12 17 22 12"/>
+                                </svg>
+                                {(isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930) && (
+                                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                )}
+                            </button>
+                            {showLayerPicker && (
+                                <div className="absolute top-12 right-0 z-[60] bg-slate-900/95 border border-white/12 rounded-xl shadow-2xl backdrop-blur-xl p-2 min-w-[130px] animate-in fade-in slide-in-from-top-1 duration-150">
+                                    <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mb-1.5">Map Style</p>
+                                    <button onClick={() => setIsSatellite(v => !v)} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${isSatellite ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                        Satellite
+                                    </button>
+                                    <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
+                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.lidar ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                        LiDAR
+                                    </button>
+                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.os1880 ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                        OS 1895
+                                    </button>
+                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.os1930 ? 'bg-orange-500/20 border border-orange-500/40 text-orange-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                                        OS 1900
+                                    </button>
+                                    <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Finds</p>
+                                    <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${historicLayerVisibility.userFinds ? 'text-white/50 hover:text-white hover:bg-white/5' : 'bg-white/10 border border-white/20 text-white/70'}`}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                        My Finds
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    {/* Desktop map controls (search + satellite unchanged) */}
+                    <div className="absolute top-4 right-4 z-[59] hidden lg:flex flex-col gap-2">
+                        <button
+                            onClick={() => setIsSearchOpen(!isSearchOpen)}
+                            aria-label={isSearchOpen ? 'Close search' : 'Search place'}
+                            className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSearchOpen ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
+                        >
+                            {isSearchOpen ? (
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                            )}
+                        </button>
                         <button
                             onClick={() => setIsSatellite(!isSatellite)}
                             className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSatellite ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
                         >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                                <polyline points="2 17 12 22 22 17" />
-                                <polyline points="2 12 12 17 22 12" />
-                            </svg>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>
                         </button>
                     </div>
 
@@ -1035,32 +1092,50 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         )}
                     </div>
 
-                    {/* Mobile Scan Sheet */}
+                    {/* Mobile Bottom Sheet */}
                     {!selectedHotspotId && !selectedId && selectedMonument === undefined && !isIntelOpen && !selectedUserFind && !selectedPASFind && (
-                        <div className="absolute bottom-3 left-3 right-3 z-[85] lg:hidden">
-                            <div className="bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl p-3">
-                                <div className="mx-auto mb-2 h-1 w-9 rounded-full bg-white/20" />
-                                <div className="flex items-center justify-between gap-3 mb-2">
+                        <div
+                            className={`absolute bottom-3 left-3 right-3 z-[85] lg:hidden flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[116px]'}`}
+                            onTouchStart={handleSheetTouchStart}
+                            onTouchEnd={handleSheetTouchEnd}
+                        >
+                            {/* Handle + Status + Actions — always visible */}
+                            <div className="shrink-0 relative h-[116px] px-4 pt-2 border-b border-white/5 cursor-pointer select-none" onClick={() => persistSheetExpanded(!sheetExpanded)}>
+                                <div className="mx-auto mb-2 h-1 w-6 rounded-full bg-white/20" />
+                                <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0">
-                                        <p className="text-[8px] font-black text-emerald-300 uppercase tracking-[0.2em]">Scan Panel</p>
-                                        <p className="text-[12px] font-black text-white leading-tight truncate">
+                                        <p className="text-[13px] font-black text-white leading-tight truncate">
                                             {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : hasScanned ? 'Landscape Review' : 'Ready to Scan'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <span className="text-[8px] font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">{sortedHotspots.length} H</span>
-                                        <span className="text-[8px] font-black text-white/70 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded">{displayTargets.length} T</span>
+                                        <button
+                                            onClick={e => { e.stopPropagation(); setShowFieldsPicker(v => !v); setShowLayerPicker(false); }}
+                                            className={`text-[8px] font-black uppercase tracking-[0.2em] transition-colors ${showFields !== false ? 'text-emerald-400' : 'text-emerald-600 hover:text-emerald-400'}`}
+                                        >
+                                            {showFields !== false && showFields !== 'all'
+                                                ? showFields.startsWith('field:')
+                                                    ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'My Fields')
+                                                    : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'My Fields')
+                                                : 'My Fields'}
+                                        </button>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className={`text-white/30 transition-transform duration-300 ${sheetExpanded ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"/></svg>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-3 gap-2">
-                                    <button onClick={findMe} disabled={isLocating} className="bg-slate-800 text-white px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-slate-700 transition-colors disabled:opacity-50 whitespace-nowrap">
+                                <div className="absolute bottom-5 left-4 right-4 flex gap-2" onClick={e => e.stopPropagation()}>
+                                    <button onClick={findMe} disabled={isLocating} className="bg-slate-800/80 text-slate-300 px-2 py-1 rounded-lg text-[8px] font-black tracking-widest uppercase hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap border border-white/8 shrink-0">
                                         {isLocating ? '...' : 'GPS'}
+                                    </button>
+                                    <button onClick={() => setFocusMode(v => !v)} className={`px-2 py-1 rounded-lg border shrink-0 transition-colors ${focusMode ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-slate-800/80 border-white/8 text-slate-300 hover:bg-slate-700 hover:text-white'}`} title={focusMode ? 'Exit focus' : 'Focus — full screen map'}>
+                                        {focusMode
+                                            ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="21" y2="3"/><line x1="3" y1="21" x2="14" y2="10"/></svg>
+                                            : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                                        }
                                     </button>
                                     <button
                                         onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
                                         disabled={analyzing || isTerrainScanning}
-                                        title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
-                                        className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
+                                        className={`flex-1 px-2 py-1 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'}`}
                                     >
                                         {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Terrain'}
                                     </button>
@@ -1071,11 +1146,74 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             else { setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                                         }}
                                         disabled={analyzing}
-                                        className={`px-2 py-2 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                                        className={`flex-1 px-2 py-1 rounded-lg text-[9px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                                     >
-                                        {(loadingPAS && historicMode) ? '...' : 'Historic'}
+                                        {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Historic'}
                                     </button>
                                 </div>
+                            </div>
+
+                            {/* Scrollable content — hotspot + target lists */}
+                            <div className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
+                                {sortedHotspots.length > 0 && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Landscape Hotspots</p>
+                                        <div className="space-y-2">
+                                            {sortedHotspots.map(h => {
+                                                const hStr = getHotspotSignalStrength(h.score);
+                                                const hier = getHotspotResultHierarchy(h, hStr);
+                                                const col = hStr === 'Strong Zone' ? 'text-amber-400' : hStr === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
+                                                return (
+                                                    <button
+                                                        key={h.id}
+                                                        onClick={() => { setSheetExpanded(false); setSelectedHotspotId(h.id); mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 }); }}
+                                                        className="w-full text-left p-3 rounded-xl bg-slate-900/50 border border-white/8 active:scale-[0.98] transition-all hover:border-white/15"
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <div className="min-w-0">
+                                                                <p className="text-[7px] font-black text-white/25 uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
+                                                                <p className={`text-xs font-black leading-tight ${col}`}>{hier.signalStrength}</p>
+                                                                <p className="text-[10px] font-bold text-white/55 leading-tight mt-0.5 line-clamp-2">{hier.whyItMatters}</p>
+                                                            </div>
+                                                            <span className="text-[8px] font-black text-white/20 shrink-0 mt-0.5">#{h.number}</span>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {displayTargets.length > 0 && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Investigation Targets</p>
+                                        <div className="space-y-2">
+                                            {displayTargets.map(f => {
+                                                const tI = buildTargetInterpretation(f);
+                                                const isPrimary = f.id === primaryTargetId;
+                                                return (
+                                                    <button
+                                                        key={f.id}
+                                                        onClick={() => { setSheetExpanded(false); setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
+                                                        className={`w-full text-left p-3 rounded-xl border-2 active:scale-[0.98] transition-all ${f.isProtected ? 'bg-red-950/20 border-red-900/50' : isPrimary ? 'bg-slate-900/60 border-emerald-500/35 shadow-[0_0_12px_rgba(16,185,129,0.06)]' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
+                                                    >
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="min-w-0">
+                                                                {!f.isProtected && <p className="text-[7px] font-black text-white/25 uppercase tracking-widest mb-0.5">{f.type}</p>}
+                                                                <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-red-300' : isPrimary ? 'text-emerald-300' : 'text-white/65'}`}>
+                                                                    {f.isProtected ? 'Protected Feature' : getTargetVerdict(tI.signalStrength, isPrimary)}
+                                                                </p>
+                                                            </div>
+                                                            {isPrimary && !f.isProtected && <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {!hasScanned && (
+                                    <p className="text-center text-[10px] font-bold text-white/20 uppercase tracking-widest italic py-6">Scan to read the landscape</p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -1777,7 +1915,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
                                 disabled={analyzing || isTerrainScanning}
                                 title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
-                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-700 text-white hover:bg-slate-600 border border-white/10' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.25)]'}`}
+                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'}`}
                             >
                                 {analyzing || isTerrainScanning ? 'Reading...' : detectedFeatures.length > 0 ? 'Clear Scan' : 'Terrain'}
                             </button>
@@ -1942,7 +2080,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hierarchy = getHotspotResultHierarchy(h, hStrength);
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-white/35';
-                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/30 border-amber-500/20 hover:border-amber-500/40' : hStrength === 'Moderate Zone' ? 'bg-slate-950/30 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-slate-950/30 border-white/10 hover:border-white/20';
+                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/15 border-amber-500/12 hover:border-amber-500/25' : hStrength === 'Moderate Zone' ? 'bg-slate-950/15 border-emerald-500/12 hover:border-emerald-500/25' : 'bg-slate-950/15 border-white/6 hover:border-white/12';
                                 const isPrimaryHotspot = h.number === 1;
                                 const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 const isCompared = compareHotspotIds.includes(h.id);
@@ -1957,9 +2095,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     className={`p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/[0.07] border-white/50 ring-2 ring-white/5' : hBorderIdle}`}
                                 >
                                     <div className="mb-3">
+                                        <p className="text-[6px] font-black text-white/18 uppercase tracking-[0.3em] mb-1.5">Landscape Reading</p>
                                         <div className="flex justify-between items-start mb-1">
                                             <p className="text-[8px] font-black text-white/35 uppercase tracking-widest pr-2">{HOTSPOT_TITLES[h.classification]}</p>
-                                            {isPrimaryHotspot && <span className="bg-white/5 border border-white/10 text-emerald-300 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Review First</span>}
+                                            {isPrimaryHotspot && <span className="bg-white/5 border border-white/8 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Priority</span>}
                                         </div>
                                         <p className={`text-sm font-black leading-tight mb-1 ${hStrengthColour}`}>{hierarchy.signalStrength}</p>
                                         <p className="text-[10px] font-bold text-white/75 leading-snug mb-1.5">{hierarchy.whyItMatters}</p>
@@ -1984,6 +2123,20 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         >
                                             {INVESTIGATION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                                         </select>
+                                        <textarea
+                                            value={pendingNotes[h.id] ?? (investigationMap.get(h.id)?.notes ?? '')}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                e.stopPropagation();
+                                                setPendingNotes(prev => ({ ...prev, [h.id]: e.target.value }));
+                                            }}
+                                            onBlur={(e) => {
+                                                void saveHotspotNote(h.id, e.target.value);
+                                            }}
+                                            placeholder="Field notes..."
+                                            rows={2}
+                                            className="mb-1.5 w-full bg-slate-950/70 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 placeholder-white/20 outline-none focus:border-white/25 resize-none"
+                                        />
                                         {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
                                             <div className="flex items-center gap-2 flex-wrap mt-1 mb-1">
                                                 {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/55 uppercase tracking-widest">{h.secondaryTag}</span>}
@@ -2157,14 +2310,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     key={f.id}
                                     id={`card-${f.id}`}
                                     onClick={() => { setSelectedId(f.id); mapRef.current?.flyTo({ center: f.center, zoom: 17 }); }}
-                                    className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? (f.isProtected ? 'bg-red-950/20 border-red-800/80 ring-2 ring-red-950/50' : 'bg-white/10 border-white ring-4 ring-white/10') : f.isProtected ? 'bg-slate-950/50 border-red-900/60 hover:border-red-800/80' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/40 border-amber-500/30 hover:border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.05)]' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/40 border-emerald-500/30 hover:border-emerald-500/60' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}
+                                    className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? (f.isProtected ? 'bg-red-950/20 border-red-800/80 ring-2 ring-red-950/50' : 'bg-white/10 border-white ring-4 ring-white/10') : f.isProtected ? 'bg-slate-950/50 border-red-900/60 hover:border-red-800/80' : isPrimaryTarget ? 'bg-slate-900/55 border-emerald-500/45 hover:border-emerald-500/65 shadow-[0_0_20px_rgba(16,185,129,0.07)]' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/50 border-amber-500/35 hover:border-amber-500/55' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/50 border-emerald-500/25 hover:border-emerald-500/45' : 'bg-slate-900/50 border-white/12 hover:border-white/22'}`}
                                 >
                                     <div className="flex items-center justify-between gap-2 mb-2">
                                         {!f.isProtected && isPrimaryTarget && (
-                                            <span className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Primary Target</span>
+                                            <span className="bg-emerald-500/25 border border-emerald-500/50 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-[0_0_8px_rgba(16,185,129,0.15)]">Start Here</span>
                                         )}
                                         {!f.isProtected && !isPrimaryTarget && (
-                                            <span className="bg-white/5 border border-white/10 text-white/45 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Actionable Target</span>
+                                            <span className="bg-white/[0.04] border border-white/10 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Target</span>
                                         )}
                                         <p className={`text-[9px] font-black uppercase tracking-[0.2em] ml-auto ${f.isProtected ? 'text-red-200/80' : 'text-white/70'}`}>
                                             {f.isProtected ? 'Protected Feature' : `Target ${f.number}`}
