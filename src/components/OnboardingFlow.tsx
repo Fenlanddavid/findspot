@@ -382,20 +382,27 @@ export default function OnboardingFlow() {
                                 </p>
                             </div>
 
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">What the scan produces</p>
+                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">How Field Guide works</p>
                             <div className="space-y-2 mb-4">
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">🎯</span>
+                                    <span className="text-base shrink-0">▣</span>
                                     <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Targets</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Individual terrain features and signals detected on the ground — things like ridges, depressions, and crop marks.</p>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Terrain scan</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Tap Terrain to read relief, cropmark, water, and route signals around the map centre.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">🔴</span>
+                                    <span className="text-base shrink-0">⌄</span>
                                     <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Hotspots</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Clusters of signals that align in one place. These are scored and ranked — tap one to see what the data shows and how to approach it.</p>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Expandable review panel</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">After a scan, expand the panel to review terrain results, switch to Targets, and tap items for details.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
+                                    <span className="text-base shrink-0">●</span>
+                                    <div>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Historic review</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Tap Historic to add heritage records, old routes, crossings, and landscape context to the same area.</p>
                                     </div>
                                 </div>
                             </div>
@@ -403,17 +410,17 @@ export default function OnboardingFlow() {
                             <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Map options</p>
                             <div className="space-y-2 mb-4">
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">🛰️</span>
+                                    <span className="text-base shrink-0">▤</span>
                                     <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Satellite / Map toggle</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Switch between satellite imagery and standard map view to orientate yourself on the ground.</p>
+                                        <p className="text-[12px] font-black text-white mb-0.5">Layers button</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">Use the map Layers button to switch satellite view on, and to show LiDAR or old map overlays.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">📡</span>
+                                    <span className="text-base shrink-0">≋</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">LiDAR &amp; historic maps</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Toggle LiDAR to see a detailed elevation relief — often reveals features invisible on satellite. Historic map overlays (OS 1895, OS 1900) show how the landscape looked in the past.</p>
+                                        <p className="text-[11px] text-white/45 leading-snug">LiDAR shows subtle relief that satellite can miss. Old map overlays include OS 1895 and OS 1900.</p>
                                     </div>
                                 </div>
                             </div>
@@ -421,10 +428,10 @@ export default function OnboardingFlow() {
                             <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Confidence levels</p>
                             <div className="space-y-1.5">
                                 {[
-                                    { label: 'Corroborated Signal', colour: 'text-amber-400', desc: 'Multiple strong signals agree - worth prioritising' },
+                                    { label: 'Strongest Signal', colour: 'text-amber-400',   desc: 'Multiple strong signals agree - worth prioritising' },
                                     { label: 'Strong Signal',    colour: 'text-emerald-400', desc: 'Good agreement across data sources' },
-                                    { label: 'Emerging Signal',  colour: 'text-white/60',    desc: 'Some signals present — interesting but not confirmed' },
-                                    { label: 'Limited Signal',   colour: 'text-white/35',    desc: 'Weak signals only - treat as exploratory' },
+                                    { label: 'Developing Signal', colour: 'text-white/60',   desc: 'Some signals present - interesting but not confirmed' },
+                                    { label: 'Weak Signal',      colour: 'text-white/35',    desc: 'Limited evidence - treat as exploratory' },
                                 ].map(({ label, colour, desc }) => (
                                     <div key={label} className="flex items-start gap-3">
                                         <span className={`text-[11px] font-black ${colour} w-28 shrink-0 leading-snug`}>{label}</span>
