@@ -33,8 +33,10 @@ export interface Cluster {
     linkedClusterIds?: string[];
     scale?: 'Micro' | 'Local' | 'Landscape';
     // Set when a target centroid or linear form aligns too closely with a road,
-    // track, or path without independent physical evidence. Suppressed from display.
+    // track, or path. Suppressed from target display; may still inform hotspots
+    // when independently corroborated.
     isRouteArtefactRisk?: boolean;
+    routeArtefactReason?: 'centroid_near_modern_way' | 'linear_alignment_with_modern_way';
 }
 
 // A modern mapped way (road, track, path) from OSM — used only for target

@@ -25,6 +25,21 @@ import { LogSource, LogLevel } from '../utils/scanLogger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+function hasStrongIndependentEvidence(c: Cluster): boolean {
+    const hasLidar = c.sources.includes('terrain') || c.sources.includes('terrain_global');
+    const hasMultiSeasonSat = c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
+
+    return (
+        (hasLidar && (hasMultiSeasonSat || c.sources.includes('hydrology') || c.multiScale === true)) ||
+        hasMultiSeasonSat ||
+        c.aimInfo !== undefined
+    );
+}
+
+function getHotspotInput(clusters: Cluster[]): Cluster[] {
+    return clusters.filter(c => !c.isRouteArtefactRisk || hasStrongIndependentEvidence(c));
+}
+
 /**
  * The formalised handoff from terrain scan to historic phase.
  * nhleData / aimData are null when running historic standalone (trigger re-fetch).
@@ -110,7 +125,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.09a';
+        const ENGINE_VERSION = 'FG-2026.05.09b';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -187,7 +202,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     cachedModernWays = await fetchModernWays(center.lat, center.lng, signal);
                     applyRouteArtefactSuppression(contextualized, cachedModernWays, routes);
                 } catch { /* non-critical */ }
-                const hotspots = buildTerrainHotspots(contextualized.filter(c => !c.isRouteArtefactRisk), routes, monumentPoints);
+                const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, hotspots,
@@ -319,14 +334,15 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
-            // Suppress targets that sit on roads/paths and lack independent evidence.
+            // Suppress target display near modern roads/paths, while allowing
+            // corroborated signals to keep contributing to hotspot context.
             // modernWaysPromise was started in parallel with other fetches.
             onStatusChange('Filtering modern route artefacts...');
             const modernWays = await modernWaysPromise;
             applyRouteArtefactSuppression(contextualized, modernWays, routes);
 
             onStatusChange('Building hotspot model...');
-            const hotspots = buildTerrainHotspots(contextualized.filter(c => !c.isRouteArtefactRisk), routes, monumentPoints);
+            const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');

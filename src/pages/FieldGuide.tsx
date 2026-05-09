@@ -861,7 +861,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         const payload = {
             exportVersion:    '1',
-            engineVersion:    'FG-2026.05.09a',
+            engineVersion:    'FG-2026.05.09b',
             exportedAt:       Date.now(),
             scanId:           tileKey,
             center:           { lat: center.lat, lng: center.lng },
@@ -2443,7 +2443,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             const mb  = mapRef.current?.getBounds();
                                                             const payload = {
                                                                 exportedAt:        new Date().toISOString(),
-                                                                engineVersion:     'FG-2026.05.09a',
+                                                                engineVersion:     'FG-2026.05.09b',
                                                                 fromCache:         scanFromCache,
                                                                 scanCenter:        mc ? { lat: mc.lat, lng: mc.lng } : null,
                                                                 viewportBounds:    mb ? { west: mb.getWest(), south: mb.getSouth(), east: mb.getEast(), north: mb.getNorth() } : null,

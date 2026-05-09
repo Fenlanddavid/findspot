@@ -543,8 +543,8 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 // path. These targets are likely scanner artefacts caused by the road surface
 // or embankment rather than archaeology.
 //
-// The flag is set in-place on each cluster; callers then filter flagged targets
-// out of display and hotspot generation.
+// The flag is set in-place on each cluster; target display filters it strictly,
+// while hotspot generation can still keep independently corroborated signals.
 
 // Route artefact suppression applies to all clusters unless formally protected
 // (isProtected). Historic routes are intentionally not used for suppression:
@@ -561,29 +561,32 @@ export function applyRouteArtefactSuppression(
         if (c.isProtected) continue;
 
         // ── Proximity check: centroid within 20m of any modern way ───────────
-        let flagged = false;
+        let reason: Cluster['routeArtefactReason'] | undefined;
 
         for (const way of modernWays) {
             const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-            if (dist <= 20) { flagged = true; break; }
+            if (dist <= 20) { reason = 'centroid_near_modern_way'; break; }
         }
 
         // ── Linear alignment check: high-ratio target whose bearing matches ──
         // a nearby way within 15°. Catches road-following linear scanner artefacts
         // that just miss the centroid threshold.
-        if (!flagged && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
+        if (!reason && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
             for (const way of modernWays) {
                 const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
                 if (dist > 30) continue;
                 const wayBearing = computeRouteBearing(way.geometry);
                 // Linear targets can run parallel in either direction — check both
                 if (bearingDiff(c.bearing, wayBearing) <= 15 || bearingDiff(c.bearing, (wayBearing + 180) % 360) <= 15) {
-                    flagged = true;
+                    reason = 'linear_alignment_with_modern_way';
                     break;
                 }
             }
         }
 
-        if (flagged) c.isRouteArtefactRisk = true;
+        if (reason) {
+            c.isRouteArtefactRisk = true;
+            c.routeArtefactReason = reason;
+        }
     }
 }
