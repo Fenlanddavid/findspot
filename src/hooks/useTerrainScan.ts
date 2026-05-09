@@ -45,6 +45,7 @@ export interface TerrainScanResult {
     nhleData:           NHLEResponse;
     aimData:            AIMResponse;
     routes:             HistoricRoute[];
+    modernWays:         import('../pages/fieldGuideTypes').ModernWay[];
     monumentPoints:     [number, number][];
     heritageCount:      number;
     sourceAvailability: Record<string, boolean>;
@@ -109,7 +110,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.02b';
+        const ENGINE_VERSION = 'FG-2026.05.09a';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -180,16 +181,17 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
                     .map((c, i) => ({ ...c, number: i + 1 }));
-                // Suppress targets that sit on roads/paths and lack independent evidence
+                // Suppress targets that sit on modern roads/paths before hotspot generation
+                let cachedModernWays: import('../pages/fieldGuideTypes').ModernWay[] = [];
                 try {
-                    const modernWays = await fetchModernWays(center.lat, center.lng, signal);
-                    applyRouteArtefactSuppression(contextualized, modernWays, routes);
+                    cachedModernWays = await fetchModernWays(center.lat, center.lng, signal);
+                    applyRouteArtefactSuppression(contextualized, cachedModernWays, routes);
                 } catch { /* non-critical */ }
-                const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
+                const hotspots = buildTerrainHotspots(contextualized.filter(c => !c.isRouteArtefactRisk), routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, hotspots,
-                    nhleData, aimData, routes, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
+                    nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
                     sourceAvailability: cached.sourceAvailability, fromCache: true,
                 };
             }
@@ -324,13 +326,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             applyRouteArtefactSuppression(contextualized, modernWays, routes);
 
             onStatusChange('Building hotspot model...');
-            const hotspots = buildTerrainHotspots(contextualized, routes, monumentPoints);
+            const hotspots = buildTerrainHotspots(contextualized.filter(c => !c.isRouteArtefactRisk), routes, monumentPoints);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
 
             if (mountedRef.current) setIsScanning(false);
-            return { terrainClusters: contextualized, detectedFeatures: contextualized, hotspots, nhleData, aimData, routes, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
+            return { terrainClusters: contextualized, detectedFeatures: contextualized, hotspots, nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
 
         } catch (e) {
             if (tokenRef.current === token) {

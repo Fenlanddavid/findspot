@@ -313,7 +313,7 @@ export function useFieldGuideMap({
         if (!source) return;
         source.setData({
             type: 'FeatureCollection',
-            features: detectedFeatures.map(f => ({
+            features: detectedFeatures.filter(f => !f.isRouteArtefactRisk).map(f => ({
                 type: 'Feature' as const,
                 geometry: { type: 'Point' as const, coordinates: f.center },
                 properties: { id: f.id, number: f.number.toString(), isProtected: f.isProtected, source: f.sources[0], consensus: f.sources.length, isPrimary: f.id === primaryTargetId },
@@ -327,10 +327,11 @@ export function useFieldGuideMap({
         if (!map) return;
         const source = map.getSource('cluster-links') as maplibregl.GeoJSONSource;
         if (!source) return;
-        const idToCenter = new Map(detectedFeatures.map(f => [f.id, f.center]));
+        const validFeatures = detectedFeatures.filter(f => !f.isRouteArtefactRisk);
+        const idToCenter = new Map(validFeatures.map(f => [f.id, f.center]));
         const seen = new Set<string>();
         const features: GeoJSON.Feature[] = [];
-        for (const f of detectedFeatures) {
+        for (const f of validFeatures) {
             if (!f.linkedClusterIds?.length) continue;
             for (const linkedId of f.linkedClusterIds) {
                 const key = [f.id, linkedId].sort().join('|');

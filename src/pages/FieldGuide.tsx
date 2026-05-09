@@ -1,7 +1,7 @@
 import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, FieldGuideInvestigationStatus, Find, Media } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
@@ -200,18 +200,31 @@ function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength):
 //                      sites, not fresh detections.
 
 function hasTargetEvidence(f: Cluster): boolean {
+    const hasLidar = f.sources.includes('terrain') || f.sources.includes('terrain_global');
+    const hasSlopeWithPhysicalSupport = f.sources.includes('slope') && (
+        hasLidar ||
+        f.sources.includes('hydrology') ||
+        f.sources.includes('satellite_spring') ||
+        f.sources.includes('satellite_summer')
+    );
     return (
-        f.sources.includes('terrain') ||
-        f.sources.includes('terrain_global') ||
+        hasLidar ||
+        hasSlopeWithPhysicalSupport ||
         (f.sources.includes('satellite_summer') && f.sources.includes('satellite_spring')) ||
         f.aimInfo !== undefined
     );
 }
 
 function hasLocalPhysicalEvidence(f: Cluster): boolean {
+    const hasLidar = f.sources.includes('terrain') || f.sources.includes('terrain_global');
+    const hasSlopeWithLocalSupport = f.sources.includes('slope') && (
+        hasLidar ||
+        (f.sources.includes('satellite_spring') && f.sources.includes('satellite_summer')) ||
+        f.multiScale === true
+    );
     return (
-        f.sources.includes('terrain') ||
-        f.sources.includes('terrain_global') ||
+        hasLidar ||
+        hasSlopeWithLocalSupport ||
         (f.sources.includes('satellite_spring') && f.sources.includes('satellite_summer')) ||
         f.multiScale === true
     );
@@ -250,7 +263,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Engine state
     const [engineState, dispatch] = useReducer(engineReducer, initialEngineState);
     const {
-        analyzing, hotspotVersion, terrainClusters,
+        analyzing, hotspotVersion, terrainClusters, scanPhase,
         detectedFeatures, hotspots, hasScanned,
         heritageCount, monumentPoints, historicRoutes,
     } = engineState;
@@ -285,13 +298,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
-    const [compareHotspotIds,        setCompareHotspotIds]        = useState<string[]>([]);
     const [sheetExpanded,          setSheetExpanded]          = useState(() => { try { return localStorage.getItem('fs_fg_sheet') === '1'; } catch { return false; } });
+    const [devMode,                setDevMode]                = useState(() => { try { return localStorage.getItem('fs_fg_devmode') === '1'; } catch { return false; } });
     const [focusMode,              setFocusMode]              = useState(false);
     const [mobileSheetMode,        setMobileSheetMode]        = useState<'hotspots' | 'targets'>('hotspots');
     const sheetDragStartY = useRef<number | null>(null);
-    const [pendingNotes,           setPendingNotes]           = useState<Record<string, string>>({});
-    const [showPermissionPicker,   setShowPermissionPicker]   = useState(false);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
     // PAS / intel state
@@ -303,6 +314,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Terrain scan centre — for drift guard in historic phase
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
 
+    // Lab export: NHLE/AIM responses and modern ways stored after scan for engine-lab export
+    const nhleDataRef      = useRef<{ features: any[] } | null>(null);
+    const aimDataRef       = useRef<{ features: any[] } | null>(null);
+    const modernWaysRef    = useRef<import('./fieldGuideTypes').ModernWay[]>([]);
+
     // User location marker (shown after GPS button press, persists for session)
     const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
     const [userGpsPos, setUserGpsPos] = useState<[number, number] | null>(null);
@@ -310,15 +326,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Scoring hook
     const { potentialScore, scanConfidence, setPotentialScore, setScanConfidence, calculatePotentialScore } = usePotentialScore();
 
-    const nav = useNavigate();
-
     const permissions = useLiveQuery(() => db.permissions.where('projectId').equals(projectId).toArray()) || [];
     const realPermissions = permissions.filter(p => !p.isDefault);
     const fields      = useLiveQuery(() => db.fields.where('projectId').equals(projectId).toArray()) || [];
-    const activeSession = useLiveQuery(async () => {
-        const sessions = await db.sessions.where('projectId').equals(projectId).filter(s => !s.isFinished).toArray();
-        return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
-    }, [projectId]);
 
     // ─── Find context for hotspot annotation ─────────────────────────────────
     const projectFinds = useLiveQuery(
@@ -430,10 +440,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         await updateHotspotInvestigation(hotspotId, { status });
     }, [updateHotspotInvestigation]);
 
-    const saveHotspotNote = useCallback(async (hotspotId: string, notes: string) => {
-        await updateHotspotInvestigation(hotspotId, { notes });
-    }, [updateHotspotInvestigation]);
-
     const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
         sheetDragStartY.current = e.touches[0].clientY;
     }, []);
@@ -445,19 +451,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         if (Math.abs(delta) < 20) return;
         persistSheetExpanded(delta > 0);
     }, [persistSheetExpanded]);
-
-    const toggleCompareHotspot = useCallback((hotspotId: string) => {
-        setCompareHotspotIds(prev => {
-            if (prev.includes(hotspotId)) return prev.filter(id => id !== hotspotId);
-            return [...prev.slice(-1), hotspotId];
-        });
-    }, []);
-
-    const compareHotspots = useMemo(() => {
-        return compareHotspotIds
-            .map(id => sortedHotspots.find(h => h.id === id))
-            .filter((h): h is Hotspot => Boolean(h));
-    }, [compareHotspotIds, sortedHotspots]);
 
     const targetFindContext = useMemo((): Map<string, { status: 'within' | 'nearby'; count: number }> => {
         const map = new Map<string, { status: 'within' | 'nearby'; count: number }>();
@@ -513,13 +506,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return sorted[0].id;
     }, [displayTargets, userGpsPos]);
 
-    function handleStartSession() {
-        if (activeSession) { nav(`/session/${activeSession.id}`); return; }
-        if (realPermissions.length === 0) { nav('/permission'); return; }
-        if (realPermissions.length === 1) { nav(`/session/new?permissionId=${realPermissions[0].id}`); return; }
-        setShowPermissionPicker(p => !p);
-    }
-
     const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
@@ -536,7 +522,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }, []);
 
     const logContainerRef  = useRef<HTMLDivElement>(null);
-    const scrollRef        = useRef<HTMLDivElement>(null);
     const sheetScrollRef   = useRef<HTMLDivElement>(null);
 
     useLayoutEffect(() => {
@@ -623,7 +608,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSelectedHotspotId(null);
         setMobileSheetMode('hotspots');
         setShowSuggestion(false);
-        setShowPermissionPicker(false);
         setShowFieldsPicker(false);
         setFieldPickerStep('top');
         setScanStatus('');
@@ -714,6 +698,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         // Push NHLE and AIM data to map sources
         applyNhleToMap(result.nhleData);
         applyAimToMap(result.aimData);
+        nhleDataRef.current   = result.nhleData;
+        aimDataRef.current    = result.aimData;
+        modernWaysRef.current = result.modernWays ?? [];
 
         setSourceAvailability(result.sourceAvailability ?? null);
         setScanFromCache(result.fromCache);
@@ -795,9 +782,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         }
     }, [selectedId, selectedUserFind, selectedPASFind, selectedMonument]);
 
-    useEffect(() => {
-        setShowPermissionPicker(false);
-    }, [selectedHotspotId]);
 
     // ─── GPS / search ─────────────────────────────────────────────────────────
 
@@ -845,12 +829,64 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const searchLocation = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!searchQuery) return;
+        if (searchQuery.trim().toLowerCase() === 'dev mode') {
+            const next = !devMode;
+            setDevMode(next);
+            try { localStorage.setItem('fs_fg_devmode', next ? '1' : '0'); } catch {}
+            setSearchQuery('');
+            setIsSearchOpen(false);
+            return;
+        }
         try {
             const res  = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
             const data = await res.json();
             if (data[0]) { mapRef.current?.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 16 }); setIsSearchOpen(false); }
         } catch { addLog('> Search failed.', 'system', 'warn'); }
     };
+
+    // ─── Engine Lab export ────────────────────────────────────────────────────
+    const handleLabExport = useCallback(async () => {
+        const map = mapRef.current;
+        if (!map || !sourceAvailability) return;
+
+        const zoom     = SCAN_CONFIG.TERRAIN_ZOOM;
+        const center   = map.getCenter();
+        const bounds   = map.getBounds();
+        const n        = Math.pow(2, zoom);
+        const cX       = (center.lng + 180) / 360 * n;
+        const cY       = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
+        const tileKey  = `${zoom}-${Math.floor(cX) - 1}-${Math.floor(cY) - 1}`;
+
+        const cached = await db.fieldGuideCache.get(tileKey);
+
+        const payload = {
+            exportVersion:    '1',
+            engineVersion:    'FG-2026.05.09a',
+            exportedAt:       Date.now(),
+            scanId:           tileKey,
+            center:           { lat: center.lat, lng: center.lng },
+            bounds:           { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() },
+            sourceAvailability,
+            rawClusters:      cached?.rawClusters ?? [],
+            nhleData:         nhleDataRef.current    ?? { features: [] },
+            aimData:          aimDataRef.current     ?? { features: [] },
+            modernWays:       modernWaysRef.current  ?? [],
+            routes:           historicRoutes,
+            pasFinds,
+            placeSignals,
+            monumentPoints,
+            referenceTargets: displayTargets,
+        };
+
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url  = URL.createObjectURL(blob);
+        const a    = Object.assign(document.createElement('a'), {
+            href: url, download: `fieldguide-lab-${tileKey}-${Date.now()}.json`,
+        });
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets]);
 
     // ─── Derived convenience aliases ──────────────────────────────────────────
 
@@ -1001,7 +1037,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     )}
 
                     {/* Map Layer Toggle + Search */}
-                    <div className="absolute top-4 right-4 z-[59] flex flex-col gap-2 lg:hidden">
+                    <div className="absolute top-4 right-4 z-[59] flex flex-col gap-2">
                         <button
                             onClick={() => { setIsSearchOpen(!isSearchOpen); setShowLayerPicker(false); }}
                             aria-label={isSearchOpen ? 'Close search' : 'Search place'}
@@ -1063,8 +1099,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             )}
                         </div>
                     </div>
-                    {/* Desktop map controls (search + satellite unchanged) */}
-                    <div className="absolute top-4 right-4 z-[59] hidden lg:flex flex-col gap-2">
+                    {/* Desktop map controls — hidden; mobile controls now show on all screens */}
+                    <div className="absolute top-4 right-4 z-[59] hidden flex-col gap-2">
                         <button
                             onClick={() => setIsSearchOpen(!isSearchOpen)}
                             aria-label={isSearchOpen ? 'Close search' : 'Search place'}
@@ -1128,7 +1164,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {/* Mobile Bottom Sheet */}
                     {(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId)) && (
                         <div
-                            className={`absolute bottom-3 left-3 right-3 z-[85] lg:hidden flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'}`}
+                            className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'}`}
                         >
                             {/* Handle + Status + Actions — always visible */}
                             <div
@@ -1787,7 +1823,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Scheduled Monument Card — on boundary click */}
                     {selectedMonument !== undefined && (
-                        <div className="hidden lg:block absolute bottom-6 left-auto right-6 w-96 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="hidden absolute bottom-6 left-auto right-6 w-96 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-200">
                             <div className="bg-slate-950/98 border border-stone-700/50 rounded-3xl p-5 shadow-2xl">
                                 <div className="flex items-start justify-between mb-3">
                                     <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em]">Scheduled Monument</p>
@@ -1806,7 +1842,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Hotspot Card Popup */}
                     {selectedHotspotId && !historicMode && (
-                        <div className="hidden lg:block absolute lg:bottom-6 lg:left-auto lg:right-6 lg:w-96 lg:max-h-[80vh] overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="hidden absolute bottom-6 left-auto right-6 w-96 max-h-[80vh] overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {hotspots.filter(h => h.id === selectedHotspotId).map(h => {
                                 const hStrength = getHotspotSignalStrength(h.score);
                                 const hierarchy = getHotspotResultHierarchy(h, hStrength);
@@ -1956,7 +1992,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* Target Card Popup — desktop only; mobile shows inside panel */}
                     {selectedId && !selectedHotspotId && (
-                        <div className="hidden lg:block absolute bottom-6 left-auto right-6 w-96 max-h-[80vh] overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="hidden absolute bottom-6 left-auto right-6 w-96 max-h-[80vh] overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                             {detectedFeatures.filter(f => f.id === selectedId).map(f => {
                                 const tInterp = buildTargetInterpretation(f);
                                 const isPrimaryTarget = f.id === primaryTargetId;
@@ -1971,7 +2007,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     'Supporting Signal': 'border-white/20',
                                 };
                                 return (
-                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border bg-slate-950/98 shadow-2xl backdrop-blur-xl transition-all ${f.isProtected ? 'border-stone-700/50' : borderColour[tInterp.signalStrength]}`}>
+                                    <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-stone-700/50' : borderColour[tInterp.signalStrength]}`}>
                                         <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
                                         {f.isProtected ? (
                                             /* Scheduled Monument — restrained heritage warning, no investigation prompts */
@@ -2122,7 +2158,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     {historicMode && !isIntelOpen && (
                             <button
                                 onClick={() => setIsIntelOpen(true)}
-                                className="hidden lg:flex absolute top-14 left-4 z-[90] bg-slate-900/90 px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-lg items-center gap-2 active:scale-95 transition-all"
+                                className="hidden absolute top-14 left-4 z-[90] bg-slate-900/90 px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-lg items-center gap-2 active:scale-95 transition-all"
                             >
                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
                                 <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">
@@ -2147,17 +2183,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         return (
                         <>
                         {/* Tap-behind to dismiss */}
-                        <div className="hidden lg:block absolute inset-0 z-[104]" onClick={() => setIsIntelOpen(false)} />
+                        <div className="hidden absolute inset-0 z-[104]" onClick={() => setIsIntelOpen(false)} />
                         {/* Context card — same position/style as hotspot card popup */}
-                        <div className="hidden lg:block absolute bottom-6 left-4 right-4 z-[105] lg:left-auto lg:right-6 lg:w-96 animate-in slide-in-from-bottom-4 fade-in duration-200">
+                        <div className="hidden absolute bottom-6 right-6 w-96 z-[105] animate-in slide-in-from-bottom-4 fade-in duration-200">
                         <div className="bg-slate-900 border-2 border-amber-500/40 shadow-[0_0_40px_rgba(245,158,11,0.15)] rounded-3xl overflow-hidden">
 
                             {/* Card header row */}
                             <div className="flex justify-between items-start px-5 pt-4 pb-0">
                                 <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Landscape Context</p>
-                                <button onClick={() => setIsIntelOpen(false)} className="text-white/30 hover:text-white/60 transition-colors -mt-1 -mr-1 p-1">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                </button>
+                                <div className="flex items-center gap-2 -mt-1 -mr-1">
+                                    {sourceAvailability && (
+                                        <button onClick={handleLabExport} className="text-[8px] font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest transition-colors px-2 py-1 border border-amber-500/30 rounded-lg bg-amber-500/10 hover:bg-amber-500/20">
+                                            ↓ Export for Lab
+                                        </button>
+                                    )}
+                                    <button onClick={() => setIsIntelOpen(false)} className="text-white/30 hover:text-white/60 transition-colors p-1">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="overflow-y-auto max-h-[52vh] px-5 pb-5 pt-2 space-y-3">
@@ -2387,14 +2430,20 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                                             {/* Export scan data — for validation / debugging */}
                                             {sourceAvailability && sortedHotspots.length > 0 && (
-                                                <div className="pt-2 border-t border-white/8">
+                                                <div className="pt-2 border-t border-white/8 flex flex-col gap-1">
+                                                    <button
+                                                        onClick={handleLabExport}
+                                                        className="w-full text-center text-[9px] font-black text-amber-600/70 hover:text-amber-400 uppercase tracking-widest transition-colors py-1"
+                                                    >
+                                                        ↓ Export for Lab
+                                                    </button>
                                                     <button
                                                         onClick={() => {
                                                             const mc  = mapRef.current?.getCenter();
                                                             const mb  = mapRef.current?.getBounds();
                                                             const payload = {
                                                                 exportedAt:        new Date().toISOString(),
-                                                                engineVersion:     'FG-2026.05.02',
+                                                                engineVersion:     'FG-2026.05.09a',
                                                                 fromCache:         scanFromCache,
                                                                 scanCenter:        mc ? { lat: mc.lat, lng: mc.lng } : null,
                                                                 viewportBounds:    mb ? { west: mb.getWest(), south: mb.getSouth(), east: mb.getEast(), north: mb.getNorth() } : null,
@@ -2450,572 +2499,80 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                     })()}
                 </div>
 
-                {/* Sidebar */}
-                <div className="hidden lg:flex lg:w-96 flex-col bg-slate-900/80 backdrop-blur-xl border-l border-white/5 shrink-0 relative z-50 overflow-y-auto scrollbar-hide">
+                {/* Sidebar — dev mode only */}
+                <div className={devMode ? 'flex w-80 flex-col bg-slate-950 border-l border-white/5 shrink-0 relative z-50' : 'hidden'}>
 
-                    {/* Unified Scan Panel - Desktop */}
-                    <div className="p-5 border-b border-white/10 bg-slate-950/35">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em]">Scan Panel</p>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <h2 className="text-lg font-black text-white tracking-tight leading-tight">
-                                        {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : historicMode ? 'Historic Review' : hasScanned ? 'Hotspot Review' : 'Ready to Scan'}
-                                    </h2>
-                                    {!analyzing && !isTerrainScanning && !loadingPAS && ((historicMode && historicScanComplete) || (!historicMode && hasScanned && terrainScanComplete)) && (
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
-                                    )}
-                                </div>
-                            </div>
-                            {potentialScore && (
-                                <span className="text-[10px] font-black text-white bg-emerald-500 px-2.5 py-1 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.35)] shrink-0">{potentialScore.score}%</span>
-                            )}
+                    {/* Dev Mode Header */}
+                    <div className="px-4 py-3 border-b border-white/8 bg-amber-500/5 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                            <span className="text-[9px] font-black text-amber-400 uppercase tracking-[0.25em]">Dev Mode</span>
                         </div>
+                        <button
+                            onClick={() => { setDevMode(false); try { localStorage.setItem('fs_fg_devmode', '0'); } catch {} }}
+                            className="text-[8px] font-black text-white/30 hover:text-white/70 uppercase tracking-widest transition-colors px-2 py-1 rounded-lg hover:bg-white/5 active:scale-95"
+                        >
+                            Exit
+                        </button>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                            <button
-                                onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
-                                disabled={analyzing || isTerrainScanning}
-                                title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
-                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'}`}
-                            >
-                                {analyzing || isTerrainScanning ? 'Reading...' : detectedFeatures.length > 0 ? 'Clear Scan' : 'Terrain'}
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (analyzing) return;
-                                    if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                    else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
-                                }}
-                                disabled={analyzing}
-                                className={`px-3 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500/10 text-blue-300 border-blue-500/30 hover:bg-blue-500/20'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
-                            >
-                                {(loadingPAS && historicMode) ? 'Reading...' : 'Historic'}
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 mb-4">
-                            <button
-                                onClick={() => setShowFieldsPicker(v => !v)}
-                                aria-label="Choose visible fields"
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${showFields !== false ? 'bg-teal-500/15 border-teal-400/40 text-teal-200' : showFieldsPicker ? 'bg-white/10 border-white/20 text-white' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M12 9v12"/></svg>
-                                {showFields !== false && showFields !== 'all'
-                                    ? showFields.startsWith('field:')
-                                        ? (fields.find(f => f.id === showFields.slice(6))?.name?.split(' ')[0] ?? 'Field')
-                                        : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'Fields')
-                                    : showFields === 'all' ? 'All Fields' : 'My Fields'}
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))}
-                                aria-label="Toggle LiDAR overlay"
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.lidar ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))}
-                                aria-label="Toggle OS 1895 overlay"
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1880 ? 'bg-amber-500/20 border-amber-400/50 text-amber-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                OS 1895
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))}
-                                aria-label="Toggle OS 1900 overlay"
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerToggles.os1930 ? 'bg-orange-500/20 border-orange-400/50 text-orange-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-                                OS 1900
-                            </button>
-                            <button
-                                onClick={() => setHistoricLayerVisibility(p => ({ ...p, context: !p.context }))}
-                                aria-label="Toggle landscape context layer"
-                                className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility.context ? 'bg-blue-500/15 border-blue-400/40 text-blue-200' : 'bg-white/[0.03] border-white/10 text-slate-400'}`}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 19h16M6 15l4-8 4 5 2-3 2 6"/></svg>
-                                Context
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2 mb-4">
-                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                    {/* Scan Stats */}
+                    <div className="px-4 py-3 border-b border-white/8 shrink-0">
+                        <p className="text-[7px] font-black text-white/25 uppercase tracking-[0.2em] mb-2">Scan State</p>
+                        <div className="grid grid-cols-3 gap-1.5 mb-2">
+                            <div className="bg-white/[0.03] border border-white/8 rounded-lg p-2 text-center">
                                 <span className="block text-sm font-black text-emerald-300">{sortedHotspots.length}</span>
-                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Hotspots</span>
+                                <span className="text-[6px] font-black text-white/25 uppercase tracking-widest">Hotspots</span>
                             </div>
-                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                            <div className="bg-white/[0.03] border border-white/8 rounded-lg p-2 text-center">
                                 <span className="block text-sm font-black text-white">{displayTargets.length}</span>
-                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Targets</span>
+                                <span className="text-[6px] font-black text-white/25 uppercase tracking-widest">Targets</span>
                             </div>
-                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-2">
+                            <div className="bg-white/[0.03] border border-white/8 rounded-lg p-2 text-center">
                                 <span className="block text-sm font-black text-blue-300">{pasFinds.length + historicRoutes.length + placeSignals.length}</span>
-                                <span className="text-[7px] font-black text-white/35 uppercase tracking-widest">Context</span>
+                                <span className="text-[6px] font-black text-white/25 uppercase tracking-widest">Context</span>
                             </div>
                         </div>
-
-                        {potentialScore ? (
-                            <div className="space-y-3">
-                                <div className="relative h-2 bg-black/40 rounded-full overflow-hidden">
-                                    <div className="absolute inset-y-0 left-0 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all duration-1000" style={{ width: `${potentialScore.score}%` }} />
-                                </div>
-                                <div className="space-y-1.5">
-                                    {potentialScore.reasons.slice(0, 3).map((reason, i) => (
-                                        <div key={i} className="flex items-start gap-2">
-                                            <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
-                                            <p className="text-[10px] font-bold text-slate-300 leading-tight">{reason}</p>
-                                        </div>
-                                    ))}
-                                </div>
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="text-[8px] font-mono text-white/30">phase: <span className="text-emerald-400">{scanPhase}</span></span>
+                            {potentialScore && <span className="text-[8px] font-mono text-white/30">score: <span className="text-emerald-400">{potentialScore.score}%</span></span>}
+                            {scanConfidence && <span className="text-[8px] font-mono text-white/30">conf: <span className="text-emerald-400">{scanConfidence}</span></span>}
+                        </div>
+                        {sourceAvailability && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                {Object.entries(sourceAvailability).map(([k, v]) => (
+                                    <span key={k} className={`text-[6px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${v ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/8' : 'text-white/20 border-white/8'}`}>{k}</span>
+                                ))}
                             </div>
-                        ) : (
-                            <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">Run a scan to read landscape signals.</p>
                         )}
                     </div>
 
-                    <div className="p-5 border-b border-white/5 bg-white/[0.02]">
-                        <div className="flex items-baseline justify-between gap-3 mb-3">
-                            <h2 className="text-[10px] font-black text-blue-300 uppercase tracking-[0.2em]">Compare Hotspots</h2>
-                            {compareHotspotIds.length > 0 && (
-                                <button onClick={() => setCompareHotspotIds([])} className="text-[9px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest">Clear</button>
-                            )}
-                        </div>
-                        {compareHotspots.length === 2 ? (
-                            <div className="grid grid-cols-2 gap-2">
-                                {compareHotspots.map(h => {
-                                    const hStrength = getHotspotSignalStrength(h.score);
-                                    const hierarchy = getHotspotResultHierarchy(h, hStrength);
-                                    const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
-                                    return (
-                                        <button
-                                            key={h.id}
-                                            onClick={() => {
-                                                clearMapItemSelections('hotspot');
-                                                setSelectedHotspotId(h.id);
-                                                mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
-                                            }}
-                                            className="text-left rounded-2xl border border-white/10 bg-slate-950/45 p-3 hover:border-blue-400/40 transition-colors"
-                                        >
-                                            <div className="flex items-start justify-between gap-2 mb-2">
-                                                <p className="text-[8px] font-black text-white/35 uppercase tracking-widest">{HOTSPOT_TITLES[h.classification]}</p>
-                                                <span className="text-[8px] font-black text-blue-300">#{h.number}</span>
-                                            </div>
-                                            <p className="text-xs font-black text-white leading-tight mb-1">{hierarchy.signalStrength}</p>
-                                            <p className="text-[9px] font-bold text-white/65 leading-tight mb-2">{hierarchy.whyItMatters}</p>
-                                            <div className="grid grid-cols-2 gap-1.5">
-                                                <div className="rounded-lg bg-white/[0.03] border border-white/8 px-2 py-1">
-                                                    <span className="block text-[10px] font-black text-emerald-300">{h.metrics.signalClassCount}</span>
-                                                    <span className="text-[6px] font-black text-white/35 uppercase tracking-widest">Signals</span>
-                                                </div>
-                                                <div className="rounded-lg bg-white/[0.03] border border-white/8 px-2 py-1">
-                                                    <span className="block text-[10px] font-black text-amber-300">{h.disturbanceRisk ?? 'Low'}</span>
-                                                    <span className="text-[6px] font-black text-white/35 uppercase tracking-widest">Disturbance</span>
-                                                </div>
-                                            </div>
-                                            <p className="mt-2 text-[8px] font-black text-blue-300/75 uppercase tracking-widest">{INVESTIGATION_STATUSES.find(s => s.value === investigationStatus)?.label}</p>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <p className="text-[10px] text-slate-500 font-bold uppercase italic leading-tight">
-                                Select two hotspots below to compare signal strength, evidence and status.
-                            </p>
-                        )}
+                    {/* Export Buttons */}
+                    <div className="px-4 py-3 border-b border-white/8 shrink-0 space-y-2">
+                        <p className="text-[7px] font-black text-white/25 uppercase tracking-[0.2em] mb-2">Export</p>
+                        <button
+                            onClick={handleLabExport}
+                            disabled={!sourceAvailability}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/8 text-amber-400 text-[9px] font-black uppercase tracking-widest hover:bg-amber-500/15 transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98]"
+                        >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Export for Lab
+                        </button>
                     </div>
 
-                    <div className="p-6 border-b border-white/5 shrink-0 overflow-y-auto max-h-[40%] scrollbar-hide">
-                        <div className="flex justify-between items-baseline mb-4">
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-sm font-black text-white uppercase tracking-tighter">Hotspots</h2>
-                                {hotspotVersion && (
-                                    <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border ${hotspotVersion === 'enhanced' ? 'text-amber-400 border-amber-500/40 bg-amber-500/10' : 'text-slate-400 border-slate-500/40 bg-slate-500/10'}`}>
-                                        {hotspotVersion === 'enhanced' ? 'Enhanced' : 'Terrain Only'}
-                                    </span>
-                                )}
-                            </div>
-                            {selectedHotspotId && <button onClick={() => setSelectedHotspotId(null)} className="text-[9px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Clear View</button>}
-                        </div>
-                        <div className="flex flex-col gap-4">
-                            {sortedHotspots.length > 0 ? sortedHotspots.map(h => {
-                                const hStrength = getHotspotSignalStrength(h.score);
-                                const hierarchy = getHotspotResultHierarchy(h, hStrength);
-                                const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-slate-200';
-                                const hBorderIdle = hStrength === 'Strong Zone' ? 'bg-slate-950/30 border-amber-500/20 hover:border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-slate-950/30 border-emerald-500/20 hover:border-emerald-500/35' : 'bg-slate-950/30 border-white/10 hover:border-white/18';
-                                const isPrimaryHotspot = h.number === 1;
-                                const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
-                                const isCompared = compareHotspotIds.includes(h.id);
-                                return (
-                                <div
-                                    key={h.id}
-                                    onClick={() => {
-                                        clearMapItemSelections('hotspot');
-                                        setShowSuggestion(false);
-                                        setSelectedHotspotId(h.id);
-                                        mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
-                                    }}
-                                    className={`p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98] ${selectedHotspotId === h.id ? 'bg-white/[0.07] border-white/50 ring-2 ring-white/5' : hBorderIdle}`}
-                                >
-                                    <div className="mb-3">
-                                        <div className="flex justify-between items-start gap-2 mb-1.5">
-                                            <div className="min-w-0">
-                                                <h3 className="text-[12px] font-black text-white leading-tight">{HOTSPOT_TITLES[h.classification]}</h3>
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                    <span className="text-[7px] font-black text-white/40 uppercase tracking-[0.16em]">Hotspot {h.number}</span>
-                                                    <span className={`rounded-full border px-1.5 py-0.5 text-[7px] font-black ${hStrength === 'Strong Zone' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : hStrength === 'Moderate Zone' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>{hierarchy.signalStrength}</span>
-                                                </div>
-                                            </div>
-                                            {isPrimaryHotspot && <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest flex-shrink-0">Priority</span>}
-                                        </div>
-                                        <p className="text-[10px] font-bold text-white/75 leading-snug mb-1.5">{hierarchy.whyItMatters}</p>
-                                        <p className="text-[9px] font-black text-emerald-400/70 uppercase tracking-widest leading-tight mb-1.5">Cue: {hierarchy.nextAction}</p>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleCompareHotspot(h.id);
-                                            }}
-                                            className={`mb-1.5 w-full rounded-lg border px-2 py-1.5 text-[8px] font-black uppercase tracking-widest transition-colors ${isCompared ? 'bg-blue-500/20 border-blue-400/50 text-blue-200' : 'bg-white/[0.03] border-white/10 text-white/45 hover:text-white/70'}`}
-                                        >
-                                            {isCompared ? 'Selected for Compare' : 'Compare'}
-                                        </button>
-                                        <select
-                                            value={investigationStatus}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => {
-                                                e.stopPropagation();
-                                                void setHotspotInvestigationStatus(h.id, e.target.value as FieldGuideInvestigationStatus);
-                                            }}
-                                            className="mt-1 mb-1.5 w-full bg-slate-950/70 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] font-black text-white/80 uppercase tracking-wider outline-none"
-                                        >
-                                            {INVESTIGATION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                                        </select>
-                                        <textarea
-                                            value={pendingNotes[h.id] ?? (investigationMap.get(h.id)?.notes ?? '')}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => {
-                                                e.stopPropagation();
-                                                setPendingNotes(prev => ({ ...prev, [h.id]: e.target.value }));
-                                            }}
-                                            onBlur={(e) => {
-                                                void saveHotspotNote(h.id, e.target.value);
-                                            }}
-                                            placeholder="Field notes..."
-                                            rows={2}
-                                            className="mb-1.5 w-full bg-slate-950/70 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] text-white/70 placeholder-white/20 outline-none focus:border-white/25 resize-none"
-                                        />
-                                        {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
-                                            <div className="flex items-center gap-2 flex-wrap mt-1 mb-1">
-                                                {h.secondaryTag && <span className="text-[8px] font-bold text-amber-300/55 uppercase tracking-widest">{h.secondaryTag}</span>}
-                                                {h.isOnCorridor && <span className="text-[8px] font-bold text-emerald-500/55 uppercase tracking-widest">On corridor</span>}
-                                                {(h.linkedCount ?? 0) > 0 && <span className="text-[8px] font-bold text-white/35 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
-                                            </div>
-                                        )}
-                                        {(() => {
-                                            const ctx = hotspotFindContext.get(h.id);
-                                            if (!ctx) return null;
-                                            const text = ctx.status === 'within'
-                                                ? `${ctx.count} find${ctx.count !== 1 ? 's' : ''} recorded here`
-                                                : `${ctx.count} find${ctx.count !== 1 ? 's' : ''} nearby`;
-                                            return <p className="text-[7px] font-black text-emerald-400 uppercase tracking-widest mt-1 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded inline-block">{text}</p>;
-                                        })()}
-                                    </div>
-                                    {h.isHighConfidenceCrossing && (
-                                        <div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-3 animate-pulse">
-                                            <p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p>
-                                        </div>
-                                    )}
-                                    {h.disturbanceRisk === 'High' && (
-                                        <div className="bg-red-500/15 px-2 py-1.5 rounded-xl border border-red-400/30 mb-3">
-                                            <p className="m-0 text-[8px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
-                                        </div>
-                                    )}
-                                    <div className="space-y-1.5 mt-3">
-                                        <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1.5">Evidence summary</p>
-                                        {h.explanation.slice(0, 3).map((reason, idx) => (
-                                            <div key={idx} className="flex items-center gap-2">
-                                                <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                                                <p className="text-[11px] font-bold text-slate-200 leading-tight">{reason}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {h.suggestedFocus && (
-                                        <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
-                                            <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
-                                            <p className="text-[9px] leading-tight">
-                                                <span className="font-black text-emerald-500/60 uppercase tracking-widest">Field focus: </span>
-                                                <span className="font-bold text-emerald-300/80">{h.suggestedFocus}</span>
-                                            </p>
-                                        </div>
-                                    )}
-                                    <div className="mt-2.5 pt-2.5 border-t border-white/5">
-                                        <span
-                                            onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)}
-                                            className="text-[10px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
-                                        >
-                                            {expandedInterpretationId === h.id ? '▲ Hide evidence breakdown' : '▼ See full evidence breakdown'}
-                                        </span>
-                                        {expandedInterpretationId === h.id && (() => {
-                                            const interp = buildInterpretation(h);
-                                            const breakdown = [
-                                                { label: 'Anomaly',     val: h.metrics.anomaly,     cap: 30 },
-                                                { label: 'Context',     val: h.metrics.context,     cap: 25 },
-                                                { label: 'Convergence', val: h.metrics.convergence, cap: 20 },
-                                                { label: 'Behaviour',   val: h.metrics.behaviour,   cap: 15 },
-                                            ];
-                                            return (
-                                                <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
-                                                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
-                                                    <div>
-                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
-                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.summary}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
-                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.reasoning}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
-                                                        <p className="text-[11px] text-white/80 leading-relaxed">{interp.strategy}</p>
-                                                    </div>
-                                                    <div className="border-t border-white/10 pt-2.5">
-                                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
-                                                        <div className="space-y-1.5">
-                                                            {breakdown.map(({ label, val, cap }) => (
-                                                                <div key={label} className="flex items-center gap-2">
-                                                                    <span className="text-[7px] text-white/55 w-16 flex-shrink-0">{label}</span>
-                                                                    <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                                                        <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
-                                                                    </div>
-                                                                    <span className="text-[7px] text-white/50 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
-                                                                </div>
-                                                            ))}
-                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })()}
-                                    </div>
-                                    <div className="mt-2.5 pt-2.5 border-t border-white/8">
-                                        {!activeSession && realPermissions.length === 0 ? (
-                                            <div className="text-center">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); nav('/permission'); }}
-                                                    className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
-                                                >
-                                                    Add a permission to start a session
-                                                </button>
-                                                <p className="text-[7px] text-white/25 mt-1">Sessions track your visit and field coverage</p>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleStartSession(); }}
-                                                    className="w-full border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/10 active:scale-[0.98] text-emerald-500/70 hover:text-emerald-400 font-bold py-1.5 rounded-xl text-[9px] uppercase tracking-widest transition-all"
-                                                >
-                                                    {activeSession ? 'Continue Session' : 'Start Session Here'}
-                                                </button>
-                                                {activeSession && (() => {
-                                                    const sessionPermission = permissions.find(p => p.id === activeSession.permissionId);
-                                                    const sessionDate = new Date(activeSession.date);
-                                                    const today = new Date();
-                                                    const isToday = sessionDate.toDateString() === today.toDateString();
-                                                    const dateLabel = isToday ? 'Today' : sessionDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-                                                    return (
-                                                        <p className="text-[8px] text-white/30 text-center mt-1">
-                                                            {sessionPermission?.name || 'Unknown permission'} · {dateLabel}
-                                                        </p>
-                                                    );
-                                                })()}
-                                                {showPermissionPicker && !activeSession && realPermissions.length > 1 && (
-                                                    <div className="mt-2 flex flex-col gap-1 animate-in fade-in slide-in-from-top-2 duration-150">
-                                                        <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1">Select permission</p>
-                                                        {realPermissions.map(p => (
-                                                            <button
-                                                                key={p.id}
-                                                                onClick={(e) => { e.stopPropagation(); setShowPermissionPicker(false); nav(`/session/new?permissionId=${p.id}`); }}
-                                                                className="w-full text-left px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/15 border border-white/10 hover:border-emerald-500/40 text-white/70 hover:text-white text-[9px] font-bold transition-all truncate"
-                                                            >
-                                                                {p.name || '(Unnamed)'}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
-                                    </div>
-                                    <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
-                                </div>
-                                );
-                            }) : (
-                                <p className="text-[10px] text-slate-500 font-bold uppercase italic text-center py-4">No hotspots detected.</p>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="p-6 border-b border-white/5 flex justify-between items-center shrink-0">
-                        <div>
-                            <h2 className="text-sm font-black text-white uppercase tracking-tighter">Target Review</h2>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase">{detectedFeatures.length} Landscape Signal{detectedFeatures.length !== 1 ? 's' : ''}</p>
-                        </div>
-                        {selectedId && <button onClick={() => setSelectedId(null)} className="text-[10px] font-black text-emerald-500 hover:underline tracking-widest uppercase">Reset</button>}
-                    </div>
-
-                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 scrollbar-hide space-y-4">
-                        {displayTargets.map((f) => {
-                            const tInterp = buildTargetInterpretation(f);
-                            const isSelected = selectedId === f.id;
-                            const isPrimaryTarget = f.id === primaryTargetId;
-                            const strengthColour: Record<TargetSignalStrength, string> = {
-                                'Strong Signal':     'text-amber-400',
-                                'Moderate Signal':   'text-emerald-400',
-                                'Supporting Signal': 'text-white/40',
-                            };
-                            return (
-                                <div
-                                    key={f.id}
-                                    id={`card-${f.id}`}
-                                    onClick={() => focusTarget(f)}
-                                    className={`p-4 rounded-2xl cursor-pointer transition-all border-2 active:scale-[0.98] ${isSelected ? (f.isProtected ? 'bg-red-950/20 border-red-800/80 ring-2 ring-red-950/50' : 'bg-white/10 border-white ring-4 ring-white/10') : f.isProtected ? 'bg-slate-950/50 border-red-900/60 hover:border-red-800/80' : isPrimaryTarget ? 'bg-slate-900/55 border-emerald-500/45 hover:border-emerald-500/65 shadow-[0_0_20px_rgba(16,185,129,0.07)]' : tInterp.signalStrength === 'Strong Signal' ? 'bg-slate-900/50 border-amber-500/35 hover:border-amber-500/55' : tInterp.signalStrength === 'Moderate Signal' ? 'bg-slate-900/50 border-emerald-500/25 hover:border-emerald-500/45' : 'bg-slate-900/50 border-white/12 hover:border-white/22'}`}
-                                >
-                                    <div className="flex items-center justify-between gap-2 mb-2">
-                                        {!f.isProtected && isPrimaryTarget && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); focusTarget(f); }}
-                                                className="bg-emerald-500/25 border border-emerald-500/50 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shadow-[0_0_8px_rgba(16,185,129,0.15)] active:scale-[0.98]"
-                                            >
-                                                Start Here
-                                            </button>
-                                        )}
-                                        {!f.isProtected && !isPrimaryTarget && (
-                                            <span className="bg-white/[0.04] border border-white/10 text-white/35 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Target</span>
-                                        )}
-                                        <p className={`text-[9px] font-black uppercase tracking-[0.2em] ml-auto ${f.isProtected ? 'text-stone-400/70' : 'text-white/70'}`}>
-                                            {f.isProtected ? 'Scheduled Monument' : `Target ${f.number}`}
-                                        </p>
-                                    </div>
-                                    {/* Header row: type + source dots */}
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div className="flex-1 min-w-0 pr-2">
-                                            {!f.isProtected && <h3 className={`text-[11px] font-black tracking-tight leading-tight mb-0.5 ${isSelected ? 'text-white' : 'text-slate-200'}`}>{f.type}</h3>}
-                                            {!f.isProtected && <p className={`text-[10px] font-black ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>}
-                                        </div>
-                                        <div className="flex flex-col gap-0.5 items-end flex-shrink-0">
-                                            {[{ ids: ['terrain', 'terrain_global'], label: 'Lidar' }, { ids: ['slope'], label: 'Slope' }, { ids: ['hydrology'], label: 'Hydro' }, { ids: ['satellite', 'satellite_spring', 'satellite_summer'], label: 'Aerial' }, { ids: ['historic'], label: 'Historic' }].map(s => (
-                                                <div key={s.label} className="flex items-center gap-1">
-                                                    <span className={`text-[6px] font-black uppercase tracking-tighter ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'text-white/60' : 'text-white/15'}`}>{s.label}</span>
-                                                    <div className={`w-1 h-1 rounded-full ${s.ids.some(id => f.sources.includes(id as Cluster['source'])) ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.5)]' : 'bg-black/40'}`} />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    {f.isProtected ? (
-                                        /* Scheduled Monument — no target guidance shown */
-                                        <div className="border-t border-stone-700/30 pt-2 space-y-2">
-                                            <div className="p-2 bg-stone-900/40 rounded-xl border border-stone-700/40 space-y-1">
-                                                <p className="text-[9px] font-bold text-stone-200/80 leading-snug">This area is protected as a Scheduled Monument.</p>
-                                                <p className="text-[9px] text-stone-400/55 leading-snug">Check legal protections before any fieldwork.</p>
-                                            </div>
-                                            {f.aimInfo && (
-                                                <div className="px-2 py-1 bg-stone-900/30 border border-stone-700/30 rounded-lg">
-                                                    <p className="text-[8px] font-black uppercase text-stone-400/60">{f.aimInfo.type} · {f.aimInfo.period}</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <p className="text-[10px] font-black text-white/75 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
-                                            {/* Hook */}
-                                            <p className="text-[10px] font-bold text-white/70 leading-snug mb-2">{tInterp.hook}</p>
-                                            {(() => {
-                                                const ctx = targetFindContext.get(f.id);
-                                                if (!ctx) return null;
-                                                const text = ctx.status === 'within'
-                                                    ? `${ctx.count} find${ctx.count !== 1 ? 's' : ''} recorded here`
-                                                    : `${ctx.count} find${ctx.count !== 1 ? 's' : ''} nearby`;
-                                                return <p className="text-[7px] font-black text-emerald-400 uppercase tracking-widest mb-1.5 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded inline-block">{text}</p>;
-                                            })()}
-                                            {/* Crossing badge */}
-                                            {f.isHighConfidenceCrossing && (<div className="bg-blue-600/40 p-1.5 rounded-xl border border-blue-400 mb-2 animate-pulse"><p className="m-0 text-[9px] font-black uppercase text-white text-center tracking-widest">🌊 Likely historic crossing point</p></div>)}
-                                            {/* Why this matters */}
-                                            <div className="space-y-1.5 mt-2 border-t border-white/8 pt-2">
-                                                <p className="text-[8px] font-black text-white/35 uppercase tracking-widest mb-1.5">Why this matters</p>
-                                                {f.explanationLines && f.explanationLines.length > 0 ? (
-                                                    f.explanationLines.slice(0, 3).map((line, idx) => (
-                                                        <div key={idx} className="flex items-center gap-2">
-                                                            <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
-                                                            <p className="text-[11px] font-bold text-slate-200 leading-tight">{line}</p>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <p className="text-[10px] text-white/40 leading-tight">Signal detected across available scan sources.</p>
-                                                )}
-                                            </div>
-                                            {/* Disturbance + AIM */}
-                                            {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
-                                                <div className={`mt-2 px-2 py-1 rounded-lg border ${f.disturbanceRisk === 'High' ? 'bg-red-500/10 border-red-500/20' : 'bg-amber-500/10 border-amber-500/20'}`}>
-                                                    <p className={`m-0 text-[8px] font-black uppercase ${f.disturbanceRisk === 'High' ? 'text-red-400' : 'text-amber-400'}`}>Risk: {f.disturbanceRisk} ({f.disturbanceReason})</p>
-                                                </div>
-                                            )}
-                                            {f.aimInfo && (<div className="mt-1 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg"><p className="m-0 text-[8px] font-black uppercase text-amber-400">Verified: {f.aimInfo.type} · {f.aimInfo.period}</p></div>)}
-                                            {/* Focus area */}
-                                            <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-white/5">
-                                                <div className="w-1 h-1 rounded-full bg-emerald-500 flex-shrink-0" />
-                                                <p className="text-[9px] leading-tight">
-                                                    <span className="font-black text-emerald-500/60 uppercase tracking-widest">Target focus: </span>
-                                                    <span className="font-bold text-emerald-300/80">{tInterp.focus}</span>
-                                                </p>
-                                            </div>
-                                            {/* Expand toggle */}
-                                            <div className="mt-2.5 pt-2.5 border-t border-white/5">
-                                                <span
-                                                    onClick={(e) => { e.stopPropagation(); setExpandedTargetId(expandedTargetId === f.id ? null : f.id); }}
-                                                    className="text-[10px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
-                                                >
-                                                    {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
-                                                </span>
-                                                {expandedTargetId === f.id && (
-                                                    <div className="mt-3 space-y-3.5 animate-in fade-in duration-200">
-                                                        <div>
-                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Summary</p>
-                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.summary}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">Why it stands out</p>
-                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.whyItStandsOut}</p>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.15em] mb-1">How to approach it</p>
-                                                            <p className="text-[10px] text-white/80 leading-relaxed">{tInterp.howToApproach}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </>
-                                    )}
-                                    <p className="text-center text-[7px] text-white/30 italic mt-2">Highlights historic activity — not guaranteed finds.</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* System Log */}
-                    <div className="h-24 bg-black/40 border-t border-white/5 p-4 overflow-y-auto shrink-0" ref={logContainerRef}>
-                        <div className="font-mono text-[9px] leading-relaxed uppercase tracking-tighter">
+                    {/* System Console — fills remaining space */}
+                    <div className="flex-1 bg-black/60 overflow-y-auto p-4 scrollbar-hide" ref={logContainerRef}>
+                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Console</p>
+                        <div className="font-mono text-[9px] leading-relaxed">
                             {systemLog.map((l, i) => (
-                                <div
-                                    key={i}
-                                    className={`mb-1 ${l.level === 'error' ? 'text-red-400/80' : l.level === 'warn' ? 'text-amber-400/80' : l.source === 'historic' ? 'text-blue-400/70' : 'text-emerald-500/70'}`}
-                                >
+                                <div key={i} className={`mb-1 ${l.level === 'error' ? 'text-red-400/80' : l.level === 'warn' ? 'text-amber-400/80' : l.source === 'historic' ? 'text-blue-400/70' : 'text-emerald-500/70'}`}>
                                     {l.message}
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
+
             </div>
 
             {/* Your Find Card — desktop only; mobile shows inside panel */}
@@ -3032,7 +2589,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 const foundDate = selectedUserFind.foundAt ?? selectedUserFind.createdAt;
                 const dateLabel = foundDate ? new Date(foundDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
                 return (
-                <div className="hidden lg:block">
+                <div className="hidden">
                     <div className="absolute inset-0 z-[199]" onClick={() => setSelectedUserFind(null)} />
                     <div className="absolute bottom-6 left-auto right-6 w-96 z-[200] animate-in slide-in-from-bottom-4 fade-in duration-200">
                         <div className="p-5 rounded-3xl border-2 border-emerald-500/40 bg-slate-900 shadow-2xl shadow-emerald-900/20">
@@ -3101,7 +2658,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
             {/* Heritage Feature Card — desktop only; mobile shows inside panel */}
             {selectedPASFind && (
-                <div className="hidden lg:block">
+                <div className="hidden">
                     <div className="absolute inset-0 z-[199]" onClick={() => setSelectedPASFind(null)} />
                     <div className="absolute bottom-6 left-auto right-6 w-96 z-[200] animate-in slide-in-from-bottom-4 fade-in duration-200">
                         <div className="p-5 rounded-3xl border-2 border-emerald-500/40 bg-slate-900 shadow-2xl shadow-emerald-900/20">

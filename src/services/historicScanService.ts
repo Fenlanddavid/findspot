@@ -261,7 +261,8 @@ export async function fetchModernWays(
     signal?: AbortSignal
 ): Promise<import('../pages/fieldGuideTypes').ModernWay[]> {
     const r = 300;
-    const query = `[out:json][timeout:15];(way["highway"="track"](around:${r},${lat},${lng});way["highway"="path"](around:${r},${lat},${lng});way["highway"="footway"](around:${r},${lat},${lng});way["highway"="bridleway"](around:${r},${lat},${lng});way["highway"="unclassified"](around:${r},${lat},${lng});way["highway"="residential"](around:${r},${lat},${lng});way["highway"="tertiary"](around:${r},${lat},${lng});way["highway"="service"](around:${r},${lat},${lng}););out geom;`;
+    const types = ['track','path','footway','bridleway','unclassified','residential','tertiary','secondary','primary','service'];
+    const query = `[out:json][timeout:15];(${types.map(t => `way["highway"="${t}"](around:${r},${lat},${lng})`).join(';')};);out geom;`;
     const result = await overpassFetch(query, signal);
     if (!result?.elements) return [];
     return result.elements

@@ -297,16 +297,10 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
     for (const m of merged) {
         if (!m.explanationLines) m.explanationLines = [];
 
-        // Confidence explanation: surface the reason behind the quality label
-        // so the output layer can show "why this signal is trusted".
-        if (m.confidence === 'High' && m.sources.includes('historic')) {
-            m.explanationLines.push('Historic data overlaps terrain signal');
-        } else if (m.confidence === 'High' || m.confidence === 'Medium') {
-            if (m.sources.length >= 2) m.explanationLines.push('Multiple independent sources agree');
-        }
-
         const hasSummer = m.sources.includes('satellite_summer');
         const hasSpring = m.sources.includes('satellite_spring');
+        const hasHistoric = m.sources.includes('historic');
+        const hasHardCorroboration = hasSummer || hasSpring || hasHistoric;
 
         if (hasSummer && hasSpring) {
             // Multi-season agreement: strong archaeological signal — both summer
@@ -320,11 +314,28 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
             m.type = 'Cropmark Signal (Drought Response)';
         }
 
-        // Persistence: repeated detection across scan passes = verified signal
+        // Persistence here means multiple raw detections merged in one scan, not
+        // repeated scans over time. It boosts potential, but only corroborated
+        // signals can use it to earn High confidence.
         if ((m.rescanCount || 0) >= 3) {
             m.findPotential = boostScore(m.findPotential, 10);
-            m.confidence = 'High';
-            m.explanationLines.push('Repeated detection across scans');
+            if (hasHardCorroboration) m.confidence = 'High';
+            m.explanationLines.push('Repeated detection within scan');
+        }
+
+        // Terrain-only clusters (including terrain/slope/hydrology combinations
+        // without satellite or historic corroboration) cap at Medium. Apply this
+        // after all boosts so later logic cannot accidentally re-promote them.
+        if (!hasHardCorroboration && m.confidence === 'High') {
+            m.confidence = 'Medium';
+        }
+
+        // Confidence explanation: surface the reason behind the quality label
+        // so the output layer can show "why this signal is trusted".
+        if (m.confidence === 'High' && hasHistoric) {
+            m.explanationLines.push('Historic data overlaps terrain signal');
+        } else if (m.confidence === 'High' || m.confidence === 'Medium') {
+            if (m.sources.length >= 2) m.explanationLines.push('Multiple independent sources agree');
         }
     }
 
@@ -529,52 +540,41 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 
 // ─── Route artefact suppression ───────────────────────────────────────────────
 // Marks clusters that sit on, or align tightly with, a modern road / track /
-// path and lack independent physical evidence. These targets are likely scanner
-// artefacts caused by the road surface or embankment rather than archaeology.
+// path. These targets are likely scanner artefacts caused by the road surface
+// or embankment rather than archaeology.
 //
-// The flag is set in-place on each cluster; callers then filter on it for display.
-// Routes/hotspots are intentionally unaffected — proximity context is still valid
-// at the landscape level.
+// The flag is set in-place on each cluster; callers then filter flagged targets
+// out of display and hotspot generation.
 
-function hasStrongIndependentEvidence(c: Cluster): boolean {
-    return (
-        c.sources.includes('terrain') ||
-        c.sources.includes('terrain_global') ||
-        (c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer')) ||
-        c.multiScale === true ||
-        c.aimInfo !== undefined
-    );
-}
+// Route artefact suppression applies to all clusters unless formally protected
+// (isProtected). Historic routes are intentionally not used for suppression:
+// they are archaeological context, while modern OSM ways are artefact evidence.
 
 export function applyRouteArtefactSuppression(
     clusters: Cluster[],
     modernWays: ModernWay[],
-    historicRoutes: HistoricRoute[],
+    _historicRoutes: HistoricRoute[],
 ): void {
-    if (modernWays.length === 0 && historicRoutes.length === 0) return;
+    if (modernWays.length === 0) return;
 
     for (const c of clusters) {
-        if (c.isProtected || hasStrongIndependentEvidence(c)) continue;
+        if (c.isProtected) continue;
 
-        // ── Proximity check: centroid within 15m of any modern way ───────────
+        // ── Proximity check: centroid within 20m of any modern way ───────────
         let flagged = false;
 
         for (const way of modernWays) {
             const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-            if (dist <= 15) { flagged = true; break; }
+            if (dist <= 20) { flagged = true; break; }
         }
 
         // ── Linear alignment check: high-ratio target whose bearing matches ──
         // a nearby way within 15°. Catches road-following linear scanner artefacts
         // that just miss the centroid threshold.
         if (!flagged && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
-            const allWays: { geometry: [number, number][]; bbox: [[number, number], [number, number]] }[] = [
-                ...modernWays,
-                ...historicRoutes,
-            ];
-            for (const way of allWays) {
+            for (const way of modernWays) {
                 const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-                if (dist > 20) continue;
+                if (dist > 30) continue;
                 const wayBearing = computeRouteBearing(way.geometry);
                 // Linear targets can run parallel in either direction — check both
                 if (bearingDiff(c.bearing, wayBearing) <= 15 || bearingDiff(c.bearing, (wayBearing + 180) % 360) <= 15) {
