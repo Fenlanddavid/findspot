@@ -193,6 +193,18 @@ const pools: Record<HotspotClassification, { summaries: string[]; strategies: st
             'start on the clearest linear feature, then expand outward.',
         ],
     },
+    'Multi-Period Occupation Zone': {
+        summaries: [
+            'a location used across more than one historical period — physical earthwork and spectral signals layer here independently.',
+            'an area where signals from different time periods concentrate in the same place.',
+            'a multi-period site where later activity overlaps with earlier landscape features.',
+        ],
+        strategies: [
+            'search the wider area for period variation rather than expecting a single concentration point.',
+            'look for spatial offset between signals — different periods may cluster in slightly different locations.',
+            'start at the strongest physical signal, then search outward for period variation.',
+        ],
+    },
     'Terrain Structure Candidate': {
         summaries: [
             'a structural feature defined by clear terrain or subsurface signals.',

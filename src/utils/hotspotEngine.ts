@@ -80,6 +80,14 @@ const EXPLANATION_PRIORITY: [string, number][] = [
     ['Landscape edge detected',           18],
     ['Likely movement corridor',          16],
     ['Favourable slope and aspect',       14],
+    ['Observational vantage',             44],
+    ['Raised position overlooking',       42],
+    ['Multi-period activity',             40],
+    ['Offset position beside movement',   38],
+    ['Sheltered raised position',         36],
+    ['Quiet raised ground',               19],
+    ['Part of',                           13],
+    ['Landscape system',                  12],
 ];
 
 function prioritiseExplanations(items: string[], limit: number): string[] {
@@ -106,6 +114,72 @@ function prioritiseExplanations(items: string[], limit: number): string[] {
     }
 
     return sliced;
+}
+
+// ─── A: Landscape Positioning Model ──────────────────────────────────────────
+// Asks: "Is this in the kind of position humans repeatedly chose to use?"
+// Covers three positioning patterns not captured by existing scoring:
+//   - Offset from movement (beside a route, not on it)
+//   - Sheltered raised position (slope backing + water nearby, confirmed by LiDAR)
+//   - Negative-space preservation (quiet undisturbed raised ground away from routes)
+//
+// Feeds into context, capped at +6 so landscape positioning supports signal
+// rather than substituting for physical evidence.
+
+function computeLandscapePositioning(params: {
+    members:                Cluster[];
+    routes:                 HistoricRoute[];
+    center:                 [number, number];
+    isRaised:               boolean;
+    hasHydrology:           boolean;
+    hasSlope:               boolean;
+    hasLidar:               boolean;
+    hasRomanProximity:      boolean;
+    hasHistProximity:       boolean;
+    isHighConfidenceCrossing: boolean;
+}): { score: number; explanations: string[] } {
+    const {
+        members, routes, center, isRaised, hasHydrology, hasSlope, hasLidar,
+        hasRomanProximity, hasHistProximity, isHighConfidenceCrossing,
+    } = params;
+    let score = 0;
+    const explanations: string[] = [];
+    const hasAnyRoute = hasRomanProximity || hasHistProximity;
+
+    // 1. Offset positioning: raised ground near a route but not directly on it.
+    //    Classic settlement-edge pattern — habitation beside movement rather than on it.
+    //    Excluded when the site is already a confirmed crossing (which IS on the route).
+    if (isRaised && hasAnyRoute && !isHighConfidenceCrossing && routes.length > 0) {
+        const nearestDist = Math.min(...routes.map(r => getDistanceToLine(center, r.geometry, r.bbox)));
+        if (nearestDist > 80 && nearestDist < 350) {
+            score += 2;
+            explanations.push('Offset position beside movement corridor');
+        }
+    }
+
+    // 2. Sheltered raised position: raised + slope break + hydrology + LiDAR.
+    //    Proxy for the "backed by hill, fronted by water" pattern — common in
+    //    settlement placement across all periods. LiDAR required to avoid firing
+    //    on speculative combinations without physical confirmation.
+    if (isRaised && hasSlope && hasHydrology && hasLidar) {
+        score += 2;
+        explanations.push('Sheltered raised position — slope backing, water nearby');
+    }
+
+    // 3. Negative-space preservation zone: raised, undisturbed, not route-adjacent.
+    //    Quiet ground passed over by later activity — archaeologically meaningful because
+    //    isolation often protects buried material from disturbance and truncation.
+    //    Requires 2+ member clusters so a single weak cluster cannot trigger this alone.
+    const allLowDisturbance = members.length >= 2 && members.every(m => m.disturbanceRisk !== 'High');
+    const routeDistance = routes.length > 0
+        ? Math.min(...routes.map(r => getDistanceToLine(center, r.geometry, r.bbox)))
+        : Infinity;
+    if (allLowDisturbance && isRaised && !hasAnyRoute && routeDistance > 250) {
+        score += 2;
+        explanations.push('Quiet raised ground — low disturbance, away from main routes');
+    }
+
+    return { score: Math.min(score, 6), explanations };
 }
 
 // ─── Classification helper ────────────────────────────────────────────────────
@@ -135,6 +209,9 @@ interface ClassifyContext {
     hasLinearPattern:       boolean;
     hasSettlementContext:   boolean;
     disturbanceIsHigh:      boolean;
+    // B: Multi-period classification
+    hasMultiSeasonSat:      boolean;
+    hasAimEnrichment:       boolean;
 }
 
 function classifyHotspot(ctx: ClassifyContext): {
@@ -158,6 +235,20 @@ function classifyHotspot(ctx: ClassifyContext): {
             classification: 'Junction / Convergence Zone',
             reason:         'Multiple routes converge here',
             secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
+        };
+    }
+
+    // B: Multi-Period Occupation Zone — physical earthwork (LiDAR) and seasonal spectral signal
+    // (multi-season satellite) represent independent time-depths of deposition. Together with
+    // diverse signal classes, this indicates repeated human use rather than a single episode.
+    // Keep below Crossing/Junction and compact circular burial morphology so those
+    // specific identities win, but above broad settlement/wetland/route buckets so
+    // the multi-period evidence is not hidden.
+    if (!ctx.hasCircularFeature && ctx.hasLidar && ctx.hasMultiSeasonSat && ctx.signalClassCount >= 3 && ctx.anomaly >= 10) {
+        return {
+            classification: 'Multi-Period Occupation Zone',
+            reason:         'Physical earthwork and multi-season spectral signals — activity from more than one period',
+            secondaryTag:   ctx.hasAimEnrichment ? 'Historically recorded activity nearby' : undefined,
         };
     }
 
@@ -577,6 +668,37 @@ export function buildTerrainHotspots(
         if (landscape.score > 0) context += Math.min(landscape.score, 10);
         landscape.reasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
 
+        // ── A: Landscape Positioning Model ────────────────────────────────────
+        // Asks whether this is in a position humans repeatedly chose.
+        // Covers offset positioning, sheltered raised sites, and negative-space
+        // preservation — patterns not captured by existing signal scoring.
+        const positioning = computeLandscapePositioning({
+            members, routes, center, isRaised, hasHydrology, hasSlope, hasLidar,
+            hasRomanProximity, hasHistProximity, isHighConfidenceCrossing,
+        });
+        if (positioning.score > 0) context += positioning.score;
+        positioning.explanations.forEach(e => { if (!explanation.includes(e)) explanation.push(e); });
+
+        // ── D: Viewshed Proxy ─────────────────────────────────────────────────
+        // Cheap observational advantage: raised + LiDAR-confirmed point that
+        // commands a position over a crossing, route, or water margin.
+        // Does not compute actual line-of-sight — uses elevation + proximity as proxy.
+        if (isRaised && hasLidar) {
+            const nearestRouteDist = routes.length > 0
+                ? Math.min(...routes.map(r => getDistanceToLine(center, r.geometry, r.bbox)))
+                : Infinity;
+            if (isHighConfidenceCrossing) {
+                context += 4;
+                explanation.push('Observational vantage over crossing point');
+            } else if (hasHydrology && nearestRouteDist < 150) {
+                context += 3;
+                explanation.push('Raised position overlooking route and water');
+            } else if (nearestRouteDist < 200) {
+                context += 2;
+                explanation.push('Raised position overlooking movement corridor');
+            }
+        }
+
         // ── Penalties (hotspot-level with caps to prevent over-stacking) ──────
         // Applied once per hotspot rather than per member, so a merged group of
         // disturbed clusters isn't penalised multiple times for the same issue.
@@ -675,6 +797,7 @@ export function buildTerrainHotspots(
             signalCount: sources.size,
             signalClassCount,
             hasCircularFeature, hasLinearPattern, hasSettlementContext, disturbanceIsHigh,
+            hasMultiSeasonSat, hasAimEnrichment,
         });
 
         // ── Suggested focus ───────────────────────────────────────────────────
@@ -689,6 +812,8 @@ export function buildTerrainHotspots(
             suggestedFocus = 'Check crossing point';
         } else if (classification === 'Junction / Convergence Zone') {
             suggestedFocus = 'Focus where the routes meet';
+        } else if (classification === 'Multi-Period Occupation Zone') {
+            suggestedFocus = 'Look for variation across the area — periods may be spatially offset';
         } else if (hasRouteAlignment || classification === 'Route-Side Activity Zone') {
             suggestedFocus = 'Follow movement line';
         } else if (hasHydrology && members.some(m => m.polarity === 'Sunken')) {
@@ -816,9 +941,110 @@ export function enhanceHotspotsWithHistoric(
         return { ...h, score: newScore, confidence, explanation: allNotes };
     });
 
-    return enhanced
+    // C: inter-hotspot relationship pass — detects connected activity landscapes
+    const withRelationships = analyzeHotspotRelationships(enhanced);
+
+    return withRelationships
         .sort((a, b) => b.score - a.score)
         .map((h, i) => ({ ...h, number: i + 1 }));
+}
+
+// ─── C: Inter-Hotspot Relationship Engine ────────────────────────────────────
+// Post-processing pass that asks: "Do these hotspots make sense together?"
+// Looks at the full hotspot set and detects:
+//   - Settlement systems (diverse classifications clustered within 600m)
+//   - Route corridor systems (hotspots strung along movement lines)
+//   - Isolated clusters (3+ hotspots with varied signals)
+//
+// Applies secondaryTag and explanation notes only — does not change scores or
+// primary classifications. Keeps the engine deterministic and explainable.
+
+function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
+    if (hotspots.length < 2) return hotspots;
+
+    // For each hotspot, find which others are within 600m
+    const neighborMap = new Map<string, string[]>();
+    for (const h of hotspots) {
+        const neighbors = hotspots
+            .filter(o => o.id !== h.id && getDistanceKm(h.center[1], h.center[0], o.center[1], o.center[0]) < 0.6)
+            .map(o => o.id);
+        if (neighbors.length > 0) neighborMap.set(h.id, neighbors);
+    }
+
+    // Find all hotspots that are part of a cluster of 3+
+    // Uses flood-fill so a chain of overlapping pairs is treated as one system
+    const visited   = new Set<string>();
+    const systems: Set<string>[] = [];
+
+    for (const h of hotspots) {
+        if (visited.has(h.id)) continue;
+        const cluster = new Set<string>();
+        const queue   = [h.id];
+        while (queue.length > 0) {
+            const id = queue.shift()!;
+            if (cluster.has(id)) continue;
+            cluster.add(id);
+            visited.add(id);
+            (neighborMap.get(id) ?? []).forEach(n => { if (!cluster.has(n)) queue.push(n); });
+        }
+        if (cluster.size >= 3) systems.push(cluster);
+    }
+
+    if (systems.length === 0) return hotspots;
+
+    // Build a lookup: hotspot id → which system it belongs to
+    const idToSystem = new Map<string, Set<string>>();
+    for (const sys of systems) {
+        for (const id of sys) idToSystem.set(id, sys);
+    }
+
+    return hotspots.map(h => {
+        const system = idToSystem.get(h.id);
+        if (!system) return h;
+
+        const systemHotspots = hotspots.filter(o => system.has(o.id));
+        const classifications = systemHotspots.map(o => o.classification);
+
+        // Characterise the system type
+        const hasCore      = classifications.some(c => c === 'Settlement Edge Candidate' || c === 'Terrain Structure Candidate' || c === 'Multi-Period Occupation Zone');
+        const hasPeriphery = classifications.some(c => c === 'Wetland Margin Activity Zone' || c === 'Lowland Activity Zone' || c === 'Organised Field System Candidate');
+        const hasMovement  = classifications.some(c => c === 'Route-Side Activity Zone' || c === 'Junction / Convergence Zone' || c === 'Crossing Point Candidate');
+        const uniqueTypes  = new Set(classifications).size;
+
+        // Only annotate when the cluster shows meaningful diversity
+        if (uniqueTypes < 2) return h;
+
+        // Identify the core site (highest score in the system)
+        const systemSorted = [...systemHotspots].sort((a, b) => b.score - a.score);
+        const isCore       = systemSorted[0]?.id === h.id;
+
+        let systemTag: string;
+        let systemNote: string;
+
+        if (hasCore && hasPeriphery && hasMovement) {
+            systemTag  = isCore ? 'Landscape system: core site' : 'Landscape system: peripheral activity';
+            systemNote = isCore
+                ? `Anchor site in ${system.size}-hotspot activity landscape`
+                : `Part of ${system.size}-site activity landscape`;
+        } else if (hasMovement && uniqueTypes >= 2) {
+            systemTag  = 'Route corridor system';
+            systemNote = `Part of ${system.size}-site route corridor cluster`;
+        } else {
+            systemTag  = 'Connected activity cluster';
+            systemNote = `Part of ${system.size}-site activity cluster`;
+        }
+
+        // Keep 'Roman corridor influence' secondary tags — don't overwrite Roman context
+        const keepExisting  = h.secondaryTag?.includes('Roman') || h.secondaryTag?.includes('Historically');
+        const newSecondaryTag = keepExisting ? h.secondaryTag : systemTag;
+
+        // Append system note to explanation if not already present (capped at 5)
+        const newExplanation = h.explanation.includes(systemNote)
+            ? h.explanation
+            : prioritiseExplanations([...h.explanation, systemNote], 5);
+
+        return { ...h, secondaryTag: newSecondaryTag, explanation: newExplanation };
+    });
 }
 
 // ─── Combined entry point ─────────────────────────────────────────────────────
@@ -835,6 +1061,7 @@ export function generateHotspots(
     placeSignals: PlaceSignal[]      = [],
 ): Hotspot[] {
     const terrain = buildTerrainHotspots(clusters, routes, monuments);
-    if (pas.length === 0 && monuments.length === 0 && placeSignals.length === 0) return terrain;
+    if (pas.length === 0 && monuments.length === 0 && placeSignals.length === 0)
+        return analyzeHotspotRelationships(terrain);
     return enhanceHotspotsWithHistoric(terrain, pas, monuments, placeSignals, period);
 }

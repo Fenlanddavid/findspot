@@ -88,6 +88,7 @@ export type HotspotClassification =
     | 'Organised Field System Candidate'
     | 'Wetland Margin Activity Zone'
     | 'Route-Side Activity Zone'
+    | 'Multi-Period Occupation Zone'
     | 'Terrain Structure Candidate'
     | 'Spectral Activity Candidate'
     | 'Lowland Activity Zone'

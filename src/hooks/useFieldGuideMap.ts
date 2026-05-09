@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
 import { Find } from '../db';
+import { DevAnnotation } from '../utils/devAnnotation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ type MapCallbacks = {
     onCrossingsLog: (msg: string) => void;
     onMonumentClick: (name: string | null) => void;
     onUserFindClick: (id: string) => void;
+    onAnnotationDrop: (lat: number, lng: number) => void;
 };
 
 export type UseFieldGuideMapOptions = {
@@ -67,6 +69,9 @@ export type UseFieldGuideMapOptions = {
     // Initial fly-to coordinates
     initLat?: number;
     initLng?: number;
+    // Dev annotation support
+    annotationMode: boolean;
+    devAnnotations: DevAnnotation[];
     // Event handler callbacks
     callbacks: MapCallbacks;
 };
@@ -76,15 +81,17 @@ export type UseFieldGuideMapOptions = {
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
-    initLat, initLng, callbacks,
+    initLat, initLng, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
-    const mapContainerRef = useRef<HTMLDivElement>(null);
-    const mapRef          = useRef<maplibregl.Map | null>(null);
-    const clickLabelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const callbacksRef    = useRef<MapCallbacks>(callbacks);
+    const mapContainerRef    = useRef<HTMLDivElement>(null);
+    const mapRef             = useRef<maplibregl.Map | null>(null);
+    const clickLabelTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const callbacksRef       = useRef<MapCallbacks>(callbacks);
+    const annotationModeRef  = useRef(false);
 
-    // Keep callbacks ref current on every render — no effect needed, refs are synchronous
+    // Keep callbacks and annotation mode ref current on every render
     useLayoutEffect(() => { callbacksRef.current = callbacks; });
+    useLayoutEffect(() => { annotationModeRef.current = annotationMode; });
 
     // ── Map initialisation (runs once) ────────────────────────────────────────
     useEffect(() => {
@@ -203,11 +210,29 @@ export function useFieldGuideMap({
             // Transparent hitbox layer with larger radius for easier tapping
             map.addLayer({ id: 'user-finds-hitbox', type: 'circle', source: 'user-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 16, 'circle-color': 'transparent', 'circle-opacity': 0 } });
 
+            // ── Dev annotation pins (dev mode only, never shown to normal users) ──
+            map.addSource('dev-annotations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: 'dev-annotations-halo', type: 'circle', source: 'dev-annotations',
+                paint: { 'circle-radius': 18, 'circle-color': '#f97316', 'circle-opacity': 0.15, 'circle-stroke-width': 0 },
+            });
+            map.addLayer({
+                id: 'dev-annotations-circle', type: 'circle', source: 'dev-annotations',
+                paint: { 'circle-radius': 6, 'circle-color': '#f97316', 'circle-opacity': 1, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': 0.9 },
+            });
+            map.addLayer({
+                id: 'dev-annotations-label', type: 'symbol', source: 'dev-annotations',
+                layout: { 'text-field': ['to-string', ['get', 'index']], 'text-size': 9, 'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'] },
+                paint: { 'text-color': '#f97316', 'text-halo-color': '#000', 'text-halo-width': 1 },
+            });
+
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
+                if (annotationModeRef.current) return;
                 if (e.features?.[0]) callbacksRef.current.onFeatureClick(e.features[0].properties?.id);
             });
             map.on('click', 'pas-circles', (e) => {
+                if (annotationModeRef.current) return;
                 if (e.features?.[0]) {
                     const props = e.features[0].properties as Record<string, unknown>;
                     callbacksRef.current.onPASFindLog(`HERITAGE: ${props.objectType} - ${props.id}`);
@@ -221,16 +246,22 @@ export function useFieldGuideMap({
                 }
             });
             map.on('click', 'hotspots-fill', (e) => {
+                if (annotationModeRef.current) return;
                 // If a target or other interactive feature is at this point, let it take priority
                 const priority = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'user-finds-hitbox', 'pas-circles'] });
                 if (priority.length > 0) return;
                 if (e.features?.[0]) callbacksRef.current.onHotspotClick(e.features[0].properties?.id);
             });
             map.on('click', 'user-finds-hitbox', (e) => {
+                if (annotationModeRef.current) return;
                 const props = e.features?.[0]?.properties as Record<string, unknown> | undefined;
                 if (props?.id) callbacksRef.current.onUserFindClick(String(props.id));
             });
             map.on('click', (e) => {
+                if (annotationModeRef.current) {
+                    callbacksRef.current.onAnnotationDrop(e.lngLat.lat, e.lngLat.lng);
+                    return;
+                }
                 const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill'] });
                 if (hits.length > 0) return;
                 callbacksRef.current.onMonumentClick(null);
@@ -239,27 +270,32 @@ export function useFieldGuideMap({
             map.on('dragstart', () => callbacksRef.current.onDragStart());
             map.on('move',      () => callbacksRef.current.onZoomChange(map.getZoom()));
 
-            map.on('click', 'historic-routes-roman',    () => showLabel('Roman Road'));
-            map.on('click', 'historic-routes-trackway', () => showLabel('Historic Trackway'));
+            map.on('click', 'historic-routes-roman',    () => { if (!annotationModeRef.current) showLabel('Roman Road'); });
+            map.on('click', 'historic-routes-trackway', () => { if (!annotationModeRef.current) showLabel('Historic Trackway'); });
             map.on('click', 'corridors-fill', (e) => {
+                if (annotationModeRef.current) return;
                 const type = e.features?.[0]?.properties?.type;
                 showLabel(type === 'roman_road' ? 'Roman Road Corridor' : 'Historic Trackway Corridor');
             });
             map.on('click', 'landscape-context-fill', (e) => {
+                if (annotationModeRef.current) return;
                 const label = e.features?.[0]?.properties?.label;
                 showLabel(String(label || 'Landscape Context'));
             });
             map.on('click', 'crossings-circle', (e) => {
+                if (annotationModeRef.current) return;
                 const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
                 const a = p?.typeA === 'roman_road' ? 'Roman Road' : 'Trackway';
                 const b = p?.typeB === 'roman_road' ? 'Roman Road' : 'Trackway';
                 showLabel(`Route Crossing: ${a} × ${b}`);
             });
             map.on('click', 'monuments-fill', (e) => {
+                if (annotationModeRef.current) return;
                 const name = e.features?.[0]?.properties?.Name as string | undefined;
                 callbacksRef.current.onMonumentClick(name ?? '');
             });
             map.on('click', 'aim-fill', (e) => {
+                if (annotationModeRef.current) return;
                 const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
                 const type   = String(p?.MONUMENT_TYPE || 'Aerial Monument');
                 const period = p?.PERIOD ? ` · ${p.PERIOD}` : '';
@@ -587,6 +623,33 @@ export function useFieldGuideMap({
         applyVisibility();
         return () => { canceled = true; };
     }, [historicLayerVisibility.userFinds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ── Annotation mode cursor ────────────────────────────────────────────────
+    useEffect(() => {
+        const canvas = mapRef.current?.getCanvas();
+        if (!canvas) return;
+        canvas.style.cursor = annotationMode ? 'crosshair' : '';
+    }, [annotationMode]);
+
+    // ── Dev annotation pins ───────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const doUpdate = () => {
+            const src = map.getSource('dev-annotations') as maplibregl.GeoJSONSource | undefined;
+            if (!src) return;
+            src.setData({
+                type: 'FeatureCollection',
+                features: devAnnotations.map((a, i) => ({
+                    type: 'Feature' as const,
+                    geometry: { type: 'Point' as const, coordinates: [a.lon, a.lat] },
+                    properties: { id: a.id, index: i + 1, annotationType: a.annotationType },
+                })),
+            } as GeoJSON.FeatureCollection);
+        };
+        if (map.loaded()) doUpdate();
+        else map.once('load', doUpdate);
+    }, [devAnnotations]);
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 

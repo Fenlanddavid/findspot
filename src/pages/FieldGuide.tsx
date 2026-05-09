@@ -17,6 +17,10 @@ import {
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
+import {
+    DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence,
+    EngineContextAtPoint, ANNOTATION_TYPE_LABELS, LANDSCAPE_TYPE_LABELS,
+} from '../utils/devAnnotation';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary, HotspotSignalStrength } from '../utils/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
 import { getDistance } from '../utils/fieldGuideAnalysis';
@@ -51,6 +55,7 @@ const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
     'Organised Field System Candidate': 'Field System',
     'Wetland Margin Activity Zone':     'Wetland Margin',
     'Route-Side Activity Zone':         'Movement Corridor',
+    'Multi-Period Occupation Zone':     'Multi-Period Site',
     'Terrain Structure Candidate':      'Structural Feature',
     'Spectral Activity Candidate':      'Cropmark Signal',
     'Lowland Activity Zone':            'Lowland Activity Zone',
@@ -164,6 +169,7 @@ function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength):
         'Organised Field System Candidate': 'Structured linear pattern suggests managed land division',
         'Wetland Margin Activity Zone':     'Activity concentrates along a wetland or former water edge',
         'Route-Side Activity Zone':         'Landscape signals follow a historic movement corridor',
+        'Multi-Period Occupation Zone':     'Physical earthwork and spectral signals indicate layered use across time',
         'Terrain Structure Candidate':      'Terrain response suggests a defined structural feature',
         'Spectral Activity Candidate':      'Crop or spectral response suggests subsurface variation',
         'Lowland Activity Zone':            'Signals cluster across lower-lying activity ground',
@@ -300,6 +306,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
     const [sheetExpanded,          setSheetExpanded]          = useState(() => { try { return localStorage.getItem('fs_fg_sheet') === '1'; } catch { return false; } });
     const [devMode,                setDevMode]                = useState(() => { try { return localStorage.getItem('fs_fg_devmode') === '1'; } catch { return false; } });
+    const [annotationMode,         setAnnotationMode]         = useState(false);
+    const [devAnnotations,         setDevAnnotations]         = useState<DevAnnotation[]>([]);
+    const [pendingAnnotation,      setPendingAnnotation]      = useState<{ lat: number; lon: number } | null>(null);
+    const [annotationForm,         setAnnotationForm]         = useState<{
+        annotationType: AnnotationType; broadPeriod: BroadPeriod;
+        landscapeType: LandscapeType; confidence: AnnotationConfidence; reviewerNote: string;
+    }>({ annotationType: 'missed_hotspot', broadPeriod: 'Unknown', landscapeType: 'unknown', confidence: 'low', reviewerNote: '' });
     const [focusMode,              setFocusMode]              = useState(false);
     const [mobileSheetMode,        setMobileSheetMode]        = useState<'hotspots' | 'targets'>('hotspots');
     const sheetDragStartY = useRef<number | null>(null);
@@ -552,6 +565,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
         userFinds: projectFinds,
         initLat, initLng,
+        annotationMode, devAnnotations,
         callbacks: {
             onFeatureClick:  (id)  => {
                 clearMapItemSelections('target');
@@ -576,7 +590,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             onPASFindSelect: (f)   => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); persistSheetExpanded(true); },
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
             onMonumentClick: (name) => { clearMapItemSelections('monument'); setSelectedMonument(name === null ? undefined : (name || null)); if (name !== null) persistSheetExpanded(true); },
-            onUserFindClick: (id)   => { clearMapItemSelections('userFind'); setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null); persistSheetExpanded(true); },
+            onUserFindClick:    (id)       => { clearMapItemSelections('userFind'); setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null); persistSheetExpanded(true); },
+            onAnnotationDrop:   (lat, lon) => {
+                setPendingAnnotation({ lat, lon });
+                setAnnotationForm({ annotationType: 'missed_hotspot', broadPeriod: 'Unknown', landscapeType: 'unknown', confidence: 'low', reviewerNote: '' });
+            },
         },
     });
 
@@ -626,6 +644,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         terrainScanCenterRef.current = null;
         setSourceAvailability(null);
         setScanFromCache(false);
+        setAnnotationMode(false);
+        setDevAnnotations([]);
+        setPendingAnnotation(null);
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
 
@@ -844,10 +865,74 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         } catch { addLog('> Search failed.', 'system', 'warn'); }
     };
 
+    // ─── Dev annotation engine context capture ────────────────────────────────
+    const captureEngineContext = useCallback((lat: number, lon: number): EngineContextAtPoint => {
+        const clusterDists = detectedFeatures.map(c => getDistance(c.center, [lon, lat]));
+        const clustersWithin50m  = clusterDists.filter(d => d <=  50).length;
+        const clustersWithin100m = clusterDists.filter(d => d <= 100).length;
+        const clustersWithin250m = clusterDists.filter(d => d <= 250).length;
+
+        let nearestHotspotId: string | null = null;
+        let nearestHotspotDist: number | null = null;
+        for (const h of sortedHotspots) {
+            const d = getDistance([lon, lat], h.center);
+            if (nearestHotspotDist === null || d < nearestHotspotDist) {
+                nearestHotspotId = h.id;
+                nearestHotspotDist = Math.round(d);
+            }
+        }
+
+        let nearestTargetId: string | null = null;
+        let nearestTargetDist: number | null = null;
+        for (const t of displayTargets) {
+            const d = getDistance([lon, lat], t.center);
+            if (nearestTargetDist === null || d < nearestTargetDist) {
+                nearestTargetId = t.id;
+                nearestTargetDist = Math.round(d);
+            }
+        }
+
+        const suppressionReasons: string[] = [];
+        detectedFeatures.forEach((c, i) => {
+            if (clusterDists[i] > 250) return;
+            if (c.isRouteArtefactRisk && c.routeArtefactReason) suppressionReasons.push(c.routeArtefactReason);
+            if (c.disturbanceReason) suppressionReasons.push(c.disturbanceReason);
+        });
+
+        return {
+            clustersWithin50m,
+            clustersWithin100m,
+            clustersWithin250m,
+            nearestHotspotId,
+            nearestHotspotDist,
+            nearestTargetId,
+            nearestTargetDist,
+            sourceAvailability: sourceAvailability ?? null,
+            hadSuppressionNearby: suppressionReasons.length > 0,
+            suppressionReasons: [...new Set(suppressionReasons)],
+            belowHotspotThreshold: clustersWithin250m > 0 && sortedHotspots.length === 0,
+        };
+    }, [detectedFeatures, sortedHotspots, displayTargets, sourceAvailability]);
+
+    const handleAnnotationConfirm = useCallback(() => {
+        if (!pendingAnnotation) return;
+        const annotation: DevAnnotation = {
+            id: `ann-${Date.now()}`,
+            lat: pendingAnnotation.lat,
+            lon: pendingAnnotation.lon,
+            timestamp: Date.now(),
+            engineVersion: 'FG-2026.05.09b',
+            ...annotationForm,
+            engineContext: captureEngineContext(pendingAnnotation.lat, pendingAnnotation.lon),
+        };
+        setDevAnnotations(prev => [...prev, annotation]);
+        setPendingAnnotation(null);
+    }, [pendingAnnotation, annotationForm, captureEngineContext]);
+
     // ─── Engine Lab export ────────────────────────────────────────────────────
     const handleLabExport = useCallback(async () => {
         const map = mapRef.current;
-        if (!map || !sourceAvailability) return;
+        if (!map) return;
 
         const zoom     = SCAN_CONFIG.TERRAIN_ZOOM;
         const center   = map.getCenter();
@@ -876,6 +961,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             placeSignals,
             monumentPoints,
             referenceTargets: displayTargets,
+            devAnnotations,
         };
 
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -886,7 +972,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         document.body.appendChild(a);
         a.click();
         setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
-    }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets]);
+    }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets, devAnnotations]);
 
     // ─── Derived convenience aliases ──────────────────────────────────────────
 
@@ -910,7 +996,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                             }}
                             disabled={analyzing}
-                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-slate-600 text-white border-slate-500' : 'bg-blue-600 text-white border-blue-400/50 shadow-[0_0_15px_rgba(37,99,235,0.3)]'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                         >
                             {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Clear' : 'Historic Layers'}
                         </button>
@@ -1178,7 +1264,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <p className="text-[15px] font-black text-white leading-tight truncate">
-                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Scheduled Monument' : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Hotspot Review') : 'Ready to Scan'}
+                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Scheduled Monument' : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review') : 'Ready to Scan'}
                                             </p>
                                             {selectedMonument === undefined && !analyzing && !isTerrainScanning && !loadingPAS && ((historicMode && historicScanComplete) || (!historicMode && hasScanned && mobileSheetMode === 'hotspots' && terrainScanComplete)) && (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
@@ -1228,7 +1314,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
                                         }}
                                         disabled={analyzing}
-                                        className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_12px_rgba(59,130,246,0.22)]' : 'bg-blue-500/15 text-blue-200 border-blue-500/35 hover:bg-blue-500/25'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
+                                        className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_12px_rgba(59,130,246,0.24)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                                     >
                                         {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Historic'}
                                     </button>
@@ -2509,7 +2595,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <span className="text-[9px] font-black text-amber-400 uppercase tracking-[0.25em]">Dev Mode</span>
                         </div>
                         <button
-                            onClick={() => { setDevMode(false); try { localStorage.setItem('fs_fg_devmode', '0'); } catch {} }}
+                            onClick={() => {
+                                setDevMode(false);
+                                setAnnotationMode(false);
+                                setPendingAnnotation(null);
+                                setDevAnnotations([]);
+                                try { localStorage.setItem('fs_fg_devmode', '0'); } catch {}
+                            }}
                             className="text-[8px] font-black text-white/30 hover:text-white/70 uppercase tracking-widest transition-colors px-2 py-1 rounded-lg hover:bg-white/5 active:scale-95"
                         >
                             Exit
@@ -2547,12 +2639,50 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         )}
                     </div>
 
+                    {/* Annotation Controls */}
+                    <div className="px-4 py-3 border-b border-white/8 shrink-0 space-y-2">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-[7px] font-black text-white/25 uppercase tracking-[0.2em]">Annotations</p>
+                            {devAnnotations.length > 0 && (
+                                <span className="text-[7px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 rounded">
+                                    {devAnnotations.length} placed
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            onClick={() => setAnnotationMode(v => !v)}
+                            disabled={!hasScanned}
+                            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98] ${annotationMode ? 'border-orange-500/60 bg-orange-500/20 text-orange-300' : 'border-orange-500/30 bg-orange-500/8 text-orange-400 hover:bg-orange-500/15'}`}
+                        >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+                            {annotationMode ? 'Tap map to place pin' : 'Annotate Scan'}
+                        </button>
+                        {devAnnotations.length > 0 && (
+                            <div className="space-y-1 max-h-28 overflow-y-auto scrollbar-hide">
+                                {devAnnotations.map((a, i) => (
+                                    <div key={a.id} className="flex items-center justify-between bg-orange-500/5 border border-orange-500/15 rounded-lg px-2 py-1.5">
+                                        <div className="min-w-0">
+                                            <span className="text-[7px] font-black text-orange-400 mr-1.5">#{i + 1}</span>
+                                            <span className="text-[7px] text-white/50 truncate">{ANNOTATION_TYPE_LABELS[a.annotationType]}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setDevAnnotations(prev => prev.filter(x => x.id !== a.id))}
+                                            className="text-white/20 hover:text-white/60 ml-2 shrink-0 transition-colors"
+                                        >
+                                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Export Buttons */}
                     <div className="px-4 py-3 border-b border-white/8 shrink-0 space-y-2">
                         <p className="text-[7px] font-black text-white/25 uppercase tracking-[0.2em] mb-2">Export</p>
                         <button
                             onClick={handleLabExport}
-                            disabled={!sourceAvailability}
+                            disabled={!sourceAvailability && devAnnotations.length === 0}
                             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-amber-500/30 bg-amber-500/8 text-amber-400 text-[9px] font-black uppercase tracking-widest hover:bg-amber-500/15 transition-colors disabled:opacity-30 disabled:cursor-not-allowed active:scale-[0.98]"
                         >
                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -2562,10 +2692,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                     {/* System Console — fills remaining space */}
                     <div className="flex-1 bg-black/60 overflow-y-auto p-4 scrollbar-hide" ref={logContainerRef}>
-                        <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.2em] mb-2">Console</p>
+                        <p className="text-[7px] font-black text-white/40 uppercase tracking-[0.2em] mb-2">Console</p>
                         <div className="font-mono text-[9px] leading-relaxed">
                             {systemLog.map((l, i) => (
-                                <div key={i} className={`mb-1 ${l.level === 'error' ? 'text-red-400/80' : l.level === 'warn' ? 'text-amber-400/80' : l.source === 'historic' ? 'text-blue-400/70' : 'text-emerald-500/70'}`}>
+                                <div key={i} className={`mb-1 ${l.level === 'error' ? 'text-red-400' : l.level === 'warn' ? 'text-amber-400' : l.source === 'historic' ? 'text-blue-300' : 'text-emerald-400'}`}>
                                     {l.message}
                                 </div>
                             ))}
@@ -2574,6 +2704,98 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 </div>
 
             </div>
+
+            {/* Dev Annotation Modal — shown when a pin has been dropped in annotation mode */}
+            {devMode && pendingAnnotation && (
+                <div className="absolute bottom-6 left-6 z-[300] w-72 bg-slate-900 border border-orange-500/40 rounded-2xl shadow-2xl shadow-orange-900/20 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
+                    <div className="px-4 py-3 border-b border-orange-500/15 bg-orange-500/5 flex items-center gap-2">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+                        <span className="text-[9px] font-black text-orange-400 uppercase tracking-[0.2em]">Dev Annotation</span>
+                        <span className="ml-auto text-[7px] font-mono text-white/25">{pendingAnnotation.lat.toFixed(4)}, {pendingAnnotation.lon.toFixed(4)}</span>
+                    </div>
+                    <div className="px-4 py-3 space-y-2.5">
+                        {/* Annotation type */}
+                        <div>
+                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest mb-1">Type</p>
+                            <select
+                                value={annotationForm.annotationType}
+                                onChange={e => setAnnotationForm(f => ({ ...f, annotationType: e.target.value as AnnotationType }))}
+                                className="w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-[9px] text-white/80 font-mono focus:outline-none focus:border-orange-500/50"
+                            >
+                                {(Object.entries(ANNOTATION_TYPE_LABELS) as [AnnotationType, string][]).map(([v, l]) => (
+                                    <option key={v} value={v}>{l}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Row: period + landscape */}
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <p className="text-[7px] font-black text-white/30 uppercase tracking-widest mb-1">Period</p>
+                                <select
+                                    value={annotationForm.broadPeriod}
+                                    onChange={e => setAnnotationForm(f => ({ ...f, broadPeriod: e.target.value as BroadPeriod }))}
+                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] text-white/80 font-mono focus:outline-none focus:border-orange-500/50"
+                                >
+                                    {(['Prehistoric','Roman','Early Medieval','Medieval','Post-Medieval','Multi-period','Unknown'] as BroadPeriod[]).map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <p className="text-[7px] font-black text-white/30 uppercase tracking-widest mb-1">Confidence</p>
+                                <select
+                                    value={annotationForm.confidence}
+                                    onChange={e => setAnnotationForm(f => ({ ...f, confidence: e.target.value as AnnotationConfidence }))}
+                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-[9px] text-white/80 font-mono focus:outline-none focus:border-orange-500/50"
+                                >
+                                    {(['low','medium','high'] as AnnotationConfidence[]).map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        {/* Landscape type */}
+                        <div>
+                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest mb-1">Landscape</p>
+                            <select
+                                value={annotationForm.landscapeType}
+                                onChange={e => setAnnotationForm(f => ({ ...f, landscapeType: e.target.value as LandscapeType }))}
+                                className="w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-[9px] text-white/80 font-mono focus:outline-none focus:border-orange-500/50"
+                            >
+                                {(Object.entries(LANDSCAPE_TYPE_LABELS) as [LandscapeType, string][]).map(([v, l]) => (
+                                    <option key={v} value={v}>{l}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Note */}
+                        <div>
+                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest mb-1">Note (optional)</p>
+                            <input
+                                type="text"
+                                value={annotationForm.reviewerNote}
+                                onChange={e => setAnnotationForm(f => ({ ...f, reviewerNote: e.target.value }))}
+                                placeholder="e.g. Roman activity likely, no hotspot"
+                                className="w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-[9px] text-white/80 font-mono placeholder:text-white/20 focus:outline-none focus:border-orange-500/50"
+                            />
+                        </div>
+                        {/* Actions */}
+                        <div className="flex gap-2 pt-0.5">
+                            <button
+                                onClick={() => setPendingAnnotation(null)}
+                                className="flex-1 px-3 py-2 rounded-lg border border-white/10 text-white/40 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 transition-colors active:scale-[0.98]"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAnnotationConfirm}
+                                className="flex-1 px-3 py-2 rounded-lg border border-orange-500/40 bg-orange-500/15 text-orange-300 text-[9px] font-black uppercase tracking-widest hover:bg-orange-500/25 transition-colors active:scale-[0.98]"
+                            >
+                                Save Pin
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Your Find Card — desktop only; mobile shows inside panel */}
             {selectedUserFind && (() => {
