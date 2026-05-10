@@ -214,9 +214,14 @@ function hasTargetEvidence(f: Cluster): boolean {
         f.sources.includes('satellite_spring') ||
         f.sources.includes('satellite_summer')
     );
+    // Hydrology corroborated by LiDAR is strong independent physical evidence —
+    // a palaeochannel confirmed in both sources is a valid target signal, but
+    // hydrology alone (without LiDAR) is too ambiguous to pass this gate.
+    const hasCorroboratedHydrology = f.sources.includes('hydrology') && hasLidar;
     return (
         hasLidar ||
         hasSlopeWithPhysicalSupport ||
+        hasCorroboratedHydrology ||
         (f.sources.includes('satellite_summer') && f.sources.includes('satellite_spring')) ||
         f.aimInfo !== undefined
     );
@@ -492,6 +497,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Protected targets always show regardless of evidence (they carry their own warning).
     // Capped at 12 per scan to keep the list actionable.
     const displayTargets = useMemo(() => {
+        // Annotate suppression reasons before filtering so the Engine Lab can see
+        // exactly why each cluster was rejected at the gate level.
+        for (const f of detectedFeatures) {
+            if (f.isProtected) continue;
+            if (!hasTargetEvidence(f)) {
+                if (!f.suppressedBy) f.suppressedBy = [];
+                if (!f.suppressedBy.includes('failed_evidence_gate')) f.suppressedBy.push('failed_evidence_gate');
+            }
+            if (!hasLocalPhysicalEvidence(f)) {
+                if (!f.suppressedBy) f.suppressedBy = [];
+                if (!f.suppressedBy.includes('failed_physical_gate')) f.suppressedBy.push('failed_physical_gate');
+            }
+        }
         return detectedFeatures
             .filter(f => f.isProtected || (
                 hasTargetEvidence(f) &&
@@ -506,7 +524,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Secondary exploratory tier — never feeds back into hotspots or displayTargets.
     const traceTargets = useMemo<TraceTarget[]>(() => {
         if (!detectedFeatures.length) return [];
-        return computeTraceTargets(detectedFeatures, displayTargets, rawClusters, devMode);
+        return computeTraceTargets(detectedFeatures, displayTargets, rawClusters, devMode, modernWaysRef.current);
     }, [detectedFeatures, displayTargets, rawClusters, devMode]);
 
     // ─── Primary target selection ─────────────────────────────────────────────

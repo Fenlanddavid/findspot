@@ -22,7 +22,7 @@ export interface Cluster {
     disturbanceReason?: string;
     aspect?: number;
     relativeElevation?: 'Ridge' | 'Hollow' | 'Slope' | 'Flat';
-    metrics?: { circularity: number; density: number; ratio: number; area: number; ridgeStrength?: number; dirConsistency?: number };
+    metrics?: { circularity: number; density: number; ratio: number; area: number; ridgeStrength?: number; dirConsistency?: number; interiorDensity?: number };
     multiScale?: boolean;
     multiScaleLevel?: number;
     explanationLines?: string[];
@@ -37,6 +37,13 @@ export interface Cluster {
     // when independently corroborated.
     isRouteArtefactRisk?: boolean;
     routeArtefactReason?: 'centroid_near_modern_way' | 'linear_alignment_with_modern_way';
+    // Suppression audit trail — populated by each suppression function.
+    // Gives the Engine Lab visibility into why each cluster was rejected.
+    suppressedBy?: string[];
+    // Signal strength decomposition for confidence transparency.
+    signalBreakdown?: { terrain: number; hydrology: number; spectral: number; disturbance: number; };
+    // Relationship annotation set by analyzeContext relationship pass.
+    relationshipTag?: string;
 }
 
 // A modern mapped way (road, track, path) from OSM — used only for target
@@ -144,7 +151,7 @@ export const ETYMOLOGY_SIGNALS = [
     { pattern: "bury", meaning: "Fortified place", period: "Saxon", confidence: 0.85 },
     { pattern: "borough", meaning: "Fortified settlement", period: "Saxon", confidence: 0.85 },
     { pattern: "burgh", meaning: "Fortified settlement", period: "Saxon", confidence: 0.85 },
-    { pattern: "ham", meaning: "Settlement", period: "Saxon", confidence: 0.75 },
+    { pattern: "ham", meaning: "Settlement", period: "Saxon", confidence: 0.50 },
     { pattern: "ton", meaning: "Farmstead or enclosure", period: "Saxon", confidence: 0.75 },
     { pattern: "stow", meaning: "Meeting / holy place", period: "Saxon", confidence: 0.85 },
     { pattern: "ley", meaning: "Clearing in woodland", period: "Saxon", confidence: 0.7 },
@@ -188,7 +195,7 @@ export const SCAN_PROFILE = {
     },
     HYDROLOGY: {
         threshold: 0.22,
-        minSize: 650,
+        minSize: 350,
         dilation: 2,
         minSolidity: 0.10,
         minLinearity: 5.5
@@ -222,10 +229,19 @@ export type TraceRejectionReason =
 
 /** Category that describes what kind of weaker signal the trace represents */
 export type TraceType =
-    | 'suppressed_physical'     // had physical basis but failed a strict gate
-    | 'below_cut_supporting'    // passed all gates but was ranked #13+
-    | 'merged_echo'             // isolated sub-signal from a rawCluster that merged into a display target
-    | 'single_source_landscape'; // a single credible source, not enough for displayTargets
+    | 'suppressed_physical'       // failed a strict gate but has physical basis
+    | 'below_cut_supporting'      // passed all gates but ranked #13+
+    | 'merged_echo'               // sub-signal offset from a display target
+    | 'single_source_landscape'   // single credible source, below displayTargets bar
+    | 'hydrology_trace'           // palaeochannel or wet-margin signal
+    | 'spectral_trace'            // satellite-derived without LiDAR confirmation
+    | 'boundary_trace'            // linear ditch/bank form below evidence threshold
+    | 'suppressed_circular'       // ring/circular morphology below confidence bar
+    | 'weak_structural'           // structural signal with insufficient corroboration
+    | 'fragmented_enclosure'      // enclosure-like form without full perimeter
+    | 'corridor_trace'            // movement signal near a historic route
+    | 'dry_margin_trace'          // raised ground beside hydrology, low confidence
+    | 'weak_multiscale';          // multi-scale agreement but failed evidence gate
 
 /**
  * A secondary-tier archaeological clue that failed at least one strict gate

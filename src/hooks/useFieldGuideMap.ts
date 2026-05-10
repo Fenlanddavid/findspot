@@ -26,6 +26,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'landscape-context-outline',       visibleWhen: s => s.historicMode && s.visibility.context },
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
+    { id: 'cluster-links-casing',            visibleWhen: s => !s.historicMode },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
     { id: 'trace-targets-circle',            visibleWhen: s => !s.historicMode },
     { id: 'trace-targets-selected',          visibleWhen: s => !s.historicMode },
@@ -152,10 +153,16 @@ export function useFieldGuideMap({
             });
 
             map.addSource('cluster-links', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            // Casing gives the dashed line definition against any map background
+            map.addLayer({
+                id: 'cluster-links-casing', type: 'line', source: 'cluster-links',
+                layout: { 'line-join': 'round', 'line-cap': 'round' },
+                paint: { 'line-color': '#064e3b', 'line-width': 5, 'line-opacity': 0.45 },
+            });
             map.addLayer({
                 id: 'cluster-links-line', type: 'line', source: 'cluster-links',
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
-                paint: { 'line-color': '#34d399', 'line-width': 1, 'line-opacity': 0.3, 'line-dasharray': [3, 4] },
+                paint: { 'line-color': '#34d399', 'line-width': 2.5, 'line-opacity': 0.85, 'line-dasharray': [6, 3] },
             });
 
             // Trace Signals — translucent secondary layer, always below main targets

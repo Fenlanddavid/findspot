@@ -103,8 +103,16 @@ export function applyAIMEnrichment(clusters: Cluster[], aimData: AIMLike): Clust
                     period:   String(aim.properties?.PERIOD || ''),
                     evidence: String(aim.properties?.EVIDENCE_1 || ''),
                 };
-                c.confidence   = 'High';
-                c.findPotential = 96;
+                // Route through the logistic so AIM cannot bypass anti-inflation.
+                // AIM includes low-certainty cropmark transcriptions — a +25 boost
+                // is strong without capping at 96 unconditionally.
+                c.findPotential = boostScore(c.findPotential, 25);
+                // High confidence only when independently corroborated by a physical
+                // sensor — AIM polygons alone are not sufficient ground-truth.
+                const hasPhysicalCorroboration =
+                    c.sources.includes('terrain') || c.sources.includes('terrain_global') ||
+                    (c.sources.includes('satellite_summer') && c.sources.includes('satellite_spring'));
+                if (hasPhysicalCorroboration) c.confidence = 'High';
                 break;
             }
         }
@@ -225,7 +233,6 @@ export function getRouteTypeWeight(route: HistoricRoute): number {
 
 export function findConsensus(rawClusters: Cluster[]): Cluster[] {
     const merged: Cluster[] = [];
-    const thresholdM = 40;
 
     for (const c of rawClusters) {
         let found = false;
@@ -238,13 +245,19 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
             const gapLimit = 60;
             const canStitch = isAligned && dist < gapLimit && c.metrics!.ratio > 3.0 && m.metrics!.ratio > 3.0;
 
-            if (dist < thresholdM || canStitch) {
+            // Same-source merging uses a tighter 25m threshold — distinct features
+            // seen by the same sensor (e.g. two separate LiDAR pit features 30m apart)
+            // should not be collapsed. Cross-source merging keeps 40m to account for
+            // positional offsets between different data sources.
+            const mergeThresholdM = c.source === m.source ? 25 : 40;
+
+            if (dist < mergeThresholdM || canStitch) {
                 c.sources.forEach(src => {
                     if (!m.sources.includes(src)) m.sources.push(src);
                 });
                 if (!m.sources.includes(c.source)) m.sources.push(c.source);
 
-                if (canStitch && dist > thresholdM) {
+                if (canStitch && dist > mergeThresholdM) {
                     m.type = "Linear Pattern Anomaly";
                     m.confidence = dist > 45 ? 'Medium' : 'High';
                 }
@@ -391,15 +404,30 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
         let hasRouteProximity = false;
         for (const route of routes) {
             const dist = getDistanceToLine(c.center, route.geometry, route.bbox);
-            if (route.type === 'roman_road' && dist < 150) {
-                c.findPotential = boostScore(c.findPotential, 12);
-                c.explanationLines.push("Roman road proximity");
-                if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) {
-                    c.explanationLines.push("LiDAR relief agrees with movement corridor");
+            if (route.type === 'roman_road') {
+                // Graduated decay — roadside activity (vici, mansiones, wayside shrines)
+                // routinely sits 150–300m off the agger. A flat 150m cutoff discards
+                // genuine Roman-period sites in the wider road corridor.
+                if (dist < 100) {
+                    c.findPotential = boostScore(c.findPotential, 12);
+                    c.explanationLines.push("Roman road proximity");
+                    if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) {
+                        c.explanationLines.push("LiDAR relief agrees with movement corridor");
+                    }
+                    hasRouteProximity = true;
+                    if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
+                    c.isOnCorridor = true;
+                } else if (dist < 200) {
+                    c.findPotential = boostScore(c.findPotential, 7);
+                    c.explanationLines.push("Near Roman road corridor");
+                    hasRouteProximity = true;
+                    if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
+                    c.isOnCorridor = true;
+                } else if (dist < 350) {
+                    c.findPotential = boostScore(c.findPotential, 3);
+                    c.explanationLines.push("Roman road in wider landscape");
+                    if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
                 }
-                hasRouteProximity = true;
-                if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
-                c.isOnCorridor = true;
             } else if (dist < 100) {
                 c.findPotential = boostScore(c.findPotential, 7 * getRouteTypeWeight(route));
                 c.explanationLines.push("Historic route proximity");
@@ -425,9 +453,6 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
     }
 
     // ── Second pass: cluster linking by route alignment ───────────────────────
-    // Connects clusters that share the same movement corridor (same bearing ±10°,
-    // within 200m). Enables flow visualisation and settlement structure mapping.
-    // Run after the first pass so routeAlignment is set on all clusters.
     for (const c of results) {
         if (c.routeAlignment === undefined) continue;
         const aligned = results.filter(n =>
@@ -437,6 +462,44 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
             getDistance(c.center, n.center) <= 200,
         );
         if (aligned.length > 0) c.linkedClusterIds = aligned.map(n => n.id);
+    }
+
+    // ── Third pass: target relationship annotations ───────────────────────────
+    // Finds archaeologically meaningful cluster pairings within 200m and adds
+    // explanationLines + a relationshipTag. No score changes — interpretation only.
+    for (const c of results) {
+        if (!c.explanationLines) c.explanationLines = [];
+        const nearby = results.filter(n => n.id !== c.id && getDistance(c.center, n.center) < 200);
+        if (nearby.length === 0) continue;
+
+        // Circular/ring near another circular — possible barrow group or ring ditch cemetery
+        const isCircular = c.type.includes('Ring') || c.type.includes('Circular') ||
+                           c.type.includes('Barrow') || c.type.includes('Roundhouse');
+        const nearCircular = nearby.filter(n =>
+            n.type.includes('Ring') || n.type.includes('Circular') ||
+            n.type.includes('Barrow') || n.type.includes('Roundhouse')
+        );
+        if (isCircular && nearCircular.length >= 1 && !c.explanationLines.some(l => l.includes('barrow'))) {
+            c.relationshipTag = 'barrow_group';
+            c.explanationLines.push('Clustered circular features — possible barrow group or ring ditch cemetery');
+        }
+
+        // Settlement-type near a crossing — roadside/vicus activity
+        const isSettlement = c.contextLabel?.includes('Settlement') || c.type.includes('Settlement') || c.type.includes('Foundation');
+        if (isSettlement && nearby.some(n => n.isHighConfidenceCrossing) &&
+            !c.explanationLines.some(l => l.includes('crossing'))) {
+            c.relationshipTag = c.relationshipTag ?? 'route_settlement';
+            c.explanationLines.push('Settlement near movement crossing — roadside activity possible');
+        }
+
+        // Raised hydrology + nearby raised hydrology — dry-margin chain
+        const isRaisedHydro = c.sources.includes('hydrology') && c.polarity === 'Raised';
+        if (isRaisedHydro &&
+            nearby.some(n => n.sources.includes('hydrology') && n.polarity === 'Raised') &&
+            !c.explanationLines.some(l => l.includes('dry-margin chain'))) {
+            c.relationshipTag = c.relationshipTag ?? 'hydrology_chain';
+            c.explanationLines.push('Part of dry-margin chain — multiple raised areas along water edge');
+        }
     }
 
     return results;
@@ -451,6 +514,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         const c = results[i];
         let risk: Cluster['disturbanceRisk'] = 'Low';
         let reason = "";
+        let suppressCode = '';
 
         const parallelNeighbors = results.filter(n =>
             n.id !== c.id &&
@@ -460,34 +524,43 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         );
 
         if (parallelNeighbors.length >= 2) {
-            risk = 'High';
-            reason = "Systematic Parallelism (Drainage/Plough)";
+            risk = 'High'; reason = "Systematic Parallelism (Drainage/Plough)"; suppressCode = 'systematic_parallelism';
         }
 
         if (c.metrics!.density > 0.85 && c.metrics!.area < 300 && !c.type.includes('Roundhouse')) {
-            risk = 'Medium';
-            reason = "High Gradient Sharpness (Recent Cut)";
+            risk = 'Medium'; reason = "High Gradient Sharpness (Recent Cut)"; suppressCode = 'high_gradient_sharpness';
         }
 
         if (c.metrics!.ratio > 8.0 && parallelNeighbors.length >= 1) {
-            risk = 'High';
-            reason = "Machinery / Track Scar";
+            risk = 'High'; reason = "Machinery / Track Scar"; suppressCode = 'machinery_track_scar';
         }
 
         // Ridge-and-furrow: 3+ parallel linear features in a wider 200m radius,
         // bearing within 3°. Catches systematic medieval agricultural patterns
         // that survive as faint regular ridges under LiDAR.
-        if (risk === 'Low' && c.metrics!.ratio > 3.0) {
+        // Ratio threshold raised to 5.0 (from 3.0) to avoid suppressing genuine
+        // prehistoric linears (cursus, pit alignments) that share modest elongation.
+        // Additionally requires alternating Raised/Sunken polarity — ridge-and-furrow
+        // is defined by its strip alternation; two features with identical polarity
+        // are more likely genuine archaeology than plough ridges.
+        if (risk === 'Low' && c.metrics!.ratio > 5.0) {
             const ridgeFurrowNeighbors = results.filter(n =>
                 n.id !== c.id &&
                 n.metrics &&
                 getDistance(c.center, n.center) < 200 &&
                 Math.abs((c.bearing || 0) - (n.bearing || 0)) < 3 &&
-                n.metrics.ratio > 3.0,
+                n.metrics.ratio > 5.0,
             );
             if (ridgeFurrowNeighbors.length >= 2) {
-                risk   = 'High';
-                reason = "Ridge-and-Furrow Pattern (Agricultural)";
+                // True ridge-and-furrow alternates Raised/Sunken across adjacent strips.
+                // If all neighbors share the same polarity as the target, this is more
+                // likely a genuine ancient linear system — do not suppress it.
+                const hasAlternatingPolarity = ridgeFurrowNeighbors.some(n => n.polarity !== c.polarity);
+                if (hasAlternatingPolarity) {
+                    risk         = 'High';
+                    reason       = "Ridge-and-Furrow Pattern (Agricultural)";
+                    suppressCode = 'ridge_and_furrow';
+                }
             }
         }
 
@@ -499,8 +572,9 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
                 (c.maxY ?? 0) - (c.minY ?? 0) + 1,
             );
             if (minAxis < 5) {
-                risk   = 'Medium';
-                reason = "Thin Linear (Possible Noise or Modern Feature)";
+                risk         = 'Medium';
+                reason       = "Thin Linear (Possible Noise or Modern Feature)";
+                suppressCode = 'thin_linear';
             }
         }
 
@@ -514,23 +588,43 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
                 return (diff > 75 && diff < 105) || (diff > 255 && diff < 285);
             });
             if (perpNeighbors.length >= 1 && parallelNeighbors.length >= 1) {
-                risk   = 'Medium';
-                reason = "Field Boundary Network";
+                risk         = 'Medium';
+                reason       = "Field Boundary Network";
+                suppressCode = 'field_boundary_network';
             }
         }
 
         if (risk !== 'Low') {
             c.disturbanceRisk = risk;
             c.disturbanceReason = reason;
+            if (suppressCode) {
+                if (!c.suppressedBy) c.suppressedBy = [];
+                if (!c.suppressedBy.includes(suppressCode)) c.suppressedBy.push(suppressCode);
+            }
             // Proportional penalty: preserves signal in heavily-worked landscapes.
-            // A High-risk cluster at 60 becomes 36 (not 0 as flat −60 would give),
-            // so disturbance flags downgrade rather than delete useful signals.
             const penaltyFactor = risk === 'High' ? 0.4 : 0.2;
             c.findPotential = Math.max(5, Math.round(c.findPotential * (1 - penaltyFactor)));
         } else {
             c.disturbanceRisk = 'Low';
         }
     }
+
+    // ── Signal breakdown ──────────────────────────────────────────────────────
+    // Computed once after all disturbance passes so disturbanceRisk is final.
+    // Gives the UI and Engine Lab a per-cluster confidence decomposition.
+    for (const c of results) {
+        const hasLidar   = c.sources.includes('terrain') || c.sources.includes('terrain_global');
+        const hasHydro   = c.sources.includes('hydrology');
+        const hasSummer  = c.sources.includes('satellite_summer');
+        const hasSpring  = c.sources.includes('satellite_spring');
+        c.signalBreakdown = {
+            terrain:    hasLidar  ? (c.confidence === 'High' ? 85 : c.confidence === 'Medium' ? 65 : 40) : 0,
+            hydrology:  hasHydro  ? 60 : 0,
+            spectral:   (hasSummer && hasSpring) ? 80 : hasSummer ? 60 : hasSpring ? 40 : 0,
+            disturbance: c.disturbanceRisk === 'High' ? 80 : c.disturbanceRisk === 'Medium' ? 45 : 10,
+        };
+    }
+
     return results;
 }
 
@@ -550,6 +644,32 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 // (isProtected). Historic routes are intentionally not used for suppression:
 // they are archaeological context, while modern OSM ways are artefact evidence.
 
+// Suppression distance and linear-alignment eligibility vary by road class.
+// Major engineered roads have large embankments that generate significant LiDAR
+// noise well away from the centreline — use a wide threshold.
+// Minor roads have a smaller profile — use a tighter threshold.
+// Tracks, paths, and bridleways are NOT suppressed: they are often ancient
+// features and targets near them are archaeologically meaningful.
+function waySuppressionDistance(highwayTag: string): number | null {
+    switch (highwayTag) {
+        case 'motorway':
+        case 'trunk':
+        case 'primary':     return 20;   // major road embankment radius
+        case 'secondary':   return 15;
+        case 'tertiary':
+        case 'unclassified':
+        case 'residential':
+        case 'service':     return 10;   // only suppress if centroid is basically on the road
+        default:            return null; // track, path, footway, bridleway → no suppression
+    }
+}
+
+// Linear alignment check is only worth running for roads with enough tarmac /
+// embankment mass to generate scanner artefacts — secondary and above.
+function wayHasLinearArtefactRisk(highwayTag: string): boolean {
+    return ['motorway', 'trunk', 'primary', 'secondary'].includes(highwayTag);
+}
+
 export function applyRouteArtefactSuppression(
     clusters: Cluster[],
     modernWays: ModernWay[],
@@ -560,23 +680,26 @@ export function applyRouteArtefactSuppression(
     for (const c of clusters) {
         if (c.isProtected) continue;
 
-        // ── Proximity check: centroid within 20m of any modern way ───────────
+        // ── Proximity check: centroid within road-class-specific threshold ────
         let reason: Cluster['routeArtefactReason'] | undefined;
 
         for (const way of modernWays) {
+            const threshold = waySuppressionDistance(way.highwayTag);
+            if (threshold === null) continue;   // tracks/paths — skip
             const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-            if (dist <= 20) { reason = 'centroid_near_modern_way'; break; }
+            if (dist <= threshold) { reason = 'centroid_near_modern_way'; break; }
         }
 
-        // ── Linear alignment check: high-ratio target whose bearing matches ──
-        // a nearby way within 15°. Catches road-following linear scanner artefacts
-        // that just miss the centroid threshold.
+        // ── Linear alignment check: major roads only ──────────────────────────
+        // High-ratio target whose bearing matches a nearby major-road within 15°.
+        // Only applied to roads with significant embankment mass; smaller roads
+        // don't generate enough LiDAR ridge noise to warrant this check.
         if (!reason && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
             for (const way of modernWays) {
+                if (!wayHasLinearArtefactRisk(way.highwayTag)) continue;
                 const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
                 if (dist > 30) continue;
                 const wayBearing = computeRouteBearing(way.geometry);
-                // Linear targets can run parallel in either direction — check both
                 if (bearingDiff(c.bearing, wayBearing) <= 15 || bearingDiff(c.bearing, (wayBearing + 180) % 360) <= 15) {
                     reason = 'linear_alignment_with_modern_way';
                     break;
@@ -587,6 +710,47 @@ export function applyRouteArtefactSuppression(
         if (reason) {
             c.isRouteArtefactRisk = true;
             c.routeArtefactReason = reason;
+            if (!c.suppressedBy) c.suppressedBy = [];
+            c.suppressedBy.push(reason === 'centroid_near_modern_way' ? 'route_alignment' : 'route_linear_alignment');
         }
     }
+}
+
+// ─── Field reliability scoring ────────────────────────────────────────────────
+// Per-scan measure of how much modern noise dominates the cluster population.
+// Used by buildTerrainHotspots to proportionally soften confidence in noisy fields.
+
+export interface FieldReliabilityResult {
+    score:   number;                         // 0–100, 100 = clean/high reliability
+    label:   'high' | 'moderate' | 'low';
+    reasons: string[];
+}
+
+export function computeFieldReliabilityScore(clusters: Cluster[]): FieldReliabilityResult {
+    if (clusters.length === 0) return { score: 100, label: 'high', reasons: [] };
+    const total = clusters.length;
+
+    const highDistRatio      = clusters.filter(c => c.disturbanceRisk === 'High').length / total;
+    const routeArtefactRatio = clusters.filter(c => c.isRouteArtefactRisk).length / total;
+    const genericLinearRatio = clusters.filter(c =>
+        (c.type.includes('Linear') || c.type.includes('Movement Signal')) &&
+        (c.metrics?.ratio ?? 0) > 4.5 && !c.multiScale
+    ).length / total;
+
+    const reasons: string[] = [];
+    let score = 100;
+
+    if      (highDistRatio > 0.5)  { score -= 35; reasons.push('High disturbance dominance'); }
+    else if (highDistRatio > 0.25) { score -= 18; reasons.push('Elevated disturbance pattern'); }
+
+    if      (routeArtefactRatio > 0.35) { score -= 25; reasons.push('Route artefact dominance'); }
+    else if (routeArtefactRatio > 0.15) { score -= 10; reasons.push('Moderate route artefact presence'); }
+
+    if      (genericLinearRatio > 0.5)  { score -= 20; reasons.push('Linear feature dominance'); }
+    else if (genericLinearRatio > 0.3)  { score -=  8; reasons.push('Elevated linear signal ratio'); }
+
+    score = Math.max(0, Math.min(100, score));
+    const label: 'high' | 'moderate' | 'low' =
+        score >= 70 ? 'high' : score >= 40 ? 'moderate' : 'low';
+    return { score, label, reasons };
 }

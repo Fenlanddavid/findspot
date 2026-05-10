@@ -36,6 +36,8 @@ interface MemberFlags {
     multiScaleConfirmed: boolean;
     highCircularity:   boolean;
     hasEarthworkType:  boolean;
+    hasHollowForm:     boolean;  // any member has metrics.interiorDensity < 0.35 (ring/enclosure)
+    hasSolidForm:      boolean;  // any member has metrics.interiorDensity > 0.70 (mound/platform)
     // For movement pinch — kept as arrays only when needed
     hydroCenters:      [number, number][];
     slopeCenters:      [number, number][];
@@ -50,6 +52,7 @@ function buildFlags(members: Cluster[]): MemberFlags {
     let hasAlignment = false, hasCrossing = false, hasLidar = false;
     let isSouthFacing = false, hasGentleSlope = false;
     let multiScaleConfirmed = false, highCircularity = false, hasEarthworkType = false;
+    let hasHollowForm = false, hasSolidForm = false;
     let hasCorridorMember = false;
     const hydroCenters: [number, number][] = [];
     const slopeCenters: [number, number][] = [];
@@ -85,6 +88,8 @@ function buildFlags(members: Cluster[]): MemberFlags {
 
         if (!multiScaleConfirmed && m.multiScale && (m.multiScaleLevel ?? 0) >= 2) multiScaleConfirmed = true;
         if (!highCircularity     && (m.metrics?.circularity ?? 0) > 0.82)          highCircularity = true;
+        if (!hasHollowForm       && (m.metrics?.interiorDensity ?? 0.5) < 0.35)    hasHollowForm = true;
+        if (!hasSolidForm        && (m.metrics?.interiorDensity ?? 0.5) > 0.70)    hasSolidForm  = true;
 
         if (!hasEarthworkType) {
             const t = m.type;
@@ -105,7 +110,7 @@ function buildFlags(members: Cluster[]): MemberFlags {
         hasHydro, hasRaised, hasSunken, hasSlopeBreak, hasRouteProximity,
         hasSatSummer, hasSatSpring, hasAlignment, hasCrossing, hasLidar,
         isSouthFacing, hasGentleSlope, multiScaleConfirmed, highCircularity,
-        hasEarthworkType, hasCorridorMember,
+        hasEarthworkType, hasHollowForm, hasSolidForm, hasCorridorMember,
         hydroCenters, slopeCenters, firstCenter,
     };
 }
@@ -175,6 +180,40 @@ function terrainSuitabilityReading(f: MemberFlags): string | undefined {
     return undefined;
 }
 
+// ─── 6. Archaeological plausibility ──────────────────────────────────────────
+// Combines landscape-context clues into a plausibility score (0–3) that
+// rewards signatures historically associated with occupation or funerary use:
+// south-facing slope, water proximity, confirmed hollow morphology, etc.
+// Additive with microTopo + dryMargin inside the existing cap of 6.
+
+function archaeologicalPlausibilityScore(f: MemberFlags): { score: number; reason?: string } {
+    // Hollow earthwork on south-facing slope near water — classic Bronze Age / Iron Age settlement
+    if (f.hasHollowForm && f.isSouthFacing && f.hasHydro) {
+        return { score: 3, reason: 'High-plausibility: hollow earthwork, south-facing, near water' };
+    }
+    // Multi-scale hollow form confirmed by LiDAR — very low false-positive rate
+    if (f.hasHollowForm && f.multiScaleConfirmed && f.hasEarthworkType) {
+        return { score: 3, reason: 'High-plausibility: multi-scale hollow earthwork confirmed' };
+    }
+    // Solid raised form near water with south aspect — mound or platform
+    if (f.hasSolidForm && f.hasRaised && f.hasHydro && f.isSouthFacing) {
+        return { score: 2, reason: 'Plausible raised platform or mound: solid form near water' };
+    }
+    // Earthwork type on south-facing gentle slope — classic habitation terrain
+    if (f.hasEarthworkType && f.isSouthFacing && f.hasGentleSlope) {
+        return { score: 2, reason: 'Favourable terrain position for occupation site' };
+    }
+    // Topographic pinch: route crossing + water + slope change — classic ford/crossing context
+    if (f.hasCrossing && f.hasHydro && f.hasSlopeBreak) {
+        return { score: 2, reason: 'Topographic threshold: movement pinch with slope change' };
+    }
+    // South-facing raised ground near water — baseline plausibility
+    if (f.isSouthFacing && f.hasRaised && f.hasHydro) {
+        return { score: 1, reason: 'South-facing raised ground near water' };
+    }
+    return { score: 0 };
+}
+
 // ─── Combined entry point ─────────────────────────────────────────────────────
 
 export function computeLandscapeReading(
@@ -183,20 +222,22 @@ export function computeLandscapeReading(
 ): LandscapeReading {
     const f = buildFlags(members);
 
-    const micro    = microTopoScore(f);
-    const margin   = dryMarginScore(f);
-    const edge     = edgeReading(f);
-    const movement = movementReading(f, routes);
-    const terrain  = terrainSuitabilityReading(f);
+    const micro       = microTopoScore(f);
+    const margin      = dryMarginScore(f);
+    const edge        = edgeReading(f);
+    const movement    = movementReading(f, routes);
+    const terrain     = terrainSuitabilityReading(f);
+    const plausibility = archaeologicalPlausibilityScore(f);
 
-    const score = Math.min(6, micro.score + margin.score);
+    const score = Math.min(6, micro.score + margin.score + plausibility.score);
 
     const reasons: string[] = [];
-    if (micro.reason)  reasons.push(micro.reason);
-    if (margin.reason) reasons.push(margin.reason);
-    if (edge)          reasons.push(edge);
-    if (movement)      reasons.push(movement);
-    if (terrain)       reasons.push(terrain);
+    if (micro.reason)        reasons.push(micro.reason);
+    if (margin.reason)       reasons.push(margin.reason);
+    if (plausibility.reason) reasons.push(plausibility.reason);
+    if (edge)                reasons.push(edge);
+    if (movement)            reasons.push(movement);
+    if (terrain)             reasons.push(terrain);
 
     return { score, reasons };
 }

@@ -6,7 +6,7 @@
 // generateHotspots is the combined entry point kept for call-site compatibility.
 
 import { Cluster, Hotspot, HotspotClassification, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
-import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight } from './fieldGuideAnalysis';
+import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from './fieldGuideAnalysis';
 import { computeLandscapeReading } from './landscapeReadingEngine';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
@@ -238,12 +238,24 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
+    // 3. Burial / Barrow Candidate — isolated compact circular raised feature confirmed by LiDAR.
+    // Requires the cluster to have a circular earthwork type and high circularity, but must NOT
+    // sit within a settlement cluster (which would indicate a domestic rather than funerary feature).
+    // Ranked before Multi-Period: Bronze Age barrows are the highest-yield single site type for
+    // metal detecting in England. Specific morphological identity should win over broad periodisation.
+    if (ctx.hasLidar && ctx.isRaised && ctx.hasCircularFeature &&
+        !ctx.hasSettlementContext && ctx.anomaly >= 10) {
+        return {
+            classification: 'Burial / Barrow Candidate',
+            reason:         'Compact circular raised feature — check heritage records before investigating',
+        };
+    }
+
     // B: Multi-Period Occupation Zone — physical earthwork (LiDAR) and seasonal spectral signal
     // (multi-season satellite) represent independent time-depths of deposition. Together with
     // diverse signal classes, this indicates repeated human use rather than a single episode.
-    // Keep below Crossing/Junction and compact circular burial morphology so those
-    // specific identities win, but above broad settlement/wetland/route buckets so
-    // the multi-period evidence is not hidden.
+    // Circular burial features take priority above this (already handled); non-circular
+    // multi-period evidence sits above broad settlement/wetland/route buckets.
     if (!ctx.hasCircularFeature && ctx.hasLidar && ctx.hasMultiSeasonSat && ctx.signalClassCount >= 3 && ctx.anomaly >= 10) {
         return {
             classification: 'Multi-Period Occupation Zone',
@@ -252,7 +264,7 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 3. Settlement Edge Candidate — raised LiDAR anomaly with meaningful context.
+    // 4. Settlement Edge Candidate — raised LiDAR anomaly with meaningful context.
     // Requires 2+ signal classes so a single LiDAR feature on raised ground alone
     // cannot trigger this classification.
     if (ctx.anomaly >= 12 && ctx.context >= 6 && ctx.isRaised && ctx.hasLidar &&
@@ -262,17 +274,6 @@ function classifyHotspot(ctx: ClassifyContext): {
             classification: 'Settlement Edge Candidate',
             reason:         'Raised LiDAR anomaly in landscape context',
             secondaryTag:   ctx.hasHydrology ? 'Water margin setting' : undefined,
-        };
-    }
-
-    // 4. Burial / Barrow Candidate — isolated compact circular raised feature confirmed by LiDAR.
-    // Requires the cluster to have a circular earthwork type and high circularity, but must NOT
-    // sit within a settlement cluster (which would indicate a domestic rather than funerary feature).
-    if (ctx.hasLidar && ctx.isRaised && ctx.hasCircularFeature &&
-        !ctx.hasSettlementContext && ctx.anomaly >= 10) {
-        return {
-            classification: 'Burial / Barrow Candidate',
-            reason:         'Compact circular raised feature — check heritage records before investigating',
         };
     }
 
@@ -385,6 +386,10 @@ export function buildTerrainHotspots(
 ): Hotspot[] {
     const results: Hotspot[] = [];
     const usedIds = new Set<string>();
+
+    // Field-level reliability — computed once from the full cluster population.
+    // Used at the end to proportionally soften confidence in noisy/disturbed fields.
+    const fieldReliability = computeFieldReliabilityScore(clusters);
 
     // Sort clusters before grouping so the strongest always acts as the group
     // anchor — makes cluster membership deterministic regardless of input order.
@@ -716,6 +721,38 @@ export function buildTerrainHotspots(
             if (featurelessCount / members.length > 0.5) explanation.push('IGNORE: Uniform/Featureless terrain');
         }
 
+        // ── Negative evidence penalties ───────────────────────────────────────
+        // Anti-archaeological behaviour patterns that reduce overconfident interpretation.
+        // Applied after all positive scoring so they act as calibration, not suppression.
+        {
+            const _hasCircularFeature   = members.some(m =>
+                m.type.includes('Roundhouse') || m.type.includes('Barrow') ||
+                m.type.includes('Ring Ditch') || (m.metrics?.circularity ?? 0) > 0.65
+            );
+            const _hasSettlementContext = members.some(m =>
+                m.type.includes('Settlement') || m.type.includes('Building') || m.type.includes('Structure')
+            );
+            const _hasLinearPattern     = members.filter(m =>
+                m.type.includes('Linear') || m.type.includes('Ditch') ||
+                m.type.includes('Boundary') || m.type.includes('Enclosure')
+            ).length >= 2;
+
+            // Route proximity without any archaeological form — context should strengthen
+            // a signal, not substitute for one. Penalise route-only behaviour.
+            if ((hasRomanProximity || hasHistProximity) &&
+                !_hasCircularFeature && !_hasSettlementContext && !isHighConfidenceCrossing &&
+                !hasHydrology && anomaly < 12) {
+                penalty -= 4;
+                explanation.push('IGNORE: Route proximity without archaeological form');
+            }
+
+            // All linear signals, no circular or structural, no hydrology — field grid or drainage.
+            if (_hasLinearPattern && !_hasCircularFeature && !_hasSettlementContext &&
+                !hasHydrology && signalClassCount <= 2 && !hasRomanProximity) {
+                penalty -= 3;
+            }
+        }
+
         // ── Disturbance gate ──────────────────────────────────────────────────
         // High-disturbance hotspots are only kept if there is strong independent
         // evidence — AIM data, 3+ sources, multi-season satellite, or LiDAR +
@@ -742,7 +779,7 @@ export function buildTerrainHotspots(
         const cappedAnomaly     = Math.min(anomaly,     30);
         const cappedContext     = Math.min(context,     25);
         const cappedConvergence = Math.min(convergence, 20);
-        const cappedBehaviour   = Math.min(behaviour,   15);
+        const cappedBehaviour   = Math.min(behaviour,   20);  // raised 15→20: Roman roads are strongest predictor
         const cappedPenalty     = Math.max(penalty,    -20);
         const score       = Math.min(98, Math.max(0, cappedAnomaly + cappedContext + cappedConvergence + cappedBehaviour + cappedPenalty));
         const signalCount = sources.size;
@@ -777,7 +814,9 @@ export function buildTerrainHotspots(
         // ── Classification layer ──────────────────────────────────────────────
         const hasCircularFeature   = members.some(m =>
             m.type.includes('Roundhouse') || m.type.includes('Barrow') ||
-            m.type.includes('Ring Ditch') || (m.metrics?.circularity ?? 0) > 0.7
+            m.type.includes('Ring Ditch') || (m.metrics?.circularity ?? 0) > 0.65
+            // Threshold lowered 0.7→0.65: ring ditches on ploughed fields are rarely
+            // perfectly circular — ploughing distorts the signal.
         );
         const hasLinearPattern     = members.filter(m =>
             m.type.includes('Linear') || m.type.includes('Ditch') ||
@@ -872,7 +911,18 @@ export function buildTerrainHotspots(
         .filter(h => h.score >= 25)
         .sort((a, b) => b.score - a.score)
         .slice(0, 8)
-        .map((h, i) => ({ ...h, number: i + 1 }));
+        .map((h, i) => {
+            // Proportional confidence softening in low-reliability fields.
+            // Prevents weak signals in heavily-disturbed scans being labelled
+            // with the same confidence as strong signals in clean fields.
+            let confidence = h.confidence;
+            if (fieldReliability.label === 'low') {
+                if (confidence === 'Developing Signal') confidence = 'Weak Signal';
+            } else if (fieldReliability.label === 'moderate') {
+                if (confidence === 'Strongest Signal' && h.score < 85) confidence = 'Strong Signal';
+            }
+            return { ...h, number: i + 1, confidence };
+        });
 }
 
 // ─── Stage 2: historic enrichment ────────────────────────────────────────────

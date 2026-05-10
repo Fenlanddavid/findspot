@@ -73,6 +73,17 @@ function convexHullPerimeter(pts: {x: number; y: number}[]): number {
     return perim;
 }
 
+// ─── Local anti-inflation logistic ───────────────────────────────────────────
+// Mirrors boostScore() in fieldGuideAnalysis.ts — kept local to avoid importing
+// from outside the worker bundle. Each additional boost yields diminishing returns
+// as scores approach 100, making "High potential" actually mean something.
+
+function boostScoreLocal(base: number, boost: number): number {
+    if (base <= 0) return Math.min(96, 100 * (1 - Math.exp(-boost / 100)));
+    const raw = -Math.log(Math.max(0.001, 1 - Math.min(0.999, base / 100))) * 100;
+    return Math.min(96, 100 * (1 - Math.exp(-(raw + boost) / 100)));
+}
+
 // ─── Main processing function ─────────────────────────────────────────────────
 
 async function processSource(params: WorkerParams): Promise<Cluster[]> {
@@ -435,6 +446,11 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 const isMovement = ratio > 6.0 && minAxis >= 6 && dirConsistency > 0.35;
                 const isPalaeo   = sourceType === 'hydrology' && ratio > 4.0 && cluster.polarity === 'Sunken' && minAxis >= 8 && dens > 0.25;
 
+                // Circularity threshold varies by source: ploughing distorts ring features
+                // in satellite imagery more than in LiDAR, so satellite uses a looser threshold
+                // (0.62) while LiDAR retains the more precise 0.68.
+                const circularityThresh = sourceType.startsWith('satellite_') ? 0.62 : 0.68;
+
                 if      (isHollow && circularity > 0.55 && areaPx > 150) cluster.type = 'Ring Feature (Possible Ditch or Enclosure)';
                 else if (isHollow && areaPx > 80)                        cluster.type = 'Enclosure Signal (Possible Earthwork)';
                 else if (isPalaeo)                                        cluster.type = 'Palaeochannel (Ancient Watercourse)';
@@ -442,9 +458,37 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 else if (isMovement)                                      cluster.type = 'Movement Signal (Possible Trackway)';
                 else if (ratio > 3.0)                                     cluster.type = 'Linear Feature (Ditch or Bank Signal)';
                 else if (dens > 0.75 && ratio < 1.4 && areaPx > 80)      cluster.type = 'Structural Signal (Possible Building Remains)';
-                else if (circularity > 0.72 && dens > 0.55 && areaPx > 60) cluster.type = 'Circular Feature (Possible Structure or Mound)';
+                else if (circularity > circularityThresh && dens > 0.55 && areaPx > 60) cluster.type = 'Circular Feature (Possible Structure or Mound)';
                 else if (areaPx > 400)                                    cluster.type = 'Complex Earthwork Signal';
                 else                                                      cluster.type = 'Subsurface Anomaly (Unclassified)';
+
+                // ── Internal structure analysis ───────────────────────────────────────
+                // Compute core-vs-shell point density BEFORE points are cleared.
+                // Core zone = inner 40% of bounding box on each axis (16% of bbox area).
+                // interiorDensity ratio: 0 = hollow (ring/enclosure), 1 = solid fill (mound/platform).
+                // Only computed for clusters with ≥80 points; 0.5 (unknown) otherwise.
+                let interiorDensityVal = 0.5;
+                if (areaPx >= 80) {
+                    const coreMinX = cluster.minX + w * 0.30;
+                    const coreMaxX = cluster.minX + w * 0.70;
+                    const coreMinY = cluster.minY + h * 0.30;
+                    const coreMaxY = cluster.minY + h * 0.70;
+                    const expectedCoreFrac = 0.4 * 0.4; // 16% of bbox
+                    let coreCount = 0;
+                    for (const p of cluster.points) {
+                        if (p.x >= coreMinX && p.x <= coreMaxX && p.y >= coreMinY && p.y <= coreMaxY) coreCount++;
+                    }
+                    const observedCoreFrac = coreCount / areaPx;
+                    interiorDensityVal = Math.min(1, observedCoreFrac / (expectedCoreFrac + 0.001));
+                }
+
+                // Refine classification using confirmed internal structure.
+                // A solid interior invalidates a ring morphology; a hollow circle upgrades to ring.
+                if (interiorDensityVal > 0.70 && cluster.type === 'Ring Feature (Possible Ditch or Enclosure)') {
+                    cluster.type = 'Enclosure Signal (Possible Earthwork)';
+                } else if (interiorDensityVal < 0.25 && cluster.type === 'Circular Feature (Possible Structure or Mound)' && circularity > 0.60) {
+                    cluster.type = 'Ring Feature (Possible Ditch or Enclosure)';
+                }
 
                 // Confidence
                 let confidenceVal = dens * 0.22 + circularity * 0.22 + Math.min(areaPx / 600, 1) * 0.26 + meanRidgeStrength * 0.30;
@@ -457,9 +501,14 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 if (ratio > 3.0 && dirConsistency < 0.25) confidenceVal = Math.max(0, confidenceVal - 0.06);
                 if (nearEdge)                              confidenceVal = Math.max(0, confidenceVal - tier.edgePenalty);
 
+                // Confirmed hollow ring: genuine ring-ditch morphology is archaeologically credible
+                if (interiorDensityVal < 0.25 && cluster.type.includes('Ring')) {
+                    confidenceVal = Math.min(1, confidenceVal + 0.05);
+                }
+
                 cluster.confidence    = confidenceVal > 0.6 ? 'High' : confidenceVal > 0.35 ? 'Medium' : 'Subtle';
                 cluster.findPotential = Math.min(96, Math.round(confidenceVal * 100));
-                cluster.metrics       = { circularity, density: dens, ratio, area: areaPx, ridgeStrength: meanRidgeStrength, dirConsistency };
+                cluster.metrics       = { circularity, density: dens, ratio, area: areaPx, ridgeStrength: meanRidgeStrength, dirConsistency, interiorDensity: interiorDensityVal };
                 // points was only needed inside the worker — clear before postMessage to avoid
                 // structured-cloning potentially thousands of pixel coords per cluster.
                 cluster.points = [];
@@ -483,8 +532,11 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
         if (agreedTiers.size >= 2) {
             c.multiScale      = true;
             c.multiScaleLevel = agreedTiers.size;
+            // Route through the logistic so multi-scale agreement cannot push a
+            // cluster to 96 from a modest base — multi-scale is a quality signal,
+            // not a substitute for physical evidence strength.
             const boost = agreedTiers.size >= 3 ? 8 : 5;
-            c.findPotential = Math.min(96, c.findPotential + boost);
+            c.findPotential = boostScoreLocal(c.findPotential, boost);
             if      (c.findPotential > 60) c.confidence = 'High';
             else if (c.findPotential > 35) c.confidence = 'Medium';
         }
