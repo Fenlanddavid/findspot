@@ -11,9 +11,10 @@ import { useHistoricScan } from '../hooks/useHistoricScan';
 import { useTilePrewarm } from '../hooks/useTilePrewarm';
 
 import {
-    Cluster, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
+    Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
     HotspotClassification, HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
+import { computeTraceTargets } from '../utils/traceTargetEngine';
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
@@ -315,6 +316,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }>({ annotationType: 'missed_hotspot', broadPeriod: 'Unknown', landscapeType: 'unknown', confidence: 'low', reviewerNote: '' });
     const [focusMode,              setFocusMode]              = useState(false);
     const [mobileSheetMode,        setMobileSheetMode]        = useState<'hotspots' | 'targets'>('hotspots');
+    const [selectedTraceId,        setSelectedTraceId]        = useState<string | null>(null);
+    const traceCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const sheetDragStartY = useRef<number | null>(null);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
@@ -327,10 +330,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // Terrain scan centre — for drift guard in historic phase
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
 
-    // Lab export: NHLE/AIM responses and modern ways stored after scan for engine-lab export
+    // Lab export: NHLE/AIM responses, modern ways, and raw clusters stored after scan
     const nhleDataRef      = useRef<{ features: any[] } | null>(null);
     const aimDataRef       = useRef<{ features: any[] } | null>(null);
     const modernWaysRef    = useRef<import('./fieldGuideTypes').ModernWay[]>([]);
+    const [rawClusters,    setRawClusters]    = useState<Cluster[]>([]);
 
     // User location marker (shown after GPS button press, persists for session)
     const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -416,12 +420,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return new Map(investigations.map(i => [i.hotspotId, i]));
     }, [investigations]);
 
-    const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument') => {
+    const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument' | 'trace') => {
         if (keep !== 'target') setSelectedId(null);
         if (keep !== 'hotspot') setSelectedHotspotId(null);
         if (keep !== 'userFind') setSelectedUserFind(null);
         if (keep !== 'pasFind') setSelectedPASFind(null);
         if (keep !== 'monument') setSelectedMonument(undefined);
+        if (keep !== 'trace') setSelectedTraceId(null);
     }, []);
 
     const persistSheetExpanded = useCallback((expanded: boolean) => {
@@ -497,6 +502,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             .slice(0, 12);
     }, [detectedFeatures]);
 
+    // ─── Trace Signals ────────────────────────────────────────────────────────
+    // Secondary exploratory tier — never feeds back into hotspots or displayTargets.
+    const traceTargets = useMemo<TraceTarget[]>(() => {
+        if (!detectedFeatures.length) return [];
+        return computeTraceTargets(detectedFeatures, displayTargets, rawClusters, devMode);
+    }, [detectedFeatures, displayTargets, rawClusters, devMode]);
+
     // ─── Primary target selection ─────────────────────────────────────────────
     // Exactly one non-protected target is promoted as "Start here".
     // Tie-break order: highest score → closest to GPS → closest to centroid → hash.
@@ -556,7 +568,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
-        hotspots, selectedHotspotId, detectedFeatures, primaryTargetId, pasFinds, historicRoutes,
+        hotspots, selectedHotspotId, detectedFeatures: displayTargets, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
         fieldBoundaries: [
             ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
             // Fall back to the permission's own boundary when no fields have been drawn
@@ -581,6 +593,16 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                 persistSheetExpanded(true);
                 const h = hotspots.find(h => h.id === id);
                 if (h) mapRef.current?.fitBounds(h.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
+            },
+            onTraceTargetClick: (id) => {
+                clearMapItemSelections('trace');
+                setMobileSheetMode('targets');
+                setSelectedTraceId(id);
+                persistSheetExpanded(true);
+                // Scroll card into view after state settles
+                requestAnimationFrame(() => {
+                    traceCardRefs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                });
             },
             onDeselect:      ()    => { setShowSuggestion(false); clearMapItemSelections(); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
@@ -644,6 +666,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         terrainScanCenterRef.current = null;
         setSourceAvailability(null);
         setScanFromCache(false);
+        setRawClusters([]);
+        setSelectedTraceId(null);
         setAnnotationMode(false);
         setDevAnnotations([]);
         setPendingAnnotation(null);
@@ -725,6 +749,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         setSourceAvailability(result.sourceAvailability ?? null);
         setScanFromCache(result.fromCache);
+        setRawClusters(result.rawClusters ?? []);
 
         dispatch({
             type: 'SCAN_SUCCESS',
@@ -739,6 +764,12 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         if (!hasScanned && result.hotspots.length > 0) {
             setShowSuggestion(true);
             setSelectedHotspotId(result.hotspots[0].id);
+        }
+
+        // If there are no hotspots, jump straight to the Targets tab so the list
+        // isn't hidden behind an empty Hotspots panel.
+        if (result.hotspots.length === 0) {
+            setMobileSheetMode('targets');
         }
 
         const scanCenter = {
@@ -961,6 +992,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             placeSignals,
             monumentPoints,
             referenceTargets: displayTargets,
+            traceTargets,
             devAnnotations,
         };
 
@@ -972,7 +1004,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         document.body.appendChild(a);
         a.click();
         setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
-    }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets, devAnnotations]);
+    }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets, traceTargets, devAnnotations]);
 
     // ─── Derived convenience aliases ──────────────────────────────────────────
 
@@ -1872,22 +1904,70 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     <button
                                                         key={f.id}
                                                         onClick={() => focusTarget(f)}
-                                                        className={`w-full text-left p-3 rounded-xl border active:scale-[0.98] transition-all ${f.isProtected ? 'bg-red-950/20 border-red-900/50' : isPrimary ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)]' : 'bg-slate-900/40 border-white/8 hover:border-white/15'}`}
+                                                        className={`w-full text-left p-3 rounded-xl border active:scale-[0.98] transition-all ${f.isProtected ? 'bg-red-950/20 border-red-900/50' : isPrimary ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)]' : 'bg-slate-900/45 border-white/8 hover:border-sky-300/20 hover:bg-slate-900/60'}`}
                                                     >
                                                         <div className="flex items-start justify-between gap-2">
                                                             <div className="min-w-0">
-                                                                {!f.isProtected && <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-white' : 'text-white/85'}`}>{f.type}</p>}
-                                                                <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-stone-400' : isPrimary ? 'text-emerald-300' : 'text-white/65'}`}>
+                                                                {!f.isProtected && <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-emerald-100' : 'text-sky-200/55'}`}>{f.type}</p>}
+                                                                <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-stone-400' : isPrimary ? 'text-emerald-300' : 'text-white/78'}`}>
                                                                     {f.isProtected ? 'Scheduled Monument' : getTargetVerdict(tI.signalStrength, isPrimary)}
                                                                 </p>
-                                                                {!f.isProtected && <p className="text-[10px] font-bold text-white/65 leading-tight mt-0.5 line-clamp-2">{tI.hook}</p>}
+                                                                {!f.isProtected && <p className={`text-[10px] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
                                                             </div>
-                                                            {isPrimary && !f.isProtected && <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>}
+                                                            {isPrimary && !f.isProtected
+                                                                ? <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>
+                                                                : !f.isProtected && <span className="text-[8px] font-mono text-white/24 shrink-0 pt-0.5">{f.findPotential}</span>}
                                                         </div>
                                                     </button>
                                                 );
                                             })}
                                         </div>
+                                    </div>
+                                )}
+                                {/* Trace Signals — secondary exploratory layer */}
+                                {selectedMonument === undefined && !selectedHotspotId && mobileSheetMode === 'targets' && traceTargets.length > 0 && hasScanned && (
+                                    <div>
+                                        <p className="text-[8px] font-black text-amber-500/40 uppercase tracking-[0.25em] mb-2 px-1 mt-1">Trace Signals</p>
+                                        <div className="space-y-1.5">
+                                            {traceTargets.map(t => {
+                                                const isSelected = t.id === selectedTraceId;
+                                                const sourceChips: string[] = [];
+                                                if (t.sources.includes('terrain') || t.sources.includes('terrain_global')) sourceChips.push('LiDAR');
+                                                if (t.sources.includes('satellite_summer') || t.sources.includes('satellite_spring')) sourceChips.push('Sat');
+                                                if (t.sources.includes('hydrology')) sourceChips.push('Hydro');
+                                                if (t.sources.includes('slope')) sourceChips.push('Slope');
+                                                if (t.multiScale) sourceChips.push('Multi-Scale');
+                                                const distanceLabel = t.distanceToNearestTarget >= 1000
+                                                    ? `${(t.distanceToNearestTarget / 1000).toFixed(1)}km from nearest target`
+                                                    : `${Math.round(t.distanceToNearestTarget)}m from nearest target`;
+                                                return (
+                                                    <div
+                                                        key={t.id}
+                                                        ref={el => { if (el) traceCardRefs.current.set(t.id, el); else traceCardRefs.current.delete(t.id); }}
+                                                        className={`w-full text-left p-2.5 rounded-xl border transition-all ${isSelected ? 'border-amber-300/20 bg-slate-900/70 shadow-[0_0_12px_rgba(245,158,11,0.06)]' : 'border-white/5 bg-slate-900/35 hover:border-white/9'}`}
+                                                    >
+                                                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                                                            <div className="min-w-0">
+                                                                <p className={`text-[8px] font-black uppercase tracking-widest leading-tight ${isSelected ? 'text-amber-200' : 'text-amber-300/55'}`}>{t.traceLabel}</p>
+                                                                <p className="text-[10px] font-bold text-white/45 leading-snug mt-0.5">{t.traceReason}</p>
+                                                            </div>
+                                                            <span className={`text-[8px] font-black uppercase tracking-widest rounded-full border px-1.5 py-0.5 shrink-0 ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>Clue</span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1 mb-1.5">
+                                                            {sourceChips.map(chip => (
+                                                                <span key={chip} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>
+                                                                    {chip}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                        <div className="flex items-center justify-end gap-2 pt-0.5">
+                                                            <span className="text-[8px] font-mono text-white/22 shrink-0">{distanceLabel} / {t.traceScore}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-[8px] font-bold text-white/20 italic text-center mt-2">Trace signals are weaker clues, not investigation targets.</p>
                                     </div>
                                 )}
                                 {selectedMonument === undefined && !historicMode && !selectedHotspotId && hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 && (

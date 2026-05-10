@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
-import { Cluster, Hotspot, HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
 import { Find } from '../db';
 import { DevAnnotation } from '../utils/devAnnotation';
 
@@ -27,6 +27,8 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
+    { id: 'trace-targets-circle',            visibleWhen: s => !s.historicMode },
+    { id: 'trace-targets-selected',          visibleWhen: s => !s.historicMode },
     { id: 'targets-halo',                    visibleWhen: s => !s.historicMode },
     { id: 'targets-circle',                  visibleWhen: s => !s.historicMode },
     { id: 'hotspots-outline',                visibleWhen: s => !s.historicMode },
@@ -38,6 +40,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
 type MapCallbacks = {
     onFeatureClick: (id: string) => void;
     onHotspotClick: (id: string) => void;
+    onTraceTargetClick: (id: string) => void;
     onDeselect: () => void;
     onDragStart: () => void;
     onZoomChange: (z: number) => void;
@@ -55,6 +58,8 @@ export type UseFieldGuideMapOptions = {
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
+    traceTargets: TraceTarget[];
+    selectedTraceId: string | null;
     primaryTargetId: string | null;
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
@@ -79,7 +84,7 @@ export type UseFieldGuideMapOptions = {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useFieldGuideMap({
-    hotspots, selectedHotspotId, detectedFeatures, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
+    hotspots, selectedHotspotId, detectedFeatures, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
     initLat, initLng, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
@@ -151,6 +156,33 @@ export function useFieldGuideMap({
                 id: 'cluster-links-line', type: 'line', source: 'cluster-links',
                 layout: { 'line-join': 'round', 'line-cap': 'round' },
                 paint: { 'line-color': '#34d399', 'line-width': 1, 'line-opacity': 0.3, 'line-dasharray': [3, 4] },
+            });
+
+            // Trace Signals — translucent secondary layer, always below main targets
+            map.addSource('trace-targets', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: 'trace-targets-circle', type: 'circle', source: 'trace-targets',
+                paint: {
+                    'circle-radius':        9,
+                    'circle-color':         '#94a3b8',  // slate-400 — deliberately muted
+                    'circle-opacity':       0.30,
+                    'circle-stroke-width':  1,
+                    'circle-stroke-color':  '#94a3b8',
+                    'circle-stroke-opacity': 0.45,
+                },
+            });
+            // Selected trace — amber highlight ring, rendered above base layer
+            map.addLayer({
+                id: 'trace-targets-selected', type: 'circle', source: 'trace-targets',
+                filter: ['==', ['get', 'id'], ''],
+                paint: {
+                    'circle-radius':        12,
+                    'circle-color':         '#f59e0b',
+                    'circle-opacity':       0.18,
+                    'circle-stroke-width':  1.5,
+                    'circle-stroke-color':  '#f59e0b',
+                    'circle-stroke-opacity': 0.70,
+                },
             });
 
             map.addSource('targets', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -231,6 +263,12 @@ export function useFieldGuideMap({
                 if (annotationModeRef.current) return;
                 if (e.features?.[0]) callbacksRef.current.onFeatureClick(e.features[0].properties?.id);
             });
+            map.on('click', 'trace-targets-circle', (e) => {
+                if (annotationModeRef.current) return;
+                if (e.features?.[0]) callbacksRef.current.onTraceTargetClick(e.features[0].properties?.id);
+            });
+            map.on('mouseenter', 'trace-targets-circle', () => { if (!annotationModeRef.current) map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'trace-targets-circle', () => { map.getCanvas().style.cursor = ''; });
             map.on('click', 'pas-circles', (e) => {
                 if (annotationModeRef.current) return;
                 if (e.features?.[0]) {
@@ -248,7 +286,7 @@ export function useFieldGuideMap({
             map.on('click', 'hotspots-fill', (e) => {
                 if (annotationModeRef.current) return;
                 // If a target or other interactive feature is at this point, let it take priority
-                const priority = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'user-finds-hitbox', 'pas-circles'] });
+                const priority = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles'] });
                 if (priority.length > 0) return;
                 if (e.features?.[0]) callbacksRef.current.onHotspotClick(e.features[0].properties?.id);
             });
@@ -262,7 +300,7 @@ export function useFieldGuideMap({
                     callbacksRef.current.onAnnotationDrop(e.lngLat.lat, e.lngLat.lng);
                     return;
                 }
-                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill'] });
+                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill'] });
                 if (hits.length > 0) return;
                 callbacksRef.current.onMonumentClick(null);
                 callbacksRef.current.onDeselect();
@@ -356,6 +394,31 @@ export function useFieldGuideMap({
             })),
         } as GeoJSON.FeatureCollection);
     }, [detectedFeatures, primaryTargetId]);
+
+    // ── Trace Signals source ──────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const source = map.getSource('trace-targets') as maplibregl.GeoJSONSource;
+        if (!source) return;
+        source.setData({
+            type: 'FeatureCollection',
+            features: traceTargets.map(t => ({
+                type: 'Feature' as const,
+                geometry: { type: 'Point' as const, coordinates: t.center },
+                properties: { id: t.id, traceLabel: t.traceLabel, traceScore: t.traceScore },
+            })),
+        } as GeoJSON.FeatureCollection);
+    }, [traceTargets]);
+
+    // ── Trace selected highlight filter ──────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const layer = map.getLayer('trace-targets-selected');
+        if (!layer) return;
+        map.setFilter('trace-targets-selected', ['==', ['get', 'id'], selectedTraceId ?? '']);
+    }, [selectedTraceId]);
 
     // ── Cluster link lines ────────────────────────────────────────────────────
     useEffect(() => {
@@ -657,7 +720,7 @@ export function useFieldGuideMap({
     const clearMapSources = () => {
         const map = mapRef.current;
         if (!map) return;
-        const sources = ['monuments', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'landscape-context', 'crossings'];
+        const sources = ['monuments', 'trace-targets', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'landscape-context', 'crossings'];
         sources.forEach(id => {
             const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
             if (src) src.setData({ type: 'FeatureCollection', features: [] });

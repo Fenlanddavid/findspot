@@ -56,6 +56,7 @@ export interface ScanContext {
 export interface TerrainScanResult {
     terrainClusters:    Cluster[];
     detectedFeatures:   Cluster[];
+    rawClusters:        Cluster[];   // pre-consensus — used by Trace Signal engine
     hotspots:           Hotspot[];
     nhleData:           NHLEResponse;
     aimData:            AIMResponse;
@@ -205,7 +206,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
                 return {
-                    terrainClusters: contextualized, detectedFeatures: contextualized, hotspots,
+                    terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
                     sourceAvailability: cached.sourceAvailability, fromCache: true,
                 };
@@ -348,7 +349,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
 
             if (mountedRef.current) setIsScanning(false);
-            return { terrainClusters: contextualized, detectedFeatures: contextualized, hotspots, nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
+            return { terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots, nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
 
         } catch (e) {
             if (tokenRef.current === token) {

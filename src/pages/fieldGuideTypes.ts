@@ -209,6 +209,54 @@ export const SCAN_PROFILE = {
     }
 };
 
+// ─── Trace Signals ────────────────────────────────────────────────────────────
+
+/** Why a trace candidate didn't make it to displayTargets */
+export type TraceRejectionReason =
+    | 'failed_target_evidence'
+    | 'failed_local_physical_evidence'
+    | 'below_display_cut'
+    | 'merged_echo'
+    | 'single_source_signal'
+    | 'disturbance_limited';
+
+/** Category that describes what kind of weaker signal the trace represents */
+export type TraceType =
+    | 'suppressed_physical'     // had physical basis but failed a strict gate
+    | 'below_cut_supporting'    // passed all gates but was ranked #13+
+    | 'merged_echo'             // isolated sub-signal from a rawCluster that merged into a display target
+    | 'single_source_landscape'; // a single credible source, not enough for displayTargets
+
+/**
+ * A secondary-tier archaeological clue that failed at least one strict gate
+ * but has enough physical basis to be worth surfacing as an exploratory hint.
+ *
+ * Trace Signals are NOT targets and must never feed back into the main engine.
+ */
+export interface TraceTarget {
+    // Positional / identity
+    id: string;
+    center: [number, number];
+    type: string;
+    sources: Cluster['sources'];
+    findPotential: number;
+    confidence: Cluster['confidence'];
+    // Optional physical descriptors (carried through from source cluster)
+    disturbanceRisk?: Cluster['disturbanceRisk'];
+    multiScale?: boolean;
+    polarity?: Cluster['polarity'];
+    relativeElevation?: Cluster['relativeElevation'];
+    aimInfo?: Cluster['aimInfo'];
+    isRouteArtefactRisk?: boolean;
+    // Trace-specific fields
+    traceScore: number;                      // 0–100 trace confidence (own scale)
+    traceType: TraceType;
+    traceLabel: string;                      // display label e.g. "Hydrology Trace"
+    traceReason: string;                     // one-line human explanation
+    rejectedBy: TraceRejectionReason;
+    distanceToNearestTarget: number;         // metres from nearest displayTarget centre
+}
+
 // ─── Score / label helpers ────────────────────────────────────────────────────
 
 export function getConfidenceLabel(score: number): 'Weak Signal' | 'Developing Signal' | 'Strong Signal' | 'Strongest Signal' {
