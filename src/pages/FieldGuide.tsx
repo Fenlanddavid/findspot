@@ -568,7 +568,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
-        hotspots, selectedHotspotId, detectedFeatures: displayTargets, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
+        hotspots, selectedHotspotId, detectedFeatures: displayTargets.filter(f => !f.isProtected), traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
         fieldBoundaries: [
             ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
             // Fall back to the permission's own boundary when no fields have been drawn
