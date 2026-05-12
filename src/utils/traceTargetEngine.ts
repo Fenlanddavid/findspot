@@ -216,14 +216,26 @@ function classifyTraceType(
     if (t.includes('Palaeochannel') || (c.sources.includes('hydrology') && physicalSourceCount(c) === 1)) {
         return 'hydrology_trace';
     }
+    // Strongest terrain-water path: corroborated dryMarginScore + flowConvergence.
+    // Does not require hydrology source — terrain geometry alone can reach this tier.
+    if ((c.metrics?.dryMarginScore  ?? 0) >= 0.70 &&
+        (c.metrics?.flowConvergence ?? 0) >= 0.55) {
+        return 'wet_margin_trace';
+    }
     if (c.multiScale && !passedEvidence) {
         return 'weak_multiscale';
     }
     if (c.isOnCorridor || t.includes('Movement') || t.includes('Corridor')) {
         return 'corridor_trace';
     }
+    // Hydrology-backed dry margin: source list confirms a watercourse relationship.
     if (c.sources.includes('hydrology') && c.polarity === 'Raised') {
         return 'dry_margin_trace';
+    }
+    // Terrain-only dry margin: geometry suggests raised ground beside lower terrain,
+    // but no mapped hydrology. Weaker claim — label must not imply watercourse evidence.
+    if ((c.metrics?.dryMarginScore ?? 0) >= 0.60 && c.polarity === 'Raised') {
+        return 'terrain_dry_margin_trace';
     }
     if ((c.sources.includes('satellite_summer') || c.sources.includes('satellite_spring')) &&
         !c.sources.includes('terrain') && !c.sources.includes('terrain_global')) {
@@ -248,7 +260,9 @@ function getTraceLabel(type: TraceType, _sources: Cluster['sources']): string {
         case 'weak_structural':       return 'Structural Trace';
         case 'fragmented_enclosure':  return 'Fragmented Enclosure';
         case 'corridor_trace':        return 'Corridor Trace';
-        case 'dry_margin_trace':      return 'Dry Margin Trace';
+        case 'dry_margin_trace':         return 'Dry Margin Trace';
+        case 'wet_margin_trace':         return 'Wet Margin Trace';
+        case 'terrain_dry_margin_trace': return 'Terrain Dry-Margin Trace';
         case 'weak_multiscale':       return 'Weak Multi-Scale Signal';
         case 'single_source_landscape': return 'Subtle Terrain Signal';
         default:                      return 'Trace Signal';
@@ -276,7 +290,11 @@ function buildTraceReason(c: Cluster, type: TraceType): string {
         case 'corridor_trace':
             return 'Movement-associated signal near a historic route — possible roadside activity or trackway feature.';
         case 'dry_margin_trace':
-            return 'Raised ground beside hydrology signal — dry edge beside former wet zone.';
+            return 'Raised ground beside a hydrology-backed margin — dry edge beside a mapped or corroborated wet zone.';
+        case 'wet_margin_trace':
+            return 'Terrain suggests a strong wet/dry margin relationship — raised ground with flow convergence toward a local low zone.';
+        case 'terrain_dry_margin_trace':
+            return 'Terrain geometry suggests a possible dry-margin edge — raised ground beside lower terrain. No mapped watercourse; terrain context only.';
         case 'weak_multiscale':
             return 'Multi-scale agreement without sufficient evidence corroboration — scale-consistent anomaly worth exploring.';
         case 'single_source_landscape':
@@ -503,7 +521,9 @@ export function computeTraceTargets(
         fragmented_enclosure:    2,  // partial enclosure form
         weak_structural:         3,  // possible building platform / remains
         hydrology_trace:         4,  // palaeochannel / wet-margin signal
-        dry_margin_trace:        5,  // raised ground beside former water
+        dry_margin_trace:        5,  // raised ground beside hydrology-backed margin
+        wet_margin_trace:        6,  // strong terrain-water signal (dryMarginScore + flowConvergence)
+        terrain_dry_margin_trace: 7, // terrain geometry only, no mapped watercourse
         weak_multiscale:         6,  // multi-scale agreement, evidence gate failed
         spectral_trace:          7,  // satellite-only anomaly
         suppressed_physical:     8,  // physical basis, failed a gate

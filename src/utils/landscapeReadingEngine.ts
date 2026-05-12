@@ -154,10 +154,12 @@ function dryMarginScore(f: MemberFlags): { score: number; reason?: string } {
     const sourcePathFires    = f.hasHydro && f.hasRaised && sourceQualifiers > 0;
     const sourceScore        = sourcePathFires ? (sourceQualifiers >= 2 ? 3 : 2) : 0;
 
-    // Path B
-    const geomPathFires      = f.bestDryMarginScore >= 0.45 && f.hasRaised;
+    // Path B — threshold raised from 0.45 to 0.55: the 0.45–0.54 band produced a
+    // score-of-1 from geometry alone, which was too weak to justify after the
+    // directional gate in computeDryMarginScore already filters scattered depressions.
+    const geomPathFires      = f.bestDryMarginScore >= 0.55 && f.hasRaised;
     const geomScore          = geomPathFires
-        ? (f.bestDryMarginScore >= 0.70 ? 3 : f.bestDryMarginScore >= 0.55 ? 2 : 1)
+        ? (f.bestDryMarginScore >= 0.70 ? 3 : 2)
         : 0;
 
     const score = Math.max(sourceScore, geomScore);

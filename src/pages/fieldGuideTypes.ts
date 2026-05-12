@@ -255,7 +255,9 @@ export type TraceType =
     | 'weak_structural'           // structural signal with insufficient corroboration
     | 'fragmented_enclosure'      // enclosure-like form without full perimeter
     | 'corridor_trace'            // movement signal near a historic route
-    | 'dry_margin_trace'          // raised ground beside hydrology, low confidence
+    | 'dry_margin_trace'          // raised ground beside hydrology-backed margin
+    | 'wet_margin_trace'          // strong terrain-water relationship (dryMarginScore + flowConvergence)
+    | 'terrain_dry_margin_trace'  // terrain geometry suggests dry-margin edge, no hydrology source
     | 'weak_multiscale';          // multi-scale agreement but failed evidence gate
 
 /**

@@ -111,28 +111,58 @@ function computeDryMarginScore(
     // Must be above local mean to qualify as raised margin
     if (centerVal < 0.50) return 0;
 
-    // Sample a ring at ~40 px: how much of it is lower than the centre?
-    const RING_R   = 40;
-    const RING_N   = 16;
-    let lowerCount = 0;
-    let nearLowCount = 0;   // absolute-low proxy (wet-zone indicator)
-    let validCount  = 0;
+    // Collect ring samples with their angular index so we can:
+    //   (a) compute a ring-relative mean (removes hillshade/aspect bias), and
+    //   (b) test whether lower samples concentrate in one arc (removes quarry/
+    //       hollow false positives — at Barnack every hill is beside a hole,
+    //       so lowerFrac is high in all directions).
+    const RING_R = 40;
+    const RING_N = 16;
+    const ring: { v: number; i: number }[] = [];
 
     for (let i = 0; i < RING_N; i++) {
         const angle = (i / RING_N) * 2 * Math.PI;
         const sx = Math.round(cx + Math.cos(angle) * RING_R);
         const sy = Math.round(cy + Math.sin(angle) * RING_R);
         if (sx < 0 || sx >= stitchSize || sy < 0 || sy >= stitchSize) continue;
-        const v = processed[sy * stitchSize + sx];
-        validCount++;
-        if (v < centerVal - 0.06) lowerCount++;
-        if (v < 0.42) nearLowCount++;
+        ring.push({ v: processed[sy * stitchSize + sx], i });
     }
 
+    const validCount = ring.length;
     if (validCount < 6) return 0;
+
+    // Ring mean — hillshade-neutral local reference
+    const ringMean = ring.reduce((s, r) => s + r.v, 0) / validCount;
+
+    let lowerCount   = 0;
+    let nearLowCount = 0;
+    const lowerIndices: number[] = [];
+
+    for (const r of ring) {
+        if (r.v < centerVal - 0.06) { lowerCount++; lowerIndices.push(r.i); }
+        if (r.v < ringMean - 0.12)  nearLowCount++;   // ring-relative, not absolute
+    }
 
     const lowerFrac = lowerCount / validCount;
     if (lowerFrac < 0.30) return 0;   // not meaningfully raised above surroundings
+
+    // ── Directional concentration gate ───────────────────────────────────────
+    // A genuine dry margin has its low zone on one side (river bank, fen edge).
+    // Quarry pits, chalk hollows, and hilltops have low values all around.
+    // Sliding 180° arc test: find the half-ring (8 of 16 positions) that captures
+    // the most lower-samples. If < 65 % of lower samples fit in any single arc,
+    // the lowness is too scattered to represent a directional water margin.
+    if (lowerCount >= 3) {
+        let maxArcCount = 0;
+        for (let start = 0; start < RING_N; start++) {
+            let arcCount = 0;
+            for (const idx of lowerIndices) {
+                if (((idx - start + RING_N) % RING_N) < RING_N / 2) arcCount++;
+            }
+            if (arcCount > maxArcCount) maxArcCount = arcCount;
+        }
+        if (maxArcCount / lowerCount < 0.65) return 0;
+    }
 
     // Map 0.30 → 0.80 to 0 → 1
     let score = Math.min(1.0, (lowerFrac - 0.30) / 0.50);
@@ -159,6 +189,13 @@ function computeFlowConvergence(
     stitchSize: number,
 ): number {
     if (cx < 4 || cx >= stitchSize - 4 || cy < 4 || cy >= stitchSize - 4) return 0;
+
+    // If the cluster centre is below local mean (< 0.50) it is inside a depression —
+    // a quarry pit, natural bowl, or watercourse. Convergence toward a depression
+    // scores identically to convergence toward an archaeological site; this gate
+    // removes that false-positive path. Archaeological flow-convergence sites sit
+    // on or above local mean, not inside the low zone.
+    if (processed[cy * stitchSize + cx] < 0.50) return 0;
 
     const OUTER_R = 32;
     const STEPS   = 16;
