@@ -38,6 +38,9 @@ interface MemberFlags {
     hasEarthworkType:  boolean;
     hasHollowForm:     boolean;  // any member has metrics.interiorDensity < 0.35 (ring/enclosure)
     hasSolidForm:      boolean;  // any member has metrics.interiorDensity > 0.70 (mound/platform)
+    // Geometry-derived terrain-water heuristics (terrain-hydro-v1)
+    bestDryMarginScore:  number; // highest metrics.dryMarginScore across members
+    bestFlowConvergence: number; // highest metrics.flowConvergence across members
     // For movement pinch — kept as arrays only when needed
     hydroCenters:      [number, number][];
     slopeCenters:      [number, number][];
@@ -54,6 +57,7 @@ function buildFlags(members: Cluster[]): MemberFlags {
     let multiScaleConfirmed = false, highCircularity = false, hasEarthworkType = false;
     let hasHollowForm = false, hasSolidForm = false;
     let hasCorridorMember = false;
+    let bestDryMarginScore = 0, bestFlowConvergence = 0;
     const hydroCenters: [number, number][] = [];
     const slopeCenters: [number, number][] = [];
     let firstCenter: [number, number] | null = null;
@@ -103,6 +107,12 @@ function buildFlags(members: Cluster[]): MemberFlags {
         if (!isSouthFacing && typeof m.aspect === 'number' && m.aspect >= 135 && m.aspect <= 225) {
             isSouthFacing = true;
         }
+
+        // Terrain-derived hydrology heuristics
+        const dms = m.metrics?.dryMarginScore ?? 0;
+        if (dms > bestDryMarginScore) bestDryMarginScore = dms;
+        const fcs = m.metrics?.flowConvergence ?? 0;
+        if (fcs > bestFlowConvergence) bestFlowConvergence = fcs;
     }
 
     // De-duplicate hydro centers (raised clusters were pushed twice if they also have hydro source)
@@ -111,6 +121,7 @@ function buildFlags(members: Cluster[]): MemberFlags {
         hasSatSummer, hasSatSpring, hasAlignment, hasCrossing, hasLidar,
         isSouthFacing, hasGentleSlope, multiScaleConfirmed, highCircularity,
         hasEarthworkType, hasHollowForm, hasSolidForm, hasCorridorMember,
+        bestDryMarginScore, bestFlowConvergence,
         hydroCenters, slopeCenters, firstCenter,
     };
 }
@@ -129,13 +140,29 @@ function microTopoScore(f: MemberFlags): { score: number; reason?: string } {
 }
 
 // ─── 2. Dry-edge zones ────────────────────────────────────────────────────────
+// Two independent paths — pick the stronger; never stack both.
+//
+// Path A (source-based):  hydrology tile + raised polarity + at least one qualifier.
+// Path B (geometry-based): terrain-hydro-v1 dryMarginScore ≥ 0.45 + raised polarity.
+//
+// The two paths are mutually exclusive in scoring to avoid double-credit.
 
 function dryMarginScore(f: MemberFlags): { score: number; reason?: string } {
-    if (!f.hasHydro || !f.hasRaised) return { score: 0 };
-    const hasMultiSeasonSat = f.hasSatSummer && f.hasSatSpring;
-    const qualifierCount = [f.hasSlopeBreak, f.hasRouteProximity, hasMultiSeasonSat].filter(Boolean).length;
-    if (qualifierCount === 0) return { score: 0 };
-    return { score: qualifierCount >= 2 ? 3 : 2, reason: 'Dry ground beside former wet zone' };
+    // Path A
+    const hasMultiSeasonSat  = f.hasSatSummer && f.hasSatSpring;
+    const sourceQualifiers   = [f.hasSlopeBreak, f.hasRouteProximity, hasMultiSeasonSat].filter(Boolean).length;
+    const sourcePathFires    = f.hasHydro && f.hasRaised && sourceQualifiers > 0;
+    const sourceScore        = sourcePathFires ? (sourceQualifiers >= 2 ? 3 : 2) : 0;
+
+    // Path B
+    const geomPathFires      = f.bestDryMarginScore >= 0.45 && f.hasRaised;
+    const geomScore          = geomPathFires
+        ? (f.bestDryMarginScore >= 0.70 ? 3 : f.bestDryMarginScore >= 0.55 ? 2 : 1)
+        : 0;
+
+    const score = Math.max(sourceScore, geomScore);
+    if (score === 0) return { score: 0 };
+    return { score, reason: 'Dry ground beside former wet zone' };
 }
 
 // ─── 3. Edge detection ────────────────────────────────────────────────────────

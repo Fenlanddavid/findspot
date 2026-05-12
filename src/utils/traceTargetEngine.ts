@@ -161,6 +161,31 @@ function computeTraceScore(c: Cluster, nearestDisplayDist: number): number {
         score -= 8;
     }
 
+    // ── Terrain-derived hydrology heuristics (contextual support only) ────────
+    // Maximum combined contribution: +13. Cannot create a trace by themselves.
+    const dms = c.metrics?.dryMarginScore   ?? 0;
+    const fcs = c.metrics?.flowConvergence  ?? 0;
+
+    // Dry margin: raised ground beside wet zone supports dry_margin_trace
+    // and any cluster with raised / ridge character.
+    if (dms >= 0.60 && (c.polarity === 'Raised' || c.relativeElevation === 'Ridge')) {
+        score += dms >= 0.75 ? 5 : 3;
+    }
+
+    // Flow convergence: benefits movement / crossing signals.
+    // Guard: do NOT boost high-aspect-ratio linears — engineered drainage channels
+    // show natural convergence but are the dominant false-positive shape.
+    const isHighAspectLinear = (c.metrics?.ratio ?? 0) > 5.0 &&
+        (c.type.includes('Linear') || c.type.includes('Movement'));
+    if (fcs >= 0.60 && !isHighAspectLinear) {
+        score += fcs >= 0.75 ? 5 : 3;
+    }
+
+    // Combined wet-margin context: dry margin + convergence near a low zone.
+    if (dms >= 0.55 && fcs >= 0.50 && !isHighAspectLinear) {
+        score += 3;
+    }
+
     return Math.max(0, Math.min(100, score));
 }
 

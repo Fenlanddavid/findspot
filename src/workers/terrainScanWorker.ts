@@ -84,6 +84,125 @@ function boostScoreLocal(base: number, boost: number): number {
     return Math.min(96, 100 * (1 - Math.exp(-(raw + boost) / 100)));
 }
 
+// ─── Terrain-derived archaeological hydrology heuristics ─────────────────────
+// Lightweight terrain-water interpretation derived live from the local DTM window.
+// NOT engineering hydrology — archaeological terrain interpretation only.
+// Only meaningful for terrain/terrain_global sources (post-macro-blur, normalised).
+//
+// processed[] after macro-blur removal represents LOCAL relief:
+//   > 0.5 = locally raised  |  < 0.5 = locally low  |  ≈ 0.5 = mean
+//
+// Both functions operate on pixel coordinates (cx, cy) for the cluster centre.
+
+/**
+ * dryMarginScore — is this cluster raised usable ground beside likely wet/low terrain?
+ * Returns 0–1; 0 = no signal, 1 = strong dry-margin position.
+ */
+function computeDryMarginScore(
+    cx: number,
+    cy: number,
+    processed: Float32Array,
+    stitchSize: number,
+): number {
+    if (cx < 3 || cx >= stitchSize - 3 || cy < 3 || cy >= stitchSize - 3) return 0;
+
+    const centerVal = processed[cy * stitchSize + cx];
+
+    // Must be above local mean to qualify as raised margin
+    if (centerVal < 0.50) return 0;
+
+    // Sample a ring at ~40 px: how much of it is lower than the centre?
+    const RING_R   = 40;
+    const RING_N   = 16;
+    let lowerCount = 0;
+    let nearLowCount = 0;   // absolute-low proxy (wet-zone indicator)
+    let validCount  = 0;
+
+    for (let i = 0; i < RING_N; i++) {
+        const angle = (i / RING_N) * 2 * Math.PI;
+        const sx = Math.round(cx + Math.cos(angle) * RING_R);
+        const sy = Math.round(cy + Math.sin(angle) * RING_R);
+        if (sx < 0 || sx >= stitchSize || sy < 0 || sy >= stitchSize) continue;
+        const v = processed[sy * stitchSize + sx];
+        validCount++;
+        if (v < centerVal - 0.06) lowerCount++;
+        if (v < 0.42) nearLowCount++;
+    }
+
+    if (validCount < 6) return 0;
+
+    const lowerFrac = lowerCount / validCount;
+    if (lowerFrac < 0.30) return 0;   // not meaningfully raised above surroundings
+
+    // Map 0.30 → 0.80 to 0 → 1
+    let score = Math.min(1.0, (lowerFrac - 0.30) / 0.50);
+
+    // Amplify when a genuine low zone (wet proxy) exists within the ring
+    if (nearLowCount >= 3) score = Math.min(1.0, score * 1.4);
+
+    // Scale by how far above 0.5 the centre sits (genuine raisedness)
+    const raisedness = (centerVal - 0.50) / 0.50;   // 0 → 1
+    score *= (0.5 + 0.5 * raisedness);
+
+    return Math.max(0, Math.min(1, score));
+}
+
+/**
+ * computeFlowConvergence — does local terrain converge toward this cluster?
+ * Lightweight D8-style approximation on a single outer ring; no propagation.
+ * Returns 0–1; 0 = no convergence, 1 = strong local convergence.
+ */
+function computeFlowConvergence(
+    cx: number,
+    cy: number,
+    processed: Float32Array,
+    stitchSize: number,
+): number {
+    if (cx < 4 || cx >= stitchSize - 4 || cy < 4 || cy >= stitchSize - 4) return 0;
+
+    const OUTER_R = 32;
+    const STEPS   = 16;
+    const D8: [number, number][] = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+
+    let convergingCount = 0;
+    let validCount      = 0;
+
+    for (let i = 0; i < STEPS; i++) {
+        const angle = (i / STEPS) * 2 * Math.PI;
+        const sx = Math.round(cx + Math.cos(angle) * OUTER_R);
+        const sy = Math.round(cy + Math.sin(angle) * OUTER_R);
+        if (sx < 1 || sx >= stitchSize - 1 || sy < 1 || sy >= stitchSize - 1) continue;
+        validCount++;
+
+        // D8: steepest-descent direction from this sample pixel
+        const selfVal = processed[sy * stitchSize + sx];
+        let bestDrop = 0;
+        let bestDx = 0, bestDy = 0;
+        for (const [ndx, ndy] of D8) {
+            const nx = sx + ndx, ny = sy + ndy;
+            if (nx < 0 || nx >= stitchSize || ny < 0 || ny >= stitchSize) continue;
+            const drop = selfVal - processed[ny * stitchSize + nx];
+            if (drop > bestDrop) { bestDrop = drop; bestDx = ndx; bestDy = ndy; }
+        }
+
+        if (bestDrop < 0.005) continue;   // effectively flat — skip
+
+        // Positive dot product with (centre − sample) vector ⟹ draining toward centre
+        if (bestDx * (cx - sx) + bestDy * (cy - sy) > 0) convergingCount++;
+    }
+
+    if (validCount < 8) return 0;
+
+    const convergingFrac = convergingCount / validCount;
+
+    // Geometric baseline: ~50% of ring pixels face inward by position alone.
+    // Only score meaningful excess above this.
+    if (convergingFrac <= 0.50) return 0;
+
+    // Map 0.50 → 0.90 to 0 → 1
+    return Math.min(1.0, (convergingFrac - 0.50) / 0.40);
+}
+
 // ─── Main processing function ─────────────────────────────────────────────────
 
 async function processSource(params: WorkerParams): Promise<Cluster[]> {
@@ -508,7 +627,33 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
 
                 cluster.confidence    = confidenceVal > 0.6 ? 'High' : confidenceVal > 0.35 ? 'Medium' : 'Subtle';
                 cluster.findPotential = Math.min(96, Math.round(confidenceVal * 100));
-                cluster.metrics       = { circularity, density: dens, ratio, area: areaPx, ridgeStrength: meanRidgeStrength, dirConsistency, interiorDensity: interiorDensityVal };
+
+                // ── Terrain-derived hydrology heuristics ──────────────────────
+                // Only meaningful for terrain sources (local-relief normalised data).
+                let dryMarginVal      = 0;
+                let flowConvergenceVal = 0;
+                if (sourceType.startsWith('terrain')) {
+                    const hx = Math.floor(midX), hy = Math.floor(midY);
+                    if (hx > 4 && hx < stitchSize - 5 && hy > 4 && hy < stitchSize - 5) {
+                        dryMarginVal      = computeDryMarginScore(hx, hy, processed, stitchSize);
+                        flowConvergenceVal = computeFlowConvergence(hx, hy, processed, stitchSize);
+                    }
+                }
+                const hydrologicalContextVal = dryMarginVal > 0 || flowConvergenceVal > 0
+                    ? Math.min(1.0, dryMarginVal * 0.55 + flowConvergenceVal * 0.45)
+                    : 0;
+
+                cluster.metrics = {
+                    circularity, density: dens, ratio, area: areaPx,
+                    ridgeStrength: meanRidgeStrength, dirConsistency, interiorDensity: interiorDensityVal,
+                    ...(dryMarginVal > 0 || flowConvergenceVal > 0 ? {
+                        dryMarginScore:            dryMarginVal,
+                        flowConvergence:           flowConvergenceVal,
+                        hydrologicalContext:       hydrologicalContextVal,
+                        hydrologyHeuristicVersion: 'terrain-hydro-v1',
+                        hydrologyUsed:             true,
+                    } : {}),
+                };
                 // points was only needed inside the worker — clear before postMessage to avoid
                 // structured-cloning potentially thousands of pixel coords per cluster.
                 cluster.points = [];

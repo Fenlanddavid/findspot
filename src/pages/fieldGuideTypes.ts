@@ -22,7 +22,22 @@ export interface Cluster {
     disturbanceReason?: string;
     aspect?: number;
     relativeElevation?: 'Ridge' | 'Hollow' | 'Slope' | 'Flat';
-    metrics?: { circularity: number; density: number; ratio: number; area: number; ridgeStrength?: number; dirConsistency?: number; interiorDensity?: number };
+    metrics?: {
+        circularity: number;
+        density: number;
+        ratio: number;
+        area: number;
+        ridgeStrength?: number;
+        dirConsistency?: number;
+        interiorDensity?: number;
+        // Terrain-derived hydrology heuristics (terrain-hydro-v1)
+        dryMarginScore?: number;          // 0–1: raised usable ground beside local wet/low terrain
+        flowConvergence?: number;         // 0–1: local D8-derived terrain convergence tendency
+        hydrologicalContext?: number;     // 0–1: composite of dryMargin + flowConvergence
+        hydrologyHeuristicVersion?: string;
+        hydrologyUsed?: boolean;
+        hydrologyIgnoredReason?: string;
+    };
     multiScale?: boolean;
     multiScaleLevel?: number;
     explanationLines?: string[];
