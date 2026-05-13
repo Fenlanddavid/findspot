@@ -77,14 +77,14 @@ function Shell() {
 
     // Track unique installation (one-time per device)
     const trackInstallation = async () => {
-      try {
-        const isInstalled = localStorage.getItem("fs_installed");
-        if (!isInstalled) {
+      const isInstalled = localStorage.getItem("fs_installed");
+      if (!isInstalled) {
+        try {
           await fetch("https://findspot-counter.trials-uk.workers.dev/up");
           localStorage.setItem("fs_installed", "true");
+        } catch (e) {
+          // silent fail — will retry on next launch
         }
-      } catch (e) {
-        console.error("Installation tracking failed", e);
       }
     };
     trackInstallation();
