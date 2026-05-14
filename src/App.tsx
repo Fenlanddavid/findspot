@@ -251,7 +251,8 @@ function Shell() {
                 <button
                   type="button"
                   onClick={() => setShowClubRallyModal(true)}
-                  className="hidden sm:inline-flex hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-sm font-medium text-gray-600 dark:text-gray-300"
+                  className="inline-flex items-center justify-center rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[8px] min-[380px]:text-[9px] font-black uppercase tracking-wide text-teal-700 transition-colors hover:border-teal-500 hover:bg-teal-600 hover:text-white dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:border-teal-500 dark:hover:bg-teal-500 dark:hover:text-white whitespace-nowrap"
+                  aria-label="Club/Rally"
                 >
                   Club/Rally
                 </button>
@@ -263,23 +264,12 @@ function Shell() {
             <nav className="flex w-full sm:w-auto justify-between sm:justify-start gap-x-0 sm:gap-x-5 gap-y-2 flex-wrap items-center text-[12px] min-[380px]:text-[13px] sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                <span className="sm:hidden">Guide</span>
-                <span className="hidden sm:inline">FieldGuide</span>
+                FieldGuide
               </NavLink>
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                <span className="sm:hidden">Perms</span>
-                <span className="hidden sm:inline">Permissions</span>
+                Permissions
               </NavLink>
               <NavLink to="/discover" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Discover</NavLink>
-              <button
-                type="button"
-                onClick={() => setShowClubRallyModal(true)}
-                className="sm:hidden hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap"
-                aria-label="Club/Rally"
-              >
-                <span className="min-[360px]:hidden">Rally</span>
-                <span className="hidden min-[360px]:inline">Club/Rally</span>
-              </button>
               <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</NavLink>
             </nav>
 
