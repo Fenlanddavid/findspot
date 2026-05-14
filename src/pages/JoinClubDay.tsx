@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { importClubDayPack, getSetting, setSetting } from "../services/data";
+import { importClubDayPack, getSetting, setSetting, normalizeClubDayPack } from "../services/data";
 import type { ClubDayPack } from "../services/data";
 import { Logo } from "../App";
 
@@ -14,8 +14,7 @@ function decodePack(value: string): string {
 function parsePack(value: string | null): ClubDayPack | null {
   if (!value) return null;
   try {
-    const pack = JSON.parse(decodePack(value));
-    return pack?.type === "findspot-club-day-pack" ? pack : null;
+    return normalizeClubDayPack(JSON.parse(decodePack(value)));
   } catch {
     return null;
   }

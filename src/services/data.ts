@@ -307,6 +307,8 @@ export async function getOrCreateRecorderId(): Promise<string> {
   return id;
 }
 
+export type ClubDayPackField = Pick<Field, "id" | "name" | "boundary"> & Partial<Pick<Field, "notes" | "createdAt" | "updatedAt">>;
+
 export type ClubDayPack = {
   type: "findspot-club-day-pack";
   version: 1;
@@ -318,10 +320,216 @@ export type ClubDayPack = {
   organiserEmail?: string;
   significantFindInstructions?: string;
   publicNotes?: string;
-  boundary?: object;
-  fields: Field[];
+  boundary?: Field["boundary"];
+  fields: ClubDayPackField[];
   createdAt: string;
 };
+
+type EncodedPolygon = number[][];
+type CompactClubDayField = [id: string, name: string, boundary: EncodedPolygon];
+
+type CompactClubDayPack = {
+  t: "cdp";
+  v: 1;
+  s: string;
+  n: string;
+  d: string;
+  o?: string;
+  c?: string;
+  e?: string;
+  i?: string;
+  p?: string;
+  b?: EncodedPolygon;
+  f: CompactClubDayField[];
+  a: string;
+};
+
+const COORD_SCALE = 1_000_000;
+
+function roundCoord(value: number): number {
+  return Number(value.toFixed(6));
+}
+
+function sameCoord(a: number[], b: number[]): boolean {
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+function compactPolygon(boundary?: Field["boundary"]): Field["boundary"] | undefined {
+  if (!boundary?.coordinates?.length) return undefined;
+
+  const rings = boundary.coordinates
+    .map(ring => {
+      const cleaned: number[][] = [];
+      ring.forEach(point => {
+        if (!Array.isArray(point) || point.length < 2) return;
+        const lon = Number(point[0]);
+        const lat = Number(point[1]);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+        const next = [roundCoord(lon), roundCoord(lat)];
+        const prev = cleaned[cleaned.length - 1];
+        if (!prev || !sameCoord(prev, next)) cleaned.push(next);
+      });
+
+      if (cleaned.length < 3) return [];
+      const first = cleaned[0];
+      const last = cleaned[cleaned.length - 1];
+      if (!sameCoord(first, last)) cleaned.push([...first]);
+      return cleaned;
+    })
+    .filter(ring => ring.length >= 4);
+
+  if (rings.length === 0) return undefined;
+  return { type: "Polygon", coordinates: rings };
+}
+
+function boundaryFromCoordinates(coordinates?: number[][][]): Field["boundary"] | undefined {
+  if (!coordinates?.length) return undefined;
+  return compactPolygon({ type: "Polygon", coordinates });
+}
+
+function encodePolygon(boundary?: Field["boundary"]): EncodedPolygon | undefined {
+  const compact = compactPolygon(boundary);
+  if (!compact) return undefined;
+
+  return compact.coordinates.map(ring => {
+    const encoded: number[] = [];
+    let prevLon = 0;
+    let prevLat = 0;
+
+    ring.forEach((point, index) => {
+      const lon = Math.round(point[0] * COORD_SCALE);
+      const lat = Math.round(point[1] * COORD_SCALE);
+      if (index === 0) {
+        encoded.push(lon, lat);
+      } else {
+        encoded.push(lon - prevLon, lat - prevLat);
+      }
+      prevLon = lon;
+      prevLat = lat;
+    });
+
+    return encoded;
+  });
+}
+
+function decodePolygon(encoded?: EncodedPolygon): Field["boundary"] | undefined {
+  if (!encoded?.length) return undefined;
+
+  const coordinates = encoded.map(ring => {
+    const decoded: number[][] = [];
+    let lon = 0;
+    let lat = 0;
+
+    for (let i = 0; i < ring.length - 1; i += 2) {
+      if (i === 0) {
+        lon = ring[i];
+        lat = ring[i + 1];
+      } else {
+        lon += ring[i];
+        lat += ring[i + 1];
+      }
+      decoded.push([roundCoord(lon / COORD_SCALE), roundCoord(lat / COORD_SCALE)]);
+    }
+
+    return decoded;
+  });
+
+  return boundaryFromCoordinates(coordinates);
+}
+
+function boundaryFromCompactValue(value?: EncodedPolygon | number[][][]): Field["boundary"] | undefined {
+  if (!value?.length) return undefined;
+  const firstRing = value[0] as unknown[];
+  return typeof firstRing?.[0] === "number"
+    ? decodePolygon(value as EncodedPolygon)
+    : boundaryFromCoordinates(value as number[][][]);
+}
+
+function isFullClubDayPack(value: any): value is ClubDayPack {
+  return value?.type === "findspot-club-day-pack" && value.version === 1 && typeof value.sharedPermissionId === "string";
+}
+
+function isCompactClubDayPack(value: any): value is CompactClubDayPack {
+  return value?.t === "cdp" && value.v === 1 && typeof value.s === "string";
+}
+
+export function normalizeClubDayPack(value: unknown): ClubDayPack | null {
+  if (isFullClubDayPack(value)) {
+    return {
+      ...value,
+      boundary: compactPolygon(value.boundary),
+      fields: (value.fields ?? [])
+        .map(f => {
+          const boundary = compactPolygon(f.boundary);
+          return boundary ? { ...f, boundary } : null;
+        })
+        .filter((f): f is ClubDayPackField => !!f),
+    };
+  }
+
+  if (!isCompactClubDayPack(value)) return null;
+
+  const createdAt = value.a || new Date().toISOString();
+  return {
+    type: "findspot-club-day-pack",
+    version: 1,
+    sharedPermissionId: value.s,
+    eventName: value.n || "Club Day Event",
+    eventDate: value.d || createdAt.slice(0, 10),
+    organiserName: value.o,
+    organiserContactNumber: value.c,
+    organiserEmail: value.e,
+    significantFindInstructions: value.i,
+    publicNotes: value.p,
+    boundary: boundaryFromCompactValue(value.b),
+    fields: (value.f ?? [])
+      .map((tuple): ClubDayPackField | null => {
+        if (!Array.isArray(tuple)) return null;
+        const [id, name, encodedBoundary] = tuple;
+        const boundary = boundaryFromCompactValue(encodedBoundary);
+        if (!id || !boundary) return null;
+        return {
+          id,
+          name: name || "Field",
+          boundary,
+          notes: "",
+          createdAt,
+          updatedAt: createdAt,
+        };
+      })
+      .filter((f): f is ClubDayPackField => !!f),
+    createdAt,
+  };
+}
+
+export function compactClubDayPackJson(json: string): string {
+  const pack = normalizeClubDayPack(JSON.parse(json));
+  if (!pack) throw new Error("Invalid Club Day Pack.");
+
+  const compact: CompactClubDayPack = {
+    t: "cdp",
+    v: 1,
+    s: pack.sharedPermissionId,
+    n: pack.eventName,
+    d: pack.eventDate,
+    f: pack.fields
+      .map(field => {
+        const boundary = encodePolygon(field.boundary);
+        return boundary ? [field.id, field.name, boundary] as CompactClubDayField : null;
+      })
+      .filter((field): field is CompactClubDayField => !!field),
+    a: pack.createdAt,
+  };
+
+  if (pack.organiserName) compact.o = pack.organiserName;
+  if (pack.organiserContactNumber) compact.c = pack.organiserContactNumber;
+  if (pack.organiserEmail) compact.e = pack.organiserEmail;
+  if (pack.significantFindInstructions) compact.i = pack.significantFindInstructions;
+  if (pack.publicNotes) compact.p = pack.publicNotes;
+  if (pack.boundary) compact.b = encodePolygon(pack.boundary);
+
+  return JSON.stringify(compact);
+}
 
 /**
  * Organiser: creates a Club Day Pack from a permission.
@@ -354,7 +562,18 @@ export async function createClubDayPack(
   }
 
   const allFields = await db.fields.where("permissionId").equals(permissionId).toArray();
-  const selectedFields = allFields.filter(f => selectedFieldIds.includes(f.id));
+  const selectedFields = allFields
+    .filter(f => selectedFieldIds.includes(f.id))
+    .map(f => {
+      const boundary = compactPolygon(f.boundary);
+      if (!boundary) return null;
+      return {
+        id: f.id,
+        name: f.name,
+        boundary,
+      };
+    })
+    .filter((f): f is ClubDayPackField => !!f);
 
   const pack: ClubDayPack = {
     type: "findspot-club-day-pack",
@@ -367,7 +586,7 @@ export async function createClubDayPack(
     organiserEmail: permission.organiserEmail,
     significantFindInstructions: permission.significantFindInstructions,
     publicNotes: permission.clubDayPublicNotes,
-    boundary: permission.boundary,
+    boundary: selectedFields.length === 0 ? compactPolygon(permission.boundary) : undefined,
     fields: selectedFields,
     createdAt: now,
   };
@@ -383,18 +602,19 @@ export type ClubDayImportResult = {
 
 /**
  * Member: imports a Club Day Pack and creates a read-only synthetic permission.
- * The synthetic permission's ID = sharedPermissionId so sessions/finds
- * recorded against it can be merged back by the organiser.
+ * The synthetic permission keeps sharedPermissionId as the merge anchor so
+ * sessions/finds recorded against it can be merged back by the organiser.
  */
 export async function importClubDayPack(json: string): Promise<ClubDayImportResult> {
-  let pack: ClubDayPack;
+  let parsed: unknown;
   try {
-    pack = JSON.parse(json);
+    parsed = JSON.parse(json);
   } catch {
     throw new Error("Invalid Club Day Pack: could not parse file.");
   }
 
-  if (pack.type !== "findspot-club-day-pack") {
+  const pack = normalizeClubDayPack(parsed);
+  if (!pack) {
     throw new Error("This file is not a Club Day Pack.");
   }
 
@@ -448,10 +668,15 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     });
 
     // Import the selected fields, re-keyed to the synthetic permission
-    const fieldRecords = pack.fields.map(f => ({
-      ...f,
+    const fieldRecords: Field[] = pack.fields.map(f => ({
+      id: f.id,
       projectId: project.id,
       permissionId: localPermissionId,
+      name: f.name,
+      boundary: f.boundary,
+      notes: f.notes ?? "",
+      createdAt: f.createdAt ?? now,
+      updatedAt: f.updatedAt ?? now,
     }));
     if (fieldRecords.length > 0) {
       await db.fields.bulkPut(fieldRecords);

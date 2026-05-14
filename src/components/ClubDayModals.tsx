@@ -1,30 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { db, Field } from "../db";
-import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting } from "../services/data";
+import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
 
 // ─── Build join URL from event details ───────────────────────────────────────
 
 function buildJoinUrl(params: {
-  sid: string;
-  name: string;
-  date: string;
-  contact: string;
-  email: string;
-  instructions: string;
-  publicNotes: string;
   packJson: string;
 }): string {
   const base = window.location.origin + import.meta.env.BASE_URL + "join";
   const q = new URLSearchParams();
-  q.set("sid", params.sid);
   q.set("pack", encodePack(params.packJson));
-  if (params.name)         q.set("n", params.name);
-  if (params.date)         q.set("d", params.date);
-  if (params.contact)      q.set("c", params.contact);
-  if (params.email)        q.set("e", params.email);
-  if (params.instructions) q.set("i", params.instructions);
-  if (params.publicNotes)  q.set("p", params.publicNotes);
   return `${base}?${q.toString()}`;
 }
 
@@ -65,11 +51,12 @@ function QRScreen({
     setQrReady(false);
     setQrError(null);
     QRCode.toCanvas(canvasRef.current, joinUrl, {
-      width: 240,
+      width: 320,
       margin: 2,
-      color: { dark: "#134e4a", light: "#f0fdfa" },
+      errorCorrectionLevel: "M",
+      color: { dark: "#111827", light: "#ffffff" },
     }).then(() => setQrReady(true)).catch(() => {
-      setQrError("This pack is too large for a QR code. Copy the join link, or include fewer/simpler mapped fields.");
+      setQrError("This pack is still too large for a reliable QR code. Copy the join link, or include fewer mapped fields.");
     });
   }, [joinUrl]);
 
@@ -101,12 +88,12 @@ function QRScreen({
       <div className="bg-teal-50 dark:bg-teal-950/30 rounded-2xl p-4 flex items-center justify-center border border-teal-200 dark:border-teal-800">
         <canvas ref={canvasRef} className={`rounded-xl transition-opacity ${qrError ? "hidden" : qrReady ? "opacity-100" : "opacity-0"}`} />
         {!qrReady && !qrError && (
-          <div className="w-60 h-60 flex items-center justify-center text-teal-400 animate-pulse text-sm font-bold">
+          <div className="w-80 h-80 max-w-[72vw] max-h-[72vw] flex items-center justify-center text-teal-400 animate-pulse text-sm font-bold">
             Generating…
           </div>
         )}
         {qrError && (
-          <div className="w-60 h-60 flex items-center justify-center text-center text-teal-700 dark:text-teal-300 text-xs font-bold leading-relaxed px-4">
+          <div className="w-80 h-80 max-w-[72vw] max-h-[72vw] flex items-center justify-center text-center text-teal-700 dark:text-teal-300 text-xs font-bold leading-relaxed px-4">
             {qrError}
           </div>
         )}
@@ -209,17 +196,7 @@ export function CreateClubDayPackModal({
       const sid = (updated as any)?.sharedPermissionId ?? permissionId;
       setSharedPermissionId(sid);
 
-      const perm = await db.permissions.get(permissionId);
-      const url = buildJoinUrl({
-        sid,
-        name: perm?.name ?? (eventName.trim() || permissionName),
-        date: eventDate,
-        contact: contactNumber,
-        email: organiserEmail,
-        instructions: sigFindInstructions,
-        publicNotes: publicNotes,
-        packJson,
-      });
+      const url = buildJoinUrl({ packJson: compactClubDayPackJson(packJson) });
       setJoinUrl(url);
     } catch (e: any) {
       setError(e?.message ?? "Failed to generate Club Day pack");
