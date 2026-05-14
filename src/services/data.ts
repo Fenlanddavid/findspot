@@ -598,6 +598,7 @@ export type ClubDayImportResult = {
   eventName: string;
   eventDate: string;
   alreadyImported: boolean;
+  permissionId?: string;
 };
 
 /**
@@ -622,7 +623,10 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
   const hash = await hashString(json);
   const existingByHash = await db.importedPackages.where("packageHash").equals(hash).first();
   if (existingByHash) {
-    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true };
+    const existingPermission = await db.permissions
+      .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
+      .first();
+    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true, permissionId: existingPermission?.id };
   }
 
   // Check if already joined (different hash each scan due to fresh createdAt)
@@ -630,7 +634,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
     .first();
   if (existingPermission) {
-    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true };
+    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true, permissionId: existingPermission.id };
   }
 
   const project = await db.projects.toCollection().first();
@@ -691,7 +695,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     sharedPermissionId: pack.sharedPermissionId,
   } as ImportedPackage);
 
-  return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: false };
+  return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: false, permissionId: localPermissionId };
 }
 
 export type ClubDayExport = {

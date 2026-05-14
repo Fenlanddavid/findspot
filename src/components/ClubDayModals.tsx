@@ -81,47 +81,57 @@ function QRScreen({
       <div className="text-center space-y-1">
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500">Ready to share</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100">{eventName || permissionName}</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">Members scan the QR or use the link below. Works on any phone.</p>
-      </div>
-
-      {/* QR code */}
-      <div className="bg-teal-50 dark:bg-teal-950/30 rounded-2xl p-4 flex items-center justify-center border border-teal-200 dark:border-teal-800">
-        <canvas ref={canvasRef} className={`rounded-xl transition-opacity ${qrError ? "hidden" : qrReady ? "opacity-100" : "opacity-0"}`} />
-        {!qrReady && !qrError && (
-          <div className="w-80 h-80 max-w-[72vw] max-h-[72vw] flex items-center justify-center text-teal-400 animate-pulse text-sm font-bold">
-            Generating…
-          </div>
-        )}
-        {qrError && (
-          <div className="w-80 h-80 max-w-[72vw] max-h-[72vw] flex items-center justify-center text-center text-teal-700 dark:text-teal-300 text-xs font-bold leading-relaxed px-4">
-            {qrError}
-          </div>
-        )}
+        <p className="text-xs text-gray-500 dark:text-gray-400">Send the join link to members, or show the QR for people standing nearby.</p>
       </div>
 
       {/* Shareable link */}
-      <div className="w-full">
-        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1.5">Join link — share via WhatsApp, email, etc.</p>
-        <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5">
-          <span className="flex-1 text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate select-all">{joinUrl}</span>
+      <div className="w-full bg-teal-50 dark:bg-teal-950/30 border-2 border-teal-200 dark:border-teal-800 rounded-2xl p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400">Join link</p>
+            <p className="text-[10px] text-teal-700/70 dark:text-teal-300/70 mt-0.5">Best for WhatsApp, email, or copying into a message.</p>
+          </div>
+          {copied && <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300">Copied</span>}
+        </div>
+        <div className="bg-white dark:bg-gray-950 border border-teal-100 dark:border-teal-800 rounded-xl px-3 py-3 mb-3">
+          <span className="block text-xs font-mono text-gray-700 dark:text-gray-300 break-all select-all leading-relaxed">{joinUrl}</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {!!navigator.share && (
+            <button
+              onClick={handleShare}
+              className="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-black uppercase tracking-widest transition-colors"
+            >
+              Share Link
+            </button>
+          )}
           <button
             onClick={handleCopy}
-            className={`shrink-0 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg transition-all ${copied ? "bg-emerald-600 text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"}`}
+            className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${copied ? "bg-emerald-600 text-white" : "bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900/30"}`}
           >
-            {copied ? "Copied!" : "Copy"}
+            {copied ? "Copied!" : "Copy Link"}
           </button>
         </div>
       </div>
 
-      {/* Action buttons */}
-      <div className="w-full grid gap-2">
-        {!!navigator.share && (
-          <button
-            onClick={handleShare}
-            className="w-full py-3 rounded-xl border-2 border-teal-300 dark:border-teal-700 text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
-          >
-            Share via…
-          </button>
+      {/* QR code */}
+      <div className="w-full">
+        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">QR code for scanning</p>
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 flex items-center justify-center border border-gray-200 dark:border-gray-700">
+          <canvas ref={canvasRef} className={`rounded-xl transition-opacity max-w-full ${qrError ? "hidden" : qrReady ? "opacity-100" : "opacity-0"}`} />
+          {!qrReady && !qrError && (
+            <div className="w-72 h-72 max-w-[68vw] max-h-[68vw] flex items-center justify-center text-teal-400 animate-pulse text-sm font-bold">
+              Generating...
+            </div>
+          )}
+          {qrError && (
+            <div className="w-72 h-72 max-w-[68vw] max-h-[68vw] flex items-center justify-center text-center text-teal-700 dark:text-teal-300 text-xs font-bold leading-relaxed px-4">
+              {qrError}
+            </div>
+          )}
+        </div>
+        {qrReady && !qrError && (
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center mt-2">Show this screen for members to scan in person.</p>
         )}
       </div>
     </div>
@@ -354,7 +364,7 @@ export function CreateClubDayPackModal({
                 disabled={!confirmed || saving}
                 className="flex-1 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
               >
-                {saving ? "Generating…" : "Generate QR"}
+                {saving ? "Generating..." : "Generate Link / QR"}
               </button>
             </div>
           </>

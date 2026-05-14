@@ -32,11 +32,14 @@ export default function JoinClubDay() {
   const email = packFromUrl?.organiserEmail ?? params.get("e") ?? "";
   const instructions = packFromUrl?.significantFindInstructions ?? params.get("i") ?? "";
   const publicNotes = packFromUrl?.publicNotes ?? params.get("p") ?? "";
+  const packFields = packFromUrl?.fields ?? [];
+  const mappedFieldCount = packFields.filter(f => !!f.boundary).length;
 
   const [recorderName, setRecorderName] = useState("");
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [alreadyJoined, setAlreadyJoined] = useState(false);
+  const [joinedPermissionId, setJoinedPermissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function JoinClubDay() {
       };
 
       const result = await importClubDayPack(JSON.stringify(pack));
+      setJoinedPermissionId(result.permissionId ?? null);
 
       if (result.alreadyImported) {
         setAlreadyJoined(true);
@@ -101,6 +105,9 @@ export default function JoinClubDay() {
 
   const formattedDate = date
     ? new Date(date).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : "";
+  const compactDate = date
+    ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     : "";
 
   if (joined || alreadyJoined) {
@@ -123,7 +130,7 @@ export default function JoinClubDay() {
           <div className="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl text-left space-y-2">
             <div className="text-[10px] font-black uppercase tracking-widest text-teal-500 mb-2">What's next</div>
             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-              Open FindSpot and find <strong className="text-gray-800 dark:text-gray-200">{name}</strong> in your permissions. Start a session when you're ready to detect.
+              Open <strong className="text-gray-800 dark:text-gray-200">{name}</strong>, use the field cards to locate the right area, then record find spots and find details as you go. You do not need to start a session first.
             </p>
             {contact && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -132,7 +139,7 @@ export default function JoinClubDay() {
             )}
           </div>
           <button
-            onClick={() => nav("/")}
+            onClick={() => nav(joinedPermissionId ? `/permission/${joinedPermissionId}` : "/")}
             className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3.5 rounded-2xl font-black text-sm uppercase tracking-widest transition-colors"
           >
             Open FindSpot
@@ -156,6 +163,28 @@ export default function JoinClubDay() {
           {formattedDate && (
             <p className="text-sm font-bold text-gray-500 dark:text-gray-400">{formattedDate}</p>
           )}
+        </div>
+
+        {/* Event overview card */}
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-teal-500">Event overview</div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-900/70 border border-gray-100 dark:border-gray-700 px-3 py-2">
+              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Date</div>
+              <div className="text-xs font-black text-gray-800 dark:text-gray-100 mt-0.5">{compactDate || "Today"}</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-900/70 border border-gray-100 dark:border-gray-700 px-3 py-2">
+              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Fields</div>
+              <div className="text-xs font-black text-gray-800 dark:text-gray-100 mt-0.5">{packFields.length || "Any"}</div>
+            </div>
+            <div className="rounded-xl bg-gray-50 dark:bg-gray-900/70 border border-gray-100 dark:border-gray-700 px-3 py-2">
+              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Task</div>
+              <div className="text-xs font-black text-gray-800 dark:text-gray-100 mt-0.5">Finds</div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+            Join the event, open a field card, tap Locate when you need your bearings, and record each find with its spot and details.
+          </p>
         </div>
 
         {/* Event details card */}
@@ -182,6 +211,38 @@ export default function JoinClubDay() {
             <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{publicNotes}</p>
           )}
         </div>
+
+        {packFields.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-teal-500">Fields included</div>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{mappedFieldCount} mapped {mappedFieldCount === 1 ? "boundary" : "boundaries"}</p>
+              </div>
+              <span className="text-[10px] font-black text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded-lg">{packFields.length}</span>
+            </div>
+            <div className="grid gap-2">
+              {packFields.slice(0, 5).map(field => (
+                <div key={field.id} className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{field.name}</div>
+                      {field.notes && <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">{field.notes}</p>}
+                    </div>
+                    <span className={`shrink-0 text-[9px] font-black uppercase tracking-widest ${field.boundary ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"}`}>
+                      {field.boundary ? "Mapped" : "No map"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {packFields.length > 5 && (
+                <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 text-center pt-1">
+                  +{packFields.length - 5} more fields
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Name input */}
         <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 space-y-3">

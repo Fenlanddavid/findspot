@@ -405,6 +405,7 @@ function FindRouter({ projectId }: { projectId: string }) {
   const [params] = useSearchParams();
   const permissionId = params.get("permissionId");
   const sessionId = params.get("sessionId");
+  const fieldId = params.get("fieldId");
   const quickId = params.get("quickId");
   const lat = params.get("lat");
   const lon = params.get("lon");
@@ -413,6 +414,7 @@ function FindRouter({ projectId }: { projectId: string }) {
     projectId={projectId}
     permissionId={permissionId ?? null}
     sessionId={sessionId ?? null}
+    fieldId={fieldId ?? null}
     quickId={quickId ?? null}
     initialLat={lat ? parseFloat(lat) : null}
     initialLon={lon ? parseFloat(lon) : null}

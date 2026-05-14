@@ -144,6 +144,7 @@ export default function FindPage(props: {
   projectId: string;
   permissionId: string | null;
   sessionId: string | null;
+  fieldId: string | null;
   quickId: string | null;
   initialLat?: number | null;
   initialLon?: number | null;
@@ -151,7 +152,7 @@ export default function FindPage(props: {
 }) {
   const navigate = useNavigate();
   const [locationName, setLocationName] = useState("");
-  const [fieldId, setFieldId] = useState<string | null>(null);
+  const [fieldId, setFieldId] = useState<string | null>(props.fieldId);
   const [sessionId, setSessionId] = useState<string | null>(props.sessionId);
 
   // #1 — Quick/Full mode (default: quick for new users, full for existing)
@@ -178,6 +179,10 @@ export default function FindPage(props: {
   useEffect(() => {
     if (session?.fieldId) setFieldId(session.fieldId);
   }, [session]);
+
+  useEffect(() => {
+    if (props.fieldId && !session?.fieldId) setFieldId(props.fieldId);
+  }, [props.fieldId, session?.fieldId]);
 
   const currentPermissionId = useMemo(() => {
     if (props.permissionId) return props.permissionId;

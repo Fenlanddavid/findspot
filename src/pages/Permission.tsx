@@ -239,6 +239,25 @@ export default function PermissionPage(props: {
     return info;
   }, [allMedia, finds]);
 
+  const fieldFindCounts = useMemo(() => {
+    const counts = new Map<string, { recorded: number; pending: number }>();
+    const ensure = (fieldId: string) => {
+      const existing = counts.get(fieldId);
+      if (existing) return existing;
+      const next = { recorded: 0, pending: 0 };
+      counts.set(fieldId, next);
+      return next;
+    };
+
+    for (const find of finds ?? []) {
+      if (find.fieldId) ensure(find.fieldId).recorded += 1;
+    }
+    for (const find of pendingFinds ?? []) {
+      if (find.fieldId) ensure(find.fieldId).pending += 1;
+    }
+    return counts;
+  }, [finds, pendingFinds]);
+
   const allTracks = useLiveQuery(async () => {
     if (!id) return [];
     const sessions = await db.sessions.where("permissionId").equals(id).toArray();
@@ -683,7 +702,7 @@ export default function PermissionPage(props: {
 
   async function handleDeleteClubDayPermission() {
     if (!id) return;
-    if (!confirm("Remove this club / rally permission? Your sessions and finds for this event will be permanently deleted from this device.")) return;
+    if (!confirm("Remove this club / rally permission? Your finds, photos, sessions, tracks, and field cards for this event will be permanently deleted from this device. Use Keep Rally Record first if you want to keep them.")) return;
 
     setSaving(true);
     try {
@@ -711,6 +730,73 @@ export default function PermissionPage(props: {
       nav("/");
     } catch (e: any) {
       setError("Delete failed: " + e.message);
+      setSaving(false);
+    }
+  }
+
+  async function handleKeepClubDayAsPersonalRecord() {
+    if (!id) return;
+    if (!confirm("Keep this as a personal rally record? Your finds, photos, fields, sessions, and tracks will stay on this device, but this record will no longer be linked to the organiser's QR export.")) return;
+
+    setSaving(true);
+    try {
+      const perm = await db.permissions.get(id);
+      const now = new Date().toISOString();
+      const sharedId = perm?.sharedPermissionId;
+
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.importedPackages], async () => {
+        await db.permissions.update(id, {
+          isClubDayMember: false,
+          isSharedPermission: false,
+          sharedPermissionId: undefined,
+          organiserContactNumber: undefined,
+          organiserEmail: undefined,
+          significantFindInstructions: undefined,
+          clubDayPublicNotes: undefined,
+          submittedAt: undefined,
+          landownerPhone: perm?.landownerPhone || perm?.organiserContactNumber,
+          landownerEmail: perm?.landownerEmail || perm?.organiserEmail,
+          notes: perm?.notes || perm?.clubDayPublicNotes || "",
+          updatedAt: now,
+        } as Partial<Permission>);
+
+        await db.sessions.where("permissionId").equals(id).modify((session: any) => {
+          delete session.sharedPermissionId;
+          delete session.recorderId;
+          delete session.recorderName;
+          session.updatedAt = now;
+        });
+
+        await db.finds.where("permissionId").equals(id).modify((find: any) => {
+          delete find.sharedPermissionId;
+          delete find.recorderId;
+          delete find.recorderName;
+          find.updatedAt = now;
+        });
+
+        if (sharedId) {
+          await db.importedPackages
+            .filter(p => p.sharedPermissionId === sharedId)
+            .delete();
+        }
+      });
+
+      setIsClubDayMember(false);
+      setIsSharedPermission(false);
+      setSharedPermissionId(undefined);
+      setOrganiserContactNumber(undefined);
+      setOrganiserEmail(undefined);
+      setSignificantFindInstructions(undefined);
+      setClubDayPublicNotes(undefined);
+      setSubmittedAt(undefined);
+      setLandownerPhone(prev => prev || perm?.organiserContactNumber || "");
+      setLandownerEmail(prev => prev || perm?.organiserEmail || "");
+      setNotes(perm?.notes || perm?.clubDayPublicNotes || "");
+      setMilestoneMsg("Saved as a personal rally record");
+      setTimeout(() => setMilestoneMsg(null), 4000);
+      setSaving(false);
+    } catch (e: any) {
+      setError("Could not keep rally record: " + (e?.message ?? "Unknown error"));
       setSaving(false);
     }
   }
@@ -800,6 +886,14 @@ export default function PermissionPage(props: {
   const isRally = type === 'rally';
   const canManageClubDayPack = isEdit && !isClubDayMember && (isRally || isSharedPermission);
 
+  function goRecordFind(fieldId?: string | null) {
+    if (!id) return;
+    const params = new URLSearchParams();
+    params.set("permissionId", id);
+    if (fieldId) params.set("fieldId", fieldId);
+    nav(`/find?${params.toString()}`);
+  }
+
   const currentPermission: Permission | null = id ? {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
     landownerName, landownerPhone, landownerEmail, landownerAddress,
@@ -826,7 +920,7 @@ export default function PermissionPage(props: {
                       onClick={() => setShowCreatePack(true)}
                       className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
                     >
-                      {isSharedPermission ? "Club Day / QR" : "Generate QR"}
+                      {isSharedPermission ? "Link / QR" : "Generate Link"}
                     </button>
                   )}
                 </div>
@@ -920,7 +1014,7 @@ export default function PermissionPage(props: {
                             onClick={() => setShowCreatePack(true)}
                             className="text-xs sm:text-sm font-black text-white bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded-lg border border-teal-600 transition-all flex-1 sm:flex-none"
                           >
-                            {isSharedPermission ? "Share QR / Link" : "Generate QR / Link"}
+                            {isSharedPermission ? "Share Link / QR" : "Generate Link / QR"}
                           </button>
                         )}
                         {!isClubDayMember && isEdit && isSharedPermission && (
@@ -1391,7 +1485,21 @@ export default function PermissionPage(props: {
                           <div className="flex flex-col gap-2">
                             <div className="px-3 py-2.5 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-xl">
                               <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-0.5">Club / Rally permission</div>
-                              <p className="text-xs text-teal-700 dark:text-teal-300 font-medium leading-relaxed">This is read-only and managed by the organiser. Record your sessions and finds, then export your data at the end of the day.</p>
+                              <p className="text-xs text-teal-700 dark:text-teal-300 font-medium leading-relaxed">This is read-only and managed by the organiser. Record find spots and find details during the day, then export your finds for the organiser.</p>
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                <button
+                                  onClick={() => goRecordFind()}
+                                  className="text-[10px] font-black bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 rounded-lg transition-colors uppercase tracking-widest"
+                                >
+                                  Record Find
+                                </button>
+                                <button
+                                  onClick={() => setShowExportClubDay(true)}
+                                  className="text-[10px] font-black text-teal-700 dark:text-teal-300 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-800 px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors uppercase tracking-widest"
+                                >
+                                  Export Finds
+                                </button>
+                              </div>
                             </div>
                             {submittedAt && (
                               <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
@@ -1553,12 +1661,20 @@ export default function PermissionPage(props: {
                         <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
                             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{isRally ? "Rally Boundary & Fields" : "Permission Boundary & Coverage"}</h4>
-                                    <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Tracking data from all {sessions?.length} sessions</p>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                      {isClubDayMember ? "Event Fields" : (isRally ? "Rally Boundary & Fields" : "Permission Boundary & Coverage")}
+                                    </h4>
+                                    <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">
+                                      {isClubDayMember
+                                        ? "Use Locate for bearings, then record finds against the right field"
+                                        : `Tracking data from all ${sessions?.length} sessions`}
+                                    </p>
                                 </div>
-                                <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
+                                {!isClubDayMember && (
+                                  <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
                                     {isRally ? "💡 Tap 'Show Gaps' on fields below" : "💡 Tap 'Show Gaps' on sub-fields below"}
-                                </div>
+                                  </div>
+                                )}
                             </div>
                             
                             {/* Map Preview */}
@@ -1578,8 +1694,8 @@ export default function PermissionPage(props: {
                                                 <p className="text-[9px] text-white/50 uppercase tracking-widest">Finds</p>
                                             </div>
                                             <div>
-                                                <p className="text-lg font-black text-white leading-none">{sessions?.length ?? 0}</p>
-                                                <p className="text-[9px] text-white/50 uppercase tracking-widest">Sessions</p>
+                                                <p className="text-lg font-black text-white leading-none">{isClubDayMember ? (fields?.length ?? 0) : (sessions?.length ?? 0)}</p>
+                                                <p className="text-[9px] text-white/50 uppercase tracking-widest">{isClubDayMember ? "Fields" : "Sessions"}</p>
                                             </div>
                                             {pendingFinds && pendingFinds.length > 0 && (
                                                 <div>
@@ -1589,7 +1705,9 @@ export default function PermissionPage(props: {
                                             )}
                                         </div>
                                         {(!fields || fields.length === 0) && (
-                                            <p className="text-[9px] text-white/30 mt-2 italic">{isRally ? "Add fields to track coverage per area" : "Add sub-fields to track coverage per area"}</p>
+                                            <p className="text-[9px] text-white/30 mt-2 italic">
+                                              {isClubDayMember ? "Record finds against the whole event if no fields were shared" : (isRally ? "Add fields to track coverage per area" : "Add sub-fields to track coverage per area")}
+                                            </p>
                                         )}
                                     </div>
                                 )}
@@ -1605,7 +1723,9 @@ export default function PermissionPage(props: {
                                                 {fields.length > 0 && <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>}
                                             </h4>
                                             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
-                                                {fields.length > 0 ? "Tap on a field on the map or scroll to select" : (isRally ? "Add named field boundaries for the event" : "Divide your permission into named detecting areas")}
+                                                {fields.length > 0
+                                                  ? (isClubDayMember ? "Use Locate for bearings, or Record Find to log a find in that field" : "Tap on a field on the map or scroll to select")
+                                                  : (isRally ? "Add named field boundaries for the event" : "Divide your permission into named detecting areas")}
                                             </p>
                                         </div>
                                         {!isClubDayMember && (
@@ -1619,14 +1739,22 @@ export default function PermissionPage(props: {
                                         )}
                                     </div>
                                     {fields.length === 0 && (
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">{isRally ? "No fields added yet" : "No sub-fields added yet"}{isClubDayMember ? "." : " — tap the button above to get started."}</p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                                          {isClubDayMember
+                                            ? "No fields were shared. Use Record Find to save finds against the event."
+                                            : `${isRally ? "No fields added yet" : "No sub-fields added yet"} — tap the button above to get started.`}
+                                        </p>
                                     )}
                                     <div
                                         ref={fieldScrollRef}
                                         className="grid gap-3 overflow-y-auto scroll-smooth"
                                         style={{ maxHeight: "460px", scrollbarWidth: "none" }}
                                     >
-                                        {fields.map(f => (
+                                        {fields.map(f => {
+                                            const fieldCounts = fieldFindCounts.get(f.id);
+                                            const recordedCount = fieldCounts?.recorded ?? 0;
+                                            const pendingCount = fieldCounts?.pending ?? 0;
+                                            return (
                                             <div
                                                 key={f.id}
                                                 ref={(el) => { if (el) fieldRefs.current.set(f.id, el); else fieldRefs.current.delete(f.id); }}
@@ -1658,6 +1786,20 @@ export default function PermissionPage(props: {
                                                             </div>
                                                         )}
                                                     </div>
+                                                    {(recordedCount > 0 || pendingCount > 0) && (
+                                                        <div className="flex flex-wrap gap-1.5 mb-2">
+                                                            {recordedCount > 0 && (
+                                                                <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800 rounded-lg px-2 py-1">
+                                                                    {recordedCount} {recordedCount === 1 ? "find" : "finds"}
+                                                                </span>
+                                                            )}
+                                                            {pendingCount > 0 && (
+                                                                <span className="text-[9px] font-black uppercase tracking-widest bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800 rounded-lg px-2 py-1">
+                                                                    {pendingCount} pending
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic mb-2">{f.notes}</div>}
                                                     <div className="flex flex-wrap gap-1.5 mt-2">
                                                         {f.boundary && (
@@ -1678,6 +1820,7 @@ export default function PermissionPage(props: {
                                                                 Locate
                                                             </button>
                                                         )}
+                                                        {!isClubDayMember && (
                                                         <button
                                                             onClick={() => {
                                                                 const next = new Set(shownFieldGapIds);
@@ -1695,14 +1838,15 @@ export default function PermissionPage(props: {
                                                                 <span className="ml-1">Error</span>
                                                             )}
                                                         </button>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-3 py-2">
                                                     <button
-                                                        onClick={() => nav(`/session/new?permissionId=${id}&fieldId=${f.id}`)}
+                                                        onClick={() => isClubDayMember ? goRecordFind(f.id) : nav(`/session/new?permissionId=${id}&fieldId=${f.id}`)}
                                                         className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-1.5 rounded-lg transition-colors shadow-sm"
                                                     >
-                                                        Start Session
+                                                        {isClubDayMember ? "Record Find" : "Start Session"}
                                                     </button>
                                                     {!isClubDayMember && (
                                                       <>
@@ -1723,7 +1867,8 @@ export default function PermissionPage(props: {
                                                     )}
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -1765,7 +1910,7 @@ export default function PermissionPage(props: {
                                 </button>
                             ))}
                             <p className="text-[9px] text-amber-700/60 dark:text-amber-400/60 text-center italic mt-1 font-medium">
-                                Tap to add details & assign to a session
+                                {isClubDayMember ? "Tap to add details before exporting to the organiser." : "Tap to add details & assign to a session"}
                             </p>
                         </div>
                     </div>
@@ -1775,7 +1920,7 @@ export default function PermissionPage(props: {
                 {isEdit && standaloneFinds && standaloneFinds.length > 0 && (
                     <div className="bg-sky-50 dark:bg-sky-900/10 border-2 border-sky-200 dark:border-sky-800/50 rounded-2xl p-6 shadow-sm">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-black text-sky-800 dark:text-sky-400 m-0 uppercase tracking-tight">Quick Finds</h3>
+                            <h3 className="text-lg font-black text-sky-800 dark:text-sky-400 m-0 uppercase tracking-tight">{isClubDayMember ? "Recorded Finds" : "Quick Finds"}</h3>
                             <div className="text-[10px] font-black bg-sky-200 dark:bg-sky-800 text-sky-900 dark:text-sky-100 px-2 py-0.5 rounded-full">{standaloneFinds.length}</div>
                         </div>
                         <div className="grid gap-3">
@@ -1810,7 +1955,14 @@ export default function PermissionPage(props: {
 
                                         {/* Quick Actions Bar */}
                                         <div className="p-2 bg-gray-50/50 dark:bg-gray-900/30 flex gap-2 rounded-b-xl">
-                                            {sessions && sessions.length > 0 ? (
+                                            {isClubDayMember ? (
+                                                <button
+                                                    onClick={() => setOpenFindId(f.id)}
+                                                    className="w-full bg-sky-600 text-white text-[9px] font-black py-2 rounded-lg shadow-sm hover:bg-sky-700 transition-all uppercase tracking-widest text-center"
+                                                >
+                                                    Review Find
+                                                </button>
+                                            ) : sessions && sessions.length > 0 ? (
                                                 <div className="relative flex-1 group/link">
                                                     <button className="w-full bg-sky-600 text-white text-[9px] font-black py-2 rounded-lg shadow-sm hover:bg-sky-700 transition-all uppercase tracking-widest text-center flex items-center justify-center gap-1">
                                                         <span>Link to Visit</span>
@@ -1868,13 +2020,61 @@ export default function PermissionPage(props: {
                                 );
                             })}
                             <p className="text-[9px] text-sky-700/60 dark:text-sky-400/60 text-center italic mt-1 font-medium px-2 leading-tight">
-                                Tap find to view, or link to a visit below.
+                                {isClubDayMember ? "These finds will be included when you export your club day data." : "Tap find to view, or link to a visit below."}
                             </p>
                         </div>
                     </div>
                 )}
 
-                {/* Sessions Section */}
+                {isClubDayMember ? (
+                <div className="bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-2xl p-6 shadow-sm">
+                    <div className="flex justify-between items-start gap-4 mb-5">
+                        <div>
+                            <h3 className="text-xl font-bold text-teal-900 dark:text-teal-100 m-0">Day Record</h3>
+                            <p className="text-xs text-teal-700/70 dark:text-teal-300/70 mt-1 leading-relaxed">Finds are saved against this event. Sessions are optional and not needed for club day export.</p>
+                        </div>
+                        <div className="text-xs font-mono bg-white dark:bg-gray-900 px-2 py-1 rounded font-bold text-teal-700 dark:text-teal-300 border border-teal-100 dark:border-teal-800">{finds?.length ?? 0} finds</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mb-4">
+                        <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                            <div className="text-lg font-black text-teal-700 dark:text-teal-300 leading-none">{finds?.length ?? 0}</div>
+                            <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Recorded</div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                            <div className="text-lg font-black text-amber-600 dark:text-amber-300 leading-none">{pendingFinds?.length ?? 0}</div>
+                            <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Pending</div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                            <div className="text-lg font-black text-teal-700 dark:text-teal-300 leading-none">{fields?.length ?? 0}</div>
+                            <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Fields</div>
+                        </div>
+                    </div>
+                    <div className="grid gap-2">
+                        <button
+                            onClick={() => goRecordFind()}
+                            className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl font-black shadow-sm transition-all uppercase tracking-widest text-xs"
+                        >
+                            Record Find
+                        </button>
+                        <button
+                            onClick={() => setShowExportClubDay(true)}
+                            className="w-full bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 py-3 rounded-xl font-black shadow-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-all uppercase tracking-widest text-xs"
+                        >
+                            Export Finds
+                        </button>
+                        <button
+                            onClick={handleKeepClubDayAsPersonalRecord}
+                            disabled={saving}
+                            className="w-full bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 py-3 rounded-xl font-black shadow-sm hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all uppercase tracking-widest text-xs disabled:opacity-50"
+                        >
+                            Keep Rally Record
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-teal-700/60 dark:text-teal-300/60 mt-3 leading-relaxed">
+                        Keep Rally Record leaves the organiser event but keeps your finds, photos, fields, and sessions as your own local rally record.
+                    </p>
+                </div>
+                ) : (
                 <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
@@ -1900,7 +2100,7 @@ export default function PermissionPage(props: {
                                 onClick={() => setShowCreatePack(true)}
                                 className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl font-black shadow-md transition-all flex items-center justify-center gap-2 mb-4 text-sm"
                             >
-                                {isSharedPermission ? "Share QR / Link" : "Generate QR / Link"}
+                                {isSharedPermission ? "Share Link / QR" : "Generate Link / QR"}
                             </button>
                         )}
 
@@ -1960,6 +2160,7 @@ export default function PermissionPage(props: {
                     </div>
                 )}
             </div>
+                )}
         </div>
       </div>
     </div>
