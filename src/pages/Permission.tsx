@@ -2074,6 +2074,47 @@ export default function PermissionPage(props: {
                         Keep Rally Record leaves the organiser event but keeps your finds, photos, fields, and sessions as your own local rally record.
                     </p>
                 </div>
+                ) : isRally ? (
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">Rally</div>
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0 mb-5">{name || "Unnamed Rally"}</h3>
+                    <div className="grid gap-4">
+                        {landownerName && (
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Organiser / Club</div>
+                                <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName}</p>
+                                {landownerPhone && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">📞 {landownerPhone}</p>}
+                                {landownerEmail && <p className="text-sm text-gray-500 dark:text-gray-400">✉️ {landownerEmail}</p>}
+                            </div>
+                        )}
+                        {validFrom && (
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Event Date</div>
+                                <p className="font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                            </div>
+                        )}
+                        <div>
+                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Total Finds</div>
+                            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{finds?.length ?? 0}</p>
+                        </div>
+                        {lat != null && lon != null && (
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1.5 text-gray-500 dark:text-gray-400">Location</div>
+                                <img
+                                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=13&size=400x150&markers=${lat},${lon}`}
+                                    alt="Rally location"
+                                    className="w-full rounded-xl border border-gray-100 dark:border-gray-700 mb-1.5"
+                                />
+                                <button
+                                    onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank")}
+                                    className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                >
+                                    View on Google Maps ↗
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
                 ) : (
                 <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
                     <div className="flex justify-between items-center mb-6">
@@ -2089,20 +2130,12 @@ export default function PermissionPage(props: {
 
                 {isEdit && (
                     <div className="grid gap-3">
-                        <button 
+                        <button
                             onClick={() => nav(`/session/new?permissionId=${id}`)}
-                            className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 ${canManageClubDayPack ? "" : "mb-4"}`}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-4"
                         >
                             + Start New Session (Visit)
                         </button>
-                        {canManageClubDayPack && (
-                            <button
-                                onClick={() => setShowCreatePack(true)}
-                                className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl font-black shadow-md transition-all flex items-center justify-center gap-2 mb-4 text-sm"
-                            >
-                                {isSharedPermission ? "Share Link / QR" : "Generate Link / QR"}
-                            </button>
-                        )}
 
                         {sessions && sessions.length > 0 ? (
                             <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
