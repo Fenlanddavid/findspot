@@ -766,6 +766,11 @@ export default function PermissionPage(props: {
         updatedAt: now,
       };
 
+      if (type === "rally") {
+        (permission as any).organiserContactNumber = landownerPhone || undefined;
+        (permission as any).organiserEmail = landownerEmail || undefined;
+      }
+
       if (isEdit) {
         const { createdAt, ...updates } = permission;
         await db.permissions.update(id, updates);
@@ -793,6 +798,7 @@ export default function PermissionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
   const isRally = type === 'rally';
+  const canManageClubDayPack = isEdit && !isClubDayMember && (isRally || isSharedPermission);
 
   const currentPermission: Permission | null = id ? {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
@@ -815,12 +821,12 @@ export default function PermissionPage(props: {
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
                   </h2>
-                  {isEdit && !isEditing && !isClubDayMember && isSharedPermission && (
+                  {canManageClubDayPack && !isEditing && (
                     <button
                       onClick={() => setShowCreatePack(true)}
                       className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
                     >
-                      Club Day / QR
+                      {isSharedPermission ? "Club Day / QR" : "Generate QR"}
                     </button>
                   )}
                 </div>
@@ -909,6 +915,14 @@ export default function PermissionPage(props: {
                             Leave Event
                           </button>
                         )}
+                        {canManageClubDayPack && (
+                          <button
+                            onClick={() => setShowCreatePack(true)}
+                            className="text-xs sm:text-sm font-black text-white bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded-lg border border-teal-600 transition-all flex-1 sm:flex-none"
+                          >
+                            {isSharedPermission ? "Share QR / Link" : "Generate QR / Link"}
+                          </button>
+                        )}
                         {!isClubDayMember && isEdit && isSharedPermission && (
                           <button
                             onClick={() => setShowImportClubDayData(true)}
@@ -944,21 +958,21 @@ export default function PermissionPage(props: {
                         <div>
                             <div className="font-black text-emerald-700 dark:text-emerald-300">{isRally ? "Rally saved" : "Permission saved"}</div>
                             <div className="text-xs opacity-70 font-medium mt-0.5">
-                                {boundary && !isRally && (!fields || fields.length === 0)
-                                    ? "Would you like to divide this into sub-fields?"
+                                {boundary && (!fields || fields.length === 0)
+                                    ? (isRally ? "Would you like to add field boundaries for this event?" : "Would you like to divide this into sub-fields?")
                                     : "Ready to use with finds, sessions, and coverage"}
                             </div>
                         </div>
                     </div>
                     <button onClick={() => setSaved(false)} className="text-xs opacity-60 hover:opacity-100 shrink-0">Dismiss</button>
                 </div>
-                {boundary && !isRally && (!fields || fields.length === 0) && (
+                {boundary && (!fields || fields.length === 0) && (
                     <div className="flex gap-2 pl-12">
                         <button
                             onClick={() => { setSaved(false); setIsAddingField(true); }}
                             className="text-xs font-black bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-sm"
                         >
-                            + Add Sub-Fields
+                            {isRally ? "+ Add Rally Fields" : "+ Add Sub-Fields"}
                         </button>
                         <button
                             onClick={() => setSaved(false)}
@@ -1137,20 +1151,18 @@ export default function PermissionPage(props: {
                     )}
 
                     <div className="flex items-center gap-3 pt-2">
-                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Location" : "Field Setup & Geometry"}</div>
+                      <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Event Site & Fields" : "Field Setup & Geometry"}</div>
                       <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                     </div>
                     <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
                         <div className="flex flex-col sm:flex-row gap-2">
-                            {!isRally && (
-                                <button
-                                    type="button"
-                                    onClick={() => setIsPickingBoundary(true)}
-                                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
-                                >
-                                    <span>{boundary ? "Boundary Set ✓" : "Define Boundary"}</span>
-                                </button>
-                            )}
+                            <button
+                                type="button"
+                                onClick={() => setIsPickingBoundary(true)}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-bold border-2 shadow-sm transition-all ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-emerald-400 hover:text-emerald-600'}`}
+                            >
+                                <span>{boundary ? (isRally ? "Site Boundary Set ✓" : "Boundary Set ✓") : (isRally ? "Define Site Boundary" : "Define Boundary")}</span>
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => setIsPickingLocation(true)}
@@ -1167,33 +1179,33 @@ export default function PermissionPage(props: {
                             </button>
                         </div>
 
-                        {!isRally && !boundary && (
+                        {!boundary && (
                             <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
                                 <span className="shrink-0 mt-0.5">💡</span>
-                                <span>Set the boundary, then split it into sub-fields — one per field or pasture.</span>
+                                <span>{isRally ? "Set the event site boundary, then add the field boundaries members can detect on." : "Set the boundary, then split it into sub-fields — one per field or pasture."}</span>
                             </div>
                         )}
-                        {!isRally && !isEdit && boundary && (
-                            <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                        {!isEdit && boundary && (
+                            <div className={`text-[11px] rounded-xl px-4 py-3 font-medium flex items-start gap-2 border ${isRally ? "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60" : "text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/40"}`}>
                                 <span className="shrink-0 mt-0.5">📐</span>
-                                <span>Boundary set — save your permission first, then you can divide it into sub-fields.</span>
+                                <span>{isRally ? "Boundary set — save your rally first, then you can add the field boundaries." : "Boundary set — save your permission first, then you can divide it into sub-fields."}</span>
                             </div>
                         )}
 
-                        {/* Sub-Fields inside Geometry box — individual permissions only */}
-                        {!isRally && isEdit && (
+                        {/* Fields inside Geometry box */}
+                        {isEdit && (
                             <div className="grid gap-3 border-t-2 border-emerald-200/70 dark:border-emerald-700/50 pt-5 mt-1">
                                 <div className="flex justify-between items-start gap-3">
                                     <div>
-                                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Sub-Fields / Specific Areas</h4>
-                                        <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">Break larger permissions into manageable working areas.</p>
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">{isRally ? "Rally Fields / Detecting Areas" : "Sub-Fields / Specific Areas"}</h4>
+                                        <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">{isRally ? "Add the mapped field boundaries that can be shared in the Club Day QR pack." : "Break larger permissions into manageable working areas."}</p>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={() => setIsAddingField(true)}
                                         className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
                                     >
-                                        + Add Sub-Field
+                                        {isRally ? "+ Add Field" : "+ Add Sub-Field"}
                                     </button>
                                 </div>
                                 {fields && fields.length > 0 ? (
@@ -1228,14 +1240,14 @@ export default function PermissionPage(props: {
                                     </div>
                                 ) : (
                                     <div className="bg-white/60 dark:bg-gray-800/30 border border-dashed border-emerald-200 dark:border-emerald-700/50 rounded-xl p-5 text-center grid gap-2">
-                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">No sub-fields added yet.</p>
-                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-snug">Use sub-fields to split a large permission into manageable working areas.</p>
+                                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400">{isRally ? "No rally fields added yet." : "No sub-fields added yet."}</p>
+                                        <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-snug">{isRally ? "Add each field or detecting area so members can pick the right place during the event." : "Use sub-fields to split a large permission into manageable working areas."}</p>
                                         <button
                                             type="button"
                                             onClick={() => setIsAddingField(true)}
                                             className="mt-1 text-xs font-black text-emerald-600 hover:text-white hover:bg-emerald-600 px-4 py-2 rounded-lg border border-emerald-200 dark:border-emerald-700 transition-all mx-auto"
                                         >
-                                            + Add Sub-Field
+                                            {isRally ? "+ Add Field" : "+ Add Sub-Field"}
                                         </button>
                                     </div>
                                 )}
@@ -1541,11 +1553,11 @@ export default function PermissionPage(props: {
                         <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
                             <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                                 <div>
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{isRally ? "Location" : "Permission Boundary & Coverage"}</h4>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">{isRally ? "Rally Boundary & Fields" : "Permission Boundary & Coverage"}</h4>
                                     <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">Tracking data from all {sessions?.length} sessions</p>
                                 </div>
                                 <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
-                                    💡 Tap 'Show Gaps' on sub-fields below
+                                    {isRally ? "💡 Tap 'Show Gaps' on fields below" : "💡 Tap 'Show Gaps' on sub-fields below"}
                                 </div>
                             </div>
                             
@@ -1577,7 +1589,7 @@ export default function PermissionPage(props: {
                                             )}
                                         </div>
                                         {(!fields || fields.length === 0) && (
-                                            <p className="text-[9px] text-white/30 mt-2 italic">Add sub-fields to track coverage per area</p>
+                                            <p className="text-[9px] text-white/30 mt-2 italic">{isRally ? "Add fields to track coverage per area" : "Add sub-fields to track coverage per area"}</p>
                                         )}
                                     </div>
                                 )}
@@ -1589,11 +1601,11 @@ export default function PermissionPage(props: {
                                     <div className="flex items-center justify-between gap-3">
                                         <div>
                                             <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-                                                Sub-Fields
+                                                {isRally ? "Fields" : "Sub-Fields"}
                                                 {fields.length > 0 && <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>}
                                             </h4>
                                             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
-                                                {fields.length > 0 ? "Tap on a field on the map or scroll to select" : "Divide your permission into named detecting areas"}
+                                                {fields.length > 0 ? "Tap on a field on the map or scroll to select" : (isRally ? "Add named field boundaries for the event" : "Divide your permission into named detecting areas")}
                                             </p>
                                         </div>
                                         {!isClubDayMember && (
@@ -1602,12 +1614,12 @@ export default function PermissionPage(props: {
                                               onClick={() => setIsAddingField(true)}
                                               className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
                                           >
-                                              + Add Sub-Field
+                                              {isRally ? "+ Add Field" : "+ Add Sub-Field"}
                                           </button>
                                         )}
                                     </div>
                                     {fields.length === 0 && (
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">No sub-fields added yet{isClubDayMember ? "." : " — tap the button above to get started."}</p>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">{isRally ? "No fields added yet" : "No sub-fields added yet"}{isClubDayMember ? "." : " — tap the button above to get started."}</p>
                                     )}
                                     <div
                                         ref={fieldScrollRef}
@@ -1879,10 +1891,18 @@ export default function PermissionPage(props: {
                     <div className="grid gap-3">
                         <button 
                             onClick={() => nav(`/session/new?permissionId=${id}`)}
-                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-4"
+                            className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 ${canManageClubDayPack ? "" : "mb-4"}`}
                         >
                             + Start New Session (Visit)
                         </button>
+                        {canManageClubDayPack && (
+                            <button
+                                onClick={() => setShowCreatePack(true)}
+                                className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl font-black shadow-md transition-all flex items-center justify-center gap-2 mb-4 text-sm"
+                            >
+                                {isSharedPermission ? "Share QR / Link" : "Generate QR / Link"}
+                            </button>
+                        )}
 
                         {sessions && sessions.length > 0 ? (
                             <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
@@ -2026,8 +2046,8 @@ export default function PermissionPage(props: {
         <CreateClubDayPackModal
           permissionId={id}
           permissionName={name}
-          organiserContactNumber={organiserContactNumber}
-          organiserEmail={organiserEmail}
+          organiserContactNumber={isRally ? (landownerPhone || organiserContactNumber) : organiserContactNumber}
+          organiserEmail={isRally ? (landownerEmail || organiserEmail) : organiserEmail}
           significantFindInstructions={significantFindInstructions}
           clubDayPublicNotes={clubDayPublicNotes}
           fields={fields ?? []}

@@ -146,7 +146,7 @@ export function ClubRallyChoiceModal({
           onClick={onOrganiseNew}
           className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mb-3"
         >
-          Create New Permission
+          Create New Rally
         </button>
 
         <button
