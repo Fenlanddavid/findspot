@@ -1244,7 +1244,84 @@ export default function PermissionPage(props: {
                 </div>
             )}
 
-            {(!isClubDayMember || isEditing) && (
+            {isRally && isEdit && !isEditing && !isClubDayMember && (
+            <div className="lg:col-span-3">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-4 mb-5">
+                        <div className="min-w-0">
+                            <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">Rally / Club Dig</div>
+                            <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{name || "Unnamed Rally"}</h3>
+                            {validFrom && (
+                                <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mt-1">
+                                    {new Date(validFrom).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                                </p>
+                            )}
+                        </div>
+                        <div className="shrink-0 text-xs font-mono bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-bold text-gray-600 dark:text-gray-300">
+                            {finds?.length ?? 0} finds
+                        </div>
+                    </div>
+
+                    {landownerName && (
+                        <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700">
+                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-gray-500 dark:text-gray-400">Organiser / Club</div>
+                            <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName}</p>
+                            {landownerPhone && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">📞 {landownerPhone}</p>}
+                            {landownerEmail && <p className="text-sm text-gray-500 dark:text-gray-400">✉️ {landownerEmail}</p>}
+                        </div>
+                    )}
+
+                    {(boundary || (lat != null && lon != null)) && (
+                        <div className="mb-4">
+                            {boundary && lat != null && lon != null ? (
+                                <StaticMapPreview lat={lat} lon={lon} boundary={boundary} className="h-40 rounded-xl border border-gray-200 dark:border-gray-700" />
+                            ) : lat != null && lon != null ? (
+                                <img
+                                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=13&size=600x150&markers=${lat},${lon}`}
+                                    alt="Rally location"
+                                    className="w-full rounded-xl border border-gray-200 dark:border-gray-700"
+                                />
+                            ) : null}
+                            {lat != null && lon != null && (
+                                <button
+                                    onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank")}
+                                    className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1 mt-1.5"
+                                >
+                                    View on Google Maps ↗
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {finds && finds.length > 0 ? (
+                        <div>
+                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 text-gray-500 dark:text-gray-400">Finds</div>
+                            <div className={`grid gap-1.5 ${finds.length > 6 ? 'max-h-64 overflow-y-auto' : ''}`}>
+                                {finds.map((f: any) => (
+                                    <button
+                                        key={f.id}
+                                        onClick={() => setOpenFindId(f.id)}
+                                        className="w-full text-left flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-400 transition-all group"
+                                    >
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-emerald-600 transition-colors">{f.category || "Unknown"}</div>
+                                            {f.description && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{f.description}</div>}
+                                        </div>
+                                        <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(f.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-xl text-sm text-gray-400 italic">
+                            No finds imported yet — use Import Member Data to bring in detectorist records.
+                        </div>
+                    )}
+                </div>
+            </div>
+            )}
+
+            {(!isClubDayMember || isEditing) && (!isRally || isEditing || !isEdit) && (
             <React.Fragment>
             {/* Left Column: Permission Info */}
             <div className={`lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
