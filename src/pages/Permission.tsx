@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { db, Permission, Find, Media } from "../db";
+import { db, Permission, Find, Media, GeoJSONPolygon } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting } from "../services/data";
@@ -9,6 +9,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
+import { StaticMapPreview } from "../components/StaticMapPreview";
 import PermissionReportModal from "../components/PermissionReportModal";
 import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
@@ -23,6 +24,23 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const landTypes: Permission["landType"][] = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
 ];
+
+function getBoundaryCenter(boundary?: GeoJSONPolygon | null): { lat: number; lon: number } | null {
+  const ring = boundary?.coordinates?.[0];
+  if (!Array.isArray(ring) || ring.length === 0) return null;
+
+  const points = ring.filter((p: unknown): p is [number, number] =>
+    Array.isArray(p) && typeof p[0] === "number" && typeof p[1] === "number"
+  );
+  if (points.length === 0) return null;
+
+  const lons = points.map(p => p[0]);
+  const lats = points.map(p => p[1]);
+  return {
+    lon: (Math.min(...lons) + Math.max(...lons)) / 2,
+    lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+  };
+}
 
 export default function PermissionPage(props: {
   projectId: string;
@@ -86,6 +104,7 @@ export default function PermissionPage(props: {
   const [permissionSelected, setPermissionSelected] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
+  const [showAttendeeFields, setShowAttendeeFields] = useState(false);
   const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
   const [noPermTooltip, setNoPermTooltip] = useState(false);
   // null = closed; undefined = whole permission; string = specific fieldId
@@ -889,6 +908,11 @@ export default function PermissionPage(props: {
 
   const isRally = type === 'rally';
   const canManageClubDayPack = isEdit && !isClubDayMember && !isPersonalRallyRecord && (isRally || isSharedPermission);
+  const attendeeFieldCount = fields?.length ?? 0;
+  const canPickAttendeeFields = attendeeFieldCount > 1;
+  const attendeeSelectedField = fields?.find(f => f.id === selectedFieldId) ?? null;
+  const attendeeSelectedFieldCenter = attendeeSelectedField?.boundary ? getBoundaryCenter(attendeeSelectedField.boundary) : null;
+  const attendeeDefaultFieldId = attendeeFieldCount === 1 ? fields?.[0]?.id : undefined;
 
   function goRecordFind(fieldId?: string | null) {
     if (!id) return;
@@ -990,22 +1014,6 @@ export default function PermissionPage(props: {
                         {/* Club Day buttons — shown for shared/club day permissions */}
                         {isClubDayMember && (
                           <button
-                            onClick={() => setShowExportClubDay(true)}
-                            className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
-                          >
-                            Export Club Day Data
-                          </button>
-                        )}
-                        {isClubDayMember && organiserContactNumber && (
-                          <a
-                            href={`tel:${organiserContactNumber}`}
-                            className="text-xs sm:text-sm font-black text-gray-600 dark:text-gray-400 hover:text-white hover:bg-gray-600 dark:hover:bg-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 transition-all flex-1 sm:flex-none text-center"
-                          >
-                            Contact Organiser
-                          </a>
-                        )}
-                        {isClubDayMember && (
-                          <button
                             onClick={handleDeleteClubDayPermission}
                             disabled={saving}
                             className="text-xs sm:text-sm font-medium text-red-400 hover:text-red-600 px-3 py-1.5 rounded-lg border border-transparent hover:border-red-200 dark:hover:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
@@ -1084,6 +1092,160 @@ export default function PermissionPage(props: {
         )}
 
         <div className="grid lg:grid-cols-3 gap-8">
+            {!isEditing && isClubDayMember && (
+                <div className="lg:col-span-3">
+                    <div className="bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-2xl p-5 sm:p-6 shadow-sm">
+                        <div className="flex items-start justify-between gap-4 mb-5">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-teal-500 mb-1">Day Record</div>
+                                <h3 className="text-2xl font-black text-teal-950 dark:text-teal-50 break-words">{name || "Club / Rally Event"}</h3>
+                                {validFrom && (
+                                    <p className="text-xs font-bold text-teal-700/70 dark:text-teal-300/70 mt-1">
+                                        {new Date(validFrom).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="shrink-0 text-xs font-mono bg-white dark:bg-gray-900 px-2 py-1 rounded font-bold text-teal-700 dark:text-teal-300 border border-teal-100 dark:border-teal-800">
+                                {finds?.length ?? 0} finds
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                            <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                                <div className="text-lg font-black text-teal-700 dark:text-teal-300 leading-none">{finds?.length ?? 0}</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Recorded</div>
+                            </div>
+                            <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                                <div className="text-lg font-black text-amber-600 dark:text-amber-300 leading-none">{pendingFinds?.length ?? 0}</div>
+                                <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Pending</div>
+                            </div>
+                            {canPickAttendeeFields ? (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowAttendeeFields(v => !v);
+                                        if (!selectedFieldId && fields?.[0]) setSelectedFieldId(fields[0].id);
+                                    }}
+                                    className={`bg-white dark:bg-gray-900/80 border rounded-xl p-3 text-left transition-colors ${showAttendeeFields ? "border-teal-500 ring-2 ring-teal-200 dark:ring-teal-900/60" : "border-teal-100 dark:border-teal-800"}`}
+                                >
+                                    <div className="text-lg font-black text-teal-700 dark:text-teal-300 leading-none">{attendeeFieldCount}</div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Fields</div>
+                                </button>
+                            ) : (
+                                <div className="bg-white dark:bg-gray-900/80 border border-teal-100 dark:border-teal-800 rounded-xl p-3">
+                                    <div className="text-lg font-black text-teal-700 dark:text-teal-300 leading-none">{attendeeFieldCount}</div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-teal-700/50 dark:text-teal-300/50 mt-1">Fields</div>
+                                </div>
+                            )}
+                        </div>
+
+                        {showAttendeeFields && canPickAttendeeFields && fields && fields.length > 0 && (
+                            <div className="bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-800 rounded-2xl p-3 mb-4">
+                                <div className="flex gap-2 overflow-x-auto pb-2">
+                                    {fields.map(field => (
+                                        <button
+                                            key={field.id}
+                                            type="button"
+                                            onClick={() => setSelectedFieldId(field.id)}
+                                            className={`shrink-0 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-colors ${selectedFieldId === field.id ? "bg-teal-600 border-teal-600 text-white" : "bg-gray-50 dark:bg-gray-950 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"}`}
+                                        >
+                                            {field.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                {attendeeSelectedField && (
+                                    <div className="grid gap-3 pt-2">
+                                        {attendeeSelectedFieldCenter ? (
+                                            <StaticMapPreview
+                                                lat={attendeeSelectedFieldCenter.lat}
+                                                lon={attendeeSelectedFieldCenter.lon}
+                                                boundary={attendeeSelectedField.boundary}
+                                                className="h-44 rounded-xl border border-gray-200 dark:border-gray-700"
+                                            />
+                                        ) : (
+                                            <div className="h-24 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center text-[10px] font-bold text-gray-400">
+                                                No mapped boundary
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-black text-sm text-gray-900 dark:text-gray-100 truncate">{attendeeSelectedField.name}</div>
+                                                {attendeeSelectedField.notes && (
+                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400 line-clamp-2 mt-0.5">{attendeeSelectedField.notes}</p>
+                                                )}
+                                            </div>
+                                            <div className="shrink-0 flex gap-2">
+                                                {attendeeSelectedFieldCenter && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => window.open(`https://www.google.com/maps?q=${attendeeSelectedFieldCenter.lat},${attendeeSelectedFieldCenter.lon}`, "_blank")}
+                                                        className="bg-white dark:bg-gray-950 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                                    >
+                                                        Locate
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => goRecordFind(attendeeSelectedField.id)}
+                                                    className="bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
+                                                >
+                                                    Record Here
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {submittedAt && (
+                            <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
+                                Data sent to organiser on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                            </div>
+                        )}
+
+                        {significantFindInstructions && (
+                            <div className="mb-4 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Significant find</div>
+                                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">{significantFindInstructions}</p>
+                            </div>
+                        )}
+
+                        <div className="grid gap-2">
+                            <button
+                                onClick={() => goRecordFind(attendeeDefaultFieldId)}
+                                className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3.5 rounded-xl font-black shadow-sm transition-all uppercase tracking-widest text-xs"
+                            >
+                                Record Find
+                            </button>
+                            <button
+                                onClick={() => setShowExportClubDay(true)}
+                                className="w-full bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 py-3 rounded-xl font-black shadow-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-all uppercase tracking-widest text-xs"
+                            >
+                                Export Finds
+                            </button>
+                            <button
+                                onClick={handleKeepClubDayAsPersonalRecord}
+                                disabled={saving}
+                                className="w-full bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 py-3 rounded-xl font-black shadow-sm hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all uppercase tracking-widest text-xs disabled:opacity-50"
+                            >
+                                Keep Rally Record
+                            </button>
+                            {organiserContactNumber && (
+                                <a
+                                    href={`tel:${organiserContactNumber}`}
+                                    className="w-full bg-amber-600 hover:bg-amber-500 text-white py-3.5 rounded-xl font-black shadow-sm transition-all uppercase tracking-widest text-xs text-center"
+                                >
+                                    Call organiser: {organiserContactNumber}
+                                </a>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {(!isClubDayMember || isEditing) && (
+            <React.Fragment>
             {/* Left Column: Permission Info */}
             <div className={`lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
                 {isEditing ? (
@@ -2197,9 +2359,11 @@ export default function PermissionPage(props: {
                 )}
             </div>
                 )}
+            </div>
+            </React.Fragment>
+                )}
         </div>
       </div>
-    </div>
 
       {isEdit && id && reportTarget !== null && (
         <PermissionReportModal
