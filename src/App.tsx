@@ -13,6 +13,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import Home from "./pages/Home";
 import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
+import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 
 // Lazily loaded — heavy pages (map, PDF, turf)
 const PermissionPage = React.lazy(() => import("./pages/Permission"));
@@ -65,6 +66,7 @@ function Shell() {
   const [isStandalone, setIsStandalone] = useState(true);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
+  const [showClubRallyModal, setShowClubRallyModal] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
@@ -162,6 +164,16 @@ function Shell() {
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
   const settings = useLiveQuery(() => db.settings.toArray());
+  const clubRallyPermissions = useLiveQuery(
+    async () => {
+      if (!projectId) return [];
+      const rows = await db.permissions.where("projectId").equals(projectId).toArray();
+      return rows
+        .filter(p => !p.isClubDayMember && !p.isDefault)
+        .map(p => ({ id: p.id, name: p.name, type: p.type }));
+    },
+    [projectId]
+  );
   const theme = settings?.find(s => s.key === "theme")?.value ?? "dark";
 
   useEffect(() => {
@@ -211,20 +223,22 @@ function Shell() {
       )}
 
       <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link to="/" className="no-underline flex items-center gap-3 group">
               <Logo />
               <h1 className="m-0 text-2xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
             
-            <div className="flex items-center gap-3 border-l pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
+            <div className="flex items-center gap-2 sm:gap-3 border-l pl-3 sm:pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
                 {!isStandalone && (
                   <div className="relative">
                     <button
                       onClick={() => setShowInstallHelp(h => !h)}
-                      className="text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-1.5 min-[360px]:px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
+                      aria-label="Not Installed"
                     >
-                      ⚠️ Not Installed
+                      <span aria-hidden="true">⚠️</span>
+                      <span className="hidden min-[360px]:inline">Not Installed</span>
                     </button>
                     {showInstallHelp && (
                       <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-3 shadow-xl w-56 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -234,16 +248,38 @@ function Shell() {
                     )}
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowClubRallyModal(true)}
+                  className="hidden sm:inline-flex hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-sm font-medium text-gray-600 dark:text-gray-300"
+                >
+                  Club/Rally
+                </button>
                 <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
             </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 flex-wrap">
-            <nav className="flex gap-x-3 sm:gap-x-5 gap-y-2 flex-wrap items-center text-[13px] sm:text-sm font-medium text-gray-600 dark:text-gray-300">
+            <nav className="flex w-full sm:w-auto justify-between sm:justify-start gap-x-0 sm:gap-x-5 gap-y-2 flex-wrap items-center text-[12px] min-[380px]:text-[13px] sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
-              <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>FieldGuide</NavLink>
-              <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Permissions</NavLink>
+              <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
+                <span className="sm:hidden">Guide</span>
+                <span className="hidden sm:inline">FieldGuide</span>
+              </NavLink>
+              <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
+                <span className="sm:hidden">Perms</span>
+                <span className="hidden sm:inline">Permissions</span>
+              </NavLink>
               <NavLink to="/discover" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Discover</NavLink>
+              <button
+                type="button"
+                onClick={() => setShowClubRallyModal(true)}
+                className="sm:hidden hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors whitespace-nowrap"
+                aria-label="Club/Rally"
+              >
+                <span className="min-[360px]:hidden">Rally</span>
+                <span className="hidden min-[360px]:inline">Club/Rally</span>
+              </button>
               <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</NavLink>
             </nav>
 
@@ -332,6 +368,17 @@ function Shell() {
         </Suspense>
         </PageErrorBoundary>
       </main>
+
+      {showClubRallyModal && (
+        <ClubRallyChoiceModal
+          onClose={() => setShowClubRallyModal(false)}
+          onSolo={() => { setShowClubRallyModal(false); nav("/permission?type=rally"); }}
+          onJoinUrl={(url) => { setShowClubRallyModal(false); nav(url); }}
+          onOrganiseNew={() => { setShowClubRallyModal(false); nav("/permission?type=rally&organiserSetup=true"); }}
+          onOrganiseExisting={(id) => { setShowClubRallyModal(false); nav(`/permission/${id}?openClubDay=true`); }}
+          permissions={clubRallyPermissions || []}
+        />
+      )}
 
       <GlobalActions projectId={projectId} />
       <OnboardingFlow />
