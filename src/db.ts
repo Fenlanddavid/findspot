@@ -61,6 +61,7 @@ export type Permission = {
 
   // Club Day — member side
   isClubDayMember?: boolean;            // True on synthetic read-only pack permissions
+  isPersonalRallyRecord?: boolean;      // True when a member keeps a club day locally after leaving organiser export
   organiserContactNumber?: string;      // Included in pack; shown to members
   organiserEmail?: string;              // Included in pack; used for export mailto link
   significantFindInstructions?: string; // Shown prominently on member permission

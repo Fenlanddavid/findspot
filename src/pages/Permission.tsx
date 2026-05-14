@@ -93,6 +93,7 @@ export default function PermissionPage(props: {
 
   // Club Day state
   const [isClubDayMember, setIsClubDayMember] = useState(false);
+  const [isPersonalRallyRecord, setIsPersonalRallyRecord] = useState(false);
   const [isSharedPermission, setIsSharedPermission] = useState(false);
   const [sharedPermissionId, setSharedPermissionId] = useState<string | undefined>();
   const [organiserContactNumber, setOrganiserContactNumber] = useState<string | undefined>();
@@ -623,6 +624,7 @@ export default function PermissionPage(props: {
           setAgreementId((l as any).agreementId);
           setNotes(l.notes);
           setIsClubDayMember(!!(l as any).isClubDayMember);
+          setIsPersonalRallyRecord(!!(l as any).isPersonalRallyRecord);
           setIsSharedPermission(!!(l as any).isSharedPermission);
           setSharedPermissionId((l as any).sharedPermissionId);
           setOrganiserContactNumber((l as any).organiserContactNumber);
@@ -747,6 +749,7 @@ export default function PermissionPage(props: {
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.importedPackages], async () => {
         await db.permissions.update(id, {
           isClubDayMember: false,
+          isPersonalRallyRecord: true,
           isSharedPermission: false,
           sharedPermissionId: undefined,
           organiserContactNumber: undefined,
@@ -782,6 +785,7 @@ export default function PermissionPage(props: {
       });
 
       setIsClubDayMember(false);
+      setIsPersonalRallyRecord(true);
       setIsSharedPermission(false);
       setSharedPermissionId(undefined);
       setOrganiserContactNumber(undefined);
@@ -884,7 +888,7 @@ export default function PermissionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
   const isRally = type === 'rally';
-  const canManageClubDayPack = isEdit && !isClubDayMember && (isRally || isSharedPermission);
+  const canManageClubDayPack = isEdit && !isClubDayMember && !isPersonalRallyRecord && (isRally || isSharedPermission);
 
   function goRecordFind(fieldId?: string | null) {
     if (!id) return;
@@ -2100,11 +2104,10 @@ export default function PermissionPage(props: {
                         {lat != null && lon != null && (
                             <div>
                                 <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1.5 text-gray-500 dark:text-gray-400">Location</div>
-                                <img
-                                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=13&size=400x150&markers=${lat},${lon}`}
-                                    alt="Rally location"
-                                    className="w-full rounded-xl border border-gray-100 dark:border-gray-700 mb-1.5"
-                                />
+                                <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/70 px-3 py-3 mb-2">
+                                    <p className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
+                                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Map opens only when you choose to view it.</p>
+                                </div>
                                 <button
                                     onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank")}
                                     className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
