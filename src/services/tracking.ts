@@ -3,11 +3,12 @@ import { v4 as uuid } from "uuid";
 
 let watchId: number | null = null;
 let currentTrackId: string | null = null;
+let currentTrackSessionId: string | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let isStarting = false;
 let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
 
-export async function closeStaleActiveTracks(staleAfterMs = 30 * 60 * 1000): Promise<number> {
+export async function closeStaleActiveTracks(staleAfterMs = 0): Promise<number> {
     if (watchId !== null || isStarting) return 0;
 
     const cutoff = Date.now() - staleAfterMs;
@@ -82,6 +83,7 @@ export async function startTracking(projectId: string, sessionId: string | null 
         });
 
         currentTrackId = trackId;
+        currentTrackSessionId = sessionId;
 
         await requestWakeLock();
 
@@ -139,6 +141,7 @@ export async function stopTracking() {
         });
         currentTrackId = null;
     }
+    currentTrackSessionId = null;
     pointsBuffer = [];
 
     await releaseWakeLock();
@@ -150,4 +153,16 @@ export function isTrackingActive(): boolean {
 
 export function getCurrentTrackId(): string | null {
     return currentTrackId;
+}
+
+export function getCurrentTrackSessionId(): string | null {
+    return currentTrackSessionId;
+}
+
+export function isTrackingActiveForSession(sessionId: string | null | undefined): boolean {
+    return watchId !== null && !!sessionId && currentTrackSessionId === sessionId;
+}
+
+export function isTrackCurrentlyRecording(trackId: string): boolean {
+    return watchId !== null && currentTrackId === trackId;
 }

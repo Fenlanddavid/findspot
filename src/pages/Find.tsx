@@ -229,6 +229,8 @@ export default function FindPage(props: {
   // dbDraftId: auto-created DB record to hold photos before the user explicitly saves.
   // Does NOT trigger the green banner or form lockout — only savedId does.
   const [dbDraftId, setDbDraftId] = useState<string | null>(null);
+  const dbDraftIdRef = useRef<string | null>(null);
+  const committedDraftIdsRef = useRef<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
 
@@ -251,6 +253,21 @@ export default function FindPage(props: {
     setOpenSections(prev => ({ ...prev, [s]: !prev[s] }));
 
   const stickyPhotoRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    dbDraftIdRef.current = dbDraftId;
+  }, [dbDraftId]);
+
+  useEffect(() => {
+    return () => {
+      const draftId = dbDraftIdRef.current;
+      if (!draftId || committedDraftIdsRef.current.has(draftId)) return;
+      db.transaction("rw", [db.finds, db.media], async () => {
+        await db.media.where("findId").equals(draftId).delete();
+        await db.finds.delete(draftId);
+      }).catch((e) => console.error("Failed to clean up abandoned photo draft", e));
+    };
+  }, []);
 
   // Load settings — uses setForm directly, not update(), to avoid triggering userModified
   useEffect(() => {
@@ -496,6 +513,7 @@ export default function FindPage(props: {
 
       clearDraft();
       setUserModified(false);
+      committedDraftIdsRef.current.add(id);
       setSavedId(id);
 
       if (!localStorage.getItem('fs_first_find')) {
@@ -582,6 +600,7 @@ export default function FindPage(props: {
       }
 
       if (navigator.vibrate) navigator.vibrate([50]);
+      committedDraftIdsRef.current.add(id);
       clearDraft();
       navigate("/");
     } catch (e: any) {

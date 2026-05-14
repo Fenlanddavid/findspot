@@ -340,10 +340,10 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         <span className="text-xs shrink-0">🔒</span>
         {privacyExpanded ? (
           <p className="text-xs font-normal text-black dark:text-white m-0">
-            Your data is private. All find spots, GPS coordinates, and landowner details are stored locally on this device. Nothing is ever uploaded or shared. No subscriptions. No accounts. Your data stays on this device.
+            Your saved finds, GPS coordinates, photos and landowner details stay on this device unless you export or share them. Online features may request map tiles, search results or landscape data for the area you are viewing; Discover only sends details you type into its submit forms.
           </p>
         ) : (
-          <span className="text-xs font-normal text-black dark:text-white">Your data is private · No subscriptions · No accounts</span>
+          <span className="text-xs font-normal text-black dark:text-white">Local-first storage · No subscriptions · No accounts</span>
         )}
       </button>
 

@@ -54,11 +54,17 @@ export default defineConfig({
     chunkSizeWarningLimit: 850,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Split large libraries into separate cacheable chunks
-          'maplibre': ['maplibre-gl'],
-          'turf': ['@turf/turf'],
-          'pdf': ['jspdf', 'html2canvas'],
+        manualChunks(id) {
+          // Split large libraries into separate cacheable chunks.
+          if (id.includes('node_modules/maplibre-gl')) return 'maplibre';
+          if (id.includes('node_modules/@turf')) return 'turf';
+          if (
+            id.includes('node_modules/jspdf') ||
+            id.includes('node_modules/html2canvas') ||
+            id.includes('node_modules/dompurify')
+          ) {
+            return 'pdf';
+          }
         }
       }
     }

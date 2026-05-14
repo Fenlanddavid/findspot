@@ -10,7 +10,7 @@ import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";
 import PermissionReportModal from "../components/PermissionReportModal";
-import { startTracking, stopTracking, isTrackingActive, getCurrentTrackId, isWakeLockSupported } from "../services/tracking";
+import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
@@ -215,7 +215,7 @@ export default function SessionPage(props: {
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   
-  const [isTracking, setIsTracking] = useState(isTrackingActive());
+  const [isTracking, setIsTracking] = useState(isTrackingActiveForSession(sessionId));
   const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
@@ -265,6 +265,10 @@ export default function SessionPage(props: {
     if (!sessionId) return [];
     return db.tracks.where("sessionId").equals(sessionId).toArray();
   }, [sessionId]);
+
+  useEffect(() => {
+    setIsTracking(isTrackingActiveForSession(sessionId));
+  }, [sessionId, tracks]);
 
   useEffect(() => {
     const boundary = selectedField?.boundary || (permission as any)?.boundary;
@@ -638,7 +642,7 @@ export default function SessionPage(props: {
   }
 
   async function toggleTracking() {
-    if (isTracking) {
+    if (isTrackingActiveForSession(sessionId)) {
         await stopTracking();
         setIsTracking(false);
         setShowTrackingOverlay(false);
@@ -660,8 +664,9 @@ export default function SessionPage(props: {
   }
 
   async function finishSession() {
-    if (isTracking) {
+    if (isTrackingActiveForSession(sessionId)) {
         await stopTracking();
+        setIsTracking(false);
     }
     
     const now = new Date();
@@ -746,7 +751,7 @@ export default function SessionPage(props: {
             });
         } catch (e: any) {
             setError("Could not finish session: " + (e?.message ?? "Unknown error"));
-            setIsTracking(isTrackingActive());
+            setIsTracking(isTrackingActiveForSession(sessionId));
             return;
         }
         setIsFinished(true);
@@ -1092,7 +1097,7 @@ export default function SessionPage(props: {
                                     <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] font-bold">
                                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
                                         <span>{t.points.length} pts</span>
-                                        {t.isActive && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
+                                        {isTrackCurrentlyRecording(t.id) && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
                                     </div>
                                 ))}
                             </div>

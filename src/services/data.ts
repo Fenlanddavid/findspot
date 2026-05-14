@@ -82,6 +82,121 @@ export async function exportToCSV(): Promise<string> {
   return "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
 }
 
+type BackupData = {
+  projects: any[];
+  permissions: any[];
+  fields: any[];
+  sessions: any[];
+  finds: any[];
+  tracks: any[];
+  media: any[];
+  settings: any[];
+  importedPackages: any[];
+};
+
+function requireArray(data: any, key: keyof BackupData, required = false): any[] {
+  const value = data[key];
+  if (value === undefined || value === null) {
+    if (required) throw new Error(`Invalid format: missing ${key}`);
+    return [];
+  }
+  if (!Array.isArray(value)) throw new Error(`Invalid format: ${key} must be an array`);
+  return value;
+}
+
+function assertRowsHaveId(rows: any[], table: string) {
+  rows.forEach((row, index) => {
+    if (!row || typeof row !== "object" || typeof row.id !== "string" || !row.id.trim()) {
+      throw new Error(`Invalid format: ${table}[${index}] is missing an id`);
+    }
+  });
+}
+
+function validateBackupData(data: any): BackupData {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid backup file: expected an object.");
+  }
+
+  const backup: BackupData = {
+    projects: requireArray(data, "projects", true),
+    permissions: requireArray(data, "permissions"),
+    fields: requireArray(data, "fields"),
+    sessions: requireArray(data, "sessions"),
+    finds: requireArray(data, "finds"),
+    tracks: requireArray(data, "tracks"),
+    media: requireArray(data, "media"),
+    settings: requireArray(data, "settings"),
+    importedPackages: requireArray(data, "importedPackages"),
+  };
+
+  assertRowsHaveId(backup.projects, "projects");
+  assertRowsHaveId(backup.permissions, "permissions");
+  assertRowsHaveId(backup.fields, "fields");
+  assertRowsHaveId(backup.sessions, "sessions");
+  assertRowsHaveId(backup.finds, "finds");
+  assertRowsHaveId(backup.tracks, "tracks");
+  assertRowsHaveId(backup.media, "media");
+  assertRowsHaveId(backup.importedPackages, "importedPackages");
+
+  const projectIds = new Set(backup.projects.map(p => p.id));
+  const permissionIds = new Set(backup.permissions.map(p => p.id));
+  const sessionIds = new Set(backup.sessions.map(s => s.id));
+  const findIds = new Set(backup.finds.map(f => f.id));
+
+  backup.permissions.forEach((permission, index) => {
+    if (!projectIds.has(permission.projectId)) {
+      throw new Error(`Invalid format: permissions[${index}] references an unknown project`);
+    }
+  });
+
+  backup.fields.forEach((field, index) => {
+    if (!permissionIds.has(field.permissionId)) {
+      throw new Error(`Invalid format: fields[${index}] references an unknown permission`);
+    }
+  });
+
+  backup.sessions.forEach((session, index) => {
+    if (!permissionIds.has(session.permissionId)) {
+      throw new Error(`Invalid format: sessions[${index}] references an unknown permission`);
+    }
+  });
+
+  backup.finds.forEach((find, index) => {
+    if (!permissionIds.has(find.permissionId)) {
+      throw new Error(`Invalid format: finds[${index}] references an unknown permission`);
+    }
+    if (find.sessionId && !sessionIds.has(find.sessionId)) {
+      throw new Error(`Invalid format: finds[${index}] references an unknown session`);
+    }
+  });
+
+  backup.tracks.forEach((track, index) => {
+    if (track.sessionId && !sessionIds.has(track.sessionId)) {
+      throw new Error(`Invalid format: tracks[${index}] references an unknown session`);
+    }
+  });
+
+  backup.media.forEach((media, index) => {
+    if (typeof media.blob !== "string" || !media.blob.startsWith("data:")) {
+      throw new Error(`Invalid format: media[${index}] has an invalid blob`);
+    }
+    if (media.findId && !findIds.has(media.findId)) {
+      throw new Error(`Invalid format: media[${index}] references an unknown find`);
+    }
+    if (media.permissionId && !permissionIds.has(media.permissionId)) {
+      throw new Error(`Invalid format: media[${index}] references an unknown permission`);
+    }
+  });
+
+  backup.settings.forEach((setting, index) => {
+    if (!setting || typeof setting !== "object" || typeof setting.key !== "string" || !setting.key.trim()) {
+      throw new Error(`Invalid format: settings[${index}] is missing a key`);
+    }
+  });
+
+  return backup;
+}
+
 export async function importData(json: string) {
   let data: any;
   try {
@@ -90,13 +205,13 @@ export async function importData(json: string) {
     throw new Error("Invalid backup file: could not parse JSON.");
   }
 
-  if (!data.projects || !Array.isArray(data.projects)) throw new Error("Invalid format: missing projects");
+  const backup = validateBackupData(data);
 
   // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
   // IndexedDB operation and awaiting it inside a transaction causes IDB to
   // auto-commit, silently dropping everything written afterwards.
-  const mediaItems: Media[] = data.media
-    ? await Promise.all(data.media.map(async (m: any) => ({
+  const mediaItems: Media[] = backup.media.length
+    ? await Promise.all(backup.media.map(async (m: any) => ({
         ...m,
         blob: await base64ToBlob(m.blob)
       })))
@@ -116,14 +231,14 @@ export async function importData(json: string) {
     await db.media.clear();
     await db.importedPackages.clear();
 
-    await db.projects.bulkPut(data.projects);
-    if (data.permissions) await db.permissions.bulkPut(data.permissions);
-    if (data.fields) await db.fields.bulkPut(data.fields);
-    if (data.sessions) await db.sessions.bulkPut(data.sessions);
-    if (data.finds) await db.finds.bulkPut(data.finds);
-    if (data.tracks) await db.tracks.bulkPut(data.tracks);
-    if (data.settings) await db.settings.bulkPut(data.settings);
-    if (data.importedPackages) await db.importedPackages.bulkPut(data.importedPackages);
+    await db.projects.bulkPut(backup.projects);
+    if (backup.permissions.length) await db.permissions.bulkPut(backup.permissions);
+    if (backup.fields.length) await db.fields.bulkPut(backup.fields);
+    if (backup.sessions.length) await db.sessions.bulkPut(backup.sessions);
+    if (backup.finds.length) await db.finds.bulkPut(backup.finds);
+    if (backup.tracks.length) await db.tracks.bulkPut(backup.tracks);
+    if (backup.settings.length) await db.settings.bulkPut(backup.settings);
+    if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
   });
 }
@@ -257,7 +372,7 @@ export async function createClubDayPack(
     createdAt: now,
   };
 
-  return JSON.stringify(pack, null, 2);
+  return JSON.stringify(pack);
 }
 
 export type ClubDayImportResult = {
@@ -335,6 +450,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     // Import the selected fields, re-keyed to the synthetic permission
     const fieldRecords = pack.fields.map(f => ({
       ...f,
+      projectId: project.id,
       permissionId: localPermissionId,
     }));
     if (fieldRecords.length > 0) {

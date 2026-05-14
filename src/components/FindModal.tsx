@@ -141,18 +141,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
       const items: Media[] = [];
 
-      // If we're targeting a specific slot (photo1, photo2, etc.),
-      // remove any existing photo in that slot first.
-      if (photoType && photoType !== "other") {
-          const existing = await db.media
-              .where("findId").equals(draft.id)
-              .and(m => m.photoType === photoType)
-              .toArray();
-          if (existing.length > 0) {
-              await db.media.bulkDelete(existing.map(m => m.id));
-          }
-      }
-
       for (const f of Array.from(files)) {
         const blob = await fileToBlob(f);
         items.push({
@@ -172,7 +160,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         // If we are in a specific slot, we only take the first file
         if (photoType && photoType !== "other") break;
       }
-      await db.media.bulkAdd(items);
+
+      await db.transaction("rw", [db.media], async () => {
+        if (photoType && photoType !== "other") {
+            const existing = await db.media
+                .where("findId").equals(draft.id)
+                .and(m => m.photoType === photoType)
+                .toArray();
+            if (existing.length > 0) {
+                await db.media.bulkDelete(existing.map(m => m.id));
+            }
+        }
+        await db.media.bulkAdd(items);
+      });
     } catch (err) {
       console.error("addPhotos failed:", err);
     } finally {

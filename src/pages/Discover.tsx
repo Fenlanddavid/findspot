@@ -76,8 +76,44 @@ const EVENTS_CACHE_KEY = "fs_events_cache";
 const CLUBS_CACHE_KEY = "fs_clubs_cache";
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const GOING_KEY = "fs_going_events";
+const REVIEW_SUBMISSION_URL = "https://api.web3forms.com/submit";
+const REVIEW_ACCESS_KEY = (import.meta.env.VITE_WEB3FORMS_ACCESS_KEY as string | undefined)?.trim();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function submitForReview({
+  subject,
+  message,
+  fromName,
+}: {
+  subject: string;
+  message: string;
+  fromName: string;
+}): Promise<boolean> {
+  if (!REVIEW_ACCESS_KEY) return false;
+
+  const res = await fetch(REVIEW_SUBMISSION_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      access_key: REVIEW_ACCESS_KEY,
+      subject,
+      message,
+      from_name: fromName,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Review submission failed with HTTP ${res.status}`);
+  }
+
+  const payload = await res.json().catch(() => null);
+  if (payload && payload.success === false) {
+    throw new Error(payload.message || "Review submission was rejected.");
+  }
+
+  return true;
+}
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371;
@@ -666,65 +702,66 @@ function SubmitEventModal({
   const [draft, setDraft] = useState<DraftEvent>(EMPTY_DRAFT);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [reviewQueued, setReviewQueued] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const update = (patch: Partial<DraftEvent>) => setDraft((p) => ({ ...p, ...patch }));
 
   async function submit() {
     setSubmitting(true);
-    const newEvent: DetectingEvent = {
-      id: uuid(),
-      type: draft.type,
-      title: draft.title.trim(),
-      description: draft.description.trim() || undefined,
-      startDate: draft.startDate,
-      endDate: draft.endDate || undefined,
-      startTime: draft.startTime || undefined,
-      town: draft.town.trim() || undefined,
-      county: draft.county.trim() || undefined,
-      organiserName: draft.organiserName.trim() || undefined,
-      sourceUrl: draft.sourceUrl.trim() || undefined,
-      entryFee: draft.entryFee.trim() || undefined,
-      verificationStatus: "unconfirmed",
-      createdAt: new Date().toISOString(),
-    };
-
-    saveLocalSubmission(newEvent);
-
-    const typeLabelMap: Record<EventType, string> = {
-      rally: "Rally",
-      club_dig: "Club Dig",
-      other: "Other Event",
-    };
-    const details = [
-      `Event Type: ${typeLabelMap[newEvent.type]}`,
-      `Title: ${newEvent.title}`,
-      `Start Date: ${newEvent.startDate}`,
-      newEvent.endDate       ? `End Date: ${newEvent.endDate}`           : null,
-      newEvent.startTime     ? `Start Time: ${newEvent.startTime}`       : null,
-      newEvent.town          ? `Town: ${newEvent.town}`                  : null,
-      newEvent.county        ? `County: ${newEvent.county}`              : null,
-      draft.postcode         ? `Postcode Area: ${draft.postcode}`        : null,
-      newEvent.organiserName ? `Organiser: ${newEvent.organiserName}`    : null,
-      newEvent.sourceUrl     ? `Source Link: ${newEvent.sourceUrl}`      : null,
-      newEvent.entryFee      ? `Entry Fee: ${newEvent.entryFee}`         : null,
-      newEvent.description   ? `Description: ${newEvent.description}`    : null,
-    ].filter(Boolean).join("\n");
-
+    setError(null);
     try {
-      await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_key: "4a147e0a-663e-4916-a50b-825c4fe7e673",
-          subject: `FindSpot Event Submission: ${newEvent.title}`,
-          message: details,
-          from_name: newEvent.organiserName || "FindSpot User",
-        }),
-      });
-    } catch {}
+      const newEvent: DetectingEvent = {
+        id: uuid(),
+        type: draft.type,
+        title: draft.title.trim(),
+        description: draft.description.trim() || undefined,
+        startDate: draft.startDate,
+        endDate: draft.endDate || undefined,
+        startTime: draft.startTime || undefined,
+        town: draft.town.trim() || undefined,
+        county: draft.county.trim() || undefined,
+        organiserName: draft.organiserName.trim() || undefined,
+        sourceUrl: draft.sourceUrl.trim() || undefined,
+        entryFee: draft.entryFee.trim() || undefined,
+        verificationStatus: "unconfirmed",
+        createdAt: new Date().toISOString(),
+      };
 
-    setSubmitting(false);
-    setDone(true);
+      const typeLabelMap: Record<EventType, string> = {
+        rally: "Rally",
+        club_dig: "Club Dig",
+        other: "Other Event",
+      };
+      const details = [
+        `Event Type: ${typeLabelMap[newEvent.type]}`,
+        `Title: ${newEvent.title}`,
+        `Start Date: ${newEvent.startDate}`,
+        newEvent.endDate       ? `End Date: ${newEvent.endDate}`           : null,
+        newEvent.startTime     ? `Start Time: ${newEvent.startTime}`       : null,
+        newEvent.town          ? `Town: ${newEvent.town}`                  : null,
+        newEvent.county        ? `County: ${newEvent.county}`              : null,
+        draft.postcode         ? `Postcode Area: ${draft.postcode}`        : null,
+        newEvent.organiserName ? `Organiser: ${newEvent.organiserName}`    : null,
+        newEvent.sourceUrl     ? `Source Link: ${newEvent.sourceUrl}`      : null,
+        newEvent.entryFee      ? `Entry Fee: ${newEvent.entryFee}`         : null,
+        newEvent.description   ? `Description: ${newEvent.description}`    : null,
+      ].filter(Boolean).join("\n");
+
+      const queued = await submitForReview({
+        subject: `FindSpot Event Submission: ${newEvent.title}`,
+        message: details,
+        fromName: newEvent.organiserName || "FindSpot User",
+      });
+
+      saveLocalSubmission(newEvent);
+      setReviewQueued(queued);
+      setDone(true);
+    } catch (e: any) {
+      setError(e?.message ?? "Submission failed. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (done) {
@@ -734,7 +771,9 @@ function SubmitEventModal({
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4 text-2xl font-black text-emerald-600">✓</div>
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Submitted!</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
-            Thanks — your submission has been sent for review. Once approved it will appear in Discover for everyone to see.
+            {reviewQueued
+              ? "Thanks — your submission has been sent for review. Once approved it will appear in Discover for everyone to see."
+              : "Your event has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
           </p>
           <button
             onClick={() => { onSubmitted(); onClose(); }}
@@ -780,6 +819,11 @@ function SubmitEventModal({
         </div>
 
         <div className="p-5 grid gap-4 overflow-y-auto flex-1">
+          {error && (
+            <div className="px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-300">
+              {error}
+            </div>
+          )}
           {step === 1 && (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-400">What kind of event is this?</p>
@@ -936,54 +980,55 @@ function SubmitClubModal({
   const [draft, setDraft] = useState<DraftClub>(EMPTY_DRAFT_CLUB);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [reviewQueued, setReviewQueued] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const update = (patch: Partial<DraftClub>) => setDraft((p) => ({ ...p, ...patch }));
   const canSubmit = !!draft.name.trim() && !!(draft.town.trim() || draft.county.trim() || draft.postcode.trim());
 
   async function submit() {
     setSubmitting(true);
-    const newClub: ClubListing = {
-      id: uuid(),
-      name: draft.name.trim(),
-      description: draft.description.trim() || undefined,
-      town: draft.town.trim() || undefined,
-      county: draft.county.trim() || undefined,
-      facebookUrl: draft.facebookUrl.trim() || undefined,
-      websiteUrl: draft.websiteUrl.trim() || undefined,
-      digDays: draft.digDays.trim() || undefined,
-      contactName: draft.contactName.trim() || undefined,
-      verificationStatus: "unconfirmed",
-    };
-
-    saveLocalClubSubmission(newClub);
-
-    const details = [
-      `Club Name: ${newClub.name}`,
-      newClub.town        ? `Town: ${newClub.town}`            : null,
-      newClub.county      ? `County: ${newClub.county}`        : null,
-      draft.postcode      ? `Postcode Area: ${draft.postcode}` : null,
-      newClub.digDays     ? `Dig Days: ${newClub.digDays}`     : null,
-      newClub.facebookUrl ? `Facebook: ${newClub.facebookUrl}` : null,
-      newClub.websiteUrl  ? `Website: ${newClub.websiteUrl}`   : null,
-      newClub.contactName ? `Contact: ${newClub.contactName}`  : null,
-      newClub.description ? `About: ${newClub.description}`    : null,
-    ].filter(Boolean).join("\n");
-
+    setError(null);
     try {
-      await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          access_key: "4a147e0a-663e-4916-a50b-825c4fe7e673",
-          subject: `FindSpot Club Submission: ${newClub.name}`,
-          message: details,
-          from_name: newClub.contactName || "FindSpot User",
-        }),
-      });
-    } catch {}
+      const newClub: ClubListing = {
+        id: uuid(),
+        name: draft.name.trim(),
+        description: draft.description.trim() || undefined,
+        town: draft.town.trim() || undefined,
+        county: draft.county.trim() || undefined,
+        facebookUrl: draft.facebookUrl.trim() || undefined,
+        websiteUrl: draft.websiteUrl.trim() || undefined,
+        digDays: draft.digDays.trim() || undefined,
+        contactName: draft.contactName.trim() || undefined,
+        verificationStatus: "unconfirmed",
+      };
 
-    setSubmitting(false);
-    setDone(true);
+      const details = [
+        `Club Name: ${newClub.name}`,
+        newClub.town        ? `Town: ${newClub.town}`            : null,
+        newClub.county      ? `County: ${newClub.county}`        : null,
+        draft.postcode      ? `Postcode Area: ${draft.postcode}` : null,
+        newClub.digDays     ? `Dig Days: ${newClub.digDays}`     : null,
+        newClub.facebookUrl ? `Facebook: ${newClub.facebookUrl}` : null,
+        newClub.websiteUrl  ? `Website: ${newClub.websiteUrl}`   : null,
+        newClub.contactName ? `Contact: ${newClub.contactName}`  : null,
+        newClub.description ? `About: ${newClub.description}`    : null,
+      ].filter(Boolean).join("\n");
+
+      const queued = await submitForReview({
+        subject: `FindSpot Club Submission: ${newClub.name}`,
+        message: details,
+        fromName: newClub.contactName || "FindSpot User",
+      });
+
+      saveLocalClubSubmission(newClub);
+      setReviewQueued(queued);
+      setDone(true);
+    } catch (e: any) {
+      setError(e?.message ?? "Submission failed. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const inputClass =
@@ -997,7 +1042,9 @@ function SubmitClubModal({
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4 text-2xl font-black text-emerald-600">✓</div>
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Club Listed!</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
-            Your club has been submitted for review. Once approved it will appear in the clubs directory for detectorists near you.
+            {reviewQueued
+              ? "Your club has been submitted for review. Once approved it will appear in the clubs directory for detectorists near you."
+              : "Your club has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
           </p>
           <button
             onClick={() => { onSubmitted(); onClose(); }}
@@ -1028,6 +1075,11 @@ function SubmitClubModal({
         </div>
 
         <div className="p-5 grid gap-4 overflow-y-auto flex-1">
+          {error && (
+            <div className="px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-300">
+              {error}
+            </div>
+          )}
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Add your club to the directory so other detectorists nearby can find you.
           </p>

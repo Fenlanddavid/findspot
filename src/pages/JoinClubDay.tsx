@@ -1,19 +1,38 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { importClubDayPack, getSetting, setSetting } from "../services/data";
+import type { ClubDayPack } from "../services/data";
 import { Logo } from "../App";
+
+function decodePack(value: string): string {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function parsePack(value: string | null): ClubDayPack | null {
+  if (!value) return null;
+  try {
+    const pack = JSON.parse(decodePack(value));
+    return pack?.type === "findspot-club-day-pack" ? pack : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function JoinClubDay() {
   const [params] = useSearchParams();
   const nav = useNavigate();
+  const packFromUrl = parsePack(params.get("pack"));
 
-  const sid   = params.get("sid") ?? "";
-  const name  = params.get("n")   ?? "Club Day Event";
-  const date  = params.get("d")   ?? "";
-  const contact = params.get("c") ?? "";
-  const email = params.get("e") ?? "";
-  const instructions = params.get("i") ?? "";
-  const publicNotes  = params.get("p") ?? "";
+  const sid = packFromUrl?.sharedPermissionId ?? params.get("sid") ?? "";
+  const name = packFromUrl?.eventName ?? params.get("n") ?? "Club Day Event";
+  const date = packFromUrl?.eventDate ?? params.get("d") ?? "";
+  const contact = packFromUrl?.organiserContactNumber ?? params.get("c") ?? "";
+  const email = packFromUrl?.organiserEmail ?? params.get("e") ?? "";
+  const instructions = packFromUrl?.significantFindInstructions ?? params.get("i") ?? "";
+  const publicNotes = packFromUrl?.publicNotes ?? params.get("p") ?? "";
 
   const [recorderName, setRecorderName] = useState("");
   const [joining, setJoining] = useState(false);
@@ -50,8 +69,9 @@ export default function JoinClubDay() {
       // Save the name for future exports
       await setSetting("recorderName", recorderName.trim());
 
-      // Build a lightweight pack from URL params (no field boundaries)
-      const pack = {
+      // New QR links carry the complete stripped pack, including selected fields.
+      // Older links are still accepted by reconstructing the original lightweight pack.
+      const pack: ClubDayPack = packFromUrl ?? {
         type: "findspot-club-day-pack",
         version: 1,
         sharedPermissionId: sid,

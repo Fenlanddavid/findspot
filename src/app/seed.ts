@@ -1,7 +1,10 @@
 import { db } from "../db";
 import { v4 as uuid } from "uuid";
 
-export async function ensureDefaultProject(): Promise<string> {
+let defaultProjectPromise: Promise<string> | null = null;
+const defaultPermissionPromises = new Map<string, Promise<void>>();
+
+async function createOrFindDefaultProject(): Promise<string> {
   const existing = await db.projects.toArray();
   const valid = existing.filter(p => p.id && p.name);
 
@@ -33,7 +36,17 @@ export async function ensureDefaultProject(): Promise<string> {
   return valid[0].id;
 }
 
-export async function ensureDefaultPermission(projectId: string): Promise<void> {
+export function ensureDefaultProject(): Promise<string> {
+  if (!defaultProjectPromise) {
+    defaultProjectPromise = createOrFindDefaultProject().catch((error) => {
+      defaultProjectPromise = null;
+      throw error;
+    });
+  }
+  return defaultProjectPromise;
+}
+
+async function createDefaultPermission(projectId: string): Promise<void> {
   const hasDefault = await db.permissions
     .where("projectId").equals(projectId)
     .filter(p => !!p.isDefault)
@@ -64,4 +77,16 @@ export async function ensureDefaultPermission(projectId: string): Promise<void> 
     createdAt: now,
     updatedAt: now,
   });
+}
+
+export function ensureDefaultPermission(projectId: string): Promise<void> {
+  const existing = defaultPermissionPromises.get(projectId);
+  if (existing) return existing;
+
+  const promise = createDefaultPermission(projectId).catch((error) => {
+    defaultPermissionPromises.delete(projectId);
+    throw error;
+  });
+  defaultPermissionPromises.set(projectId, promise);
+  return promise;
 }

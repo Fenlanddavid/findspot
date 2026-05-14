@@ -667,6 +667,7 @@ export default function PermissionPage(props: {
         const finds = await db.finds.where("permissionId").equals(id).toArray();
         const findIds = finds.map(f => f.id);
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
+        await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
@@ -693,6 +694,7 @@ export default function PermissionPage(props: {
         const finds = await db.finds.where("permissionId").equals(id).toArray();
         const findIds = finds.map(f => f.id);
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
+        await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
@@ -717,7 +719,18 @@ export default function PermissionPage(props: {
     if (!confirm("Are you sure? This will permanently delete this field. Sessions previously assigned to this field will remain but will no longer be linked to it.")) return;
     
     try {
-      await db.fields.delete(fieldId);
+      const now = new Date().toISOString();
+      await db.transaction("rw", [db.fields, db.sessions, db.finds], async () => {
+        await db.sessions.where("fieldId").equals(fieldId).modify({
+          fieldId: null,
+          updatedAt: now,
+        });
+        await db.finds.where("fieldId").equals(fieldId).modify({
+          fieldId: null,
+          updatedAt: now,
+        });
+        await db.fields.delete(fieldId);
+      });
     } catch (e: any) {
       setError("Delete field failed: " + e.message);
     }
