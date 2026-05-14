@@ -39,6 +39,7 @@ export default function JoinClubDay() {
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [alreadyJoined, setAlreadyJoined] = useState(false);
+  const [updatedExisting, setUpdatedExisting] = useState(false);
   const [joinedPermissionId, setJoinedPermissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +94,8 @@ export default function JoinClubDay() {
 
       if (result.alreadyImported) {
         setAlreadyJoined(true);
+      } else if (result.updatedExisting) {
+        setUpdatedExisting(true);
       } else {
         setJoined(true);
       }
@@ -110,7 +113,7 @@ export default function JoinClubDay() {
     ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
     : "";
 
-  if (joined || alreadyJoined) {
+  if (joined || alreadyJoined || updatedExisting) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-950">
         <div className="w-full max-w-sm text-center space-y-5">
@@ -119,10 +122,12 @@ export default function JoinClubDay() {
           </div>
           <div>
             <h1 className="text-xl font-black text-gray-900 dark:text-gray-100">
-              {alreadyJoined ? "Already joined" : "You're in!"}
+              {updatedExisting ? "Event updated" : alreadyJoined ? "Already joined" : "You're in!"}
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {alreadyJoined
+              {updatedExisting
+                ? `Latest details for ${name} are now on your device.`
+                : alreadyJoined
                 ? `${name} is already on your device.`
                 : `${name} has been added to your permissions.`}
             </p>

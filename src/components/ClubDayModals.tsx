@@ -147,6 +147,7 @@ export function CreateClubDayPackModal({
   organiserEmail: organiserEmailProp,
   significantFindInstructions,
   clubDayPublicNotes,
+  eventDate: eventDateProp,
   fields,
   onClose,
 }: {
@@ -156,6 +157,7 @@ export function CreateClubDayPackModal({
   organiserEmail?: string;
   significantFindInstructions?: string;
   clubDayPublicNotes?: string;
+  eventDate?: string;
   fields: Field[];
   onClose: () => void;
 }) {
@@ -163,7 +165,7 @@ export function CreateClubDayPackModal({
     new Set(fields.map(f => f.id))
   );
   const [eventName, setEventName] = useState(permissionName);
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(eventDateProp ?? new Date().toISOString().slice(0, 10));
   const [contactNumber, setContactNumber] = useState(organiserContactNumber ?? "");
   const [organiserEmail, setOrganiserEmail] = useState(organiserEmailProp ?? "");
   const [sigFindInstructions, setSigFindInstructions] = useState(

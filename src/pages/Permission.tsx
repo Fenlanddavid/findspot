@@ -1204,15 +1204,40 @@ export default function PermissionPage(props: {
                             </div>
                         )}
 
-                        {significantFindInstructions && (
-                            <div className="mb-4 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl">
-                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Significant find</div>
-                                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">{significantFindInstructions}</p>
-                            </div>
-                        )}
+	                        {significantFindInstructions && (
+	                            <div className="mb-4 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl">
+	                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Significant find</div>
+	                                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">{significantFindInstructions}</p>
+	                            </div>
+	                        )}
 
-                        <div className="grid gap-2">
-                            <button
+	                        {finds && finds.length > 0 && (
+	                            <div className="mb-4 bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-800 rounded-2xl p-3">
+	                                <div className="flex items-center justify-between gap-3 mb-2">
+	                                    <div className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400">Finds recorded</div>
+	                                    <div className="text-[10px] font-black text-teal-700 dark:text-teal-300">{finds.length}</div>
+	                                </div>
+	                                <div className={`grid gap-2 ${finds.length > 5 ? "max-h-56 overflow-y-auto pr-1" : ""}`}>
+	                                    {finds.map((find: any) => (
+	                                        <button
+	                                            key={find.id}
+	                                            type="button"
+	                                            onClick={() => setOpenFindId(find.id)}
+	                                            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 hover:border-teal-400 transition-colors"
+	                                        >
+	                                            <div className="min-w-0">
+	                                                <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{find.objectType || find.findCategory || "Unknown find"}</div>
+	                                                <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{find.notes || find.findCode}</div>
+	                                            </div>
+	                                            <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(find.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+	                                        </button>
+	                                    ))}
+	                                </div>
+	                            </div>
+	                        )}
+
+	                        <div className="grid gap-2">
+	                            <button
                                 onClick={() => goRecordFind(attendeeDefaultFieldId)}
                                 className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3.5 rounded-xl font-black shadow-sm transition-all uppercase tracking-widest text-xs"
                             >
@@ -1297,26 +1322,26 @@ export default function PermissionPage(props: {
                         <div>
                             <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 text-gray-500 dark:text-gray-400">Finds</div>
                             <div className={`grid gap-1.5 ${finds.length > 6 ? 'max-h-64 overflow-y-auto' : ''}`}>
-                                {finds.map((f: any) => (
-                                    <button
-                                        key={f.id}
-                                        onClick={() => setOpenFindId(f.id)}
-                                        className="w-full text-left flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-400 transition-all group"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-emerald-600 transition-colors">{f.category || "Unknown"}</div>
-                                            {f.description && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{f.description}</div>}
-                                        </div>
-                                        <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(f.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
-                                    </button>
-                                ))}
+	                                {finds.map((f: any) => (
+	                                    <button
+	                                        key={f.id}
+	                                        onClick={() => setOpenFindId(f.id)}
+	                                        className="w-full text-left flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-400 transition-all group"
+	                                    >
+	                                        <div className="min-w-0 flex-1">
+	                                            <div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-emerald-600 transition-colors">{f.objectType || f.findCategory || "Unknown find"}</div>
+	                                            {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{f.notes}</div>}
+	                                        </div>
+	                                        <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(f.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+	                                    </button>
+	                                ))}
                             </div>
                         </div>
-                    ) : (
-                        <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-xl text-sm text-gray-400 italic">
-                            No finds imported yet — use Import Member Data to bring in detectorist records.
-                        </div>
-                    )}
+	                    ) : (
+	                        <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-xl text-sm text-gray-400 italic">
+	                            {isSharedPermission ? "No finds imported yet — use Import Member Data to bring in detectorist records." : "No finds recorded for this rally yet."}
+	                        </div>
+	                    )}
                 </div>
             </div>
             )}
@@ -2528,6 +2553,7 @@ export default function PermissionPage(props: {
           organiserEmail={isRally ? (landownerEmail || organiserEmail) : organiserEmail}
           significantFindInstructions={significantFindInstructions}
           clubDayPublicNotes={clubDayPublicNotes}
+          eventDate={validFrom || undefined}
           fields={fields ?? []}
           onClose={() => {
             setShowCreatePack(false);

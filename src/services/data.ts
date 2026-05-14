@@ -598,8 +598,65 @@ export type ClubDayImportResult = {
   eventName: string;
   eventDate: string;
   alreadyImported: boolean;
+  updatedExisting?: boolean;
   permissionId?: string;
 };
+
+async function applyClubDayPackToLocalPermission(
+  localPermissionId: string,
+  projectId: string,
+  pack: ClubDayPack,
+  now: string
+) {
+  const fieldRecords: Field[] = pack.fields.map(f => ({
+    id: f.id,
+    projectId,
+    permissionId: localPermissionId,
+    name: f.name,
+    boundary: f.boundary,
+    notes: f.notes ?? "",
+    createdAt: f.createdAt ?? now,
+    updatedAt: f.updatedAt ?? now,
+  }));
+
+  const incomingFieldIds = new Set(fieldRecords.map(f => f.id));
+  const [existingFields, existingSessions, existingFinds] = await Promise.all([
+    db.fields.where("permissionId").equals(localPermissionId).toArray(),
+    db.sessions.where("permissionId").equals(localPermissionId).toArray(),
+    db.finds.where("permissionId").equals(localPermissionId).toArray(),
+  ]);
+
+  const referencedFieldIds = new Set<string>();
+  existingSessions.forEach(s => { if (s.fieldId) referencedFieldIds.add(s.fieldId); });
+  existingFinds.forEach(f => { if (f.fieldId) referencedFieldIds.add(f.fieldId); });
+
+  const removableStaleFieldIds = existingFields
+    .filter(f => !incomingFieldIds.has(f.id) && !referencedFieldIds.has(f.id))
+    .map(f => f.id);
+
+  await db.permissions.update(localPermissionId, {
+    name: pack.eventName,
+    type: "rally",
+    collector: pack.organiserName ?? "",
+    boundary: pack.boundary as any,
+    notes: pack.publicNotes ?? "",
+    validFrom: pack.eventDate,
+    organiserContactNumber: pack.organiserContactNumber,
+    organiserEmail: pack.organiserEmail,
+    significantFindInstructions: pack.significantFindInstructions,
+    clubDayPublicNotes: pack.publicNotes,
+    sharedPermissionId: pack.sharedPermissionId,
+    isClubDayMember: true,
+    updatedAt: now,
+  });
+
+  if (removableStaleFieldIds.length > 0) {
+    await db.fields.bulkDelete(removableStaleFieldIds);
+  }
+  if (fieldRecords.length > 0) {
+    await db.fields.bulkPut(fieldRecords);
+  }
+}
 
 /**
  * Member: imports a Club Day Pack and creates a read-only synthetic permission.
@@ -634,7 +691,22 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
     .first();
   if (existingPermission) {
-    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true, permissionId: existingPermission.id };
+    const now = new Date().toISOString();
+    const existingJoinRecord = await db.importedPackages
+      .filter(p => p.sharedPermissionId === pack.sharedPermissionId && !p.recorderId)
+      .first();
+
+    await db.transaction("rw", [db.permissions, db.fields, db.sessions, db.finds, db.importedPackages], async () => {
+      await applyClubDayPackToLocalPermission(existingPermission.id, existingPermission.projectId, pack, now);
+      await db.importedPackages.put({
+        id: existingJoinRecord?.id ?? uuid(),
+        packageHash: hash,
+        importedAt: now,
+        sharedPermissionId: pack.sharedPermissionId,
+      } as ImportedPackage);
+    });
+
+    return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: false, updatedExisting: true, permissionId: existingPermission.id };
   }
 
   const project = await db.projects.toCollection().first();
@@ -645,7 +717,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
   // not the local record ID. This avoids conflating local identity with event identity.
   const localPermissionId = uuid();
 
-  {
+  await db.transaction("rw", [db.permissions, db.fields, db.sessions, db.finds], async () => {
     // Create synthetic read-only permission from pack data
     await db.permissions.put({
       id: localPermissionId,
@@ -672,20 +744,8 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     });
 
     // Import the selected fields, re-keyed to the synthetic permission
-    const fieldRecords: Field[] = pack.fields.map(f => ({
-      id: f.id,
-      projectId: project.id,
-      permissionId: localPermissionId,
-      name: f.name,
-      boundary: f.boundary,
-      notes: f.notes ?? "",
-      createdAt: f.createdAt ?? now,
-      updatedAt: f.updatedAt ?? now,
-    }));
-    if (fieldRecords.length > 0) {
-      await db.fields.bulkPut(fieldRecords);
-    }
-  }
+    await applyClubDayPackToLocalPermission(localPermissionId, project.id, pack, now);
+  });
 
   // Record the import to prevent duplicates
   await db.importedPackages.put({

@@ -189,6 +189,11 @@ export default function FindPage(props: {
     return permissions?.find(p => locationName && p.name.toLowerCase() === locationName.toLowerCase())?.id || null;
   }, [props.permissionId, permissions, locationName]);
 
+  const currentPermission = useMemo(
+    () => permissions?.find(p => p.id === currentPermissionId) ?? null,
+    [permissions, currentPermissionId]
+  );
+
   useEffect(() => {
     if (currentPermissionId) {
       if (session && session.permissionId !== currentPermissionId) {
@@ -878,6 +883,14 @@ export default function FindPage(props: {
               Back to Session
             </button>
           )}
+          {savedId && !sessionId && currentPermissionId && (
+            <button
+              onClick={() => navigate(`/permission/${currentPermissionId}`)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold shadow-md transition-all flex items-center gap-2 text-sm"
+            >
+              {(currentPermission as any)?.isClubDayMember ? "Back to Rally Day" : currentPermission?.type === "rally" ? "Back to Rally" : "Back to Permission"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -985,13 +998,21 @@ export default function FindPage(props: {
             <div className="text-lg font-bold flex items-center gap-2">✓ Find recorded</div>
             <div className="text-sm opacity-80 mt-0.5">Saved to your finds.</div>
           </div>
-          <div className="flex gap-3 shrink-0">
+          <div className="flex flex-wrap gap-3 shrink-0">
             <button
               onClick={resetForm}
               className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl font-bold text-sm transition-colors"
             >
               Record Another
             </button>
+            {currentPermissionId && (
+              <button
+                onClick={() => navigate(`/permission/${currentPermissionId}`)}
+                className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl font-bold text-sm transition-colors"
+              >
+                {(currentPermission as any)?.isClubDayMember ? "Back to Rally Day" : currentPermission?.type === "rally" ? "Back to Rally" : "Back to Permission"}
+              </button>
+            )}
             <button
               onClick={() => navigate("/finds")}
               className="bg-white text-emerald-700 hover:bg-emerald-50 px-4 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm"

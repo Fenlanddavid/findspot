@@ -33,7 +33,7 @@ export function ClubRallyChoiceModal({
     try {
       if (trimmed.startsWith("http")) {
         const parsed = new URL(trimmed);
-        if (parsed.pathname.replace(/\/$/, "").endsWith("/join") && parsed.searchParams.get("sid")) {
+        if (parsed.pathname.replace(/\/$/, "").endsWith("/join") && (parsed.searchParams.get("sid") || parsed.searchParams.get("pack"))) {
           searchString = parsed.search;
         }
       } else {
@@ -41,7 +41,7 @@ export function ClubRallyChoiceModal({
         if (queryIndex !== -1) {
           const qs = trimmed.slice(queryIndex);
           const params = new URLSearchParams(qs);
-          if (params.get("sid")) {
+          if (params.get("sid") || params.get("pack")) {
             searchString = qs;
           }
         }

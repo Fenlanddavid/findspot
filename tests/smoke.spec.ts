@@ -203,7 +203,7 @@ test("Club Day join links can import an embedded pack with a mapped field", asyn
     createdAt: "2026-05-13T00:00:00.000Z",
   };
 
-  await page.goto(`./join?sid=smoke-shared-permission&pack=${encodePack(pack)}`);
+  await page.goto(`./join?pack=${encodePack(pack)}`);
   await expect(page.getByRole("heading", { name: "Smoke Club Rally" })).toBeVisible();
   await page.getByPlaceholder("e.g. John Smith").fill("Smoke Detectorist");
   await page.getByRole("button", { name: /Join/i }).click();
