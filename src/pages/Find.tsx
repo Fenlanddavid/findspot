@@ -734,9 +734,9 @@ export default function FindPage(props: {
     if (form.lat == null || form.lon == null) return null;
     const acc = form.acc;
     if (acc === null) return { label: "Location set", color: "text-emerald-600 dark:text-emerald-400" };
-    if (acc <= 10) return { label: `Strong fix · ±${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
-    if (acc <= 30) return { label: `Captured · ±${Math.round(acc)}m`, color: "text-amber-600 dark:text-amber-400" };
-    return { label: `⚠ Weak signal · ±${Math.round(acc)}m`, color: "text-red-600 dark:text-red-400" };
+    if (acc <= 10) return { label: `GPS Good: ${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
+    if (acc <= 30) return { label: `GPS Fair: ${Math.round(acc)}m`, color: "text-amber-600 dark:text-amber-400" };
+    return { label: `GPS Poor: ${Math.round(acc)}m`, color: "text-red-600 dark:text-red-400" };
   }, [gpsCapturing, form.lat, form.lon, form.acc]);
 
   // #11 — record quality indicator
@@ -854,7 +854,9 @@ export default function FindPage(props: {
               form.acc <= 10 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" :
               form.acc <= 30 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" :
                                "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
-            }`}>±{Math.round(form.acc)}m</span>
+            }`}>
+              {form.acc <= 10 ? "GPS Good" : form.acc <= 30 ? "GPS Fair" : "GPS Poor"}: {Math.round(form.acc)}m
+            </span>
           )}
         </div>
       )}
@@ -1080,7 +1082,7 @@ export default function FindPage(props: {
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-3 flex items-center gap-3 text-sm">
                   <span className="text-amber-500 text-base shrink-0">⚠</span>
                   <span className="text-amber-800 dark:text-amber-300">
-                    <span className="font-bold">Low GPS accuracy (±{Math.round(form.acc)}m).</span> Move to open ground and tap <em>Update Spot</em>.
+                    <span className="font-bold">Low GPS accuracy ({Math.round(form.acc)}m).</span> Move to open ground and tap <em>Update Spot</em>.
                   </span>
                 </div>
               )}
@@ -1396,7 +1398,7 @@ export default function FindPage(props: {
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-3 flex items-center gap-3 text-sm">
                   <span className="text-amber-500 text-base shrink-0">⚠</span>
                   <span className="text-amber-800 dark:text-amber-300">
-                    <span className="font-bold">Low GPS accuracy (±{Math.round(form.acc)}m).</span> Move to open ground and tap <em>Update Spot</em> for a better fix before saving.
+                    <span className="font-bold">Low GPS accuracy ({Math.round(form.acc)}m).</span> Move to open ground and tap <em>Update Spot</em> for a better fix before saving.
                   </span>
                 </div>
               )}

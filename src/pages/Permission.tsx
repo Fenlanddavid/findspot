@@ -42,6 +42,10 @@ function getBoundaryCenter(boundary?: GeoJSONPolygon | null): { lat: number; lon
   };
 }
 
+function formatDeleteCount(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export default function PermissionPage(props: {
   projectId: string;
   onSaved: (id: string) => void;
@@ -697,15 +701,28 @@ export default function PermissionPage(props: {
 
   async function handleDelete() {
     if (!id) return;
-    if (!confirm("Are you sure? This will permanently delete this permission, all sessions, and all finds.")) return;
+    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessionIds = sessions.map(s => s.id);
+    const finds = await db.finds.where("permissionId").equals(id).toArray();
+    const findIds = finds.map(f => f.id);
+    const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
+    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
+    const mediaCount = findMediaCount + permissionMediaCount;
+    const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
+
+    if (!confirm(
+      `Delete ${name.trim() || "this permission"}?\n\nThis will permanently delete:\n` +
+      `- ${formatDeleteCount(sessions.length, "session")}\n` +
+      `- ${formatDeleteCount(finds.length, "find")}\n` +
+      `- ${formatDeleteCount(fieldsToDelete.length, "field")}\n` +
+      `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
+      `- ${formatDeleteCount(trackCount, "GPS track")}`
+    )) return;
 
     setSaving(true);
     try {
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks], async () => {
-        const sessions = await db.sessions.where("permissionId").equals(id).toArray();
-        const sessionIds = sessions.map(s => s.id);
-        const finds = await db.finds.where("permissionId").equals(id).toArray();
-        const findIds = finds.map(f => f.id);
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
@@ -723,16 +740,30 @@ export default function PermissionPage(props: {
 
   async function handleDeleteClubDayPermission() {
     if (!id) return;
-    if (!confirm("Remove this club / rally permission? Your finds, photos, sessions, tracks, and field cards for this event will be permanently deleted from this device. Use Keep Rally Record first if you want to keep them.")) return;
+    const perm = await db.permissions.get(id);
+    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessionIds = sessions.map(s => s.id);
+    const finds = await db.finds.where("permissionId").equals(id).toArray();
+    const findIds = finds.map(f => f.id);
+    const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
+    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
+    const mediaCount = findMediaCount + permissionMediaCount;
+    const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
+
+    if (!confirm(
+      `Remove ${name.trim() || "this club / rally permission"}?\n\nThis will permanently delete from this device:\n` +
+      `- ${formatDeleteCount(sessions.length, "session")}\n` +
+      `- ${formatDeleteCount(finds.length, "find")}\n` +
+      `- ${formatDeleteCount(fieldsToDelete.length, "field card")}\n` +
+      `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
+      `- ${formatDeleteCount(trackCount, "GPS track")}\n\n` +
+      "Use Keep Rally Record first if you want to keep them."
+    )) return;
 
     setSaving(true);
     try {
-      const perm = await db.permissions.get(id);
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
-        const sessions = await db.sessions.where("permissionId").equals(id).toArray();
-        const sessionIds = sessions.map(s => s.id);
-        const finds = await db.finds.where("permissionId").equals(id).toArray();
-        const findIds = finds.map(f => f.id);
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
@@ -825,7 +856,18 @@ export default function PermissionPage(props: {
   }
 
   async function handleDeleteField(fieldId: string) {
-    if (!confirm("Are you sure? This will permanently delete this field. Sessions previously assigned to this field will remain but will no longer be linked to it.")) return;
+    const field = fields?.find(f => f.id === fieldId) || await db.fields.get(fieldId);
+    const [sessionCount, findCount] = await Promise.all([
+      db.sessions.where("fieldId").equals(fieldId).count(),
+      db.finds.where("fieldId").equals(fieldId).count(),
+    ]);
+
+    if (!confirm(
+      `Delete ${field?.name || "this field"}?\n\nThis will delete the field card and unlink:\n` +
+      `- ${formatDeleteCount(sessionCount, "session")}\n` +
+      `- ${formatDeleteCount(findCount, "find")}\n\n` +
+      "The sessions and finds will remain on this device."
+    )) return;
     
     try {
       const now = new Date().toISOString();
@@ -1247,7 +1289,7 @@ export default function PermissionPage(props: {
                                 onClick={() => setShowExportClubDay(true)}
                                 className="w-full bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 py-3 rounded-xl font-black shadow-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-all uppercase tracking-widest text-xs"
                             >
-                                Export Finds
+                                Send Finds to Organiser
                             </button>
                             <button
                                 onClick={handleKeepClubDayAsPersonalRecord}
@@ -1753,7 +1795,7 @@ export default function PermissionPage(props: {
                           <div className="flex flex-col gap-2">
                             <div className="px-3 py-2.5 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-xl">
                               <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-0.5">Club / Rally permission</div>
-                              <p className="text-xs text-teal-700 dark:text-teal-300 font-medium leading-relaxed">This is read-only and managed by the organiser. Record find spots and find details during the day, then export your finds for the organiser.</p>
+                              <p className="text-xs text-teal-700 dark:text-teal-300 font-medium leading-relaxed">This is read-only and managed by the organiser. Record find spots and find details during the day, then send your finds export to the organiser.</p>
                               <div className="flex flex-wrap gap-2 mt-3">
                                 <button
                                   onClick={() => goRecordFind()}
@@ -1765,7 +1807,7 @@ export default function PermissionPage(props: {
                                   onClick={() => setShowExportClubDay(true)}
                                   className="text-[10px] font-black text-teal-700 dark:text-teal-300 bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-800 px-3 py-2 rounded-lg hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-colors uppercase tracking-widest"
                                 >
-                                  Export Finds
+                                  Send Finds
                                 </button>
                               </div>
                             </div>
@@ -2328,7 +2370,7 @@ export default function PermissionPage(props: {
                             onClick={() => setShowExportClubDay(true)}
                             className="w-full bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 py-3 rounded-xl font-black shadow-sm hover:bg-teal-50 dark:hover:bg-teal-900/30 transition-all uppercase tracking-widest text-xs"
                         >
-                            Export Finds
+                            Send Finds to Organiser
                         </button>
                         <button
                             onClick={handleKeepClubDayAsPersonalRecord}

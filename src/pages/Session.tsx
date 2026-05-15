@@ -183,6 +183,10 @@ function SessionSummary({
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 13;
 
+function formatDeleteCount(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export default function SessionPage(props: {
   projectId: string;
 }) {
@@ -529,15 +533,21 @@ export default function SessionPage(props: {
 
   async function handleDelete() {
     if (!isEdit) return;
-    if (!confirm("Are you sure? This will permanently delete this session, all finds within it, and all tracking data.")) return;
+    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+    const findIds = sessionFinds.map(f => f.id);
+    const mediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const trackCount = await db.tracks.where("sessionId").equals(sessionId).count();
+
+    if (!confirm(
+      `Delete this session?\n\nThis will permanently delete:\n` +
+      `- ${formatDeleteCount(sessionFinds.length, "find")}\n` +
+      `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
+      `- ${formatDeleteCount(trackCount, "GPS track")}`
+    )) return;
     
     setSaving(true);
     try {
       await db.transaction("rw", [db.sessions, db.finds, db.media, db.tracks], async () => {
-        // Find all finds in this session
-        const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
-        const findIds = sessionFinds.map(f => f.id);
-        
         // Delete all media for those finds
         if (findIds.length > 0) {
           await db.media.where("findId").anyOf(findIds).delete();

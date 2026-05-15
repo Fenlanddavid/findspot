@@ -438,7 +438,7 @@ export function ExportClubDayModal({
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Club Day</div>
-        <h2 className="font-black text-gray-900 dark:text-gray-100 mb-2">Export Your Club Day Data</h2>
+        <h2 className="font-black text-gray-900 dark:text-gray-100 mb-2">Send Finds to Organiser</h2>
 
         {exported ? (
           <div className="space-y-4">
@@ -518,7 +518,7 @@ export function ExportClubDayModal({
                 disabled={exporting}
                 className="flex-1 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
               >
-                {exporting ? "Exporting…" : "Export & Send"}
+                {exporting ? "Exporting…" : "Save Export File"}
               </button>
             </div>
           </>

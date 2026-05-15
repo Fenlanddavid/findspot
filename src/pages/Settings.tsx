@@ -1,5 +1,49 @@
 import React, { useEffect, useState } from "react";
-import { isStoragePersistent, requestPersistentStorage, getSetting, setSetting, exportData, importData, exportToCSV } from "../services/data";
+import {
+  isStoragePersistent,
+  requestPersistentStorage,
+  getSetting,
+  setSetting,
+  exportData,
+  importData,
+  exportToCSV,
+  createAutoBackupSnapshot,
+  getAutoBackupStatus,
+  listAutoBackupSnapshots,
+  markExternalBackupSaved,
+} from "../services/data";
+import type { AutoBackupSnapshot } from "../db";
+
+type AutoBackupStatus = Awaited<ReturnType<typeof getAutoBackupStatus>>;
+
+type RestorePreview = {
+  exportedAt?: string;
+  projects: number;
+  permissions: number;
+  fields: number;
+  sessions: number;
+  finds: number;
+  media: number;
+  tracks: number;
+};
+
+function countBackupRows(value: unknown) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function previewBackup(json: string): RestorePreview {
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  return {
+    exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt : undefined,
+    projects: countBackupRows(parsed.projects),
+    permissions: countBackupRows(parsed.permissions),
+    fields: countBackupRows(parsed.fields),
+    sessions: countBackupRows(parsed.sessions),
+    finds: countBackupRows(parsed.finds),
+    media: countBackupRows(parsed.media),
+    tracks: countBackupRows(parsed.tracks),
+  };
+}
 
 const POPULAR_MODELS = [
   "Minelab Equinox 900", 
@@ -53,10 +97,16 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
+  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  const [restorePreviewError, setRestorePreviewError] = useState<string | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
+  const [autoBackupStatus, setAutoBackupStatus] = useState<AutoBackupStatus | null>(null);
+  const [autoBackupSnapshots, setAutoBackupSnapshots] = useState<AutoBackupSnapshot[]>([]);
+  const [autoBackupBusy, setAutoBackupBusy] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
 
@@ -87,8 +137,19 @@ export default function Settings() {
       else setDetectors(["Minelab Equinox 800", "Nokta Legend"]);
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
+    getSetting<boolean>("autoBackupEnabled", true).then(setAutoBackupEnabled);
+    refreshAutoBackupInfo();
 
   }, []);
+
+  async function refreshAutoBackupInfo() {
+    const [status, snapshots] = await Promise.all([
+      getAutoBackupStatus(),
+      listAutoBackupSnapshots(),
+    ]);
+    setAutoBackupStatus(status);
+    setAutoBackupSnapshots(snapshots);
+  }
 
   async function handleRequestPersistence() {
     const success = await requestPersistentStorage();
@@ -170,8 +231,9 @@ export default function Settings() {
     try {
       const json = await exportData();
       triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
-      await setSetting("lastBackupDate", new Date().toISOString());
-      setLastBackup(new Date().toISOString());
+      const savedAt = await markExternalBackupSaved();
+      setLastBackup(savedAt);
+      await refreshAutoBackupInfo();
     } catch (e) {
       setDataError("Export failed: " + e);
     } finally {
@@ -191,17 +253,26 @@ export default function Settings() {
     }
   }
 
-  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportPendingFile(file);
+    setRestorePreview(null);
+    setRestorePreviewError(null);
     e.target.value = "";
+    try {
+      setRestorePreview(previewBackup(await file.text()));
+    } catch {
+      setRestorePreviewError("Preview unavailable. FindSpot will still validate the backup before replacing any data.");
+    }
   }
 
   async function confirmImport() {
     if (!importPendingFile) return;
     const file = importPendingFile;
     setImportPendingFile(null);
+    setRestorePreview(null);
+    setRestorePreviewError(null);
     setImporting(true);
     try {
       const text = await file.text();
@@ -211,6 +282,51 @@ export default function Settings() {
       setDataError("Import failed: " + e);
       setImporting(false);
     }
+  }
+
+  async function handleToggleAutoBackup(enabled: boolean) {
+    setAutoBackupEnabled(enabled);
+    await setSetting("autoBackupEnabled", enabled);
+  }
+
+  async function handleCreateAutoBackup() {
+    setAutoBackupBusy(true);
+    setDataError(null);
+    try {
+      await createAutoBackupSnapshot("manual", "Manual safety snapshot", { force: true });
+      await refreshAutoBackupInfo();
+    } catch (e) {
+      setDataError("Safety snapshot failed: " + e);
+    } finally {
+      setAutoBackupBusy(false);
+    }
+  }
+
+  function handleDownloadSnapshot(snapshot: AutoBackupSnapshot) {
+    const date = snapshot.createdAt.slice(0, 10);
+    triggerDownload(
+      new Blob([snapshot.backupJson], { type: "application/json" }),
+      `findspot-safety-snapshot-${date}.json`
+    );
+  }
+
+  async function handleRestoreSnapshot(snapshot: AutoBackupSnapshot) {
+    if (!confirm("Restore this local safety snapshot? This will replace the current FindSpot data on this device.")) return;
+    setAutoBackupBusy(true);
+    setDataError(null);
+    try {
+      await importData(snapshot.backupJson);
+      window.location.reload();
+    } catch (e) {
+      setDataError("Safety snapshot restore failed: " + e);
+      setAutoBackupBusy(false);
+    }
+  }
+
+  function formatBackupDate(value?: string | null) {
+    if (!value) return "Never";
+    const date = new Date(value);
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   }
 
   return (
@@ -225,7 +341,7 @@ export default function Settings() {
             </p>
           </div>
           <span className={`hidden sm:inline-flex text-xs font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-600 text-white" : "bg-amber-100 text-amber-800"}`}>
-            {lastBackup ? "Protected" : "Needs Backup"}
+            {lastBackup ? "Backup saved" : "Save backup"}
           </span>
         </div>
       </div>
@@ -239,10 +355,40 @@ export default function Settings() {
 
       {importPendingFile && (
         <div className="px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <span><strong>Restore "{importPendingFile.name}"?</strong> This will replace the current FindSpot data on this device.</span>
+          <div className="min-w-0 flex-1">
+            <span><strong>Restore "{importPendingFile.name}"?</strong> This will replace the current FindSpot data on this device.</span>
+            {restorePreview && (
+              <>
+                <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {[
+                    ["Projects", restorePreview.projects],
+                    ["Permissions", restorePreview.permissions],
+                    ["Fields", restorePreview.fields],
+                    ["Sessions", restorePreview.sessions],
+                    ["Finds", restorePreview.finds],
+                    ["Media", restorePreview.media],
+                    ["Tracks", restorePreview.tracks],
+                  ].map(([label, count]) => (
+                    <div key={label} className="rounded-lg bg-white/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-2 py-1">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-blue-500/70">{label}</div>
+                      <div className="text-sm font-black">{count}</div>
+                    </div>
+                  ))}
+                </div>
+                {restorePreview.exportedAt && (
+                  <p className="mt-2 text-xs text-blue-700/70 dark:text-blue-300/70">
+                    Backup created {formatBackupDate(restorePreview.exportedAt)}
+                  </p>
+                )}
+              </>
+            )}
+            {restorePreviewError && (
+              <p className="mt-2 text-xs text-blue-700/70 dark:text-blue-300/70">{restorePreviewError}</p>
+            )}
+          </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={confirmImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing…" : "Confirm Import"}</button>
-            <button onClick={() => setImportPendingFile(null)} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
+            <button onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); }} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
       )}
@@ -267,6 +413,119 @@ export default function Settings() {
           {exportingCSV ? "Exporting…" : "Export CSV"}
         </button>
       </div>
+
+      <section className="mb-8 bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 min-w-0">
+          <div className="min-w-0">
+            <h2 className="text-lg font-black text-gray-900 dark:text-gray-100">Safety Snapshots</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              FindSpot keeps the latest local snapshots on this device. Save a JSON backup for protection if the device is lost or browser data is cleared.
+            </p>
+          </div>
+          <div className="flex w-full md:w-auto min-w-0 items-center justify-between md:justify-end gap-3">
+            <span className={`min-w-0 max-w-full text-center leading-tight text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded whitespace-normal break-words ${autoBackupEnabled ? (autoBackupStatus?.externalBackupDue ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700") : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"}`}>
+              {!autoBackupEnabled
+                ? "Auto off"
+                : !autoBackupStatus
+                ? "Checking backups"
+                : autoBackupStatus.externalBackupDue
+                ? "Save JSON backup"
+                : autoBackupStatus.latestSnapshot
+                ? "Device snapshot ready"
+                : "No local snapshot"}
+            </span>
+            <button
+              role="switch"
+              aria-checked={autoBackupEnabled}
+              aria-label="Toggle automatic safety snapshots"
+              onClick={() => handleToggleAutoBackup(!autoBackupEnabled)}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${autoBackupEnabled ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoBackupEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3 mt-4">
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Latest snapshot</div>
+            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
+              {formatBackupDate(autoBackupStatus?.latestSnapshot?.createdAt)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Saved backup</div>
+            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
+              {formatBackupDate(autoBackupStatus?.lastExternalBackupAt)}
+            </div>
+          </div>
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Changes since saved</div>
+            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
+              {autoBackupStatus?.changesSinceBackup ?? 0}
+            </div>
+          </div>
+        </div>
+
+        {autoBackupStatus?.dueReason && (
+          <div className="mt-4 min-w-0 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 break-words">
+            {autoBackupStatus.dueReason}
+          </div>
+        )}
+        {autoBackupStatus?.lastError && (
+          <div className="mt-4 min-w-0 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 break-words">
+            {autoBackupStatus.lastError}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button
+            onClick={handleCreateAutoBackup}
+            disabled={autoBackupBusy}
+            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl disabled:opacity-60"
+          >
+            {autoBackupBusy ? "Working…" : "Create Snapshot"}
+          </button>
+          {autoBackupSnapshots[0] && (
+            <button
+              onClick={() => handleDownloadSnapshot(autoBackupSnapshots[0])}
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl hover:border-emerald-400"
+            >
+              Download Latest
+            </button>
+          )}
+        </div>
+
+        {autoBackupSnapshots.length > 0 && (
+          <div className="mt-4 grid gap-2">
+            {autoBackupSnapshots.map(snapshot => (
+              <div key={snapshot.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 min-w-0">
+                <div className="min-w-0 w-full">
+                  <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{snapshot.label}</div>
+                  <div className="text-[10px] text-gray-400 dark:text-gray-500 break-words">
+                    {formatBackupDate(snapshot.createdAt)} | {snapshot.permissionCount} permissions | {snapshot.findCount} finds | {Math.ceil(snapshot.byteSize / 1024)} KB
+                  </div>
+                </div>
+                <div className="w-full sm:w-auto shrink-0 flex flex-wrap justify-end gap-2">
+                  <button
+                    onClick={() => handleDownloadSnapshot(snapshot)}
+                    className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                  >
+                    Download
+                  </button>
+                  <button
+                    onClick={() => handleRestoreSnapshot(snapshot)}
+                    disabled={autoBackupBusy}
+                    className="text-[10px] font-black text-blue-700 dark:text-blue-300 px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50"
+                  >
+                    Restore
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       <div className="space-y-8">
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -527,15 +786,15 @@ export default function Settings() {
 
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
               <div>
-                <h3 className="font-bold text-gray-800 dark:text-gray-100">Last Backup</h3>
+                <h3 className="font-bold text-gray-800 dark:text-gray-100">Saved JSON Backup</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {lastBackup 
                     ? `Last backed up on ${new Date(lastBackup).toLocaleDateString()} at ${new Date(lastBackup).toLocaleTimeString()}`
-                    : "You haven't backed up your data yet."}
+                    : "No JSON backup has been saved from this browser yet."}
                 </p>
               </div>
               <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                {lastBackup ? "Protected" : "Unprotected"}
+                {lastBackup ? "Saved" : "Not saved"}
               </span>
             </div>
             

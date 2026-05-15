@@ -116,8 +116,9 @@ test("settings can export and restore a backup", async ({ page }) => {
   const backupPath = await backupDownload.path();
   expect(backupPath).toBeTruthy();
   const backup = JSON.parse(await readFile(backupPath!, "utf8"));
+  expect(backup.autoBackups).toBeUndefined();
   expect((backup.permissions as any[]).some((row) => row.name === "Smoke Backup Permission")).toBe(true);
-  await expect(page.getByText("Protected").first()).toBeVisible();
+  await expect(page.getByText("Backup saved").first()).toBeVisible();
 
   const csvDownloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
@@ -210,5 +211,12 @@ test("Club Day join links can import an embedded pack with a mapped field", asyn
   await expect(page.getByText("You're in!")).toBeVisible();
 
   await page.getByRole("button", { name: "Open FindSpot" }).click();
-  await expect(page.getByRole("button", { name: "Smoke Club Rally" })).toBeVisible();
+  await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
+  await expect(page.getByRole("heading", { name: "Smoke Club Rally" })).toBeVisible();
+  await expect(page.getByText("Stop and call the organiser.")).toBeVisible();
+
+  const fields = await readIndexedDbStore(page, "fields");
+  const importedField = (fields as any[]).find((row) => row.id === "field-a");
+  expect(importedField?.name).toBe("North Field");
+  expect(importedField?.boundary?.type).toBe("Polygon");
 });
