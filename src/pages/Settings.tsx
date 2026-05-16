@@ -107,6 +107,7 @@ export default function Settings() {
   const [autoBackupStatus, setAutoBackupStatus] = useState<AutoBackupStatus | null>(null);
   const [autoBackupSnapshots, setAutoBackupSnapshots] = useState<AutoBackupSnapshot[]>([]);
   const [autoBackupBusy, setAutoBackupBusy] = useState(false);
+  const [showSnapshotDetails, setShowSnapshotDetails] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
 
@@ -428,26 +429,29 @@ export default function Settings() {
         </button>
       </div>
 
-      <section className="mb-8 bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 min-w-0">
+      <section className="mb-6 bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 min-w-0">
           <div className="min-w-0">
-            <h2 className="text-lg font-black text-gray-900 dark:text-gray-100">Safety Snapshots</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              FindSpot keeps the latest local snapshots on this device. Save a JSON backup for protection if the device is lost or browser data is cleared.
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base font-black text-gray-900 dark:text-gray-100">Safety Snapshots</h2>
+              <span className={`min-w-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${autoBackupEnabled ? (autoBackupStatus?.externalBackupDue ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700") : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"}`}>
+                {!autoBackupEnabled
+                  ? "Off"
+                  : !autoBackupStatus
+                  ? "Checking"
+                  : autoBackupStatus.externalBackupDue
+                  ? "Backup file due"
+                  : autoBackupStatus.latestSnapshot
+                  ? "Ready"
+                  : "No snapshot"}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+              Local recovery snapshots stay on this device. Download a JSON backup to protect against losing the device or browser data.
             </p>
           </div>
-          <div className="flex w-full md:w-auto min-w-0 items-center justify-between md:justify-end gap-3">
-            <span className={`min-w-0 max-w-full text-center leading-tight text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded whitespace-normal break-words ${autoBackupEnabled ? (autoBackupStatus?.externalBackupDue ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700") : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"}`}>
-              {!autoBackupEnabled
-                ? "Auto off"
-                : !autoBackupStatus
-                ? "Checking backups"
-                : autoBackupStatus.externalBackupDue
-                ? "Save JSON backup"
-                : autoBackupStatus.latestSnapshot
-                ? "Device snapshot ready"
-                : "No local snapshot"}
-            </span>
+          <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Auto</span>
             <button
               role="switch"
               aria-checked={autoBackupEnabled}
@@ -460,58 +464,58 @@ export default function Settings() {
           </div>
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-3 mt-4">
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Latest snapshot</div>
-            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
-              {formatBackupDate(autoBackupStatus?.latestSnapshot?.createdAt)}
-            </div>
-          </div>
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Saved backup</div>
-            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
-              {formatBackupDate(autoBackupStatus?.lastExternalBackupAt)}
-            </div>
-          </div>
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 p-3">
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Changes since saved</div>
-            <div className="text-sm font-black text-gray-800 dark:text-gray-100 mt-1">
-              {autoBackupStatus?.changesSinceBackup ?? 0}
-            </div>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400">
+          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
+            <strong className="text-gray-700 dark:text-gray-200">Latest:</strong> {formatBackupDate(autoBackupStatus?.latestSnapshot?.createdAt)}
+          </span>
+          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
+            <strong className="text-gray-700 dark:text-gray-200">Downloaded:</strong> {formatBackupDate(autoBackupStatus?.lastExternalBackupAt)}
+          </span>
+          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
+            <strong className="text-gray-700 dark:text-gray-200">Changes:</strong> {autoBackupStatus?.changesSinceBackup ?? 0}
+          </span>
         </div>
 
         {autoBackupStatus?.dueReason && (
-          <div className="mt-4 min-w-0 px-4 py-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 break-words">
+          <div className="mt-3 min-w-0 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 break-words">
             {autoBackupStatus.dueReason}
           </div>
         )}
         {autoBackupStatus?.lastError && (
-          <div className="mt-4 min-w-0 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 break-words">
+          <div className="mt-3 min-w-0 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 break-words">
             {autoBackupStatus.lastError}
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="flex flex-wrap gap-2 mt-3">
           <button
             onClick={handleCreateAutoBackup}
             disabled={autoBackupBusy}
-            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl disabled:opacity-60"
+            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl disabled:opacity-60"
           >
             {autoBackupBusy ? "Working…" : "Create Snapshot"}
           </button>
           {autoBackupSnapshots[0] && (
             <button
               onClick={() => handleDownloadSnapshot(autoBackupSnapshots[0])}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl hover:border-emerald-400"
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:border-emerald-400"
             >
               Download Latest
             </button>
           )}
+          {autoBackupSnapshots.length > 0 && (
+            <button
+              onClick={() => setShowSnapshotDetails(v => !v)}
+              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:border-emerald-400"
+              aria-expanded={showSnapshotDetails}
+            >
+              {showSnapshotDetails ? "Hide" : "Show"} Snapshots ({autoBackupSnapshots.length})
+            </button>
+          )}
         </div>
 
-        {autoBackupSnapshots.length > 0 && (
-          <div className="mt-4 grid gap-2">
+        {showSnapshotDetails && autoBackupSnapshots.length > 0 && (
+          <div className="mt-3 grid gap-2">
             {autoBackupSnapshots.map(snapshot => (
               <div key={snapshot.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 min-w-0">
                 <div className="min-w-0 w-full">
