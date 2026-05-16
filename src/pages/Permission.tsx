@@ -15,6 +15,7 @@ import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
 import { BoundaryPickerModal } from "../components/BoundaryPickerModal";
 import { FieldModal } from "../components/FieldModal";
+import { FieldNotesModal } from "../components/FieldNotesModal";
 import PermissionProofModal from "../components/PermissionProofModal";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { area as turfArea } from "@turf/turf";
@@ -107,6 +108,7 @@ export default function PermissionPage(props: {
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [permissionSelected, setPermissionSelected] = useState(false);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [notesFieldId, setNotesFieldId] = useState<string | null>(null);
   const [isAddingField, setIsAddingField] = useState(false);
   const [showAttendeeFields, setShowAttendeeFields] = useState(false);
   const [reportDropdownOpen, setReportDropdownOpen] = useState(false);
@@ -982,6 +984,7 @@ export default function PermissionPage(props: {
   const attendeeSelectedField = fields?.find(f => f.id === selectedFieldId) ?? null;
   const attendeeSelectedFieldCenter = attendeeSelectedField?.boundary ? getBoundaryCenter(attendeeSelectedField.boundary) : null;
   const attendeeDefaultFieldId = attendeeFieldCount === 1 ? fields?.[0]?.id : undefined;
+  const notesField = fields?.find(f => f.id === notesFieldId) ?? null;
 
   function goRecordFind(fieldId?: string | null) {
     if (!id) return;
@@ -1652,6 +1655,13 @@ export default function PermissionPage(props: {
                                                 <div className="flex items-center gap-1.5 shrink-0">
                                                     <button
                                                         type="button"
+                                                        onClick={() => setNotesFieldId(f.id)}
+                                                        className={`text-[10px] font-bold underline-offset-2 hover:underline transition-colors ${f.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
+                                                    >
+                                                        Notes
+                                                    </button>
+                                                    <button
+                                                        type="button"
                                                         onClick={() => setEditingFieldId(f.id)}
                                                         className="text-[10px] font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 px-2.5 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-700 transition-all"
                                                     >
@@ -2117,11 +2127,20 @@ export default function PermissionPage(props: {
                                                                 {f.boundary ? "Boundary mapped" : "No boundary"}
                                                             </div>
                                                         </div>
-                                                        {f.boundary && (
-                                                            <div className="shrink-0 text-[10px] font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                                                                {(turfArea(f.boundary) / 4046.86).toFixed(1)} acres
-                                                            </div>
-                                                        )}
+                                                        <div className="shrink-0 flex flex-col items-end gap-0.5">
+                                                            {f.boundary && (
+                                                                <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                                                                    {(turfArea(f.boundary) / 4046.86).toFixed(1)} acres
+                                                                </div>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setNotesFieldId(f.id)}
+                                                                className={`text-[9px] font-black uppercase tracking-widest underline-offset-2 hover:underline transition-colors ${f.notes ? "text-amber-800 dark:text-amber-300" : "text-amber-700 dark:text-amber-400"}`}
+                                                            >
+                                                                Notes
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     {(recordedCount > 0 || pendingCount > 0) && (
                                                         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -2601,6 +2620,14 @@ export default function PermissionPage(props: {
                setEditingFieldId(null);
              }}
          />
+      )}
+
+      {notesField && (
+        <FieldNotesModal
+          field={notesField}
+          readOnly={isClubDayMember}
+          onClose={() => setNotesFieldId(null)}
+        />
       )}
 
       {proofModalOpen && currentPermission && (

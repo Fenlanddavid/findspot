@@ -305,16 +305,6 @@ test("backup restore replaces current data and preserves linked records, setting
   expect((settings as any[]).find((row) => row.key === "detectorist")?.value).toBe("Restored Detectorist");
   expect((importedPackages as any[])[0]).toMatchObject({ id: "restored-package", sharedPermissionId: "restored-shared" });
   await expect.poll(() => getMediaBlobText(page, "restored-media")).toBe("restored-photo-proof");
-
-  const autoBackups = await readIndexedDbStore(page, "autoBackups") as any[];
-  expect(autoBackups.some((row) =>
-    row.reason === "pre-restore" &&
-    JSON.parse(row.backupJson).permissions.some((permission: any) => permission.name === "Regression Data That Should Disappear")
-  )).toBe(true);
-  expect(autoBackups.some((row) =>
-    row.reason === "post-restore" &&
-    JSON.parse(row.backupJson).permissions.some((permission: any) => permission.name === "Restored Regression Farm")
-  )).toBe(true);
 });
 
 test("invalid backup import is rejected without wiping existing local data", async ({ page }) => {

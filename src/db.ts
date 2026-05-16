@@ -244,27 +244,6 @@ export type ImportedPackage = {
   recorderName?: string;
 };
 
-export type AutoBackupReason =
-  | "auto"
-  | "manual"
-  | "external-backup"
-  | "pre-restore"
-  | "post-restore";
-
-export type AutoBackupSnapshot = {
-  id: string;
-  version: 2;
-  reason: AutoBackupReason;
-  label: string;
-  createdAt: string;
-  backupJson: string;
-  dataHash: string;
-  byteSize: number;
-  permissionCount: number;
-  findCount: number;
-  mediaCount: number;
-};
-
 // ─── FieldGuide scan cache ────────────────────────────────────────────────────
 // Caches raw cluster data from the tile workers so that identical viewports
 // skip the expensive pixel processing on revisit. TTL: 24 hours.
@@ -306,7 +285,6 @@ export class FindSpotDB extends Dexie {
   tracks!: Table<Track, string>;
   settings!: Table<Setting, string>;
   importedPackages!: Table<ImportedPackage, string>;
-  autoBackups!: Table<AutoBackupSnapshot, string>;
   fieldGuideCache!: Table<FieldGuideScanCache, string>;
   fieldGuideInvestigations!: Table<FieldGuideInvestigation, string>;
 

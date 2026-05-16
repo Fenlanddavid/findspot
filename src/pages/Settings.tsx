@@ -7,14 +7,8 @@ import {
   exportData,
   importData,
   exportToCSV,
-  createAutoBackupSnapshot,
-  getAutoBackupStatus,
-  listAutoBackupSnapshots,
   markExternalBackupSaved,
 } from "../services/data";
-import type { AutoBackupSnapshot } from "../db";
-
-type AutoBackupStatus = Awaited<ReturnType<typeof getAutoBackupStatus>>;
 
 type RestorePreview = {
   exportedAt?: string;
@@ -103,11 +97,6 @@ export default function Settings() {
   const [exporting, setExporting] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [autoBackupEnabled, setAutoBackupEnabled] = useState(true);
-  const [autoBackupStatus, setAutoBackupStatus] = useState<AutoBackupStatus | null>(null);
-  const [autoBackupSnapshots, setAutoBackupSnapshots] = useState<AutoBackupSnapshot[]>([]);
-  const [autoBackupBusy, setAutoBackupBusy] = useState(false);
-  const [showSnapshotDetails, setShowSnapshotDetails] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [eggPhase, setEggPhase] = useState<'idle' | 'signal' | 'mission'>('idle');
 
@@ -138,19 +127,8 @@ export default function Settings() {
       else setDetectors(["Minelab Equinox 800", "Nokta Legend"]);
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
-    getSetting<boolean>("autoBackupEnabled", true).then(setAutoBackupEnabled);
-    refreshAutoBackupInfo();
 
   }, []);
-
-  async function refreshAutoBackupInfo() {
-    const [status, snapshots] = await Promise.all([
-      getAutoBackupStatus(),
-      listAutoBackupSnapshots(),
-    ]);
-    setAutoBackupStatus(status);
-    setAutoBackupSnapshots(snapshots);
-  }
 
   async function handleRequestPersistence() {
     const success = await requestPersistentStorage();
@@ -234,7 +212,6 @@ export default function Settings() {
       triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
       const savedAt = await markExternalBackupSaved();
       setLastBackup(savedAt);
-      await refreshAutoBackupInfo();
     } catch (e) {
       setDataError("Export failed: " + e);
     } finally {
@@ -283,47 +260,6 @@ export default function Settings() {
     } catch (e) {
       setDataError("Import failed: " + e);
       setImporting(false);
-    }
-  }
-
-  async function handleToggleAutoBackup(enabled: boolean) {
-    setAutoBackupEnabled(enabled);
-    await setSetting("autoBackupEnabled", enabled);
-  }
-
-  async function handleCreateAutoBackup() {
-    setAutoBackupBusy(true);
-    setDataError(null);
-    try {
-      await createAutoBackupSnapshot("manual", "Manual safety snapshot", { force: true });
-      await refreshAutoBackupInfo();
-    } catch (e) {
-      setDataError("Safety snapshot failed: " + e);
-    } finally {
-      setAutoBackupBusy(false);
-    }
-  }
-
-  function handleDownloadSnapshot(snapshot: AutoBackupSnapshot) {
-    const date = snapshot.createdAt.slice(0, 10);
-    triggerDownload(
-      new Blob([snapshot.backupJson], { type: "application/json" }),
-      `findspot-safety-snapshot-${date}.json`
-    );
-  }
-
-  async function handleRestoreSnapshot(snapshot: AutoBackupSnapshot) {
-    if (!confirm("Restore this local safety snapshot? This will replace your finds, permissions, sessions, and fields with the snapshot data. Photos are not included in snapshots and will be cleared.")) return;
-    setAutoBackupBusy(true);
-    setImporting(true);
-    setDataError(null);
-    try {
-      await importData(snapshot.backupJson);
-      window.location.assign(new URL("./", window.location.href).toString());
-    } catch (e) {
-      setDataError("Safety snapshot restore failed: " + e);
-      setImporting(false);
-      setAutoBackupBusy(false);
     }
   }
 
@@ -428,122 +364,6 @@ export default function Settings() {
           {exportingCSV ? "Exporting…" : "Export CSV"}
         </button>
       </div>
-
-      <section className="mb-6 bg-white dark:bg-gray-800 p-3 sm:p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 min-w-0">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-base font-black text-gray-900 dark:text-gray-100">Safety Snapshots</h2>
-              <span className={`min-w-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded ${autoBackupEnabled ? (autoBackupStatus?.externalBackupDue ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700") : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"}`}>
-                {!autoBackupEnabled
-                  ? "Off"
-                  : !autoBackupStatus
-                  ? "Checking"
-                  : autoBackupStatus.externalBackupDue
-                  ? "Backup file due"
-                  : autoBackupStatus.latestSnapshot
-                  ? "Ready"
-                  : "No snapshot"}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">
-              Local recovery snapshots save your finds, permissions, sessions, and fields — not photos. Download a JSON backup (above) to also back up your photos.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3">
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Auto</span>
-            <button
-              role="switch"
-              aria-checked={autoBackupEnabled}
-              aria-label="Toggle automatic safety snapshots"
-              onClick={() => handleToggleAutoBackup(!autoBackupEnabled)}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${autoBackupEnabled ? "bg-emerald-500" : "bg-gray-300 dark:bg-gray-600"}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoBackupEnabled ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-gray-500 dark:text-gray-400">
-          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
-            <strong className="text-gray-700 dark:text-gray-200">Latest:</strong> {formatBackupDate(autoBackupStatus?.latestSnapshot?.createdAt)}
-          </span>
-          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
-            <strong className="text-gray-700 dark:text-gray-200">Downloaded:</strong> {formatBackupDate(autoBackupStatus?.lastExternalBackupAt)}
-          </span>
-          <span className="rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 px-2 py-1">
-            <strong className="text-gray-700 dark:text-gray-200">Changes:</strong> {autoBackupStatus?.changesSinceBackup ?? 0}
-          </span>
-        </div>
-
-        {autoBackupStatus?.dueReason && (
-          <div className="mt-3 min-w-0 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 break-words">
-            {autoBackupStatus.dueReason}
-          </div>
-        )}
-        {autoBackupStatus?.lastError && (
-          <div className="mt-3 min-w-0 px-3 py-2 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300 break-words">
-            {autoBackupStatus.lastError}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-2 mt-3">
-          <button
-            onClick={handleCreateAutoBackup}
-            disabled={autoBackupBusy}
-            className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl disabled:opacity-60"
-          >
-            {autoBackupBusy ? "Working…" : "Create Snapshot"}
-          </button>
-          {autoBackupSnapshots[0] && (
-            <button
-              onClick={() => handleDownloadSnapshot(autoBackupSnapshots[0])}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:border-emerald-400"
-            >
-              Download Latest
-            </button>
-          )}
-          {autoBackupSnapshots.length > 0 && (
-            <button
-              onClick={() => setShowSnapshotDetails(v => !v)}
-              className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl hover:border-emerald-400"
-              aria-expanded={showSnapshotDetails}
-            >
-              {showSnapshotDetails ? "Hide" : "Show"} Snapshots ({autoBackupSnapshots.length})
-            </button>
-          )}
-        </div>
-
-        {showSnapshotDetails && autoBackupSnapshots.length > 0 && (
-          <div className="mt-3 grid gap-2">
-            {autoBackupSnapshots.map(snapshot => (
-              <div key={snapshot.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 min-w-0">
-                <div className="min-w-0 w-full">
-                  <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{snapshot.label}</div>
-                  <div className="text-[10px] text-gray-400 dark:text-gray-500 break-words">
-                    {formatBackupDate(snapshot.createdAt)} | {snapshot.permissionCount} permissions | {snapshot.findCount} finds | {Math.ceil(snapshot.byteSize / 1024)} KB
-                  </div>
-                </div>
-                <div className="w-full sm:w-auto shrink-0 flex flex-wrap justify-end gap-2">
-                  <button
-                    onClick={() => handleDownloadSnapshot(snapshot)}
-                    className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-                  >
-                    Download
-                  </button>
-                  <button
-                    onClick={() => handleRestoreSnapshot(snapshot)}
-                    disabled={autoBackupBusy}
-                    className="text-[10px] font-black text-blue-700 dark:text-blue-300 px-2 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50"
-                  >
-                    Restore
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       <div className="space-y-8">
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">

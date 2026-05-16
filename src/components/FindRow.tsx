@@ -24,40 +24,57 @@ export function FindRow(props: {
   const s = props.find;
   const colorClass = PERIOD_COLORS[s.period] || PERIOD_COLORS["Unknown"];
 
+  const timeStr = (() => {
+    const raw = s.foundAt ?? s.createdAt;
+    if (!raw) return null;
+    try {
+      return new Date(raw).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return null;
+    }
+  })();
+
   return (
     <button
       onClick={props.onOpen}
-      className={`w-full text-left flex gap-3 items-center border rounded-xl p-2.5 bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group ${s.isPending ? 'border-amber-400 dark:border-amber-700 border-2' : 'border-gray-200 dark:border-gray-700'}`}
+      className={`w-full text-left flex gap-2.5 items-center border rounded-xl p-2 bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors group ${s.isPending ? 'border-amber-300 dark:border-amber-700 border-2' : 'border-gray-100 dark:border-gray-800'}`}
     >
-      <div className="relative">
+      <div className="shrink-0">
         {props.thumbMedia ? (
-          <ScaledImage 
-            media={props.thumbMedia} 
-            className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700" 
+          <ScaledImage
+            media={props.thumbMedia}
+            className="w-11 h-11 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700"
             imgClassName="object-cover"
           />
         ) : (
-          <div className="w-14 h-14 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 grid place-items-center opacity-70 text-xs bg-gray-50 dark:bg-gray-800 uppercase font-black tracking-tighter">
-            {s.isPending ? "📸 PENDING" : "no photo"}
+          <div className="w-11 h-11 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 grid place-items-center bg-gray-50 dark:bg-gray-800/60">
+            {s.isPending
+              ? <span className="text-[8px] font-black text-amber-500 leading-tight text-center px-0.5">📸<br/>PEND</span>
+              : <span className="text-[8px] font-black text-gray-300 dark:text-gray-600 uppercase tracking-tight">No<br/>photo</span>
+            }
           </div>
         )}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex gap-2 items-center flex-wrap">
-          <strong className="text-sm font-semibold group-hover:text-emerald-600 transition-colors">{s.findCode}</strong>
+        <div className="flex gap-1.5 items-center flex-wrap mb-0.5">
+          <strong className="text-xs font-black text-gray-700 dark:text-gray-200 group-hover:text-emerald-600 transition-colors">{s.findCode}</strong>
           <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${colorClass}`}>
             {s.period}
           </span>
           {s.isPending && (
-             <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest animate-pulse">
-                Pending
-             </span>
+            <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest animate-pulse">
+              Pending
+            </span>
           )}
         </div>
-        <div className="opacity-90 mt-0.5 text-sm flex items-center gap-2">
-          {s.objectType || "(Object TBD)"} {s.coinType ? `(${s.coinType})` : ""} 
-          {s.targetId && <span className="text-[10px] font-mono font-bold bg-gray-100 dark:bg-gray-900 px-1 rounded">TID: {s.targetId}</span>}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+            {s.objectType || "Object TBD"}{s.coinType ? ` (${s.coinType})` : ""}
+          </span>
+          {timeStr && (
+            <span className="shrink-0 text-[10px] font-mono text-gray-400 dark:text-gray-600">{timeStr}</span>
+          )}
         </div>
       </div>
     </button>

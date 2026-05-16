@@ -13,8 +13,10 @@ import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording, isWakeLockSupported } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
+import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
+import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -187,6 +189,22 @@ function formatDeleteCount(count: number, singular: string, plural = `${singular
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatElapsed(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0m";
+  const mins = Math.floor(ms / 60000);
+  const hrs = Math.floor(mins / 60);
+  if (hrs > 0) return `${hrs}h ${mins % 60}m`;
+  return `${mins}m`;
+}
+
 export default function SessionPage(props: {
   projectId: string;
 }) {
@@ -225,6 +243,8 @@ export default function SessionPage(props: {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
   const [coverageError, setCoverageError] = useState(false);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
+  const [showFieldNotes, setShowFieldNotes] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
   const [showTrimUI, setShowTrimUI] = useState(false);
   const [trimStartMins, setTrimStartMins] = useState(0);
@@ -237,6 +257,7 @@ export default function SessionPage(props: {
   const [showLandownerReport, setShowLandownerReport] = useState(false);
   const [landownerReportForField, setLandownerReportForField] = useState(false);
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
+  const isActiveSessionMode = isEdit && !isEditing && !isFinished;
 
   const permission = useLiveQuery(
     async () => (permissionId ? db.permissions.get(permissionId) : (sessionId ? db.sessions.get(sessionId).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
@@ -275,7 +296,14 @@ export default function SessionPage(props: {
   }, [sessionId, tracks]);
 
   useEffect(() => {
-    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    if (!isActiveSessionMode) return;
+    setNowTick(Date.now());
+    const timer = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, [isActiveSessionMode]);
+
+  useEffect(() => {
+    const boundary = selectedField?.boundary || permission?.boundary;
     if (!showCoverage || !boundary) {
         setCoverageResult(null);
         setCoverageError(false);
@@ -300,6 +328,25 @@ export default function SessionPage(props: {
     return info;
   }, [allMedia, finds]);
 
+  const activeDistanceKm = useMemo(() => {
+    if (!tracks || tracks.length === 0) return null;
+    let total = 0;
+    for (const track of tracks) {
+      if (!track.points || track.points.length < 2) continue;
+      const sorted = [...track.points].sort((a, b) => a.timestamp - b.timestamp);
+      for (let i = 1; i < sorted.length; i++) {
+        total += haversineKm(sorted[i - 1].lat, sorted[i - 1].lon, sorted[i].lat, sorted[i].lon);
+      }
+    }
+    return total > 0 ? total : null;
+  }, [tracks]);
+
+  const activeCoverage = useMemo(() => {
+    const boundary = selectedField?.boundary || permission?.boundary;
+    if (!boundary || !tracks || tracks.length === 0) return null;
+    return calculateCoverage(boundary, tracks);
+  }, [selectedField, permission, tracks]);
+
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
 
@@ -314,7 +361,7 @@ export default function SessionPage(props: {
   }, []);
 
   useEffect(() => {
-    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    const boundary = selectedField?.boundary || permission?.boundary;
     const hasBoundary = !!boundary;
     if (!mapDivRef.current || (!hasBoundary && (!tracks || tracks.length === 0) && !isTracking)) return;
 
@@ -370,9 +417,10 @@ export default function SessionPage(props: {
             id: "undetected-fill",
             type: "fill",
             source: "coverage",
+            layout: { "visibility": "none" },
             paint: {
               "fill-color": "#ea580c",
-              "fill-opacity": 0.6,
+              "fill-opacity": 0.68,
               "fill-outline-color": "#ea580c"
             }
         });
@@ -381,6 +429,7 @@ export default function SessionPage(props: {
             id: "undetected-outline",
             type: "line",
             source: "coverage",
+            layout: { "visibility": "none" },
             paint: {
               "line-color": "#ea580c",
               "line-width": 2,
@@ -399,11 +448,6 @@ export default function SessionPage(props: {
             "line-opacity": 0.8
           }
         });
-
-        if (showCoverage && coverageResult) {
-            const src = map.getSource("coverage") as maplibregl.GeoJSONSource;
-            if (src) src.setData(coverageResult.undetectionsGeoJSON);
-        }
 
         // Initial fit when data arrives
         updateMapData(map, tracks || []);
@@ -436,7 +480,7 @@ export default function SessionPage(props: {
       }
 
       const boundarySource = map.getSource("boundary") as maplibregl.GeoJSONSource;
-      const boundary = selectedField?.boundary || (permission as any)?.boundary;
+      const boundary = selectedField?.boundary || permission?.boundary;
       if (boundarySource && boundary) {
           boundarySource.setData(boundary);
       }
@@ -447,7 +491,7 @@ export default function SessionPage(props: {
       
       let hasDataForBounds = false;
       if (boundary && boundary.coordinates?.[0] && Array.isArray(boundary.coordinates[0])) {
-          boundary.coordinates[0].forEach((p: [number, number]) => {
+          boundary.coordinates[0].forEach((p) => {
               if (Array.isArray(p) && p.length >= 2) {
                   bounds.extend(p as [number, number]);
                   hasDataForBounds = true;
@@ -470,21 +514,43 @@ export default function SessionPage(props: {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
-    if (src) {
+    if (!map) return;
+
+    const syncCoverage = () => {
+      const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
+      if (!src) return;
+
         if (showCoverage && coverageResult) {
             src.setData(coverageResult.undetectionsGeoJSON);
         } else {
             src.setData({ type: "FeatureCollection", features: [] });
         }
-    }
-    if (map.getLayer("undetected-fill")) {
+
+      if (map.getLayer("undetected-fill")) {
         map.setLayoutProperty("undetected-fill", "visibility", showCoverage ? "visible" : "none");
-        if (map.getLayer("undetected-outline")) {
-            map.setLayoutProperty("undetected-outline", "visibility", showCoverage ? "visible" : "none");
-        }
+        if (showCoverage) map.moveLayer("undetected-fill");
+      }
+      if (map.getLayer("undetected-outline")) {
+        map.setLayoutProperty("undetected-outline", "visibility", showCoverage ? "visible" : "none");
+        if (showCoverage) map.moveLayer("undetected-outline");
+      }
+      if (map.getLayer("tracks-line")) {
+        map.setPaintProperty("tracks-line", "line-opacity", showCoverage ? 0.35 : 0.8);
+      }
+      if (map.getLayer("boundary-outline") && showCoverage) {
+        map.moveLayer("boundary-outline");
+      }
+    };
+
+    if (map.getSource("coverage")) {
+      syncCoverage();
+      return;
     }
+
+    map.once("idle", syncCoverage);
+    return () => {
+      map.off("idle", syncCoverage);
+    };
   }, [showCoverage, coverageResult]);
 
   useEffect(() => {
@@ -519,6 +585,26 @@ export default function SessionPage(props: {
     }
   }, [sessionId]);
 
+  function goSessionFind(mode: "quick" | "full") {
+    if (!permission?.id) return;
+    localStorage.setItem("findRecordMode", mode);
+    const params = new URLSearchParams();
+    params.set("permissionId", permission.id);
+    params.set("sessionId", sessionId);
+    if (fieldId) params.set("fieldId", fieldId);
+    nav(`/find?${params.toString()}`);
+  }
+
+  async function quickSetStubble(val: boolean) {
+    setIsStubble(val);
+    await db.sessions.update(sessionId, { isStubble: val, updatedAt: new Date().toISOString() });
+  }
+
+  async function quickSetLandUse(val: string) {
+    setLandUse(val);
+    await db.sessions.update(sessionId, { landUse: val, updatedAt: new Date().toISOString() });
+  }
+
   async function doGPS() {
     setError(null);
     try {
@@ -526,6 +612,14 @@ export default function SessionPage(props: {
       setLat(fix.lat);
       setLon(fix.lon);
       setAcc(fix.accuracyM);
+      if (isEdit && !isEditing) {
+        await db.sessions.update(sessionId, {
+          lat: fix.lat,
+          lon: fix.lon,
+          gpsAccuracyM: fix.accuracyM,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch (e: any) {
       setError(e?.message ?? "GPS failed");
     }
@@ -683,7 +777,7 @@ export default function SessionPage(props: {
     const endTimeIso = now.toISOString();
 
     // Calculate final stats for summary
-    const boundary = selectedField?.boundary || (permission as any)?.boundary;
+    const boundary = selectedField?.boundary || permission?.boundary;
     let finalCoverage = 0;
     if (boundary && tracks && tracks.length > 0) {
         const result = calculateCoverage(boundary, tracks);
@@ -792,6 +886,17 @@ export default function SessionPage(props: {
     }
   }
 
+  const activeStartedAt = new Date(date + ':00Z').getTime();
+  const activeDurationText = formatElapsed(nowTick - activeStartedAt);
+  const activeFindCount = finds?.filter(f => !f.isPending).length ?? 0;
+  const activePendingCount = finds?.filter(f => f.isPending).length ?? 0;
+  const activeCoveragePercent = activeCoverage?.percentCovered ?? null;
+  const activeAcres = selectedField?.boundary
+    ? turfArea(selectedField.boundary) / 4046.86
+    : permission?.boundary
+      ? turfArea(permission.boundary) / 4046.86
+      : null;
+
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
@@ -804,21 +909,29 @@ export default function SessionPage(props: {
       <div className="grid gap-8 mt-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
-                    {isEdit ? "Session Details" : "New Session"}
-                </h2>
-                {isEdit && !isEditing && (
-                    <button 
-                        onClick={() => setIsEditing(true)}
-                        className="text-xs font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
-                    >
-                        Edit Details
-                    </button>
+                {isActiveSessionMode ? (
+                  <p className="text-base font-bold text-gray-500 dark:text-gray-400">
+                    {new Date(date + ':00Z').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                ) : (
+                  <>
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
+                        {isEdit ? "Session Details" : "New Session"}
+                    </h2>
+                    {isEdit && !isEditing && (
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="text-xs font-bold text-emerald-600 hover:text-white hover:bg-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all"
+                        >
+                            Edit Details
+                        </button>
+                    )}
+                  </>
                 )}
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-                {isEdit && (
-                    <button 
+                {!isActiveSessionMode && isEdit && (
+                    <button
                         onClick={handleDelete}
                         disabled={saving}
                         className="text-xs sm:text-sm font-bold text-red-600 hover:text-white hover:bg-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-1 rounded-lg border border-red-200 dark:border-red-800 transition-all disabled:opacity-50 flex-1 sm:flex-none"
@@ -826,7 +939,13 @@ export default function SessionPage(props: {
                         Delete
                     </button>
                 )}
-                <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
+                {isActiveSessionMode ? (
+                  <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
+                    ← Back
+                  </button>
+                ) : (
+                  <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
+                )}
             </div>
         </div>
 
@@ -840,56 +959,214 @@ export default function SessionPage(props: {
             <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {!isEditing && (
                   <div className="flex flex-col gap-6">
-                    <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
-                        <div className="min-w-0 flex-1">
+                    {isActiveSessionMode ? (
+                      <>
+                        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md shadow-emerald-900/5 dark:border-emerald-900/70 dark:bg-gray-900">
+                          <div className="grid grid-cols-[5px_1fr]">
+                            <div className={`${isTracking ? "bg-red-500" : "bg-emerald-500"}`} />
+                            <div className="p-4 sm:p-5">
+                              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                                    <span className={`h-2.5 w-2.5 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
+                                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${isTracking ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
+                                      {isTracking ? "Mapping live" : selectedField ? "Field mode" : "Active session"}
+                                    </span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Started {new Date(date + ':00Z').toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                                  </div>
+                                  <h3 className="m-0 truncate text-3xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
+                                    {selectedField?.name || permission?.name || "Active Session"}
+                                  </h3>
+                                  {selectedField && (
+                                    <p className="mt-2 truncate text-sm font-bold text-gray-500 dark:text-gray-400">{permission?.name}</p>
+                                  )}
+
+                                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
+                                      <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDurationText}</div>
+                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">Live time</div>
+                                    </div>
+                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
+                                      <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeFindCount}</div>
+                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">{activeFindCount === 1 ? "Find" : "Finds"}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
+                                      <div className="truncate text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDistanceKm !== null ? (activeDistanceKm < 1 ? `${Math.round(activeDistanceKm * 1000)}m` : `${activeDistanceKm.toFixed(1)}km`) : "--"}</div>
+                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">Walked</div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={lat == null ? doGPS : undefined}
+                                      className={`rounded-xl border px-3 py-2 text-left transition-colors ${lat != null && lon != null ? "border-emerald-100 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/25" : "border-gray-100 bg-gray-50 hover:border-emerald-200 hover:bg-emerald-50 dark:border-gray-800 dark:bg-gray-950/40 dark:hover:border-emerald-900"}`}
+                                    >
+                                      <div className={`truncate text-base font-black leading-none ${lat != null && lon != null ? "text-emerald-700 dark:text-emerald-300" : "text-gray-400 dark:text-gray-500"}`}>{lat != null && lon != null ? (acc ? `+/-${Math.round(acc)}m` : "Saved") : "Tap to set"}</div>
+                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">GPS</div>
+                                    </button>
+                                  </div>
+
+                                  {activePendingCount > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => nav("/pending")}
+                                      className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                                    >
+                                      {activePendingCount} pending find{activePendingCount === 1 ? "" : "s"} to finish
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="grid w-full grid-cols-2 gap-2 sm:w-44 sm:grid-cols-1">
+                                  <button
+                                    type="button"
+                                    onClick={toggleTracking}
+                                    className={`rounded-xl px-4 py-3 text-sm font-black transition-all active:scale-[0.98] ${isTracking ? "bg-red-600 text-white shadow-md shadow-red-600/20" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50"}`}
+                                  >
+                                    {isTracking ? "Stop Mapping" : "Map Session"}
+                                  </button>
+                                  {isTracking && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowTrackingOverlay(true)}
+                                      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
+                                    >
+                                      Fullscreen
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {isTracking && (
+                                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/25 dark:text-amber-300">
+                                  Keep screen awake while mapping. Locking the phone can stop GPS recording.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <button
+                            type="button"
+                            onClick={() => goSessionFind("full")}
+                            className="flex min-h-[5.5rem] w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-center text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
+                          >
+                            <span className="text-xl font-black">Add Find</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={finishSession}
+                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-black text-gray-500 transition-all hover:border-gray-400 hover:bg-white hover:text-gray-700 active:scale-[0.99] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-gray-200"
+                          >
+                            Finish Session
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Session Data</h4>
+                              {selectedField && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowFieldNotes(true)}
+                                  className={`text-[10px] font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
+                                >
+                                  Notes
+                                </button>
+                              )}
+                            </div>
+                            <div className="divide-y divide-gray-100 text-xs dark:divide-gray-800">
+                              {selectedField && (
+                                <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
+                                  <span className="font-bold text-gray-400">Field</span>
+                                  <span className="truncate font-black text-gray-800 dark:text-gray-100">{selectedField.name}</span>
+                                </div>
+                              )}
+                              {activeAcres !== null && (
+                                <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
+                                  <span className="font-bold text-gray-400">Area</span>
+                                  <span className="font-black text-gray-800 dark:text-gray-100">{activeAcres.toFixed(1)} acres</span>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
+                                <span className="font-bold text-gray-400">Rate</span>
+                                <span className="font-black text-gray-800 dark:text-gray-100">
+                                  {activeFindCount > 0 && (nowTick - activeStartedAt) > 60000
+                                    ? `${(activeFindCount / ((nowTick - activeStartedAt) / 3600000)).toFixed(1)}/hr`
+                                    : "--"}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-3 py-2 last:pb-0">
+                                <span className="font-bold text-gray-400">GPS</span>
+                                {lat != null && lon != null ? (
+                                  <span className="truncate font-mono text-[10px] font-bold text-emerald-600">{lat.toFixed(5)}, {lon.toFixed(5)}</span>
+                                ) : (
+                                  <button type="button" onClick={doGPS} className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:underline">Get GPS</button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+                              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-gray-400">Ground</div>
+                              <div className="flex flex-wrap gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => quickSetStubble(!isStubble)}
+                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${isStubble ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-400 hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-amber-700"}`}
+                              >
+                                Stubble
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => quickSetLandUse(landUse === "Ploughed" ? "" : "Ploughed")}
+                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${landUse === "Ploughed" ? "border-orange-300 bg-orange-100 text-orange-800" : "border-gray-200 bg-white text-gray-400 hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-orange-700"}`}
+                              >
+                                Ploughed
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => quickSetLandUse(landUse === "Pasture" ? "" : "Pasture")}
+                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${landUse === "Pasture" ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-gray-200 bg-white text-gray-400 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-emerald-700"}`}
+                              >
+                                Pasture
+                              </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                            <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Mapping</h4>
+                            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-center dark:border-gray-800 dark:bg-gray-950/50">
+                              <div className="text-lg font-black text-gray-900 dark:text-gray-100">{activeCoveragePercent !== null ? `${Math.round(activeCoveragePercent)}%` : "--"}</div>
+                              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Area covered</div>
+                            </div>
+                            {(selectedField?.boundary || permission?.boundary) && (
+                              <button
+                                type="button"
+                                onClick={() => setShowCoverage(!showCoverage)}
+                                className={`mt-3 w-full rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${showCoverage ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:border-orange-400 dark:border-orange-900 dark:bg-gray-950/50 dark:text-orange-400"}`}
+                              >
+                                {showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? "No Gaps" : "Gaps On") : "Show Gaps"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
+                          <div className="min-w-0 flex-1">
                             <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">{permission?.name || "Unknown Location"}</p>
                             <div className="flex flex-wrap items-center gap-3">
-                                <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
-                                {isFinished && (
-                                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
-                                )}
+                              <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                              {isFinished && (
+                                <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
+                              )}
                             </div>
+                          </div>
                         </div>
-                        {!isFinished && (
-                            <>
-                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                    <button
-                                        onClick={toggleTracking}
-                                        className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-2 border-emerald-100 dark:border-emerald-900'}`}
-                                    >
-                                        <span className="text-sm">{isTracking ? 'Stop Mapping' : 'Map Session'}</span>
-                                    </button>
-                                    {isTracking && (
-                                        <button
-                                            onClick={() => setShowTrackingOverlay(true)}
-                                            className="bg-black text-white px-4 py-3 rounded-2xl font-black shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2 border-2 border-gray-800"
-                                            title="Fullscreen Tracking Mode"
-                                        >
-                                            <span className="text-xs uppercase tracking-widest">Fullscreen</span>
-                                        </button>
-                                    )}
-                                </div>
-                                {isTracking && (
-                                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 mt-1 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-lg px-2 py-1">
-                                        Keep screen awake while mapping. Locking the phone can stop GPS recording.
-                                    </p>
-                                )}
-                            </>
-                        )}
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {!isFinished ? (
-                            <button 
-                                onClick={finishSession}
-                                className="bg-emerald-600 border-2 border-emerald-500 p-4 min-h-[4.5rem] rounded-xl flex flex-col items-center justify-center gap-1 group hover:bg-emerald-500 hover:border-emerald-400 transition-all shadow-md shadow-emerald-600/20 text-white"
-                            >
-                                <span className="text-xs font-black uppercase tracking-widest">Finish Session</span>
-                            </button>
-                        ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-stretch justify-center gap-2 group">
-                                <div className="text-center opacity-70">
-                                    <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-stretch justify-center gap-2 group">
+                            <div className="text-center opacity-70">
+                              <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <button
@@ -919,24 +1196,40 @@ export default function SessionPage(props: {
                                     Re-open Session
                                 </button>
                             </div>
-                        )}
-
-                        <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Session Data</h4>
-                            <div className="flex flex-col gap-2">
-                                <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
-                                    {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">Stubble</span>}
-                                    {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">{landUse}</span>}
-                                    {!isStubble && !landUse && <span className="text-[9px] text-gray-400 dark:text-gray-500 font-bold">No ground condition set</span>}
-                                </div>
-                                {lat != null && lon != null ? (
-                                    <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
-                                ) : (
-                                    <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">Get GPS</button>
-                                )}
+                          <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest opacity-50">Session Data</h4>
+                              {selectedField && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowFieldNotes(true)}
+                                  className={`text-[10px] font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
+                                >
+                                  Notes
+                                </button>
+                              )}
                             </div>
+                            <div className="flex flex-col gap-2">
+                              {selectedField && (
+                                <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 truncate">
+                                  Field: <span className="text-gray-700 dark:text-gray-200">{selectedField.name}</span>
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
+                                {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">Stubble</span>}
+                                {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">{landUse}</span>}
+                                {!isStubble && !landUse && <span className="text-[9px] text-gray-400 dark:text-gray-500 font-bold">No ground condition set</span>}
+                              </div>
+                              {lat != null && lon != null ? (
+                                <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
+                              ) : (
+                                <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">Get GPS</button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                    </div>
+                      </>
+                    )}
 
                     {notes && (
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
@@ -1083,7 +1376,7 @@ export default function SessionPage(props: {
                                         onClick={() => setShowCoverage(!showCoverage)}
                                         className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-[10px] border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
                                     >
-                                        <span>{showCoverage ? 'Gaps On' : 'Show Gaps'}</span>
+                                        <span>{showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? 'No Gaps' : 'Gaps On') : 'Show Gaps'}</span>
                                         {showCoverage && coverageResult && (
                                             <span className="bg-white/20 px-1 rounded text-[8px]">
                                                 {Math.round(100 - coverageResult.percentCovered)}%
@@ -1181,46 +1474,96 @@ export default function SessionPage(props: {
                 )}
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner h-fit">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Finds</h3>
-                    <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{finds?.length ?? 0} total</div>
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 h-fit">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 m-0">Session Finds</h3>
+                    {(finds?.length ?? 0) > 0 && (
+                        <div className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">{finds!.length} found</div>
+                    )}
                 </div>
 
                 {!isEdit && (
-                    <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm">
-                        Save this session first to start recording finds!
+                    <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-600 italic">
+                        Save this session first to record finds.
                     </div>
                 )}
 
                 {isEdit && (
-                    <div className="grid gap-3">
-                        <button 
-                            onClick={() => nav(`/find?permissionId=${permission?.id}&sessionId=${sessionId}`)}
-                            className={`w-full ${isFinished ? 'bg-gray-600 hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-2`}
-                        >
-                            Add Find to Session {isFinished && <span className="text-[10px] opacity-75 font-normal ml-1">(Closed Session)</span>}
-                        </button>
-
+                    <div className="grid gap-2">
                         {finds && finds.length > 0 ? (
-                            finds.map((s) => (
-                                <FindRow 
-                                    key={s.id} 
-                                    find={s} 
-                                    thumbMedia={findThumbMedia?.get(s.id) ?? null} 
-                                    onOpen={() => setOpenFindId(s.id)} 
-                                />
-                            ))
-                        ) : (
-                            <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm">
-                                No finds yet for this session.
+                            <>
+                                {finds.map((s) => (
+                                    <FindRow
+                                        key={s.id}
+                                        find={s}
+                                        thumbMedia={findThumbMedia?.get(s.id) ?? null}
+                                        onOpen={() => setOpenFindId(s.id)}
+                                    />
+                                ))}
+                                {!isActiveSessionMode && (
+                                    <button
+                                        onClick={() => goSessionFind("full")}
+                                        className={`mt-1 w-full ${isFinished ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all`}
+                                    >
+                                        Add Find {isFinished && <span className="opacity-60 font-normal normal-case tracking-normal">(closed session)</span>}
+                                    </button>
+                                )}
+                            </>
+                        ) : isActiveSessionMode ? (
+                            <div className="text-center py-8">
+                                <p className="text-sm text-gray-400 dark:text-gray-500 mb-3">No finds yet.</p>
+                                <button
+                                    onClick={() => goSessionFind("full")}
+                                    className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                >
+                                    + Add first find
+                                </button>
                             </div>
+                        ) : (
+                            <>
+                                <div className="text-center py-6 text-sm text-gray-400 dark:text-gray-600 italic">
+                                    No finds yet for this session.
+                                </div>
+                                <button
+                                    onClick={() => goSessionFind("full")}
+                                    className={`w-full ${isFinished ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all`}
+                                >
+                                    Add Find to Session
+                                </button>
+                            </>
                         )}
                     </div>
                 )}
             </div>
         </div>
       </div>
+      {isActiveSessionMode && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.10)] backdrop-blur-md no-print sm:hidden dark:border-gray-800 dark:bg-gray-950/95">
+          <div className="mx-auto grid max-w-4xl grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => goSessionFind("quick")}
+              className="rounded-xl bg-emerald-600 px-2 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-emerald-600/20"
+            >
+              Quick Find
+            </button>
+            <button
+              type="button"
+              onClick={toggleTracking}
+              className={`rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest ${isTracking ? "bg-red-600 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"}`}
+            >
+              {isTracking ? "Stop" : "Map"}
+            </button>
+            <button
+              type="button"
+              onClick={finishSession}
+              className="rounded-xl bg-gray-950 px-2 py-3 text-[10px] font-black uppercase tracking-widest text-white dark:bg-gray-100 dark:text-gray-950"
+            >
+              Finish
+            </button>
+          </div>
+        </div>
+      )}
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
         <SessionSummary
@@ -1230,8 +1573,8 @@ export default function SessionPage(props: {
           durationMins={summaryData.durationMins}
           totalTime={summaryData.totalTime}
           permissionId={permission?.id ?? null}
-          sharedPermissionId={(permission as any)?.sharedPermissionId}
-          isClubDayMember={!!(permission as any)?.isClubDayMember}
+          sharedPermissionId={permission?.sharedPermissionId}
+          isClubDayMember={!!permission?.isClubDayMember}
           fieldId={fieldId}
           outcomeResult={summaryData.outcomeResult}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
@@ -1257,13 +1600,20 @@ export default function SessionPage(props: {
           onClose={() => setShowLandownerReport(false)}
         />
       )}
-      {showExportClubDay && permission && (permission as any).sharedPermissionId && (
+      {showExportClubDay && permission && permission.sharedPermissionId && (
         <ExportClubDayModal
           permissionId={permission.id}
-          sharedPermissionId={(permission as any).sharedPermissionId}
+          sharedPermissionId={permission.sharedPermissionId}
           permissionName={permission.name}
-          organiserEmail={(permission as any).organiserEmail}
+          organiserEmail={permission.organiserEmail}
           onClose={() => setShowExportClubDay(false)}
+        />
+      )}
+      {showFieldNotes && selectedField && (
+        <FieldNotesModal
+          field={selectedField}
+          readOnly={!!permission?.isClubDayMember}
+          onClose={() => setShowFieldNotes(false)}
         />
       )}
       <TrackingOverlay 

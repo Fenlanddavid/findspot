@@ -116,7 +116,6 @@ test("settings can export and restore a backup", async ({ page }) => {
   const backupPath = await backupDownload.path();
   expect(backupPath).toBeTruthy();
   const backup = JSON.parse(await readFile(backupPath!, "utf8"));
-  expect(backup.autoBackups).toBeUndefined();
   expect((backup.permissions as any[]).some((row) => row.name === "Smoke Backup Permission")).toBe(true);
   await expect(page.getByText("Backup saved").first()).toBeVisible();
 
