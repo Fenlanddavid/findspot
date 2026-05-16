@@ -8,6 +8,13 @@ let wakeLock: WakeLockSentinel | null = null;
 let isStarting = false;
 let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
 
+function formatGeolocationError(err: GeolocationPositionError) {
+    if (err.code === err.PERMISSION_DENIED) return "Location permission was denied. Allow location access before mapping a session.";
+    if (err.code === err.POSITION_UNAVAILABLE) return "Location is unavailable. Move into open ground and try mapping again.";
+    if (err.code === err.TIMEOUT) return "GPS did not get a fix in time. Move into open ground and try again.";
+    return err.message || "Could not start tracking. Check location permissions and GPS signal.";
+}
+
 export async function closeStaleActiveTracks(staleAfterMs = 0): Promise<number> {
     if (watchId !== null || isStarting) return 0;
 
@@ -60,6 +67,9 @@ export async function startTracking(projectId: string, sessionId: string | null 
     if (watchId !== null || isStarting) {
         throw new Error("Tracking already in progress");
     }
+    if (!navigator.geolocation) {
+        throw new Error("This browser does not support GPS tracking.");
+    }
     isStarting = true;
 
     try {
@@ -70,18 +80,6 @@ export async function startTracking(projectId: string, sessionId: string | null 
         const colors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
         const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-        await db.tracks.add({
-            id: trackId,
-            projectId,
-            sessionId,
-            name,
-            points: [],
-            isActive: true,
-            color: randomColor,
-            createdAt: now,
-            updatedAt: now
-        });
-
         currentTrackId = trackId;
         currentTrackSessionId = sessionId;
 
@@ -90,37 +88,96 @@ export async function startTracking(projectId: string, sessionId: string | null 
         // Re-acquire wake lock when app returns to foreground
         document.addEventListener('visibilitychange', visibilityHandler);
 
-        watchId = navigator.geolocation.watchPosition(
-            async (pos) => {
-                if (!currentTrackId) return;
+        let trackCreated = false;
+        await new Promise<void>((resolve, reject) => {
+            let startSettled = false;
 
-                const newPoint = {
-                    lat: pos.coords.latitude,
-                    lon: pos.coords.longitude,
-                    timestamp: pos.timestamp,
-                    accuracy: pos.coords.accuracy
-                };
+            const failStart = async (err: unknown) => {
+                if (startSettled) {
+                    console.error("Tracking error:", err);
+                    return;
+                }
+                startSettled = true;
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId);
+                    watchId = null;
+                }
+                document.removeEventListener('visibilitychange', visibilityHandler);
+                currentTrackId = null;
+                currentTrackSessionId = null;
+                pointsBuffer = [];
+                await releaseWakeLock().catch(() => {});
+                reject(err);
+            };
 
-                // Only add if accuracy is decent (< 50m) OR it's the first point
-                if (pos.coords.accuracy > 50 && pointsBuffer.length > 0) return;
+            watchId = navigator.geolocation.watchPosition(
+                async (pos) => {
+                    if (!currentTrackId) return;
 
-                pointsBuffer.push(newPoint);
-                await db.tracks.update(currentTrackId, {
-                    points: pointsBuffer,
-                    updatedAt: new Date().toISOString()
-                });
-            },
-            (err) => {
-                console.error("Tracking error:", err);
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            }
-        );
+                    try {
+                        const newPoint = {
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude,
+                            timestamp: pos.timestamp,
+                            accuracy: pos.coords.accuracy
+                        };
+
+                        // Only add if accuracy is decent (< 50m) OR it's the first point
+                        if (pos.coords.accuracy > 50 && pointsBuffer.length > 0) return;
+
+                        pointsBuffer.push(newPoint);
+                        const updatedAt = new Date().toISOString();
+                        if (!trackCreated) {
+                            await db.tracks.add({
+                                id: trackId,
+                                projectId,
+                                sessionId,
+                                name,
+                                points: pointsBuffer,
+                                isActive: true,
+                                color: randomColor,
+                                createdAt: now,
+                                updatedAt
+                            });
+                            trackCreated = true;
+                        } else {
+                            await db.tracks.update(currentTrackId, {
+                                points: pointsBuffer,
+                                updatedAt
+                            });
+                        }
+
+                        if (!startSettled) {
+                            startSettled = true;
+                            resolve();
+                        }
+                    } catch (err) {
+                        await failStart(err);
+                    }
+                },
+                (err) => {
+                    void failStart(new Error(formatGeolocationError(err)));
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
 
         return trackId;
+    } catch (err) {
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+        document.removeEventListener('visibilitychange', visibilityHandler);
+        currentTrackId = null;
+        currentTrackSessionId = null;
+        pointsBuffer = [];
+        await releaseWakeLock().catch(() => {});
+        throw err;
     } finally {
         isStarting = false;
     }

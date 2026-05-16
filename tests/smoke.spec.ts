@@ -163,10 +163,10 @@ test("settings can export and restore a backup", async ({ page }) => {
     buffer: Buffer.from(JSON.stringify(restore)),
   });
   await expect(page.getByText(/Restore "restore\.json"\?/)).toBeVisible();
-  await page.getByRole("button", { name: "Confirm Import" }).click();
-
-  await page.waitForLoadState("networkidle");
-  await page.goto("./");
+  await Promise.all([
+    page.waitForURL(/\/$/),
+    page.getByRole("button", { name: "Confirm Import" }).click(),
+  ]);
   await dismissNonBlockingPrompts(page);
   await expect(page.getByRole("button", { name: "Restored Meadow" })).toBeVisible();
 });

@@ -76,6 +76,61 @@ async function getMediaBlobText(page: Page, mediaId: string) {
   }), mediaId);
 }
 
+async function putPendingFindWithMedia(page: Page, projectId: string, permissionId: string) {
+  const now = new Date().toISOString();
+  await page.evaluate(({ projectId, permissionId, now }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(["finds", "media"], "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      tx.objectStore("finds").put({
+        id: "pending-with-photo",
+        projectId,
+        permissionId,
+        fieldId: null,
+        sessionId: null,
+        findCode: "REG-PENDING",
+        objectType: "Pending Quick Find",
+        isPending: true,
+        lat: null,
+        lon: null,
+        gpsAccuracyM: null,
+        osGridRef: "",
+        w3w: "",
+        period: "Unknown",
+        material: "Other",
+        weightG: null,
+        widthMm: null,
+        heightMm: null,
+        depthMm: null,
+        decoration: "",
+        completeness: "Complete",
+        findContext: "",
+        storageLocation: "",
+        notes: "seeded pending find",
+        createdAt: now,
+        updatedAt: now,
+      });
+      tx.objectStore("media").put({
+        id: "pending-media",
+        projectId,
+        findId: "pending-with-photo",
+        type: "photo",
+        photoType: "in-situ",
+        filename: "pending.txt",
+        mime: "text/plain",
+        blob: new Blob(["pending media"], { type: "text/plain" }),
+        caption: "",
+        scalePresent: false,
+        createdAt: now,
+      });
+    };
+  }), { projectId, permissionId, now });
+}
+
 async function importSettingsBackup(page: Page, filename: string, data: object) {
   await page.goto("./settings");
   await page.locator('input[type="file"][accept=".json"]').setInputFiles({
@@ -84,8 +139,10 @@ async function importSettingsBackup(page: Page, filename: string, data: object) 
     buffer: Buffer.from(JSON.stringify(data)),
   });
   await expect(page.getByText(new RegExp(`Restore "${filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\?`))).toBeVisible();
-  await page.getByRole("button", { name: "Confirm Import" }).click();
-  await page.waitForLoadState("networkidle");
+  await Promise.all([
+    page.waitForURL(/\/$/),
+    page.getByRole("button", { name: "Confirm Import" }).click(),
+  ]);
 }
 
 function regressionBoundary(offset = 0) {
@@ -303,6 +360,30 @@ test("invalid backup import is rejected without wiping existing local data", asy
   const permissions = await readIndexedDbStore(page, "permissions");
   expect((permissions as any[]).some((row) => row.name === "Regression Preserved Farm")).toBe(true);
   expect((permissions as any[]).some((row) => row.name === "Invalid Permission")).toBe(false);
+});
+
+test("deleting a pending find removes attached media", async ({ page }) => {
+  await bootApp(page);
+  const [projects, permissions] = await Promise.all([
+    readIndexedDbStore(page, "projects"),
+    readIndexedDbStore(page, "permissions"),
+  ]);
+  const projectId = (projects as any[])[0].id;
+  const permissionId = (permissions as any[])[0].id;
+  await putPendingFindWithMedia(page, projectId, permissionId);
+
+  await page.goto("./pending");
+  await expect(page.getByText("REG-PENDING")).toBeVisible();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Yes" }).click();
+  await expect(page.getByText("Queue is empty")).toBeVisible();
+
+  const [finds, media] = await Promise.all([
+    readIndexedDbStore(page, "finds"),
+    readIndexedDbStore(page, "media"),
+  ]);
+  expect((finds as any[]).some((row) => row.id === "pending-with-photo")).toBe(false);
+  expect((media as any[]).some((row) => row.id === "pending-media")).toBe(false);
 });
 
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {

@@ -135,8 +135,8 @@ export default function PermissionPage(props: {
 
   const isFirstPermission = useLiveQuery(async () => {
     if (isEdit) return false;
-    return (await db.permissions.count()) === 0;
-  }, [isEdit]);
+    return (await db.permissions.where("projectId").equals(props.projectId).filter(p => !p.isDefault).count()) === 0;
+  }, [isEdit, props.projectId]);
 
   const agreementFile = useLiveQuery(async () => {
     if (!agreementId) return null;
@@ -341,6 +341,7 @@ export default function PermissionPage(props: {
 
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
+  const fieldLabelMarkersRef = React.useRef<Array<{ id: string; marker: maplibregl.Marker; el: HTMLButtonElement }>>([]);
   const fieldRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
   const fieldScrollRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -439,23 +440,6 @@ export default function PermissionPage(props: {
             map.on("mouseenter", "boundary-fill",  () => { map.getCanvas().style.cursor = "pointer"; });
             map.on("mouseleave", "boundary-fill",  () => { map.getCanvas().style.cursor = ""; });
 
-            map.addLayer({
-                id: "field-labels",
-                type: "symbol",
-                source: "fields-boundary",
-                layout: {
-                    "text-field": ["get", "name"],
-                    "text-size": 10,
-                    "text-font": ["Open Sans Bold"],
-                    "text-anchor": "center"
-                },
-                paint: {
-                    "text-color": "#ffffff",
-                    "text-halo-color": "#0d9488",
-                    "text-halo-width": 1
-                }
-            });
-
             map.addSource("tracks", {
                 type: "geojson",
                 data: { type: "FeatureCollection", features: [] }
@@ -504,6 +488,9 @@ export default function PermissionPage(props: {
     }
 
     function updateMapData(map: maplibregl.Map, tracksData: any[]) {
+        fieldLabelMarkersRef.current.forEach(({ marker }) => marker.remove());
+        fieldLabelMarkersRef.current = [];
+
         const trackSource = map.getSource("tracks") as maplibregl.GeoJSONSource;
         if (trackSource) {
             trackSource.setData({
@@ -532,6 +519,39 @@ export default function PermissionPage(props: {
                 }))
             } as any);
         }
+
+        (fields || []).forEach(field => {
+            const center = getBoundaryCenter(field.boundary);
+            if (!center) return;
+
+            const el = document.createElement("button");
+            el.type = "button";
+            el.textContent = field.name;
+            el.style.background = "rgba(13, 148, 136, 0.92)";
+            el.style.border = "1px solid rgba(255, 255, 255, 0.85)";
+            el.style.borderRadius = "999px";
+            el.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.25)";
+            el.style.color = "#ffffff";
+            el.style.cursor = "pointer";
+            el.style.font = "700 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+            el.style.letterSpacing = "0.04em";
+            el.style.maxWidth = "9rem";
+            el.style.overflow = "hidden";
+            el.style.padding = "0.2rem 0.45rem";
+            el.style.textOverflow = "ellipsis";
+            el.style.textTransform = "uppercase";
+            el.style.whiteSpace = "nowrap";
+            el.addEventListener("click", (event) => {
+                event.stopPropagation();
+                setPermissionSelected(false);
+                setSelectedFieldId(prev => prev === field.id ? null : field.id);
+            });
+
+            const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+                .setLngLat([center.lon, center.lat])
+                .addTo(map);
+            fieldLabelMarkersRef.current.push({ id: field.id, marker, el });
+        });
 
         // Fit bounds to everything
         if (boundary && boundary.coordinates?.[0] && Array.isArray(boundary.coordinates[0])) {
@@ -563,6 +583,8 @@ export default function PermissionPage(props: {
     }
 
     return () => {
+        fieldLabelMarkersRef.current.forEach(({ marker }) => marker.remove());
+        fieldLabelMarkersRef.current = [];
         if (mapRef.current) {
             mapRef.current.remove();
             mapRef.current = null;
@@ -607,6 +629,11 @@ export default function PermissionPage(props: {
         map.setPaintProperty("fields-outline", "line-width", 2);
         map.setPaintProperty("fields-outline", "line-opacity", 1);
     }
+    fieldLabelMarkersRef.current.forEach(({ id, el }) => {
+        const selected = id === selectedFieldId;
+        el.style.background = selected ? "rgba(52, 211, 153, 0.96)" : "rgba(13, 148, 136, 0.92)";
+        el.style.boxShadow = selected ? "0 0 0 3px rgba(52, 211, 153, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25)" : "0 2px 8px rgba(0, 0, 0, 0.25)";
+    });
   }, [selectedFieldId]);
 
   useEffect(() => {

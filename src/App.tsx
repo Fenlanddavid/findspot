@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
@@ -30,7 +30,7 @@ const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 
 export function Logo() {
   return (
-    <svg className="w-10 h-10 sm:w-16 sm:h-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className="w-8 h-8 min-[360px]:w-10 min-[360px]:h-10 sm:w-16 sm:h-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#10b981" />
@@ -68,6 +68,7 @@ function Shell() {
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
   const nav = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     ensureDefaultProject().then(async (id) => {
@@ -187,6 +188,8 @@ function Shell() {
 
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
+  const shouldShowBackupReminder = showBackupReminder && (location.pathname === "/" || location.pathname === "/settings");
+
   return (
     <div className="max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
       {isInAppBrowser && (
@@ -225,12 +228,12 @@ function Shell() {
 
       <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link to="/" className="no-underline flex items-center gap-3 group">
+            <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0">
               <Logo />
-              <h1 className="m-0 text-2xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
+              <h1 className="m-0 text-xl min-[360px]:text-2xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
             
-            <div className="flex items-center gap-2 sm:gap-3 border-l pl-3 sm:pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 border-l pl-2 sm:pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0 shrink-0">
                 {!isStandalone && (
                   <div className="relative">
                     <button
@@ -239,7 +242,7 @@ function Shell() {
                       aria-label="Not Installed"
                     >
                       <span aria-hidden="true">⚠️</span>
-                      <span className="hidden min-[360px]:inline">Not Installed</span>
+                      <span className="hidden min-[430px]:inline">Not Installed</span>
                     </button>
                     {showInstallHelp && (
                       <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-3 shadow-xl w-56 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
@@ -257,7 +260,10 @@ function Shell() {
                 >
                   Club/Rally
                 </button>
-                <NavLink to="/settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Settings</NavLink>
+                <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
+                  <span className="min-[400px]:hidden text-base leading-none">⚙</span>
+                  <span className="hidden min-[400px]:inline">Settings</span>
+                </NavLink>
             </div>
         </div>
 
@@ -313,9 +319,9 @@ function Shell() {
             </div>
           </div>
         )}
-        {showBackupReminder && (
-          <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
-            <div className="flex items-center gap-3">
+        {shouldShowBackupReminder && (
+          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-3 min-w-0">
               <span className="text-2xl">🛡️</span>
               <div>
                 <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">Backup Recommended</h4>

@@ -26,6 +26,14 @@ export default function PendingFinds(props: { projectId: string }) {
     }
   }
 
+  async function deletePendingFind(id: string) {
+    await db.transaction("rw", [db.finds, db.media], async () => {
+      await db.media.where("findId").equals(id).delete();
+      await db.finds.delete(id);
+    });
+    setConfirmingDeleteId(null);
+  }
+
   if (pendingFinds === undefined) {
     return <div className="p-10 text-center opacity-50 font-medium">Loading...</div>;
   }
@@ -118,7 +126,7 @@ export default function PendingFinds(props: { projectId: string }) {
                 {confirmingDeleteId === f.id ? (
                   <div className="flex gap-1.5">
                     <button
-                      onClick={async () => { await db.finds.delete(f.id); setConfirmingDeleteId(null); }}
+                      onClick={() => deletePendingFind(f.id)}
                       className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
                     >
                       Yes

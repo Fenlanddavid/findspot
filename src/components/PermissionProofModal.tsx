@@ -73,7 +73,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
                       {formatDate(permission.validFrom)}
                     </div>
                   </div>
-                  <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter border border-emerald-200 dark:border-emerald-800">Verified Access</span>
+                  <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter border border-emerald-200 dark:border-emerald-800">Marked Active</span>
                 </div>
                 <div className="pt-3 border-t border-gray-50 dark:border-gray-800">
                   <div className="flex items-center justify-between mb-2">
@@ -81,8 +81,8 @@ export default function PermissionProofModal({ permission, agreementFile, insura
                     <span className={agreementFile ? "text-emerald-500" : "text-gray-300"}>{agreementFile ? "✅" : "❌"}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-gray-600 dark:text-gray-400 italic">ID Verified</span>
-                    <span className="text-emerald-500">✅</span>
+                    <span className="text-sm font-bold text-gray-600 dark:text-gray-400 italic">ID Check</span>
+                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500">Not recorded</span>
                   </div>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
         <div className="mt-6 text-center">
             <div className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-full border border-emerald-100 dark:border-emerald-800">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-tighter">Locally Verified Secure Proof</span>
+                <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 uppercase tracking-tighter">Local permission record</span>
             </div>
         </div>
       </div>

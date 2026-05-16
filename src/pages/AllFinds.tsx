@@ -10,6 +10,28 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 5;
 
+type FindMapFeature = {
+  type: "Feature";
+  geometry: { type: "Point"; coordinates: [number, number] };
+  properties: { id: string; category: string };
+};
+
+function fitMapToFinds(map: maplibregl.Map, features: FindMapFeature[]) {
+  if (features.length === 0) return;
+  if (features.length === 1) {
+    map.easeTo({
+      center: features[0].geometry.coordinates,
+      zoom: Math.max(map.getZoom(), 16),
+      duration: 0,
+    });
+    return;
+  }
+
+  const bounds = new maplibregl.LngLatBounds();
+  for (const feature of features) bounds.extend(feature.geometry.coordinates);
+  map.fitBounds(bounds, { padding: 72, maxZoom: 17, duration: 0 });
+}
+
 export default function AllFinds(props: { projectId: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<"list" | "map">(searchParams.get("view") === "map" ? "map" : "list");
@@ -75,13 +97,32 @@ export default function AllFinds(props: { projectId: string }) {
     });
   }, [baseFinds, filterPeriod, filterType, filterMaterial, filterPending]);
 
+  const locatedFinds = useMemo(() => (finds ?? []).filter(f => f.lat != null && f.lon != null), [finds]);
+  const mapFeatures = useMemo<FindMapFeature[]>(() => locatedFinds.map(f => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
+    properties: {
+      id: f.id,
+      category: (f.findCategory === 'Coin' || f.findCategory === 'Token / Jetton' || (f.objectType || '').toLowerCase().includes('coin')) ? 'coin' : (f.period || 'Unknown')
+    }
+  })), [locatedFinds]);
+  const mapFeatureSignature = useMemo(
+    () => mapFeatures.map(f => `${f.properties.id}:${f.geometry.coordinates[0]}:${f.geometry.coordinates[1]}`).join("|"),
+    [mapFeatures]
+  );
+
   // --- MAP LOGIC ---
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const lastPos = useRef<{ center: [number, number]; zoom: number } | null>(null);
-  // Keep a ref to the latest finds so the map's load callback can seed data immediately
-  const findsRef = useRef(finds);
-  useEffect(() => { findsRef.current = finds; }, [finds]);
+  const lastFitSignature = useRef<string>("");
+  // Keep a ref to the latest features so the map's load callback can seed data immediately
+  const mapFeaturesRef = useRef(mapFeatures);
+  const mapFeatureSignatureRef = useRef(mapFeatureSignature);
+  useEffect(() => {
+    mapFeaturesRef.current = mapFeatures;
+    mapFeatureSignatureRef.current = mapFeatureSignature;
+  }, [mapFeatures, mapFeatureSignature]);
   const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
   useEffect(() => {
     db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
@@ -117,16 +158,7 @@ export default function AllFinds(props: { projectId: string }) {
     });
 
     map.on('load', () => {
-        const seedFeatures = (findsRef.current ?? [])
-            .filter(f => f.lat != null && f.lon != null)
-            .map(f => ({
-                type: 'Feature' as const,
-                geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
-                properties: {
-                    id: f.id,
-                    category: (f.findCategory === 'Coin' || f.findCategory === 'Token / Jetton' || (f.objectType || '').toLowerCase().includes('coin')) ? 'coin' : (f.period || 'Unknown')
-                }
-            }));
+        const seedFeatures = mapFeaturesRef.current;
 
         map.addSource('finds', {
             type: 'geojson',
@@ -161,6 +193,8 @@ export default function AllFinds(props: { projectId: string }) {
         });
         map.on('mouseenter', 'finds-points', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'finds-points', () => { map.getCanvas().style.cursor = ''; });
+        fitMapToFinds(map, seedFeatures);
+        lastFitSignature.current = mapFeatureSignatureRef.current;
     });
 
     mapRef.current = map;
@@ -185,17 +219,14 @@ export default function AllFinds(props: { projectId: string }) {
         const source = mapRef.current.getSource('finds') as maplibregl.GeoJSONSource;
         source.setData({
             type: 'FeatureCollection',
-            features: finds.filter(f => f.lat != null && f.lon != null).map(f => ({
-                type: 'Feature',
-                geometry: { type: 'Point', coordinates: [f.lon!, f.lat!] },
-                properties: {
-                    id: f.id,
-                    category: (f.findCategory === 'Coin' || f.findCategory === 'Token / Jetton' || (f.objectType || '').toLowerCase().includes('coin')) ? 'coin' : (f.period || 'Unknown')
-                }
-            }))
+            features: mapFeatures
         });
+        if (mapFeatureSignature !== lastFitSignature.current) {
+            fitMapToFinds(mapRef.current, mapFeatures);
+            lastFitSignature.current = mapFeatureSignature;
+        }
     }
-  }, [finds]);
+  }, [finds, mapFeatures, mapFeatureSignature]);
 
   // --- RENDER HELPERS ---
   const visibleFinds = useMemo(() => finds?.slice(0, (page + 1) * PAGE_SIZE), [finds, page]);
@@ -336,7 +367,9 @@ export default function AllFinds(props: { projectId: string }) {
                 </button>
             </div>
             <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl text-[9px] font-black text-white uppercase tracking-widest border border-white/10">
-                {finds?.length ?? 0} Finds Located
+                {locatedFinds.length === (finds?.length ?? 0)
+                  ? `${locatedFinds.length} Finds Located`
+                  : `${locatedFinds.length} of ${finds?.length ?? 0} Finds Located`}
             </div>
         </div>
       )}

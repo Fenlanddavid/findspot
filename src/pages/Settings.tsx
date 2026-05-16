@@ -270,14 +270,15 @@ export default function Settings() {
   async function confirmImport() {
     if (!importPendingFile) return;
     const file = importPendingFile;
-    setImportPendingFile(null);
-    setRestorePreview(null);
-    setRestorePreviewError(null);
+    setDataError(null);
     setImporting(true);
     try {
       const text = await file.text();
       await importData(text);
-      window.location.reload();
+      setImportPendingFile(null);
+      setRestorePreview(null);
+      setRestorePreviewError(null);
+      window.location.assign(new URL("./", window.location.href).toString());
     } catch (e) {
       setDataError("Import failed: " + e);
       setImporting(false);
@@ -313,12 +314,14 @@ export default function Settings() {
   async function handleRestoreSnapshot(snapshot: AutoBackupSnapshot) {
     if (!confirm("Restore this local safety snapshot? This will replace the current FindSpot data on this device.")) return;
     setAutoBackupBusy(true);
+    setImporting(true);
     setDataError(null);
     try {
       await importData(snapshot.backupJson);
-      window.location.reload();
+      window.location.assign(new URL("./", window.location.href).toString());
     } catch (e) {
       setDataError("Safety snapshot restore failed: " + e);
+      setImporting(false);
       setAutoBackupBusy(false);
     }
   }
@@ -331,6 +334,17 @@ export default function Settings() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 pb-20 mt-4">
+      {importing && (
+        <div className="fixed inset-0 z-[80] bg-gray-950/70 backdrop-blur-sm flex items-center justify-center p-4" role="status" aria-live="assertive">
+          <div className="w-full max-w-sm rounded-2xl border border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-900 p-5 shadow-2xl text-center">
+            <div className="mx-auto mb-3 h-10 w-10 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+            <h2 className="text-base font-black text-gray-900 dark:text-gray-100">Restoring Backup</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+              Keep FindSpot open until it reloads with the restored data.
+            </p>
+          </div>
+        </div>
+      )}
       <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
       <div className="mb-6 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4">
         <div className="flex items-center justify-between gap-4">
@@ -388,7 +402,7 @@ export default function Settings() {
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={confirmImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing…" : "Confirm Import"}</button>
-            <button onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); }} className="text-blue-700 dark:text-blue-400 text-xs font-bold hover:underline px-2">Cancel</button>
+            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); }} className="text-blue-700 dark:text-blue-400 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
       )}

@@ -739,6 +739,14 @@ export default function FindPage(props: {
     return { label: `GPS Poor: ${Math.round(acc)}m`, color: "text-red-600 dark:text-red-400" };
   }, [gpsCapturing, form.lat, form.lon, form.acc]);
 
+  const saveBarContext = currentField
+    ? `Field: ${currentField.name}`
+    : currentPermission
+      ? `${currentPermission.type === "rally" ? "Rally" : "Permission"}: ${currentPermission.name}`
+      : locationName.trim()
+        ? `Location: ${locationName.trim()}`
+        : "No location set";
+
   // #11 — record quality indicator
   const recordQuality = useMemo(() => {
     const checks = [
@@ -864,7 +872,7 @@ export default function FindPage(props: {
   );
 
   return (
-    <div className="grid gap-6 max-w-4xl mx-auto pb-24">
+    <div className="grid gap-6 max-w-4xl mx-auto pb-8 sm:pb-[calc(8rem+env(safe-area-inset-bottom))] scroll-pb-[calc(10rem+env(safe-area-inset-bottom))]">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-1">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
@@ -1468,7 +1476,11 @@ export default function FindPage(props: {
       )}
 
       {/* #2 — Sticky bottom save bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-3 sm:px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+      <div className="relative sm:fixed sm:bottom-0 sm:left-0 sm:right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-gray-200 dark:border-gray-700 sm:border-x-0 sm:border-b-0 rounded-2xl sm:rounded-none px-3 sm:px-4 pt-2 sm:pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="basis-full min-w-0 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+          <span className="truncate">{saveBarContext}</span>
+          {gpsStatus && <span className={`shrink-0 ${gpsStatus.color}`}>{gpsStatus.label}</span>}
+        </div>
         {/* Quick photo shortcut — always active (#4) */}
         <label className="flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 cursor-pointer bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
           <span className="hidden sm:inline">Add Photo</span><span className="sm:hidden">Photo</span>

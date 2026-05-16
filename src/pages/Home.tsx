@@ -378,12 +378,22 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{nextMove.detail}</p>
             )}
           </div>
-          <button
-            onClick={nextMove.action}
-            className={`shrink-0 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
-          >
-            {nextMove.cta}
-          </button>
+          <div className="flex shrink-0 flex-col sm:flex-row gap-2">
+            {nextMove.type === 'active_session' && activeSession && (
+              <button
+                onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
+                className="text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
+              >
+                Quick Find
+              </button>
+            )}
+            <button
+              onClick={nextMove.action}
+              className={`text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
+            >
+              {nextMove.cta}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
@@ -650,9 +660,12 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
-            <button onClick={props.goAllFinds} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All Finds</button>
+            <button onClick={props.goAllFinds} className="shrink-0 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">
+              <span className="sm:hidden">Finds</span>
+              <span className="hidden sm:inline">Open All Finds</span>
+            </button>
         </div>
 
         {(!recentFinds || recentFinds.length === 0) && (

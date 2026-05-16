@@ -36,6 +36,54 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'hotspots-fill',                   visibleWhen: s => !s.historicMode },
 ];
 
+function getPolygonCenter(boundary: any): [number, number] | null {
+    const ring = boundary?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length === 0) return null;
+    const points = ring.filter((p: unknown): p is [number, number] =>
+        Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number'
+    );
+    if (points.length === 0) return null;
+    const lons = points.map(p => p[0]);
+    const lats = points.map(p => p[1]);
+    return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
+}
+
+function makeFieldLabelElement(label: string) {
+    const el = document.createElement('div');
+    el.textContent = label;
+    el.style.background = 'rgba(13, 148, 136, 0.9)';
+    el.style.border = '1px solid rgba(94, 234, 212, 0.7)';
+    el.style.borderRadius = '999px';
+    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
+    el.style.color = '#ccfbf1';
+    el.style.font = "800 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    el.style.letterSpacing = '0.04em';
+    el.style.maxWidth = '9rem';
+    el.style.overflow = 'hidden';
+    el.style.padding = '0.2rem 0.45rem';
+    el.style.pointerEvents = 'none';
+    el.style.textOverflow = 'ellipsis';
+    el.style.textTransform = 'uppercase';
+    el.style.whiteSpace = 'nowrap';
+    return el;
+}
+
+function makeAnnotationLabelElement(index: number) {
+    const el = document.createElement('div');
+    el.textContent = String(index);
+    el.style.background = 'rgba(17, 24, 39, 0.92)';
+    el.style.border = '1px solid rgba(249, 115, 22, 0.85)';
+    el.style.borderRadius = '999px';
+    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
+    el.style.color = '#fb923c';
+    el.style.font = "800 9px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    el.style.minWidth = '1.1rem';
+    el.style.padding = '0.05rem 0.25rem';
+    el.style.pointerEvents = 'none';
+    el.style.textAlign = 'center';
+    return el;
+}
+
 // Callbacks are stored in a ref so map event handlers never go stale
 // without needing to be in the map-init effect's dependency array.
 type MapCallbacks = {
@@ -94,6 +142,8 @@ export function useFieldGuideMap({
     const clickLabelTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
     const callbacksRef       = useRef<MapCallbacks>(callbacks);
     const annotationModeRef  = useRef(false);
+    const fieldLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
+    const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
 
     // Keep callbacks and annotation mode ref current on every render
     useLayoutEffect(() => { callbacksRef.current = callbacks; });
@@ -240,7 +290,6 @@ export function useFieldGuideMap({
             map.addSource('permission-fields', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'permission-fields-fill',    type: 'fill',   source: 'permission-fields', layout: { visibility: 'none' }, paint: { 'fill-color': '#0d9488', 'fill-opacity': 0.08 } });
             map.addLayer({ id: 'permission-fields-outline', type: 'line',   source: 'permission-fields', layout: { visibility: 'none' }, paint: { 'line-color': '#0d9488', 'line-width': 2, 'line-opacity': 0.9, 'line-dasharray': [4, 2] } });
-            map.addLayer({ id: 'permission-fields-labels',  type: 'symbol', source: 'permission-fields', layout: { visibility: 'none', 'text-field': ['get', 'name'], 'text-size': 11, 'text-font': ['Open Sans Bold'], 'text-anchor': 'center', 'text-max-width': 8 }, paint: { 'text-color': '#5eead4', 'text-halo-color': '#000', 'text-halo-width': 1.5 } });
 
 
             // ── User recorded finds overlay ───────────────────────────────────
@@ -258,11 +307,6 @@ export function useFieldGuideMap({
             map.addLayer({
                 id: 'dev-annotations-circle', type: 'circle', source: 'dev-annotations',
                 paint: { 'circle-radius': 6, 'circle-color': '#f97316', 'circle-opacity': 1, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': 0.9 },
-            });
-            map.addLayer({
-                id: 'dev-annotations-label', type: 'symbol', source: 'dev-annotations',
-                layout: { 'text-field': ['to-string', ['get', 'index']], 'text-size': 9, 'text-offset': [0, -1.8], 'text-anchor': 'bottom', 'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'] },
-                paint: { 'text-color': '#f97316', 'text-halo-color': '#000', 'text-halo-width': 1 },
             });
 
             // ── Event handlers — all use callbacksRef so they never go stale ──
@@ -356,6 +400,10 @@ export function useFieldGuideMap({
         mapRef.current = map;
         return () => {
             if (clickLabelTimer.current) clearTimeout(clickLabelTimer.current);
+            fieldLabelMarkersRef.current.forEach(marker => marker.remove());
+            fieldLabelMarkersRef.current = [];
+            devAnnotationMarkersRef.current.forEach(marker => marker.remove());
+            devAnnotationMarkersRef.current = [];
             if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -624,20 +672,38 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        const src = map.getSource('permission-fields') as maplibregl.GeoJSONSource | undefined;
-        if (!src) return;
-        const visible = showFields !== false
-            ? fieldBoundaries.filter(f => {
-                if (!f.boundary) return false;
-                if (showFields === 'all') return true;
-                if (typeof showFields === 'string' && showFields.startsWith('field:')) return f.id === showFields.slice(6);
-                return f.permissionId === showFields;
-            })
-            : [];
-        src.setData({
-            type: 'FeatureCollection',
-            features: visible.map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
-        } as any);
+        let canceled = false;
+        const doUpdate = () => {
+            if (canceled) return;
+            const src = map.getSource('permission-fields') as maplibregl.GeoJSONSource | undefined;
+            if (!src) return;
+            const visible = showFields !== false
+                ? fieldBoundaries.filter(f => {
+                    if (!f.boundary) return false;
+                    if (showFields === 'all') return true;
+                    if (typeof showFields === 'string' && showFields.startsWith('field:')) return f.id === showFields.slice(6);
+                    return f.permissionId === showFields;
+                })
+                : [];
+            src.setData({
+                type: 'FeatureCollection',
+                features: visible.map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
+            } as any);
+
+            fieldLabelMarkersRef.current.forEach(marker => marker.remove());
+            fieldLabelMarkersRef.current = [];
+            visible.forEach(field => {
+                const center = getPolygonCenter(field.boundary);
+                if (!center) return;
+                const marker = new maplibregl.Marker({ element: makeFieldLabelElement(field.name), anchor: 'center' })
+                    .setLngLat(center)
+                    .addTo(map);
+                fieldLabelMarkersRef.current.push(marker);
+            });
+        };
+        if (map.loaded()) doUpdate();
+        else map.once('load', doUpdate);
+        return () => { canceled = true; };
     }, [fieldBoundaries, showFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Field boundaries visibility ───────────────────────────────────────────
@@ -645,7 +711,7 @@ export function useFieldGuideMap({
         const map = mapRef.current;
         if (!map) return;
         const vis = showFields !== false ? 'visible' : 'none';
-        ['permission-fields-fill', 'permission-fields-outline', 'permission-fields-labels'].forEach(id => {
+        ['permission-fields-fill', 'permission-fields-outline'].forEach(id => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
         });
     }, [showFields]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -705,7 +771,9 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
+        let canceled = false;
         const doUpdate = () => {
+            if (canceled) return;
             const src = map.getSource('dev-annotations') as maplibregl.GeoJSONSource | undefined;
             if (!src) return;
             src.setData({
@@ -716,9 +784,19 @@ export function useFieldGuideMap({
                     properties: { id: a.id, index: i + 1, annotationType: a.annotationType },
                 })),
             } as GeoJSON.FeatureCollection);
+
+            devAnnotationMarkersRef.current.forEach(marker => marker.remove());
+            devAnnotationMarkersRef.current = [];
+            devAnnotations.forEach((annotation, index) => {
+                const marker = new maplibregl.Marker({ element: makeAnnotationLabelElement(index + 1), anchor: 'bottom', offset: [0, -14] })
+                    .setLngLat([annotation.lon, annotation.lat])
+                    .addTo(map);
+                devAnnotationMarkersRef.current.push(marker);
+            });
         };
         if (map.loaded()) doUpdate();
         else map.once('load', doUpdate);
+        return () => { canceled = true; };
     }, [devAnnotations]);
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
