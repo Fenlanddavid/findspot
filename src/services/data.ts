@@ -174,7 +174,10 @@ export async function createAutoBackupSnapshot(
   const counts = await getBackupCounts();
   if (!shouldCreateSnapshotForData(reason, counts)) return null;
 
-  const backupJson = await exportData();
+  // Snapshots intentionally exclude photo blobs — they protect text data only.
+  // Loading all blobs into memory for every auto-save would OOM mobile browsers.
+  // The manual "Download Backup" JSON (exportData with media) is the full archive.
+  const backupJson = await exportData({ includeMedia: false });
   const dataHash = await stableBackupHash(backupJson);
   const latest = await db.autoBackups.orderBy("createdAt").last();
   if (!options.force && latest?.dataHash === dataHash) return latest;
@@ -275,7 +278,9 @@ export async function getAutoBackupStatus() {
   };
 }
 
-export async function exportData(): Promise<string> {
+export async function exportData(options: { includeMedia?: boolean } = {}): Promise<string> {
+  const includeMedia = options.includeMedia !== false;
+
   const projects = await db.projects.toArray();
   const permissions = await db.permissions.toArray();
   const sessions = await db.sessions.toArray();
@@ -283,16 +288,16 @@ export async function exportData(): Promise<string> {
   const tracks = await db.tracks.toArray();
   const settings = await db.settings.toArray();
   const importedPackages = await db.importedPackages.toArray();
-  
-  const media = await db.media.toArray();
-  const mediaExport = await Promise.all(media.map(async (m) => {
-    return {
+  const fields = await db.fields.toArray();
+
+  let mediaExport: any[] = [];
+  if (includeMedia) {
+    const media = await db.media.toArray();
+    mediaExport = await Promise.all(media.map(async (m) => ({
       ...m,
       blob: await blobToBase64(m.blob)
-    };
-  }));
-
-  const fields = await db.fields.toArray();
+    })));
+  }
 
   const data = {
     version: 2,

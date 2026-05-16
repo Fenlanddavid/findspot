@@ -313,7 +313,7 @@ export default function Settings() {
   }
 
   async function handleRestoreSnapshot(snapshot: AutoBackupSnapshot) {
-    if (!confirm("Restore this local safety snapshot? This will replace the current FindSpot data on this device.")) return;
+    if (!confirm("Restore this local safety snapshot? This will replace your finds, permissions, sessions, and fields with the snapshot data. Photos are not included in snapshots and will be cleared.")) return;
     setAutoBackupBusy(true);
     setImporting(true);
     setDataError(null);
@@ -447,7 +447,7 @@ export default function Settings() {
               </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-snug">
-              Local recovery snapshots stay on this device. Download a JSON backup to protect against losing the device or browser data.
+              Local recovery snapshots save your finds, permissions, sessions, and fields — not photos. Download a JSON backup (above) to also back up your photos.
             </p>
           </div>
           <div className="flex shrink-0 items-center justify-between sm:justify-end gap-3">
