@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useCallback, useEffect, useState, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
@@ -14,6 +14,7 @@ import Home from "./pages/Home";
 import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
 import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
+import { useConfirmDialog } from "./components/ConfirmModal";
 
 // Lazily loaded — heavy pages (map, PDF, turf)
 const PermissionPage = React.lazy(() => import("./pages/Permission"));
@@ -28,9 +29,14 @@ const Discover = React.lazy(() => import("./pages/Discover"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 export function Logo() {
   return (
-    <svg className="h-8 w-8 shrink-0 min-[360px]:h-10 min-[360px]:w-10 sm:h-16 sm:w-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className="h-9 w-9 shrink-0 min-[360px]:h-11 min-[360px]:w-11 sm:h-16 sm:w-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#10b981" />
@@ -64,8 +70,10 @@ function Shell() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const nav = useNavigate();
   const location = useLocation();
 
@@ -125,11 +133,41 @@ function Shell() {
     checkStorageQuota();
   }, []);
 
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as BeforeInstallPromptEvent);
+    };
+    const onAppInstalled = () => {
+      setInstallPromptEvent(null);
+      setIsStandalone(true);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  const promptInstall = useCallback(async () => {
+    if (!installPromptEvent) return false;
+    try {
+      await installPromptEvent.prompt();
+      await installPromptEvent.userChoice.catch(() => null);
+      setInstallPromptEvent(null);
+      return true;
+    } catch {
+      setInstallPromptEvent(null);
+      return false;
+    }
+  }, [installPromptEvent]);
+
   const androidIntentUrl = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
 
   async function checkBackupStatus() {
     // Check if there is any data worth backing up
-    const permCount = await db.permissions.count();
+    const permCount = await db.permissions.filter(p => !p.isDefault).count();
     const findCount = await db.finds.count();
     if (permCount === 0 && findCount === 0) {
       setShowBackupReminder(false);
@@ -224,9 +262,9 @@ function Shell() {
         </div>
       )}
 
-      <header className="mb-4 flex flex-col gap-3 rounded-lg border border-gray-200/80 bg-white/80 px-3 py-3 shadow-sm shadow-gray-200/50 backdrop-blur dark:border-gray-800 dark:bg-gray-900/75 dark:shadow-black/10 sm:mb-6 sm:gap-4 sm:px-4">
+      <header className="mb-4 flex flex-col gap-3 border-b border-gray-200/80 bg-white/80 px-3 pb-3 pt-2 backdrop-blur dark:border-gray-800 dark:bg-gray-900/75 sm:mb-6 sm:gap-4 sm:px-4 sm:pt-3">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
-            <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0">
+            <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0 outline-none [-webkit-tap-highlight-color:transparent] focus:outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-emerald-400/60">
               <Logo />
               <h1 className="m-0 text-xl min-[360px]:text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
@@ -235,13 +273,15 @@ function Shell() {
                 <button
                   type="button"
                   onClick={() => setShowClubRallyModal(true)}
-                  className="inline-flex h-6 items-center justify-center rounded-full border border-gray-200 bg-white/70 px-1.5 text-[9px] font-bold leading-none text-gray-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300 whitespace-nowrap"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl px-0.5 transition-colors"
                   aria-label="Club/Rally tools"
                 >
-                  Club/Rally
+                  <span className="inline-flex h-6 items-center justify-center rounded-full border border-gray-200 bg-white/70 px-1.5 text-[9px] font-bold leading-none text-gray-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300 whitespace-nowrap">
+                    Club/Rally
+                  </span>
                 </button>
                 <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => `inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:min-h-0 sm:min-w-0 sm:rounded-none sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                  <span className="min-[400px]:hidden text-lg leading-none">⚙</span>
+                  <span className="min-[400px]:hidden text-xl leading-none">⚙</span>
                   <span className="hidden min-[400px]:inline">Settings</span>
                 </NavLink>
             </div>
@@ -273,8 +313,12 @@ function Shell() {
               <span className="font-bold">Update available.</span> {UPDATE_NOTES} — tap to install.
             </div>
             <button
-              onClick={() => {
-                if (confirm("Update FindSpot now? Any unsaved changes will be lost.")) {
+              onClick={async () => {
+                if (await confirmAction({
+                  title: "Update FindSpot?",
+                  message: "Any unsaved changes will be lost while the app reloads.",
+                  confirmLabel: "Update Now",
+                })) {
                   updateServiceWorker(true);
                 }
               }}
@@ -327,7 +371,7 @@ function Shell() {
         <PageErrorBoundary>
         <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold animate-pulse">Loading…</div>}>
         <Routes>
-            <Route path="/" element={<HomeRouter projectId={projectId} isStandalone={isStandalone} />} />
+            <Route path="/" element={<HomeRouter projectId={projectId} isStandalone={isStandalone} promptInstall={promptInstall} />} />
             <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/permission/${id}`)} />} />
             <Route path="/permission/:id" element={<PermissionPage projectId={projectId} onSaved={() => {}} />} />
             <Route path="/permissions" element={<AllPermissions projectId={projectId} />} />
@@ -381,17 +425,19 @@ function Shell() {
 
       <GlobalActions projectId={projectId} />
       <OnboardingFlow />
+      {confirmDialog}
     </div>
   );
 }
 
 
-function HomeRouter({ projectId, isStandalone }: { projectId: string; isStandalone: boolean }) {
+function HomeRouter({ projectId, isStandalone, promptInstall }: { projectId: string; isStandalone: boolean; promptInstall: () => Promise<boolean> }) {
   const nav = useNavigate();
   return (
     <Home
       projectId={projectId}
       isStandalone={isStandalone}
+      promptInstall={promptInstall}
       goPermission={() => nav("/permission")}
       goPermissionWithParam={(type: string) => nav(`/permission?type=${type}`)}
       goPermissionEdit={(id: string) => nav(`/permission/${id}`)}

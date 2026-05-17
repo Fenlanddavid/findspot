@@ -89,9 +89,9 @@ test("deleting a permission removes its sessions and finds", async ({ page }) =>
   await page.getByRole("button", { name: "Save Find" }).click();
   await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
 
-  page.on("dialog", (dialog) => dialog.accept());
   await page.goto(`./permission/${permissionId}`);
   await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\/$/);
 
   const [permissions, sessions, finds] = await Promise.all([

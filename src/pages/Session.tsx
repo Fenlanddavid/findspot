@@ -16,6 +16,7 @@ import { Modal } from "../components/Modal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
+import { useConfirmDialog } from "../components/ConfirmModal";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -213,6 +214,7 @@ export default function SessionPage(props: {
   const permissionId = searchParams.get("permissionId");
   const urlFieldId = searchParams.get("fieldId");
   const nav = useNavigate();
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   
   // Use a stable sessionId even if it's a new session (id is undefined)
   const [sessionId] = useState(id || uuid());
@@ -632,12 +634,15 @@ export default function SessionPage(props: {
     const mediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
     const trackCount = await db.tracks.where("sessionId").equals(sessionId).count();
 
-    if (!confirm(
-      `Delete this session?\n\nThis will permanently delete:\n` +
+    if (!(await confirmAction({
+      title: "Delete Session?",
+      message: `Delete this session?\n\nThis will permanently delete:\n` +
       `- ${formatDeleteCount(sessionFinds.length, "find")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
-      `- ${formatDeleteCount(trackCount, "GPS track")}`
-    )) return;
+      `- ${formatDeleteCount(trackCount, "GPS track")}`,
+      confirmLabel: "Delete",
+      danger: true,
+    }))) return;
     
     setSaving(true);
     try {
@@ -1190,7 +1195,11 @@ export default function SessionPage(props: {
                                 </div>
                                 <button
                                     onClick={async () => {
-                                        if (sessionId && confirm("Re-open this session?")) {
+                                        if (sessionId && await confirmAction({
+                                            title: "Re-open Session?",
+                                            message: "This will move the session back into your active session queue.",
+                                            confirmLabel: "Re-open",
+                                        })) {
                                             await db.sessions.update(sessionId, { isFinished: false });
                                             setIsFinished(false);
                                         }
@@ -1625,6 +1634,7 @@ export default function SessionPage(props: {
         onClose={() => setShowTrackingOverlay(false)} 
         wakeLockSupported={isWakeLockSupported()} 
       />
+      {confirmDialog}
     </div>
   );
 }

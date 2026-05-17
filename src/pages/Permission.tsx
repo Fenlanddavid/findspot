@@ -17,6 +17,7 @@ import { BoundaryPickerModal } from "../components/BoundaryPickerModal";
 import { FieldModal } from "../components/FieldModal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import PermissionProofModal from "../components/PermissionProofModal";
+import { useConfirmDialog } from "../components/ConfirmModal";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
@@ -54,6 +55,7 @@ export default function PermissionPage(props: {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const nav = useNavigate();
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const isEdit = !!id;
 
   const [name, setName] = useState("");
@@ -741,14 +743,17 @@ export default function PermissionPage(props: {
     const mediaCount = findMediaCount + permissionMediaCount;
     const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
-    if (!confirm(
-      `Delete ${name.trim() || "this permission"}?\n\nThis will permanently delete:\n` +
+    if (!(await confirmAction({
+      title: "Delete Permission?",
+      message: `Delete ${name.trim() || "this permission"}?\n\nThis will permanently delete:\n` +
       `- ${formatDeleteCount(sessions.length, "session")}\n` +
       `- ${formatDeleteCount(finds.length, "find")}\n` +
       `- ${formatDeleteCount(fieldsToDelete.length, "field")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
-      `- ${formatDeleteCount(trackCount, "GPS track")}`
-    )) return;
+      `- ${formatDeleteCount(trackCount, "GPS track")}`,
+      confirmLabel: "Delete",
+      danger: true,
+    }))) return;
 
     setSaving(true);
     try {
@@ -781,15 +786,18 @@ export default function PermissionPage(props: {
     const mediaCount = findMediaCount + permissionMediaCount;
     const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
-    if (!confirm(
-      `Remove ${name.trim() || "this club / rally permission"}?\n\nThis will permanently delete from this device:\n` +
+    if (!(await confirmAction({
+      title: "Remove Rally Permission?",
+      message: `Remove ${name.trim() || "this club / rally permission"}?\n\nThis will permanently delete from this device:\n` +
       `- ${formatDeleteCount(sessions.length, "session")}\n` +
       `- ${formatDeleteCount(finds.length, "find")}\n` +
       `- ${formatDeleteCount(fieldsToDelete.length, "field card")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
       `- ${formatDeleteCount(trackCount, "GPS track")}\n\n` +
-      "Use Keep Rally Record first if you want to keep them."
-    )) return;
+      "Use Keep Rally Record first if you want to keep them.",
+      confirmLabel: "Remove",
+      danger: true,
+    }))) return;
 
     setSaving(true);
     try {
@@ -818,7 +826,11 @@ export default function PermissionPage(props: {
 
   async function handleKeepClubDayAsPersonalRecord() {
     if (!id) return;
-    if (!confirm("Keep this as a personal rally record? Your finds, photos, fields, sessions, and tracks will stay on this device, but this record will no longer be linked to the organiser's QR export.")) return;
+    if (!(await confirmAction({
+      title: "Keep Rally Record?",
+      message: "Your finds, photos, fields, sessions, and tracks will stay on this device, but this record will no longer be linked to the organiser's QR export.",
+      confirmLabel: "Keep Record",
+    }))) return;
 
     setSaving(true);
     try {
@@ -892,12 +904,15 @@ export default function PermissionPage(props: {
       db.finds.where("fieldId").equals(fieldId).count(),
     ]);
 
-    if (!confirm(
-      `Delete ${field?.name || "this field"}?\n\nThis will delete the field card and unlink:\n` +
+    if (!(await confirmAction({
+      title: "Delete Field?",
+      message: `Delete ${field?.name || "this field"}?\n\nThis will delete the field card and unlink:\n` +
       `- ${formatDeleteCount(sessionCount, "session")}\n` +
       `- ${formatDeleteCount(findCount, "find")}\n\n` +
-      "The sessions and finds will remain on this device."
-    )) return;
+      "The sessions and finds will remain on this device.",
+      confirmLabel: "Delete Field",
+      danger: true,
+    }))) return;
     
     try {
       const now = new Date().toISOString();
@@ -2388,7 +2403,11 @@ export default function PermissionPage(props: {
                                                                 <button 
                                                                     key={s.id}
                                                                     onClick={async () => {
-                                                                        if (confirm(`Link this find to the session on ${new Date(s.date).toLocaleDateString()}?`)) {
+                                                                        if (await confirmAction({
+                                                                            title: "Link Find to Visit?",
+                                                                            message: `Link this find to the session on ${new Date(s.date).toLocaleDateString()}?`,
+                                                                            confirmLabel: "Link",
+                                                                        })) {
                                                                             await db.finds.update(f.id, { 
                                                                                 sessionId: s.id, 
                                                                                 fieldId: s.fieldId || f.fieldId,
@@ -2735,6 +2754,8 @@ export default function PermissionPage(props: {
           onClose={() => setShowImportClubDayData(false)}
         />
       )}
+
+      {confirmDialog}
 
     </div>
   );

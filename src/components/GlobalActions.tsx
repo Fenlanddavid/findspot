@@ -18,16 +18,35 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   const [fabIntroduced, setFabIntroduced] = React.useState(() =>
     !!localStorage.getItem('fs_fab_used') || !!localStorage.getItem('fs_onboarding_done')
   );
+  const [homeFabVisible, setHomeFabVisible] = React.useState(() => location.pathname !== "/" || window.scrollY > 180);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (location.pathname !== "/") {
+      setHomeFabVisible(true);
+      return;
+    }
+    const update = () => setHomeFabVisible(window.scrollY > 180);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, [location.pathname]);
   
   const activeSession = useLiveQuery(
-    () => db.sessions.filter(s => !s.isFinished).sortBy("updatedAt").then(arr => arr[arr.length - 1]),
-    []
+    () => db.sessions
+      .where("projectId").equals(projectId)
+      .filter(s => !s.isFinished)
+      .sortBy("updatedAt")
+      .then(arr => arr[arr.length - 1]),
+    [projectId]
   );
 
   const pendingCount = useLiveQuery(
-    () => db.finds.filter(f => !!f.isPending).count(),
-    []
+    () => db.finds
+      .where("projectId").equals(projectId)
+      .filter(f => !!f.isPending)
+      .count(),
+    [projectId]
   );
 
   // Hide on certain pages
@@ -70,6 +89,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
     let targetPerm = activeSession?.permissionId
         ? await db.permissions.get(activeSession.permissionId)
         : undefined;
+    if (targetPerm?.projectId !== projectId) targetPerm = undefined;
 
     if (!targetPerm) {
         targetPerm = await db.permissions
@@ -89,8 +109,8 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
         id,
         projectId,
         permissionId: targetPerm.id,
-        sessionId: activeSession?.id || null,
-        fieldId: activeSession?.fieldId || null,
+        sessionId: activeSession?.projectId === projectId ? activeSession.id : null,
+        fieldId: activeSession?.projectId === projectId ? activeSession.fieldId : null,
         findCode: `QUICK-${Date.now().toString().slice(-6)}`,
         objectType: "Pending Quick Find",
         lat,
@@ -153,7 +173,7 @@ export default function GlobalActions({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex flex-col items-end gap-3 pointer-events-none sm:bottom-6 sm:right-6">
+    <div className={`fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex-col items-end gap-3 pointer-events-none sm:bottom-6 sm:right-6 sm:flex ${homeFabVisible ? "flex" : "hidden"}`}>
       {fabError && (
         <div className="pointer-events-auto bg-red-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-red-500/50 min-w-[200px]">
           <span className="text-xs">{fabError}</span>

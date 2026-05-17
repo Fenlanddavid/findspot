@@ -16,6 +16,7 @@ const FindModal = React.lazy(() =>
 export default function Home(props: {
   projectId: string;
   isStandalone: boolean;
+  promptInstall: () => Promise<boolean>;
   goPermission: () => void;
   goPermissionWithParam: (type: string) => void;
   goPermissionEdit: (id: string) => void;
@@ -163,17 +164,6 @@ export default function Home(props: {
       action: () => void;
     }> = [];
 
-    if (!props.isStandalone && !installNextStepDismissed) {
-      items.push({
-        type: 'install_app',
-        dismissKey: 'install_app',
-        message: 'Install FindSpot on this device',
-        detail: 'Use it from your home screen without the browser bar.',
-        cta: 'Install App',
-        action: () => setShowInstallGuide(true),
-      });
-    }
-
     if (activeSession) {
       const sessionPermName = permissions?.find(p => p.id === activeSession.permissionId)?.name;
       items.push({
@@ -183,6 +173,24 @@ export default function Home(props: {
         detail: sessionPermName ? `Session on: ${sessionPermName}` : undefined,
         cta: 'Resume Session',
         action: () => nav(`/session/${activeSession.id}`),
+      });
+    }
+    if (!props.isStandalone && !installNextStepDismissed) {
+      items.push({
+        type: 'install_app',
+        dismissKey: 'install_app',
+        message: 'Install FindSpot on this device',
+        detail: 'Use it from your home screen without the browser bar.',
+        cta: 'Install App',
+        action: () => {
+          props.promptInstall().then(prompted => {
+            if (prompted) {
+              dismissInstallNextStep();
+              return;
+            }
+            setShowInstallGuide(true);
+          });
+        },
       });
     }
     if (pendingFinds && pendingFinds.length > 0) {
@@ -725,20 +733,40 @@ export default function Home(props: {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recentFinds.slice(0, 3).map((s) => {
               const media = firstMediaMap?.get(s.id);
+              if (!media) {
+                return (
+                  <div
+                    key={s.id}
+                    className="min-h-24 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:shadow-md dark:border-gray-700 dark:bg-gray-800 cursor-pointer"
+                    onClick={() => setOpenFindId(s.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <strong className="inline-flex rounded bg-gray-900 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-tighter text-white dark:bg-black">{s.findCode}</strong>
+                        <div className="mt-3 truncate text-base font-black leading-tight text-gray-800 transition-colors group-hover:text-emerald-600 dark:text-gray-100" title={s.objectType}>{s.objectType || "(Object TBD)"}</div>
+                      </div>
+                      <div className="shrink-0 rounded-lg border border-gray-200 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-400 dark:border-gray-700 dark:text-gray-500">
+                        No photo
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-gray-500 dark:text-gray-400">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="rounded border border-gray-200 bg-gray-50 px-1 font-bold uppercase dark:border-gray-700 dark:bg-gray-900">{s.period}</span>
+                        {s.material !== "Other" && <span className="truncate capitalize">{s.material}</span>}
+                      </div>
+                      <span className="shrink-0 opacity-70">{new Date(s.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div key={s.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800 shadow-md hover:shadow-lg hover:-translate-y-[1px] transition-all duration-200 ease-out flex flex-col h-full group cursor-pointer" onClick={() => setOpenFindId(s.id)}>
                   <div className="aspect-square bg-gray-100 dark:bg-gray-900 relative">
-                    {media ? (
-                      <ScaledImage
-                        media={media}
-                        className="w-full h-full"
-                        imgClassName="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center opacity-30 italic text-[10px]">
-                        No photo
-                      </div>
-                    )}
+                    <ScaledImage
+                      media={media}
+                      className="w-full h-full"
+                      imgClassName="object-cover"
+                    />
                     <div className="absolute top-2 left-2">
                         <strong className="text-white font-mono text-[9px] bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded uppercase tracking-tighter">{s.findCode}</strong>
                     </div>

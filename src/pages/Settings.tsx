@@ -757,17 +757,17 @@ export default function Settings() {
           </p>
         </section>
 
-        {typeof installCount === 'number' && (
-          <div className="mt-2 px-2">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
+        <div className="mt-2 px-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
+            {typeof installCount === 'number' && (
               <div className="flex items-center gap-1 opacity-40">
                 <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
                 <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
         </>
         )}
       </div>
