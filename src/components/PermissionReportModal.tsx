@@ -7,6 +7,23 @@ import { db, Find, GeoJSONPolygon, Media, Permission, Session, Track } from "../
 import { Modal } from "./Modal";
 import { toFarmerLabel, toFarmerDetail, summariseFinds } from "../services/fieldReport";
 import { getSetting } from "../services/data";
+import {
+  REPORT,
+  ReportFooter,
+  ReportHeader,
+  ReportMetricGrid,
+  ReportPillList,
+  ReportSectionHeading,
+  ReportSummaryRows,
+  formatReportDate,
+  formatSessionDateRange,
+  getNotableFindLabels,
+  gpsBadgeStyle,
+  makeReportReference,
+  reportBodyStyle,
+  reportDocumentStyle,
+  plural,
+} from "./ReportChrome";
 
 interface Props {
   permissionId: string;
@@ -37,14 +54,13 @@ function makeMarkerImage(num: number): { width: number; height: number; data: Ui
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
-  ctx.fillStyle = "#059669";
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "#10b981";
+  ctx.stroke();
+  ctx.fillStyle = "#047857";
   const fontSize = num >= 10 ? 11 : 13;
   ctx.font = `bold ${fontSize}px sans-serif`;
   ctx.textAlign = "center";
@@ -137,6 +153,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
 
   const mapDivRef = useRef<HTMLDivElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
+  const generatedAtRef = useRef(new Date());
 
   // ── Load data ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -185,7 +202,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
         const detectoristName = (await getSetting("detectorist", "")) as string;
         const insuranceProvider = (await getSetting("insuranceProvider", "")) as string;
         const ncmdNumber = (await getSetting("ncmdNumber", "")) as string;
-        const isClubDay = !!(permission as any).isSharedPermission;
+        const isClubDay = !!permission.isSharedPermission;
 
         const findIds = allFinds.map(f => f.id);
         const firstPhotos: Media[] = findIds.length > 0
@@ -372,14 +389,50 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
   const summary = summariseFinds(finds);
   const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat != null && f.lon != null));
   const reportTitle = fieldId ? `${permission.name} — ${scopeLabel}` : permission.name;
+  const isGroupReport = permission.type === "rally" || isClubDay;
+  const generatedAt = generatedAtRef.current;
+  const reportReference = makeReportReference(isGroupReport ? "RALLY" : "LAND", permission.id, generatedAt);
+  const reportTypeLabel = isGroupReport ? "Club/Rally Landowner Report" : "Landowner Report";
+  const conductedByLabel = isGroupReport ? "Club/rally organiser" : (detectoristName || permission.collector || "Detectorist");
+  const dateRangeLabel = formatSessionDateRange(sessions);
+  const latestSessionDate = sessions
+    .map(s => new Date(s.date))
+    .filter(date => !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const latestVisitLabel = formatReportDate(latestSessionDate, "short");
+  const eventDateLabel = formatReportDate(permission.validFrom, "long");
+  const organiserContactName = permission.landownerName;
+  const organiserContactPhone = permission.landownerPhone || permission.organiserContactNumber;
+  const organiserContactEmail = permission.landownerEmail || permission.organiserEmail;
+  const notableFinds = getNotableFindLabels(finds);
+  const gpsFindCount = finds.filter(f => f.lat != null && f.lon != null).length;
+  const participantCount = isGroupReport
+    ? new Set(sessions.map(s => s.recorderId || s.recorderName).filter(Boolean)).size
+    : 0;
+  const headerDescriptor = fieldId
+    ? "Single-field summary prepared for landowner review, showing recorded activity, finds and any mapped search coverage for this field."
+    : isGroupReport
+      ? "Club/rally activity summary prepared for landowner review. Member names are intentionally omitted from this copy."
+      : "Permission summary prepared for landowner review, showing recorded visits, finds and mapped activity across the permission.";
+  const summaryRows = [
+    { label: "Sessions recorded", value: sessions.length > 0 ? plural(sessions.length, "visit") : "No visits recorded yet" },
+    { label: "Finds recorded", value: summary.total > 0 ? plural(summary.total, "find") : "No finds recorded yet" },
+    { label: "Latest visit", value: latestVisitLabel || "Not recorded" },
+    { label: "Date range", value: dateRangeLabel || "Not recorded" },
+    { label: "Key highlights", value: notableFinds.length > 0 ? notableFinds.slice(0, 3).join(", ") : "No notable finds highlighted yet" },
+    ...(isGroupReport ? [{ label: "Privacy", value: "Detectorist names are omitted from this landowner copy." }] : []),
+  ];
+  const metricStats = [
+    { label: "Sessions", value: String(sessions.length) },
+    { label: "Finds", value: String(summary.total) },
+    { label: "GPS finds", value: String(gpsFindCount) },
+    ...(participantCount > 0 ? [{ label: "Detectorists", value: String(participantCount) }] : []),
+    ...(summary.coins > 0 ? [{ label: "Coins", value: String(summary.coins) }] : []),
+  ];
 
   const sessionDateMap = new Map(
     sessions.map(s => [s.id, new Date(s.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })])
   );
-  const sessionRecorderMap = new Map(
-    sessions.filter(s => (s as any).recorderName).map(s => [s.id, (s as any).recorderName as string])
-  );
-  const participants = [...new Set(sessions.map(s => (s as any).recorderName as string).filter(Boolean))];
   const hasMultipleSessions = sessions.length > 1;
 
   return (
@@ -417,83 +470,79 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
         {mapError && <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{mapError}</div>}
 
         {/* Off-screen map canvas */}
-        <div ref={mapDivRef} style={{ position: "fixed", left: -9999, top: -9999, width: 720, height: 420, zIndex: -1 }} />
+        <div ref={mapDivRef} style={{ position: "fixed", left: -9999, top: -9999, width: 920, height: 540, zIndex: -1 }} />
 
         {/* Report preview */}
-        <div ref={reportRef} className="bg-white text-black rounded-xl overflow-hidden" style={{ fontFamily: "Georgia, serif" }}>
+        <div ref={reportRef} style={reportDocumentStyle}>
+          <ReportHeader
+            typeLabel={reportTypeLabel}
+            title={permission.name}
+            subtitle={fieldId ? scopeLabel : null}
+            reference={reportReference}
+            conductedBy={conductedByLabel}
+            insuranceText={!isGroupReport && ncmdNumber ? `${insuranceProvider || "NCMD"} No. ${ncmdNumber}` : null}
+            dateText={`Generated ${formatReportDate(generatedAt, "long")}`}
+            descriptor={headerDescriptor}
+          />
 
-          {/* Header */}
-          <div style={{ background: "#064e3b", color: "#fff", padding: "32px 32px 28px", textAlign: "center" }}>
-            <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.2em", opacity: 0.6, marginBottom: 14, textTransform: "uppercase" }}>Landowner Report</div>
-            <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1.15 }}>{permission.name}</div>
-            {fieldId && (
-              <div style={{ fontSize: 14, opacity: 0.75, marginTop: 4, fontStyle: "italic" }}>{scopeLabel}</div>
-            )}
-            <div style={{ width: 48, height: 2, background: "rgba(255,255,255,0.25)", margin: "16px auto" }} />
-            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 2 }}>
-              Conducted by <strong>{detectoristName || permission.collector || "Detectorist"}</strong>
-              {ncmdNumber && <span style={{ opacity: 0.7, fontSize: 11 }}> · {insuranceProvider || "NCMD"} No. {ncmdNumber}</span>}
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 14 }}>
-              Generated: {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-            </div>
-            <div style={{ display: "inline-block", fontSize: 10, fontFamily: "sans-serif", letterSpacing: "0.06em", opacity: 0.6, background: "rgba(255,255,255,0.1)", borderRadius: 4, padding: "4px 12px", fontStyle: "italic" }}>
-              {fieldId ? "Single field summary for landowner review" : "Full permission summary for landowner review"}
-            </div>
-          </div>
-
-          <div style={{ padding: "24px 32px", display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={reportBodyStyle}>
 
             {/* Prepared for */}
             {permission.landownerName && (
-              <div style={{ borderLeft: "3px solid #d1fae5", paddingLeft: 14 }}>
-                <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 2 }}>Prepared for</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>{permission.landownerName}</div>
-                {permission.landownerAddress && <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{permission.landownerAddress}</div>}
+              <div style={{ borderLeft: `3px solid ${REPORT.accent}`, paddingLeft: 14 }}>
+                <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.1em", textTransform: "uppercase", color: REPORT.muted, marginBottom: 2, fontWeight: 800 }}>{isGroupReport ? "Primary event contact" : "Prepared for"}</div>
+                <div style={{ fontSize: 15, fontWeight: 740, color: REPORT.ink }}>{permission.landownerName}</div>
+                {permission.landownerAddress && <div style={{ fontSize: 12, color: REPORT.muted, marginTop: 2 }}>{permission.landownerAddress}</div>}
               </div>
             )}
 
-            {/* Stats row */}
-            {(() => {
-              const stats = [
-                { label: "Sessions", value: String(sessions.length) },
-                { label: "Finds recorded", value: String(summary.total) },
-                ...(summary.coins > 0 ? [{ label: "Coins", value: String(summary.coins) }] : []),
-              ];
-              return (
-                <div style={{ display: "grid", gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 12 }}>
-                  {stats.map(({ label, value }) => (
-                    <div key={label} style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px 14px", textAlign: "center" }}>
-                      <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 4 }}>{label}</div>
-                      <div style={{ fontSize: 16, fontWeight: 900, color: "#064e3b" }}>{value}</div>
+            <ReportSummaryRows rows={summaryRows} />
+
+            {isGroupReport && (
+              <div data-pdf-block style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, padding: "15px 16px", fontFamily: "sans-serif" }}>
+                <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: REPORT.muted, marginBottom: 10, fontWeight: 800 }}>Club/Rally Event Details</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: REPORT.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, fontWeight: 800 }}>Event date</div>
+                    <div style={{ fontSize: 12, color: REPORT.ink, fontWeight: 720 }}>{eventDateLabel || "Not recorded"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: REPORT.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, fontWeight: 800 }}>Member submissions</div>
+                    <div style={{ fontSize: 12, color: REPORT.ink, fontWeight: 720 }}>{plural(sessions.length, "session")} received</div>
+                  </div>
+                  {(organiserContactName || organiserContactPhone || organiserContactEmail) && (
+                    <div>
+                      <div style={{ fontSize: 9, color: REPORT.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, fontWeight: 800 }}>Event contact</div>
+                      <div style={{ fontSize: 12, color: REPORT.ink, fontWeight: 720 }}>
+                        {[organiserContactName, organiserContactPhone, organiserContactEmail].filter(Boolean).join(" · ")}
+                      </div>
                     </div>
-                  ))}
+                  )}
+                  <div>
+                    <div style={{ fontSize: 9, color: REPORT.faint, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 2, fontWeight: 800 }}>Privacy</div>
+                    <div style={{ fontSize: 12, color: REPORT.ink, fontWeight: 720 }}>Detectorist names omitted from this landowner copy</div>
+                  </div>
                 </div>
-              );
-            })()}
-
-            {/* Participants — club/rally digs */}
-            {isClubDay && participants.length > 0 && (
-              <div data-pdf-block>
-                <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 6 }}>Participants</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {participants.map(name => (
-                    <span key={name} style={{ fontSize: 11, fontFamily: "sans-serif", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "3px 10px", color: "#166534", fontWeight: 600 }}>{name}</span>
-                  ))}
+                <div style={{ marginTop: 10, fontSize: 11, color: REPORT.muted, lineHeight: 1.5 }}>
+                  Member-facing club/rally packs do not include private landowner notes, agreements or landowner-only details.
                 </div>
               </div>
             )}
+
+            <ReportMetricGrid stats={metricStats} />
+
+            <ReportPillList title={isGroupReport ? "Significant / Notable Finds" : "Notable Finds"} items={notableFinds} />
 
             {/* Combined map */}
             {hasMap && (
               <div data-pdf-block>
-                <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af", marginBottom: 6 }}>
+                <ReportSectionHeading caption="Find locations and recorded search activity across this permission.">
                   GPS Tracks &amp; Find Locations
-                </div>
+                </ReportSectionHeading>
                 {mapUrl ? (
-                  <img src={mapUrl} alt="Permission map" style={{ width: "100%", borderRadius: 8, border: "1px solid #e5e7eb", display: "block" }} />
+                  <img src={mapUrl} alt="Permission map" style={{ width: "100%", borderRadius: 10, border: `1px solid ${REPORT.line}`, display: "block", background: REPORT.panel }} />
                 ) : (
-                  <div style={{ height: 200, background: "#f3f4f6", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 12 }}>
+                  <div style={{ height: 250, background: REPORT.panelSoft, borderRadius: 10, border: `1px solid ${REPORT.line}`, display: "flex", alignItems: "center", justifyContent: "center", color: REPORT.muted, fontSize: 12 }}>
                     {mapCapturing ? "Rendering..." : "Map unavailable"}
                   </div>
                 )}
@@ -503,47 +552,37 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
             {/* Find list */}
             {finds.length > 0 && (
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: "#9ca3af" }}>
-                    What Was Found
-                  </div>
-                  <div style={{ fontSize: 11, fontFamily: "sans-serif", color: "#6b7280" }}>
-                    {finds.length} {finds.length === 1 ? "find" : "finds"} recorded
-                    {!fieldId && sessions.length > 0 && ` across ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <ReportSectionHeading caption={`${finds.length} ${finds.length === 1 ? "find" : "finds"} recorded${!fieldId && sessions.length > 0 ? ` across ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}` : ""}.`}>
+                  Finds Catalogue
+                </ReportSectionHeading>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                   {finds.map((find, i) => {
                     const num = i + 1;
                     const hasGps = find.lat != null && find.lon != null;
                     const detail = toFarmerDetail(find);
                     const sessionDate = find.sessionId ? sessionDateMap.get(find.sessionId) : null;
-                    const recorder = isClubDay && find.sessionId ? sessionRecorderMap.get(find.sessionId) : null;
                     return (
-                      <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", background: i % 2 === 0 ? "#f9fafb" : "#ffffff", borderRadius: 6, border: "1px solid #e5e7eb" }}>
-                        <div style={{ width: 22, height: 22, borderRadius: "50%", background: hasGps ? "#059669" : "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#fff", fontSize: 9, fontWeight: 900, fontFamily: "sans-serif", marginTop: detail ? 1 : 0 }}>
+                      <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 12px", background: REPORT.panel, borderRadius: 9, border: `1px solid ${REPORT.line}` }}>
+                        <div style={{ ...gpsBadgeStyle(hasGps), marginTop: detail ? 1 : 0 }}>
                           {num}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{toFarmerLabel(find)}</div>
-                          {detail && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2, fontFamily: "sans-serif" }}>{detail}</div>}
+                          <div style={{ fontSize: 13, color: REPORT.ink, fontWeight: 720 }}>{toFarmerLabel(find)}</div>
+                          {detail && <div style={{ fontSize: 11, color: REPORT.muted, marginTop: 3, fontFamily: "sans-serif" }}>{detail}</div>}
                           {!hasGps && (
-                            <div style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", marginTop: 2 }}>No GPS</div>
+                            <div style={{ fontSize: 9, color: REPORT.muted, fontFamily: "sans-serif", marginTop: 4 }}>GPS not recorded</div>
                           )}
                         </div>
-                        {(photoUrls.has(find.id) || (hasMultipleSessions && sessionDate) || recorder) && (
+                        {(photoUrls.has(find.id) || (hasMultipleSessions && sessionDate)) && (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
                             {hasMultipleSessions && sessionDate && (
-                              <span style={{ fontSize: 9, color: "#059669", fontFamily: "sans-serif", fontWeight: 700, whiteSpace: "nowrap" }}>{sessionDate}</span>
-                            )}
-                            {recorder && (
-                              <span style={{ fontSize: 9, color: "#6b7280", fontFamily: "sans-serif", whiteSpace: "nowrap" }}>{recorder}</span>
+                              <span style={{ fontSize: 9, color: REPORT.accentDark, fontFamily: "sans-serif", fontWeight: 760, whiteSpace: "nowrap" }}>{sessionDate}</span>
                             )}
                             {photoUrls.has(find.id) && (
                               <img
                                 src={photoUrls.get(find.id)}
                                 alt=""
-                                style={{ width: 56, height: 56, borderRadius: 4, border: "1px solid #e5e7eb", objectFit: "cover", display: "block" }}
+                                style={{ width: 64, height: 64, borderRadius: 6, border: `1px solid ${REPORT.line}`, objectFit: "cover", display: "block", background: REPORT.panelSoft }}
                               />
                             )}
                           </div>
@@ -553,28 +592,25 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                   })}
                 </div>
                 {finds.some(f => !f.lat || !f.lon) && (
-                  <div style={{ fontSize: 9, color: "#9ca3af", fontFamily: "sans-serif", fontStyle: "italic", marginTop: 6, paddingLeft: 2 }}>
-                    Grey numbers indicate finds recorded without GPS location.
+                  <div style={{ fontSize: 9, color: REPORT.muted, fontFamily: "sans-serif", marginTop: 7, paddingLeft: 2 }}>
+                    Soft grey outlined numbers indicate finds recorded without GPS location.
                   </div>
                 )}
               </div>
             )}
 
             {finds.length === 0 && (
-              <div style={{ textAlign: "center", padding: "24px 0", color: "#9ca3af", fontFamily: "sans-serif", fontSize: 13 }}>
+              <div style={{ textAlign: "center", padding: "24px 0", color: REPORT.muted, fontFamily: "sans-serif", fontSize: 13 }}>
                 No finds recorded for this {fieldId ? "field" : "permission"} yet.
               </div>
             )}
 
             {/* Compliance */}
-            <div data-pdf-block style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16, fontSize: 11, color: "#6b7280", lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
+            <div data-pdf-block style={{ borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, fontSize: 11, color: REPORT.muted, lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
               All activity conducted in accordance with the Code of Practice for Responsible Metal Detecting in England and Wales. All finds recorded and reported as required.
             </div>
 
-            {/* Footer */}
-            <div style={{ textAlign: "center", fontSize: 9, color: "#d1d5db", fontFamily: "sans-serif", letterSpacing: "0.08em", paddingBottom: 4 }}>
-              Generated by FindSpot
-            </div>
+            <ReportFooter reference={reportReference} generatedAt={generatedAt} />
 
           </div>
         </div>

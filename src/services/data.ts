@@ -689,14 +689,14 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
   const existingByHash = await db.importedPackages.where("packageHash").equals(hash).first();
   if (existingByHash) {
     const existingPermission = await db.permissions
-      .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
+      .filter(p => !!p.isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
       .first();
     return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: true, permissionId: existingPermission?.id };
   }
 
   // Check if already joined (different hash each scan due to fresh createdAt)
   const existingPermission = await db.permissions
-    .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
+    .filter(p => !!p.isClubDayMember && p.sharedPermissionId === pack.sharedPermissionId)
     .first();
   if (existingPermission) {
     const now = new Date().toISOString();
@@ -787,7 +787,7 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
 
   // Find the local synthetic permission for this event to get the correct local permissionId
   const localPermission = await db.permissions
-    .filter(p => !!(p as any).isClubDayMember && p.sharedPermissionId === sharedPermissionId)
+    .filter(p => !!p.isClubDayMember && p.sharedPermissionId === sharedPermissionId)
     .first();
   if (!localPermission) throw new Error("Not a Club Day permission — cannot export.");
 

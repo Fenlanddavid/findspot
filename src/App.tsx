@@ -15,6 +15,9 @@ import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
 import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 import { useConfirmDialog } from "./components/ConfirmModal";
+import { Logo } from "./components/Logo";
+
+export { Logo } from "./components/Logo";
 
 // Lazily loaded — heavy pages (map, PDF, turf)
 const PermissionPage = React.lazy(() => import("./pages/Permission"));
@@ -33,35 +36,6 @@ type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
-
-export function Logo() {
-  return (
-    <svg className="h-9 w-9 shrink-0 min-[360px]:h-11 min-[360px]:w-11 sm:h-16 sm:w-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="50%" stopColor="#14b8a6" />
-          <stop offset="100%" stopColor="#0ea5e9" />
-        </linearGradient>
-      </defs>
-      
-      {/* Outer Ring */}
-      <circle cx="256" cy="256" r="200" stroke="url(#logo-grad)" strokeWidth="32" fill="none" />
-      
-      {/* Middle Ring */}
-      <circle cx="256" cy="256" r="120" stroke="url(#logo-grad)" strokeWidth="24" fill="none" opacity="0.6" />
-      
-      {/* Center Bullseye */}
-      <circle cx="256" cy="256" r="50" fill="url(#logo-grad)" />
-      
-      {/* Crosshairs */}
-      <rect x="244" y="20" width="24" height="80" rx="4" fill="url(#logo-grad)" opacity="0.4" />
-      <rect x="244" y="412" width="24" height="80" rx="4" fill="url(#logo-grad)" opacity="0.4" />
-      <rect x="20" y="244" width="80" height="24" rx="4" fill="url(#logo-grad)" opacity="0.4" />
-      <rect x="412" y="244" width="80" height="24" rx="4" fill="url(#logo-grad)" opacity="0.4" />
-    </svg>
-  );
-}
 
 function Shell() {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { importClubDayPack, getSetting, setSetting, normalizeClubDayPack } from "../services/data";
 import type { ClubDayPack } from "../services/data";
-import { Logo } from "../App";
+import { Logo } from "../components/Logo";
 
 function decodePack(value: string): string {
   const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
