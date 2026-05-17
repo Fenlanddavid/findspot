@@ -34,7 +34,7 @@ export default function Home(props: {
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
-const [privacyExpanded, setPrivacyExpanded] = useState(false);
+  const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [dismissedNextMoves, setDismissedNextMoves] = useState<Record<string, number>>(() => {
     try {
       const stored = localStorage.getItem('fs_nextmove_dismissed');
@@ -96,24 +96,23 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
     return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
   }, [props.projectId]);
 
-  const hasOnlyDefault = useMemo(() =>
-    !!permissions && permissions.length > 0 && permissions.every(p => p.isDefault),
+  const realPermissions = useMemo(
+    () => permissions?.filter(p => !p.isDefault) ?? [],
     [permissions]
   );
 
   const filteredPermissions = useMemo(() => {
     if (!permissions) return undefined;
-    const real = permissions.filter(p => !p.isDefault);
-    if (!searchQuery.trim()) return real.slice(0, 3);
+    if (!searchQuery.trim()) return realPermissions.slice(0, 3);
     const q = searchQuery.toLowerCase();
-    return real
+    return realPermissions
       .filter(l =>
         l.name.toLowerCase().includes(q) ||
         (l.landownerName?.toLowerCase().includes(q) ?? false) ||
         (l.notes?.toLowerCase().includes(q) ?? false)
       )
       .slice(0, 3);
-  }, [permissions, searchQuery]);
+  }, [permissions, realPermissions, searchQuery]);
 
   const finds = useLiveQuery(
     async () => db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
@@ -122,6 +121,8 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
+  const completedFindCount = recentFinds?.length ?? 0;
+  const isFirstRun = !!permissions && realPermissions.length === 0 && completedFindCount === 0;
 
   const appSettings = useLiveQuery(async () => {
     const [detectorist, lastBackupDate] = await Promise.all([
@@ -167,8 +168,9 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       });
     }
     if (permissions && permissions.length > 0) {
+      const real = permissions.filter(p => !p.isDefault);
       const now = Date.now();
-      const upcomingRallies = permissions
+      const upcomingRallies = real
         .filter(p => p.type === "rally" && p.validFrom)
         .map(p => ({ ...p, daysUntil: Math.ceil((new Date(p.validFrom!).getTime() - now) / 86400000) }))
         .filter(p => p.daysUntil >= 0 && p.daysUntil <= 14)
@@ -184,7 +186,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           action: () => props.goPermissionEdit(rally.id),
         });
       }
-      const stalePerms = permissions.filter(p => {
+      const stalePerms = real.filter(p => {
         if (p.type === "rally") return false;
         if (!p.lastSessionDate) return false;
         const days = (now - new Date(p.lastSessionDate).getTime()) / 86400000;
@@ -202,7 +204,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           action: () => props.goPermissionEdit(stale.id),
         });
       }
-      const newPerms = permissions.filter(p => p.type !== "rally" && p.sessionCount === 0);
+      const newPerms = real.filter(p => p.type !== "rally" && p.sessionCount === 0);
       for (const newPerm of newPerms) {
         items.push({
           type: 'new_permission',
@@ -247,7 +249,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const adaptiveActions = useMemo(() => {
     if (!permissions || !appSettings) return [];
 
-    const realPerms = permissions.filter(p => !p.isDefault);
+    const realPerms = realPermissions;
     const totalFinds = finds?.filter(f => !f.isPending).length ?? 0;
     const hasSessions = realPerms.some(p => p.sessionCount > 0);
     const isEstablished = realPerms.length > 0 && totalFinds > 0 && hasSessions;
@@ -269,39 +271,39 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
       return sorted[0] && sorted[0][1] >= 5 ? sorted[0][0] : null;
     })();
 
-    type Action = { label: string; action: () => void } | null;
+    type Action = { label: string; mobileLabel?: string; action: () => void } | null;
 
     // ── Action pool ──────────────────────────────────────────────────────────
     // Only shown when "Your Next Move" has no content.
     // Each entry is null when its condition isn't met — nulls are filtered out.
     // Add, rotate, or remove entries here to adapt to user behaviour.
-    // The first 2 non-null entries are shown; order determines priority.
+    // The first 4 non-null entries are available on mobile; larger screens show the first 2.
     const pool: Action[] = isNewUser ? [
-      { label: 'Create Permission',    action: props.goPermission },
-      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
-      { label: 'Search for a Rally',   action: () => setShowClubRallyModal(true) },
+      { label: 'Create Permission',    mobileLabel: 'Permission', action: props.goPermission },
+      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
+      { label: 'Search for a Rally',   mobileLabel: 'Find Rally',  action: () => setShowClubRallyModal(true) },
     ] : isEstablished ? [
-      backupNeeded   ? { label: 'Back Up Your Data',   action: () => nav('/settings') } : null,
-      nameNotSet     ? { label: 'Set Your Name',        action: () => nav('/settings') } : null,
+      backupNeeded   ? { label: 'Back Up Your Data',   mobileLabel: 'Back Up',       action: () => nav('/settings') } : null,
+      nameNotSet     ? { label: 'Set Your Name',        mobileLabel: 'Set Name',      action: () => nav('/settings') } : null,
       permsWithoutBoundary.length > 0
-                     ? { label: 'Add a Field Boundary', action: () => nav(`/permission/${permsWithoutBoundary[0].id}`) } : null,
-      dominantPeriod ? { label: `View ${dominantPeriod} Finds`, action: () => props.goFindsWithFilter(`period=${dominantPeriod}`) } : null,
+                     ? { label: 'Add a Field Boundary', mobileLabel: 'Add Boundary',  action: () => nav(`/permission/${permsWithoutBoundary[0].id}`) } : null,
+      dominantPeriod ? { label: `View ${dominantPeriod} Finds`, mobileLabel: `${dominantPeriod} Finds`, action: () => props.goFindsWithFilter(`period=${dominantPeriod}`) } : null,
       totalFinds >= 10
-                     ? { label: 'Export to CSV',        action: () => nav('/settings') } : null,
+                     ? { label: 'Export to CSV',        mobileLabel: 'Export CSV',    action: () => nav('/settings') } : null,
       realPerms.length > 0
-                     ? { label: 'Share a Permission',   action: () => setShowClubRallyModal(true) } : null,
-      { label: 'Search for a Rally',   action: () => setShowClubRallyModal(true) },
-      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
+                     ? { label: 'Share a Permission',   mobileLabel: 'Share',         action: () => setShowClubRallyModal(true) } : null,
+      { label: 'Search for a Rally',   mobileLabel: 'Find Rally', action: () => setShowClubRallyModal(true) },
+      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
     ] : [
       { label: 'Record Find',          action: () => props.goFind() },
-      { label: 'Scan with FieldGuide', action: props.goFieldGuide },
-      { label: 'Create Permission',    action: props.goPermission },
+      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
+      { label: 'Create Permission',    mobileLabel: 'Permission',  action: props.goPermission },
     ];
     // ────────────────────────────────────────────────────────────────────────
 
     return (pool.filter(Boolean) as NonNullable<Action>[])
       .filter(a => !usedActions.has(a.label))
-      .slice(0, 2)
+      .slice(0, 4)
       .map(a => ({
         ...a,
         action: () => {
@@ -314,7 +316,7 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           a.action();
         },
       }));
-  }, [permissions, finds, appSettings, usedActions, nav, props]);
+  }, [permissions, realPermissions, finds, appSettings, usedActions, nav, props]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
@@ -354,12 +356,36 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         </div>
       </section>
 
-      {nextMove ? (
+      {isFirstRun ? (
+        <section className="grid gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Start here</p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Choose the task that matches where you are now.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {[
+              { label: "Scan Land", detail: "Read the landscape before setting up a permission.", action: props.goFieldGuide },
+              { label: "Add Permission", detail: "Save a farm, field or event you can detect on.", action: props.goPermission },
+              { label: "Record Find", detail: "Log a quick find now and finish details later.", action: () => props.goFind() },
+              { label: "Find a Rally", detail: "Browse clubs, rallies and club digs.", action: () => setShowClubRallyModal(true) },
+            ].map(item => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                className="min-h-20 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-emerald-400 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900"
+              >
+                <span className="block text-sm font-black text-gray-900 dark:text-gray-100">{item.label}</span>
+                <span className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400">{item.detail}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : nextMove ? (
         <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
           {nextMove.type !== 'active_session' && (
             <button
               onClick={() => dismissNextMove(nextMove.dismissKey)}
-              className="absolute top-1.5 right-1.5 w-4 h-4 p-0 flex items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
+              className="absolute top-1.5 right-1.5 flex h-8 w-8 items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
               aria-label="Dismiss"
             >
               ×
@@ -381,15 +407,15 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
           <div className="flex shrink-0 flex-col sm:flex-row gap-2">
             {nextMove.type === 'active_session' && activeSession && (
               <button
-                onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
-                className="text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
+                onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}&mode=quick${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
+                className="min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
               >
                 Quick Find
               </button>
             )}
             <button
               onClick={nextMove.action}
-              className={`text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
+              className={`min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
             >
               {nextMove.cta}
             </button>
@@ -397,44 +423,17 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         </div>
       ) : (
         <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
-          <div className="flex gap-2">
-            {adaptiveActions.map(item => (
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
+            {adaptiveActions.map((item, index) => (
               <button
                 key={item.label}
                 onClick={item.action}
-                className="shrink-0 px-4 py-2.5 rounded-full text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 hover:border-emerald-400 dark:hover:border-emerald-500 transition-all active:scale-[0.98] whitespace-nowrap"
+                className={`${index >= 2 ? 'sm:hidden' : ''} min-h-11 min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-700 transition-all active:scale-[0.98] dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-200 hover:border-emerald-400 dark:hover:border-emerald-500 sm:shrink-0 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal`}
               >
-                {item.label}
+                <span className="sm:hidden">{item.mobileLabel ?? item.label}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </button>
             ))}
-          </div>
-        </div>
-      )}
-
-
-      {hasOnlyDefault && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-          <div>
-            <p className="text-xs font-bold text-gray-600 dark:text-gray-300">
-              Start with FieldGuide
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug mt-0.5">
-              Scan the land before setting up permissions. Find where activity likely was, then record properly when you're ready.
-            </p>
-          </div>
-          <div className="flex gap-2 shrink-0">
-            <button
-              onClick={props.goFieldGuide}
-              className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-2 rounded-xl hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all whitespace-nowrap"
-            >
-              Open FieldGuide
-            </button>
-            <button
-              onClick={props.goPermission}
-              className="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded-xl hover:border-emerald-400 transition-all whitespace-nowrap"
-            >
-              Add Permission
-            </button>
           </div>
         </div>
       )}
@@ -498,37 +497,39 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
         </section>
       )}
 
-      <div
-        className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-md hover:shadow-lg hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
-        onClick={props.goFieldGuide}
-      >
-        <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-          <defs>
-            <linearGradient id="fg-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fcd34d" />
-              <stop offset="50%" stopColor="#fb923c" />
-              <stop offset="100%" stopColor="#f87171" />
-            </linearGradient>
-          </defs>
-          <circle cx="256" cy="256" r="180" stroke="url(#fg-card-grad)" strokeWidth="24" fill="none" />
-          <circle cx="256" cy="256" r="100" stroke="url(#fg-card-grad)" strokeWidth="22" fill="none" opacity="0.45" />
-          <circle cx="256" cy="256" r="40" fill="url(#fg-card-grad)" />
-          <rect x="244" y="40" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
-          <rect x="244" y="402" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
-          <rect x="40" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
-          <rect x="402" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
-        </svg>
-        <div className="flex-1 min-w-0">
-          <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
-          <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
-          className="shrink-0 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+      {!isFirstRun && (
+        <div
+          className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-md hover:shadow-lg hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
+          onClick={props.goFieldGuide}
         >
-          Open
-        </button>
-      </div>
+          <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+            <defs>
+              <linearGradient id="fg-card-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#fcd34d" />
+                <stop offset="50%" stopColor="#fb923c" />
+                <stop offset="100%" stopColor="#f87171" />
+              </linearGradient>
+            </defs>
+            <circle cx="256" cy="256" r="180" stroke="url(#fg-card-grad)" strokeWidth="24" fill="none" />
+            <circle cx="256" cy="256" r="100" stroke="url(#fg-card-grad)" strokeWidth="22" fill="none" opacity="0.45" />
+            <circle cx="256" cy="256" r="40" fill="url(#fg-card-grad)" />
+            <rect x="244" y="40" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+            <rect x="244" y="402" width="24" height="70" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+            <rect x="40" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+            <rect x="402" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
+            <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
+            className="min-h-11 shrink-0 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+          >
+            Open
+          </button>
+        </div>
+      )}
 
       <section className="overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
@@ -560,12 +561,11 @@ const [privacyExpanded, setPrivacyExpanded] = useState(false);
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
                     <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-bold">No real permissions yet.</p>
-                        <p className="text-sm text-emerald-700/70 dark:text-emerald-400/80 max-w-md">Start with FieldGuide to understand the land, or add a permission if you already have access.</p>
-                        <button onClick={props.goFieldGuide} className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
-                            Open FieldGuide
-                        </button>
-                        <button onClick={props.goPermission} className="text-emerald-700 dark:text-emerald-400 text-sm font-bold hover:underline">
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-bold">No saved permissions yet.</p>
+                        <p className="text-sm text-emerald-700/70 dark:text-emerald-400/80 max-w-md">
+                          {isFirstRun ? "Add one when you are ready to keep landowner, field and session records together." : "Add a permission if you already have access to the land."}
+                        </p>
+                        <button onClick={props.goPermission} className="min-h-11 bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
                             Add Permission
                         </button>
                     </div>

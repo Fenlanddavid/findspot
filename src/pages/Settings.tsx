@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   isStoragePersistent,
   requestPersistentStorage,
@@ -20,6 +21,12 @@ type RestorePreview = {
   media: number;
   tracks: number;
 };
+
+type SettingsTab = "data" | "profile" | "detectors" | "app";
+
+function isSettingsTab(value: string | null): value is SettingsTab {
+  return value === "data" || value === "profile" || value === "detectors" || value === "app";
+}
 
 function countBackupRows(value: unknown) {
   return Array.isArray(value) ? value.length : 0;
@@ -74,6 +81,14 @@ const POPULAR_MODELS = [
 ].sort();
 
 export default function Settings() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(() => {
+    const tabParam = searchParams.get("tab");
+    const savedTab = localStorage.getItem("fs_settings_tab");
+    if (isSettingsTab(tabParam)) return tabParam;
+    if (isSettingsTab(savedTab)) return savedTab;
+    return "data";
+  });
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
   const [recorderName, setRecorderName] = useState("");
@@ -129,6 +144,25 @@ export default function Settings() {
     getSetting("defaultDetector", "").then(setDefaultDetector);
 
   }, []);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (isSettingsTab(tabParam) && tabParam !== settingsTab) {
+      setSettingsTab(tabParam);
+      localStorage.setItem("fs_settings_tab", tabParam);
+    }
+  }, [searchParams, settingsTab]);
+
+  function selectSettingsTab(tab: SettingsTab) {
+    setSettingsTab(tab);
+    localStorage.setItem("fs_settings_tab", tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tab === "data") next.delete("tab");
+      else next.set("tab", tab);
+      return next;
+    }, { replace: true });
+  }
 
   async function handleRequestPersistence() {
     const success = await requestPersistentStorage();
@@ -283,6 +317,25 @@ export default function Settings() {
         </div>
       )}
       <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
+      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900 sm:grid-cols-4">
+        {[
+          ["data", "Backup"],
+          ["profile", "Profile"],
+          ["detectors", "Detector"],
+          ["app", "App"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => selectSettingsTab(key as SettingsTab)}
+            className={`min-h-11 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-widest transition-colors ${settingsTab === key ? "bg-white text-emerald-700 shadow-sm dark:bg-gray-800 dark:text-emerald-300" : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {settingsTab === "data" && (
+      <>
       <div className="mb-6 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -295,6 +348,13 @@ export default function Settings() {
             {lastBackup ? "Backup saved" : "Save backup"}
           </span>
         </div>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <h2 className="mb-1 text-sm font-black text-gray-900 dark:text-gray-100">Privacy Guarantee</h2>
+        <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+          Saved finds, permissions, landowner details, photos and backups stay on this device unless you export or share them.
+        </p>
       </div>
 
       {dataError && (
@@ -364,8 +424,11 @@ export default function Settings() {
           {exportingCSV ? "Exporting…" : "Export CSV"}
         </button>
       </div>
+      </>
+      )}
 
       <div className="space-y-8">
+        {settingsTab === "detectors" && (
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             Detector Profiles
@@ -446,7 +509,9 @@ export default function Settings() {
             </div>
           </div>
         </section>
+        )}
 
+        {settingsTab === "profile" && (
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             Profile & Insurance
@@ -587,7 +652,9 @@ export default function Settings() {
             </button>
           </div>
         </section>
+        )}
 
+        {settingsTab === "data" && (
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             App Storage
@@ -644,7 +711,10 @@ export default function Settings() {
             </div>
           </div>
         </section>
+        )}
 
+        {settingsTab === "app" && (
+        <>
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             App Appearance
@@ -734,6 +804,8 @@ export default function Settings() {
               </div>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

@@ -190,7 +190,7 @@ function Shell() {
   const shouldShowBackupReminder = showBackupReminder && (location.pathname === "/" || location.pathname === "/settings");
 
   return (
-    <div className="max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
+    <div className="max-w-6xl mx-auto p-3 pb-28 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
       {isInAppBrowser && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl mb-4 shadow-lg flex flex-col items-center gap-3 text-center border-2 border-white animate-pulse">
             <div className="text-2xl">{isIOS ? "🍎" : "🌍"}</div>
@@ -225,19 +225,19 @@ function Shell() {
         </div>
       )}
 
-      <header className="flex flex-col gap-4 mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">
+      <header className="mb-4 flex flex-col gap-3 rounded-lg border border-gray-200/80 bg-white/80 px-3 py-3 shadow-sm shadow-gray-200/50 backdrop-blur dark:border-gray-800 dark:bg-gray-900/75 dark:shadow-black/10 sm:mb-6 sm:gap-4 sm:px-4">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0">
               <Logo />
-              <h1 className="m-0 text-xl min-[360px]:text-2xl sm:text-5xl font-black tracking-tighter bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
+              <h1 className="m-0 text-xl min-[360px]:text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
             
-            <div className="flex items-center gap-1.5 sm:gap-3 border-l pl-2 sm:pl-4 border-gray-300 dark:border-gray-600 sm:border-0 sm:pl-0 shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 border-l border-gray-200 pl-2 dark:border-gray-700 sm:border-0 sm:pl-0 shrink-0">
                 {!isStandalone && (
                   <div className="relative">
                     <button
                       onClick={() => setShowInstallHelp(h => !h)}
-                      className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 dark:text-emerald-400 bg-amber-50 dark:bg-emerald-950/20 px-1.5 min-[360px]:px-2 py-1 rounded border border-amber-200 dark:border-emerald-800 animate-pulse"
+                      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 text-[10px] font-bold text-amber-600 animate-pulse dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
                       aria-label="Not Installed"
                     >
                       <span aria-hidden="true">⚠️</span>
@@ -254,19 +254,19 @@ function Shell() {
                 <button
                   type="button"
                   onClick={() => setShowClubRallyModal(true)}
-                  className="inline-flex items-center justify-center rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[8px] min-[380px]:text-[9px] font-black uppercase tracking-wide text-teal-700 transition-colors hover:border-teal-500 hover:bg-teal-600 hover:text-white dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:border-teal-500 dark:hover:bg-teal-500 dark:hover:text-white whitespace-nowrap"
-                  aria-label="Club/Rally"
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-200 bg-white/70 px-2.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300 sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-[9px] whitespace-nowrap"
+                  aria-label="Club/Rally tools"
                 >
                   Club/Rally
                 </button>
-                <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                  <span className="min-[400px]:hidden text-base leading-none">⚙</span>
+                <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => `inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:min-h-0 sm:min-w-0 sm:rounded-none sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
+                  <span className="min-[400px]:hidden text-lg leading-none">⚙</span>
                   <span className="hidden min-[400px]:inline">Settings</span>
                 </NavLink>
             </div>
         </div>
 
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="hidden sm:flex items-center justify-between gap-4 flex-wrap">
             <nav className="flex gap-x-3 sm:gap-x-5 gap-y-2 flex-wrap items-center text-[13px] sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
@@ -365,6 +365,28 @@ function Shell() {
         </PageErrorBoundary>
       </main>
 
+      <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+          {[
+            { to: "/", label: "Home", icon: "⌂" },
+            { to: "/fieldguide", label: "FieldGuide", icon: "◎" },
+            { to: "/permissions", label: "Permissions", icon: "□" },
+            { to: "/discover", label: "Discover", icon: "⌕" },
+            { to: "/finds-box", label: "Finds", icon: "☆" },
+          ].map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className={({ isActive }) => `flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-black transition-colors ${isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}
+            >
+              <span className="text-lg leading-none" aria-hidden="true">{item.icon}</span>
+              <span className="max-w-full truncate">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
+
       {showClubRallyModal && (
         <ClubRallyChoiceModal
           onClose={() => setShowClubRallyModal(false)}
@@ -399,8 +421,8 @@ function HomeRouter({ projectId }: { projectId: string }) {
         const q = params.toString();
         nav(`/find${q ? `?${q}` : ""}`);
       }}
-      goAllFinds={() => nav("/finds")}
-      goFindsWithFilter={(filter: string) => filter === 'filter=pending' ? nav('/pending') : nav(`/finds?${filter}`)}
+      goAllFinds={() => nav("/finds-box")}
+      goFindsWithFilter={(filter: string) => filter === 'filter=pending' ? nav('/pending') : nav(`/finds-box?${filter}`)}
       goFindsBox={() => nav("/finds-box")}
       goFieldGuide={() => nav("/fieldguide")}
     />
@@ -416,6 +438,7 @@ function FindRouter({ projectId }: { projectId: string }) {
   const lat = params.get("lat");
   const lon = params.get("lon");
   const manual = params.get("manual") === "true";
+  const mode = params.get("mode");
   return <FindPage
     projectId={projectId}
     permissionId={permissionId ?? null}
@@ -424,6 +447,7 @@ function FindRouter({ projectId }: { projectId: string }) {
     quickId={quickId ?? null}
     initialLat={lat ? parseFloat(lat) : null}
     initialLon={lon ? parseFloat(lon) : null}
+    initialMode={mode === "quick" || mode === "full" ? mode : null}
     manual={manual}
   />;
 }

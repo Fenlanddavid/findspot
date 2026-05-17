@@ -127,8 +127,10 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function del() {
     if (!draft) return;
     setBusy(true);
-    await db.media.where("findId").equals(draft.id).delete();
-    await db.finds.delete(draft.id);
+    await db.transaction("rw", [db.finds, db.media], async () => {
+      await db.media.where("findId").equals(draft.id).delete();
+      await db.finds.delete(draft.id);
+    });
     setBusy(false);
     props.onClose();
   }

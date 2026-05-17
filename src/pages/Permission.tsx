@@ -90,6 +90,7 @@ export default function PermissionPage(props: {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
+  const [showNewPermissionDetails, setShowNewPermissionDetails] = useState(false);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [isPickingBoundary, setIsPickingBoundary] = useState(false);
   const [boundary, setBoundary] = useState<any | null>(null);
@@ -339,7 +340,7 @@ export default function PermissionPage(props: {
     }).catch(() => {
         setFieldGapErrors(new Set(fIds));
     });
-  }, [showCoverage, shownFieldGapIds, boundary, allTracks, id]);
+  }, [showCoverage, shownFieldGapIds, boundary, allTracks, id, fields]);
 
   const mapDivRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<maplibregl.Map | null>(null);
@@ -978,6 +979,8 @@ export default function PermissionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
   const isRally = type === 'rally';
+  const showStarterPermissionFlow = !id && type !== "rally";
+  const showOptionalPermissionDetails = !showStarterPermissionFlow || showNewPermissionDetails;
   const canManageClubDayPack = isEdit && !isClubDayMember && !isPersonalRallyRecord && (isRally || isSharedPermission);
   const attendeeFieldCount = fields?.length ?? 0;
   const canPickAttendeeFields = attendeeFieldCount > 1;
@@ -985,6 +988,17 @@ export default function PermissionPage(props: {
   const attendeeSelectedFieldCenter = attendeeSelectedField?.boundary ? getBoundaryCenter(attendeeSelectedField.boundary) : null;
   const attendeeDefaultFieldId = attendeeFieldCount === 1 ? fields?.[0]?.id : undefined;
   const notesField = fields?.find(f => f.id === notesFieldId) ?? null;
+  const hasPermissionContact = !!landownerName.trim();
+  const hasPermissionAccessRecord = permissionGranted || !!validFrom || !!agreementId;
+  const hasPermissionMappedArea = (lat != null && lon != null) || !!boundary || (fields?.some(f => !!f.boundary) ?? false);
+  const permissionNeedsCompletion = isEdit && !isRally && !isClubDayMember && (
+    !hasPermissionContact || !hasPermissionAccessRecord || !hasPermissionMappedArea
+  );
+
+  function completePermissionDetails() {
+    setShowNewPermissionDetails(true);
+    setIsEditing(true);
+  }
 
   function goRecordFind(fieldId?: string | null) {
     if (!id) return;
@@ -1449,16 +1463,44 @@ export default function PermissionPage(props: {
                     )}
                     <label className="block">
                     <div className="mb-2 text-sm font-black text-gray-800 dark:text-gray-200">{type === 'rally' ? 'Rally / Event Name' : 'Permission Name / Location'}</div>
-                    <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder={type === 'rally' ? "e.g., Weekend Rally, Club Dig North" : "e.g., Smith's Farm, North Field"}
-                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-base"
-                    />
-                    </label>
+	                    <input
+	                        value={name}
+	                        onChange={(e) => setName(e.target.value)}
+	                        placeholder={type === 'rally' ? "e.g., Weekend Rally, Club Dig North" : "e.g., Smith's Farm, North Field"}
+	                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-base"
+	                    />
+	                    </label>
 
-                    {isRally ? (
-                      <>
+	                    {!showOptionalPermissionDetails && (
+	                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20">
+	                        <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fast setup</div>
+	                        <p className="mt-1 text-sm font-medium text-emerald-900 dark:text-emerald-100">
+	                          Create the permission now. Landowner details, GPS, field boundaries, agreements and notes can be added from the permission page afterwards.
+	                        </p>
+	                        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+	                          <button
+	                            type="button"
+	                            onClick={() => setShowNewPermissionDetails(true)}
+	                            className="min-h-11 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-500 hover:bg-emerald-600 hover:text-white dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+	                          >
+	                            Add details now
+	                          </button>
+	                          <button
+	                            type="button"
+	                            onClick={doGPS}
+	                            className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+	                          >
+	                            {lat != null ? "GPS set" : "Set GPS only"}
+	                          </button>
+	                        </div>
+	                      </div>
+	                    )}
+
+	                    {showOptionalPermissionDetails && (
+	                      <>
+
+	                    {isRally ? (
+	                      <>
                         <div className="flex flex-col gap-1 pt-2">
                           <div className="flex items-center gap-3">
                             <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Organiser & Event</div>
@@ -1761,13 +1803,15 @@ export default function PermissionPage(props: {
                     </div>
                     <label className="block">
                     <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">{isRally ? "Event Notes" : "Land/Farm Notes"}</div>
-                    <textarea 
-                        value={notes} 
-                        onChange={(e) => setNotes(e.target.value)} 
-                        rows={4} 
-                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
-                    />
-                    </label>
+	                    <textarea
+	                        value={notes}
+	                        onChange={(e) => setNotes(e.target.value)}
+	                        rows={4}
+	                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-medium"
+	                    />
+	                    </label>
+	                      </>
+	                    )}
 
                     <div className="flex gap-4">
                         <button 
@@ -1895,6 +1939,14 @@ export default function PermissionPage(props: {
 
                         {/* Row 3 — action buttons */}
                         <div className="flex flex-wrap gap-2 items-center">
+                            {permissionNeedsCompletion && (
+                                <button
+                                    onClick={completePermissionDetails}
+                                    className="text-[11px] font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
+                                >
+                                    Complete Permission
+                                </button>
+                            )}
                             {lat != null && lon != null && (
                                 <button
                                     onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}

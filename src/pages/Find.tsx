@@ -148,6 +148,7 @@ export default function FindPage(props: {
   quickId: string | null;
   initialLat?: number | null;
   initialLon?: number | null;
+  initialMode?: "quick" | "full" | null;
   manual?: boolean;
 }) {
   const navigate = useNavigate();
@@ -157,13 +158,15 @@ export default function FindPage(props: {
 
   // #1 — Quick/Full mode (default: quick for new users, full for existing)
   const [recordMode, setRecordMode] = useState<"quick" | "full">(() => {
+    if (props.initialMode) return props.initialMode;
+    if (props.sessionId && !props.quickId) return "quick";
     const stored = localStorage.getItem("findRecordMode");
     if (stored === "quick" || stored === "full") return stored;
     return localStorage.getItem("fs_onboarding_done") ? "full" : "quick";
   });
   const changeMode = (m: "quick" | "full") => {
     setRecordMode(m);
-    localStorage.setItem("findRecordMode", m);
+    if (!props.sessionId) localStorage.setItem("findRecordMode", m);
   };
 
   const permissions = useLiveQuery(
@@ -218,6 +221,12 @@ export default function FindPage(props: {
     if (!currentPermissionId) return [];
     return db.sessions.where("permissionId").equals(currentPermissionId).reverse().sortBy("date");
   }, [currentPermissionId]);
+
+  const sessionOptions = useMemo(() => {
+    const rows = availableSessions ?? [];
+    if (!session || rows.some(s => s.id === session.id)) return rows;
+    return [session, ...rows];
+  }, [availableSessions, session]);
 
   const [form, setForm] = useState<FormState>(() => makeInitialForm(props.initialLat, props.initialLon));
   const [detectors, setDetectors] = useState<string[]>([]);
@@ -1077,6 +1086,7 @@ export default function FindPage(props: {
               <label className="block">
                 <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Object Type</div>
                 <input
+                  aria-label="Object Type / Title / Description"
                   value={form.objectType}
                   onChange={(e) => update({ objectType: e.target.value })}
                   placeholder="e.g., Coin, Buckle, Brooch"
@@ -1126,10 +1136,10 @@ export default function FindPage(props: {
                   className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow font-medium disabled:opacity-50"
                 >
                   <option value="">(No specific session)</option>
-                  {availableSessions?.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {new Date(s.date).toLocaleDateString()} {s.cropType ? `(${s.cropType})` : ""}
-                    </option>
+	                  {sessionOptions.map(s => (
+	                    <option key={s.id} value={s.id}>
+	                      {new Date(s.date).toLocaleDateString()} {s.cropType ? `(${s.cropType})` : ""}
+	                    </option>
                   ))}
                 </select>
               </label>

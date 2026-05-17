@@ -1,174 +1,414 @@
-import React, { useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Media } from "../db";
+import { db, Find, Media, Permission } from "../db";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 
+type FindsFilter = "all" | "top" | "pending";
+
+const PAGE_SIZE = 60;
+
+const PERIOD_COLORS: Record<string, string> = {
+  Prehistoric: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  "Bronze Age": "bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400",
+  "Iron Age": "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400",
+  Celtic: "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400",
+  Roman: "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400",
+  "Anglo-Saxon": "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
+  "Early Medieval": "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
+  Medieval: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400",
+  "Post-medieval": "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400",
+  Modern: "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400",
+  Unknown: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500",
+};
+
+function getFindDate(find: Find) {
+  return find.foundAt ?? find.createdAt;
+}
+
+function formatFindDate(find: Find) {
+  const raw = getFindDate(find);
+  if (!raw) return "Undated";
+  try {
+    return new Date(raw).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return "Undated";
+  }
+}
+
+function getFilter(value: string | null): FindsFilter {
+  return value === "top" || value === "pending" ? value : "all";
+}
+
+function searchText(find: Find, permission?: Permission) {
+  return [
+    find.objectType,
+    find.findCategory,
+    find.findCode,
+    find.notes,
+    find.period,
+    find.material,
+    find.coinType,
+    find.coinDenomination,
+    permission?.name,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
 export default function FindsBox(props: { projectId: string }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [openFindId, setOpenFindId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const searchQuery = searchParams.get("q") ?? "";
+  const activeFilter = getFilter(searchParams.get("filter"));
+  const filterPeriod = searchParams.get("period");
+  const filterMaterial = searchParams.get("material");
+  const filterType = searchParams.get("type");
+
   const finds = useLiveQuery(
     async () => {
-      return db.finds
-        .where("projectId")
-        .equals(props.projectId)
-        .filter(f => !!f.isFavorite)
-        .reverse()
-        .sortBy("createdAt");
+      const rows = await db.finds.where("projectId").equals(props.projectId).toArray();
+      return rows.sort((a, b) => getFindDate(b).localeCompare(getFindDate(a)));
     },
     [props.projectId]
   );
 
-  const findIds = useMemo(() => finds?.map(s => s.id) ?? [], [finds]);
+  const permissions = useLiveQuery(
+    async () => db.permissions.where("projectId").equals(props.projectId).toArray(),
+    [props.projectId]
+  );
+
+  const permissionMap = useMemo(() => {
+    const map = new Map<string, Permission>();
+    for (const permission of permissions ?? []) map.set(permission.id, permission);
+    return map;
+  }, [permissions]);
+
+  const stats = useMemo(() => {
+    if (!finds) return null;
+    return {
+      total: finds.length,
+      complete: finds.filter(f => !f.isPending).length,
+      top: finds.filter(f => !!f.isFavorite && !f.isPending).length,
+      pending: finds.filter(f => !!f.isPending).length,
+      located: finds.filter(f => f.lat != null && f.lon != null).length,
+    };
+  }, [finds]);
+
+  const filteredFinds = useMemo(() => {
+    if (!finds) return undefined;
+    const query = searchQuery.trim().toLowerCase();
+    return finds.filter(find => {
+      if (activeFilter === "top" && (!find.isFavorite || find.isPending)) return false;
+      if (activeFilter === "pending" && !find.isPending) return false;
+      if (activeFilter === "all" && find.isPending) return false;
+      if (filterPeriod && find.period !== filterPeriod) return false;
+      if (filterMaterial && find.material !== filterMaterial) return false;
+      if (filterType) {
+        const type = filterType.toLowerCase();
+        const matchesType = (find.objectType || "").toLowerCase().includes(type) ||
+          (find.findCategory || "").toLowerCase().includes(type) ||
+          (find.coinType || "").toLowerCase().includes(type);
+        if (!matchesType) return false;
+      }
+      if (query && !searchText(find, permissionMap.get(find.permissionId)).includes(query)) return false;
+      return true;
+    });
+  }, [activeFilter, filterMaterial, filterPeriod, filterType, finds, permissionMap, searchQuery]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeFilter, filterMaterial, filterPeriod, filterType, searchQuery]);
+
+  const visibleFinds = useMemo(
+    () => filteredFinds?.slice(0, visibleCount) ?? [],
+    [filteredFinds, visibleCount]
+  );
+
+  const findIds = useMemo(() => visibleFinds.map(s => s.id), [visibleFinds]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
     const media = await db.media.where("findId").anyOf(findIds).toArray();
-    const m = new Map<string, Media>();
-    media.sort((a, b) => {
-        const aDate = a?.createdAt || "";
-        const bDate = b?.createdAt || "";
-        return aDate.localeCompare(bDate);
-    });
+    const map = new Map<string, Media>();
+    media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of media) {
-        if (row.findId && !m.has(row.findId)) m.set(row.findId, row);
+      if (row.findId && !map.has(row.findId)) map.set(row.findId, row);
     }
-    return m;
+    return map;
   }, [findIds]);
 
-  return (
-    <div className="max-w-6xl mx-auto pb-20 px-4">
+  function updateSearch(value: string) {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (value.trim()) next.set("q", value);
+      else next.delete("q");
+      return next;
+    }, { replace: true });
+  }
 
-      {/* Search your finds */}
-      <section className="pt-8 mt-4 mb-10">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100">Search Finds</h3>
-          <button
-            onClick={() => navigate("/find?manual=true")}
-            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
-          >
-            + Add Find
-          </button>
-        </div>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Browse everything you've recorded across all permissions</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            navigate(searchQuery.trim() ? `/finds?q=${encodeURIComponent(searchQuery.trim())}` : "/finds");
-          }}
-          className="flex gap-2"
-        >
-          <div className="relative flex-1">
-            <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search objects, periods, notes…"
-              className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl pl-9 pr-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-            />
+  function setFilter(filter: FindsFilter) {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (filter === "all") next.delete("filter");
+      else next.set("filter", filter);
+      return next;
+    }, { replace: true });
+  }
+
+  function openMapView() {
+    const next = new URLSearchParams(searchParams);
+    next.set("view", "map");
+    if (next.get("filter") === "top") next.delete("filter");
+    navigate(`/finds?${next.toString()}`);
+  }
+
+  const isLoading = finds === undefined || permissions === undefined;
+  const hasAnyFinds = (stats?.total ?? 0) > 0;
+  const noMatches = !isLoading && hasAnyFinds && (filteredFinds?.length ?? 0) === 0;
+  const emptyMain = !isLoading && !hasAnyFinds;
+  const hasFilters = !!searchQuery || activeFilter !== "all" || !!filterPeriod || !!filterMaterial || !!filterType;
+
+  return (
+    <div className="mx-auto max-w-6xl px-4 pb-24">
+      <header className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+        <div>
+          <h1 className="m-0 text-3xl font-black tracking-tight text-gray-950 dark:text-gray-50">Finds</h1>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "all" ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950" : "border-gray-200 bg-white text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
+            >
+              <div className="text-base font-black leading-none">{stats?.complete ?? "--"}</div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">All</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("top")}
+              className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "top" ? "border-amber-500 bg-amber-500 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
+            >
+              <div className="text-base font-black leading-none">{stats?.top ?? "--"}</div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Top</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("pending")}
+              className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "pending" ? "border-amber-600 bg-amber-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
+            >
+              <div className="text-base font-black leading-none">{stats?.pending ?? "--"}</div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Pending</div>
+            </button>
+            <div className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-left text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+              <div className="text-base font-black leading-none">{stats?.located ?? "--"}</div>
+              <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Mapped</div>
+            </div>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 sm:justify-end">
           <button
-            type="submit"
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[10px] uppercase tracking-widest px-5 rounded-xl transition-colors shrink-0"
+            type="button"
+            onClick={() => navigate("/find?manual=true")}
+            className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500"
           >
-            Search
-          </button>
-        </form>
-        <div className="mt-3 flex gap-2 flex-wrap">
-          <button
-            onClick={() => navigate("/finds")}
-            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
-          >
-            Browse All Finds →
+            Add Find
           </button>
           <button
-            onClick={() => navigate("/finds?view=map")}
-            className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest hover:border-emerald-400 transition-all"
+            type="button"
+            onClick={openMapView}
+            className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-emerald-700"
           >
             Map View
           </button>
         </div>
-      </section>
-
-      {/* Header + Starred finds */}
-      <header className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-xl sm:text-2xl">⭐</span>
-          <h1 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase tracking-tight">Top Finds</h1>
-        </div>
-        <p className="text-gray-500 dark:text-gray-400 font-medium max-w-xl leading-relaxed">
-          Tap the star on any find to showcase it here.
-        </p>
       </header>
 
-      {(!finds || finds.length === 0) ? (
-        <div className="text-center py-24 bg-white dark:bg-gray-800/40 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700 shadow-sm">
-          <div className="text-6xl mb-6 opacity-20">⭐</div>
-          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">Your box is empty</h2>
-          <p className="text-gray-500 dark:text-gray-400 max-w-xs mx-auto italic">
-            "Every field has a story. Go out and find yours."
-          </p>
-          <div className="mt-8 flex justify-center">
-            <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 rounded-full border border-emerald-100 dark:border-emerald-800 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                <span>Tip: Tap the</span>
-                <span className="text-amber-500">☆</span>
-                <span>on a find to add it here.</span>
+      <section className="mt-5 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          className="flex flex-col gap-2 sm:flex-row"
+        >
+          <label className="relative flex-1">
+            <span className="sr-only">Search finds</span>
+            <svg className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => updateSearch(e.target.value)}
+              placeholder="Search finds, permissions, periods, notes..."
+              className="min-h-11 w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-9 pr-4 text-sm outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-900"
+            />
+          </label>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchParams({}, { replace: true });
+              }}
+              className="min-h-11 rounded-xl border border-gray-200 px-4 text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 dark:border-gray-700 dark:text-gray-400"
+            >
+              Clear
+            </button>
+          )}
+        </form>
+        {(filterPeriod || filterMaterial || filterType) && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {filterPeriod && (
+              <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                {filterPeriod}
+              </span>
+            )}
+            {filterMaterial && (
+              <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                {filterMaterial}
+              </span>
+            )}
+            {filterType && (
+              <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                {filterType}
+              </span>
+            )}
+          </div>
+        )}
+      </section>
+
+      {isLoading && (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <div className="aspect-[4/3] animate-pulse bg-gray-100 dark:bg-gray-900" />
+              <div className="grid gap-2 p-4">
+                <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+                <div className="h-3 w-1/2 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+              </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {emptyMain && (
+        <div className="mt-6 rounded-3xl border-2 border-dashed border-gray-200 bg-white px-5 py-16 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800/40">
+          <h2 className="mb-2 text-xl font-black text-gray-900 dark:text-gray-100">No finds yet</h2>
+          <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">Start a record manually, or use quick capture while detecting.</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigate("/find?manual=true")}
+              className="min-h-11 rounded-xl bg-emerald-600 px-5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500"
+            >
+              Add Find
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+            >
+              Home
+            </button>
           </div>
         </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {finds.map((s) => {
-            const media = firstMediaMap?.get(s.id);
-            return (
-              <div 
-                key={s.id} 
-                onClick={() => setOpenFindId(s.id)}
-                className="group relative aspect-square bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer border border-gray-100 dark:border-gray-800 hover:border-emerald-200 dark:hover:border-emerald-900"
-              >
-                {media ? (
-                  <ScaledImage 
-                    media={media} 
-                    className="w-full h-full" 
-                    imgClassName="object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center opacity-30 italic text-[10px] bg-gray-50 dark:bg-gray-900">
-                    No photo
-                  </div>
-                )}
-                
-                {/* Overlay with details */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
-                    <p className="text-white font-black text-sm mb-0.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">{s.objectType || "Unidentified"}</p>
-                    <div className="flex justify-between items-center transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300 delay-75">
-                        <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{s.period}</span>
-                        <span className="text-[10px] text-white/60 font-mono">{s.findCode}</span>
-                    </div>
-                </div>
+      )}
 
-                {/* Always visible material tag if interesting */}
-                {s.material !== "Other" && (
-                    <div className="absolute top-2 left-2 pointer-events-none">
-                        <span className="text-[8px] font-black uppercase tracking-widest bg-white/90 dark:bg-gray-900/90 text-gray-800 dark:text-gray-100 px-1.5 py-0.5 rounded shadow-sm border border-gray-100 dark:border-gray-800">
-                            {s.material}
-                        </span>
-                    </div>
-                )}
-                
-                {/* Star indicator */}
-                <div className="absolute top-2 right-2">
-                    <span className="drop-shadow-md text-amber-400 text-sm">⭐</span>
-                </div>
-              </div>
-            );
-          })}
+      {noMatches && (
+        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="mb-2 text-lg font-black text-gray-900 dark:text-gray-100">No matching finds</h2>
+          <button
+            type="button"
+            onClick={() => setSearchParams({}, { replace: true })}
+            className="mt-3 min-h-11 rounded-xl border border-gray-200 px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:text-gray-300"
+          >
+            Clear filters
+          </button>
         </div>
+      )}
+
+      {!isLoading && !emptyMain && !noMatches && (
+        <>
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleFinds.map(find => {
+              const media = firstMediaMap?.get(find.id);
+              const permission = permissionMap.get(find.permissionId);
+              const periodClass = PERIOD_COLORS[find.period] ?? PERIOD_COLORS.Unknown;
+              return (
+                <button
+                  key={find.id}
+                  type="button"
+                  onClick={() => setOpenFindId(find.id)}
+                  className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:bg-gray-800 ${find.isPending ? "border-amber-300 dark:border-amber-700" : "border-gray-200 hover:border-emerald-200 dark:border-gray-700 dark:hover:border-emerald-800"}`}
+                  aria-label={`Open ${find.objectType || "find"} ${find.findCode}`}
+                >
+                  <div className="relative aspect-[4/3] bg-gray-100 dark:bg-gray-900">
+                    {media ? (
+                      <ScaledImage
+                        media={media}
+                        className="h-full w-full"
+                        imgClassName="object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600">
+                        No photo
+                      </div>
+                    )}
+                    <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                      <span className="rounded-lg bg-black/65 px-2 py-1 font-mono text-[9px] font-bold text-white shadow-sm backdrop-blur">
+                        {find.findCode}
+                      </span>
+                      {find.isPending && (
+                        <span className="rounded-lg bg-amber-500 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white shadow-sm">
+                          Pending
+                        </span>
+                      )}
+                    </div>
+                    {find.isFavorite && (
+                      <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2 py-1 text-sm text-amber-500 shadow-sm dark:bg-gray-950/80">
+                        ★
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid gap-3 p-4">
+                    <div className="min-w-0">
+                      <h2 className="truncate text-base font-black text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-gray-100 dark:group-hover:text-emerald-400">
+                        {find.objectType || (find.isPending ? "Pending find" : "Unidentified")}
+                      </h2>
+                      <div className="mt-1 flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        <span className="truncate">{permission?.name || "No permission"}</span>
+                        <span className="shrink-0 opacity-50">•</span>
+                        <span className="shrink-0">{formatFindDate(find)}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className={`rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest ${periodClass}`}>
+                        {find.period}
+                      </span>
+                      {find.material !== "Other" && (
+                        <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                          {find.material}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {filteredFinds && visibleCount < filteredFinds.length && (
+            <div className="mt-6 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount(count => count + PAGE_SIZE)}
+                className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              >
+                Load more
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {openFindId && (

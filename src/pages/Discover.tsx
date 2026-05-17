@@ -373,9 +373,8 @@ function EventCard({
   const qualityTag = getQualityLabel(event);
 
   return (
-    <div
-      onClick={onClick}
-      className={`bg-white dark:bg-gray-800 rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all group ${
+    <article
+      className={`bg-white dark:bg-gray-800 rounded-2xl p-4 hover:shadow-md transition-all group ${
   going || planned
     ? "border-2 border-emerald-400 dark:border-emerald-600 hover:border-emerald-500"
     : "border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-700"
@@ -391,11 +390,11 @@ function EventCard({
               href={event.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-gray-400 hover:text-emerald-500"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 text-gray-400 transition-colors hover:border-emerald-300 hover:text-emerald-500 dark:border-gray-700"
               title="Open website"
+              aria-label={`Open website for ${event.title}`}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
                 <polyline points="15 3 21 3 21 9" />
                 <line x1="10" y1="14" x2="21" y2="3" />
@@ -407,11 +406,11 @@ function EventCard({
               href={event.facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-gray-400 hover:text-blue-500"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 text-gray-400 transition-colors hover:border-blue-300 hover:text-blue-500 dark:border-gray-700"
               title="Facebook"
+              aria-label={`Open Facebook page for ${event.title}`}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
               </svg>
             </a>
@@ -449,7 +448,16 @@ function EventCard({
           <span className="text-[9px] text-gray-400 dark:text-gray-500">{event.entryFee}</span>
         )}
       </div>
-    </div>
+      <button
+        type="button"
+        onClick={onClick}
+        className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-gray-700 dark:bg-gray-900/60 dark:text-emerald-300 dark:hover:border-emerald-700"
+        aria-label={`View details for ${event.title}`}
+      >
+        <span>View details</span>
+        <span className="text-gray-400">Plan / going</span>
+      </button>
+    </article>
   );
 }
 
@@ -492,7 +500,8 @@ function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number
               href={club.facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              aria-label={`Open Facebook page for ${club.name}`}
+              className="inline-flex min-h-11 items-center text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
             >
               Facebook
             </a>
@@ -502,7 +511,8 @@ function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number
               href={club.websiteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              aria-label={`Open website for ${club.name}`}
+              className="inline-flex min-h-11 items-center text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
             >
               Website
             </a>
@@ -1279,6 +1289,8 @@ export default function Discover({ projectId }: { projectId: string }) {
     ).then(([events, clubs]) => {
       setRemoteEvents(events.filter((e) => (e.endDate ?? e.startDate) >= today));
       setRemoteClubs(clubs);
+      setLoadingRemote(false);
+    }).catch(() => {
       setLoadingRemote(false);
     });
   }, []);

@@ -587,10 +587,10 @@ export default function SessionPage(props: {
 
   function goSessionFind(mode: "quick" | "full") {
     if (!permission?.id) return;
-    localStorage.setItem("findRecordMode", mode);
     const params = new URLSearchParams();
     params.set("permissionId", permission.id);
     params.set("sessionId", sessionId);
+    params.set("mode", mode);
     if (fieldId) params.set("fieldId", fieldId);
     nav(`/find?${params.toString()}`);
   }
@@ -910,9 +910,12 @@ export default function SessionPage(props: {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
                 {isActiveSessionMode ? (
-                  <p className="text-base font-bold text-gray-500 dark:text-gray-400">
-                    {new Date(date + ':00Z').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
+                  <div>
+                    <h2 className="m-0 text-sm font-black uppercase tracking-widest text-gray-800 dark:text-gray-100">Session Details</h2>
+                    <p className="mt-1 text-base font-bold text-gray-500 dark:text-gray-400">
+                      {new Date(date + ':00Z').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
@@ -1045,7 +1048,8 @@ export default function SessionPage(props: {
                         <div className="flex flex-col gap-2">
                           <button
                             type="button"
-                            onClick={() => goSessionFind("full")}
+	                            onClick={() => goSessionFind("quick")}
+                            aria-label="Add Find to Session"
                             className="flex min-h-[5.5rem] w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-center text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
                           >
                             <span className="text-xl font-black">Add Find</span>
