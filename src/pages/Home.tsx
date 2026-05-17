@@ -301,8 +301,11 @@ export default function Home(props: {
     ];
     // ────────────────────────────────────────────────────────────────────────
 
-    return (pool.filter(Boolean) as NonNullable<Action>[])
-      .filter(a => !usedActions.has(a.label))
+    const availableActions = pool.filter(Boolean) as NonNullable<Action>[];
+    const unusedActions = availableActions.filter(a => !usedActions.has(a.label));
+    const visibleActions = unusedActions.length > 0 ? unusedActions : availableActions;
+
+    return visibleActions
       .slice(0, 4)
       .map(a => ({
         ...a,
@@ -310,7 +313,7 @@ export default function Home(props: {
           try {
             const stored = sessionStorage.getItem('fs_used_actions');
             const current: string[] = stored ? JSON.parse(stored) : [];
-            sessionStorage.setItem('fs_used_actions', JSON.stringify([...current, a.label]));
+            sessionStorage.setItem('fs_used_actions', JSON.stringify([...new Set([...current, a.label])]));
           } catch {}
           setUsedActions(prev => new Set(prev).add(a.label));
           a.action();
@@ -428,7 +431,7 @@ export default function Home(props: {
               <button
                 key={item.label}
                 onClick={item.action}
-                className={`${index >= 2 ? 'sm:hidden' : ''} min-h-11 min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-700 transition-all active:scale-[0.98] dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-200 hover:border-emerald-400 dark:hover:border-emerald-500 sm:shrink-0 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal`}
+                className={`${index >= 2 ? 'min-[400px]:hidden' : ''} min-h-11 min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-700 transition-all active:scale-[0.98] dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-200 hover:border-emerald-400 dark:hover:border-emerald-500 sm:shrink-0 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal`}
               >
                 <span className="sm:hidden">{item.mobileLabel ?? item.label}</span>
                 <span className="hidden sm:inline">{item.label}</span>
