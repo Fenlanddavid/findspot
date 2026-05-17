@@ -7,6 +7,7 @@ import { ScaledImage } from "../components/ScaledImage";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions, EnrichedPermission } from "../services/permissions";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
+import { Modal } from "../components/Modal";
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -14,6 +15,7 @@ const FindModal = React.lazy(() =>
 
 export default function Home(props: {
   projectId: string;
+  isStandalone: boolean;
   goPermission: () => void;
   goPermissionWithParam: (type: string) => void;
   goPermissionEdit: (id: string) => void;
@@ -28,6 +30,12 @@ export default function Home(props: {
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [installNextStepDismissed, setInstallNextStepDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('fs_install_next_step_dismissed') === 'true';
+    } catch { return false; }
+  });
   const [usedActions, setUsedActions] = useState<Set<string>>(() => {
     try {
       const stored = sessionStorage.getItem('fs_used_actions');
@@ -57,6 +65,16 @@ export default function Home(props: {
   const dismissNextMove = useCallback((key: string) => {
     setDismissedNextMoves(prev => ({ ...prev, [key]: Date.now() }));
   }, []);
+
+  const dismissInstallNextStep = useCallback(() => {
+    try { sessionStorage.setItem('fs_install_next_step_dismissed', 'true'); } catch {}
+    setInstallNextStepDismissed(true);
+  }, []);
+
+  const closeInstallGuide = useCallback(() => {
+    setShowInstallGuide(false);
+    dismissInstallNextStep();
+  }, [dismissInstallNextStep]);
 
   const isDismissed = useCallback((key: string, type: string): boolean => {
     if (type === 'active_session') return false;
@@ -145,6 +163,17 @@ export default function Home(props: {
       action: () => void;
     }> = [];
 
+    if (!props.isStandalone && !installNextStepDismissed) {
+      items.push({
+        type: 'install_app',
+        dismissKey: 'install_app',
+        message: 'Install FindSpot on this device',
+        detail: 'Use it from your home screen without the browser bar.',
+        cta: 'Install App',
+        action: () => setShowInstallGuide(true),
+      });
+    }
+
     if (activeSession) {
       const sessionPermName = permissions?.find(p => p.id === activeSession.permissionId)?.name;
       items.push({
@@ -216,9 +245,16 @@ export default function Home(props: {
       }
     }
     return items;
-  }, [pendingFinds, activeSession, permissions, nav, props]);
+  }, [pendingFinds, activeSession, permissions, nav, props, installNextStepDismissed]);
 
   const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
+
+  const installPlatform = useMemo(() => {
+    const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+    if (/iPad|iPhone|iPod/i.test(ua)) return 'ios';
+    if (/Android/i.test(ua)) return 'android';
+    return 'desktop';
+  }, []);
 
   const currentYearFindStats = useMemo(() => {
     if (!finds) return null;
@@ -359,35 +395,17 @@ export default function Home(props: {
         </div>
       </section>
 
-      {isFirstRun ? (
-        <section className="grid gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Start here</p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Choose the task that matches where you are now.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[
-              { label: "Scan Land", detail: "Read the landscape before setting up a permission.", action: props.goFieldGuide },
-              { label: "Add Permission", detail: "Save a farm, field or event you can detect on.", action: props.goPermission },
-              { label: "Record Find", detail: "Log a quick find now and finish details later.", action: () => props.goFind() },
-              { label: "Find a Rally", detail: "Browse clubs, rallies and club digs.", action: () => setShowClubRallyModal(true) },
-            ].map(item => (
-              <button
-                key={item.label}
-                onClick={item.action}
-                className="min-h-20 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-emerald-400 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900"
-              >
-                <span className="block text-sm font-black text-gray-900 dark:text-gray-100">{item.label}</span>
-                <span className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400">{item.detail}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : nextMove ? (
+      {nextMove ? (
         <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
           {nextMove.type !== 'active_session' && (
             <button
-              onClick={() => dismissNextMove(nextMove.dismissKey)}
+              onClick={() => {
+                if (nextMove.type === 'install_app') {
+                  dismissInstallNextStep();
+                  return;
+                }
+                dismissNextMove(nextMove.dismissKey);
+              }}
               className="absolute top-1.5 right-1.5 flex h-8 w-8 items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
               aria-label="Dismiss"
             >
@@ -424,6 +442,30 @@ export default function Home(props: {
             </button>
           </div>
         </div>
+      ) : isFirstRun ? (
+        <section className="grid gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Start here</p>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Choose the task that matches where you are now.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {[
+              { label: "Scan Land", detail: "Read the landscape before setting up a permission.", action: props.goFieldGuide },
+              { label: "Add Permission", detail: "Save a farm, field or event you can detect on.", action: props.goPermission },
+              { label: "Record Find", detail: "Log a quick find now and finish details later.", action: () => props.goFind() },
+              { label: "Find a Rally", detail: "Browse clubs, rallies and club digs.", action: () => setShowClubRallyModal(true) },
+            ].map(item => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                className="min-h-20 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-emerald-400 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900"
+              >
+                <span className="block text-sm font-black text-gray-900 dark:text-gray-100">{item.label}</span>
+                <span className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400">{item.detail}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       ) : (
         <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
@@ -722,6 +764,44 @@ export default function Home(props: {
         <React.Suspense fallback={null}>
           <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />
         </React.Suspense>
+      )}
+
+      {showInstallGuide && (
+        <Modal title="Install FindSpot" onClose={closeInstallGuide}>
+          <div className="grid gap-4">
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              Add FindSpot to your home screen so it opens like an app and keeps more screen space for maps, finds and field notes.
+            </p>
+
+            <div className="grid gap-2">
+              {(installPlatform === 'ios' ? [
+                'Open findspot.uk in Safari.',
+                'Tap the Share button.',
+                'Choose Add to Home Screen, then tap Add.',
+              ] : installPlatform === 'android' ? [
+                'Open findspot.uk in Chrome.',
+                'Tap the three-dot menu.',
+                'Choose Install app or Add to Home screen, then confirm.',
+              ] : [
+                'Open findspot.uk in your browser.',
+                'Use the install icon in the address bar, or the browser menu.',
+                'Choose Install or Add to desktop, then confirm.',
+              ]).map((step, index) => (
+                <div key={step} className="flex gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-900/40">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-black text-white">{index + 1}</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{step}</span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={closeInstallGuide}
+              className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500"
+            >
+              Got It
+            </button>
+          </div>
+        </Modal>
       )}
 
       {showClubRallyModal && (

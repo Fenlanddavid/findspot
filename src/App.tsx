@@ -30,7 +30,7 @@ const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 
 export function Logo() {
   return (
-    <svg className="w-8 h-8 min-[360px]:w-10 min-[360px]:h-10 sm:w-16 sm:h-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className="h-8 w-8 shrink-0 min-[360px]:h-10 min-[360px]:w-10 sm:h-16 sm:w-16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#10b981" />
@@ -64,7 +64,6 @@ function Shell() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
-  const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
   const nav = useNavigate();
@@ -233,28 +232,10 @@ function Shell() {
             </Link>
             
             <div className="flex items-center gap-1 sm:gap-2 border-l border-gray-200 pl-2 dark:border-gray-700 sm:border-0 sm:pl-0 shrink-0">
-                {!isStandalone && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowInstallHelp(h => !h)}
-                      className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 text-[10px] font-bold text-amber-600 animate-pulse dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-400 sm:min-h-0 sm:min-w-0 sm:px-2 sm:py-1"
-                      aria-label="Not Installed"
-                    >
-                      <span aria-hidden="true">⚠️</span>
-                      <span className="hidden min-[430px]:inline">Not Installed</span>
-                    </button>
-                    {showInstallHelp && (
-                      <div className="absolute right-0 top-8 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl p-3 shadow-xl w-56 text-xs text-gray-700 dark:text-gray-300 leading-relaxed">
-                        Tap your browser's menu (⋮ or share icon) and select 'Add to Home Screen'.
-                        <button onClick={() => setShowInstallHelp(false)} className="block mt-2 text-emerald-600 font-bold">Got it</button>
-                      </div>
-                    )}
-                  </div>
-                )}
                 <button
                   type="button"
                   onClick={() => setShowClubRallyModal(true)}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-200 bg-white/70 px-2.5 text-[10px] font-bold uppercase tracking-wide text-gray-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300 sm:min-h-8 sm:px-2.5 sm:py-1 sm:text-[9px] whitespace-nowrap"
+                  className="inline-flex h-6 items-center justify-center rounded-full border border-gray-200 bg-white/70 px-1.5 text-[9px] font-bold leading-none text-gray-500 transition-colors hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400 dark:hover:border-teal-700 dark:hover:bg-teal-950/30 dark:hover:text-teal-300 whitespace-nowrap"
                   aria-label="Club/Rally tools"
                 >
                   Club/Rally
@@ -346,7 +327,7 @@ function Shell() {
         <PageErrorBoundary>
         <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold animate-pulse">Loading…</div>}>
         <Routes>
-            <Route path="/" element={<HomeRouter projectId={projectId} />} />
+            <Route path="/" element={<HomeRouter projectId={projectId} isStandalone={isStandalone} />} />
             <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/permission/${id}`)} />} />
             <Route path="/permission/:id" element={<PermissionPage projectId={projectId} onSaved={() => {}} />} />
             <Route path="/permissions" element={<AllPermissions projectId={projectId} />} />
@@ -405,11 +386,12 @@ function Shell() {
 }
 
 
-function HomeRouter({ projectId }: { projectId: string }) {
+function HomeRouter({ projectId, isStandalone }: { projectId: string; isStandalone: boolean }) {
   const nav = useNavigate();
   return (
     <Home
       projectId={projectId}
+      isStandalone={isStandalone}
       goPermission={() => nav("/permission")}
       goPermissionWithParam={(type: string) => nav(`/permission?type=${type}`)}
       goPermissionEdit={(id: string) => nav(`/permission/${id}`)}
