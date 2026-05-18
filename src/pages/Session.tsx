@@ -905,7 +905,7 @@ export default function SessionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
-    <div className={`max-w-4xl mx-auto px-4 ${isActiveSessionMode ? "pb-40 sm:pb-20" : "pb-20"}`}>
+    <div className="max-w-4xl mx-auto pb-20 px-4">
       {milestoneMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
           {milestoneMsg}
@@ -1062,7 +1062,7 @@ export default function SessionPage(props: {
                           <button
                             type="button"
                             onClick={finishSession}
-                            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-black text-gray-500 transition-all hover:border-gray-400 hover:bg-white hover:text-gray-700 active:scale-[0.99] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:border-gray-500 dark:hover:text-gray-200"
+                            className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-amber-800 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 active:scale-[0.99] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:border-amber-600 dark:hover:bg-amber-950/50"
                           >
                             Finish Session
                           </button>
@@ -1550,37 +1550,6 @@ export default function SessionPage(props: {
             </div>
         </div>
       </div>
-      {isActiveSessionMode && (
-        <div
-          role="toolbar"
-          aria-label="Active session actions"
-          className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] border-t border-gray-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.10)] backdrop-blur-md no-print sm:hidden dark:border-gray-800 dark:bg-gray-950/95"
-        >
-          <div className="mx-auto grid max-w-4xl grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => goSessionFind("quick")}
-              className="rounded-xl bg-emerald-600 px-2 py-3 text-[10px] font-black uppercase tracking-widest text-white shadow-sm shadow-emerald-600/20"
-            >
-              Quick Find
-            </button>
-            <button
-              type="button"
-              onClick={toggleTracking}
-              className={`rounded-xl px-2 py-2.5 text-[10px] font-black uppercase tracking-widest ${isTracking ? "bg-red-600 text-white" : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"}`}
-            >
-              {isTracking ? "Stop" : "Map"}
-            </button>
-            <button
-              type="button"
-              onClick={finishSession}
-              className="rounded-xl bg-gray-950 px-2 py-3 text-[10px] font-black uppercase tracking-widest text-white dark:bg-gray-100 dark:text-gray-950"
-            >
-              Finish
-            </button>
-          </div>
-        </div>
-      )}
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
         <SessionSummary

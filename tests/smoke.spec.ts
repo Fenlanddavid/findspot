@@ -101,7 +101,7 @@ test("organiser rally setup continues to share link generation", async ({ page }
   await expect(page.getByText(/\/findspot\/join\?pack=/)).toBeVisible();
 });
 
-test("active session mobile actions remain above the bottom nav", async ({ page }) => {
+test("active session mobile uses in-page actions without a redundant bottom bar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await createPermission(page, "Mobile Session Farm");
 
@@ -109,9 +109,9 @@ test("active session mobile actions remain above the bottom nav", async ({ page 
   await page.getByRole("button", { name: "Start Session" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
 
-  const sessionActions = page.getByRole("toolbar", { name: "Active session actions" });
-  await expect(sessionActions).toBeVisible();
-  await sessionActions.getByRole("button", { name: "Quick Find" }).click();
+  await expect(page.getByRole("toolbar", { name: "Active session actions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Finish Session" })).toBeVisible();
+  await page.getByRole("button", { name: "Add Find to Session" }).click();
   await expect(page).toHaveURL(/\/find\?/);
 });
 
