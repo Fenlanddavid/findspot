@@ -10,9 +10,9 @@ import {
   exportToCSV,
   markExternalBackupSaved,
 } from "../services/data";
+import { db } from "../db";
 
-type RestorePreview = {
-  exportedAt?: string;
+type RestoreCounts = {
   projects: number;
   permissions: number;
   fields: number;
@@ -22,7 +22,13 @@ type RestorePreview = {
   tracks: number;
 };
 
+type RestorePreview = RestoreCounts & {
+  exportedAt?: string;
+};
+
 type SettingsTab = "data" | "profile" | "detectors" | "app";
+
+const RESTORE_CONFIRMATION = "RESTORE";
 
 function isSettingsTab(value: string | null): value is SettingsTab {
   return value === "data" || value === "profile" || value === "detectors" || value === "app";
@@ -44,6 +50,19 @@ function previewBackup(json: string): RestorePreview {
     media: countBackupRows(parsed.media),
     tracks: countBackupRows(parsed.tracks),
   };
+}
+
+async function getCurrentDataCounts(): Promise<RestoreCounts> {
+  const [projects, permissions, fields, sessions, finds, media, tracks] = await Promise.all([
+    db.projects.count(),
+    db.permissions.count(),
+    db.fields.count(),
+    db.sessions.count(),
+    db.finds.count(),
+    db.media.count(),
+    db.tracks.count(),
+  ]);
+  return { projects, permissions, fields, sessions, finds, media, tracks };
 }
 
 const POPULAR_MODELS = [
@@ -108,6 +127,8 @@ export default function Settings() {
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
   const [restorePreviewError, setRestorePreviewError] = useState<string | null>(null);
+  const [currentDataCounts, setCurrentDataCounts] = useState<RestoreCounts | null>(null);
+  const [restoreConfirmText, setRestoreConfirmText] = useState("");
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
@@ -270,7 +291,10 @@ export default function Settings() {
     setImportPendingFile(file);
     setRestorePreview(null);
     setRestorePreviewError(null);
+    setCurrentDataCounts(null);
+    setRestoreConfirmText("");
     e.target.value = "";
+    getCurrentDataCounts().then(setCurrentDataCounts).catch(() => setCurrentDataCounts(null));
     try {
       setRestorePreview(previewBackup(await file.text()));
     } catch {
@@ -280,6 +304,7 @@ export default function Settings() {
 
   async function confirmImport() {
     if (!importPendingFile) return;
+    if (restoreConfirmText !== RESTORE_CONFIRMATION) return;
     const file = importPendingFile;
     setDataError(null);
     setImporting(true);
@@ -289,6 +314,8 @@ export default function Settings() {
       setImportPendingFile(null);
       setRestorePreview(null);
       setRestorePreviewError(null);
+      setCurrentDataCounts(null);
+      setRestoreConfirmText("");
       window.location.assign(new URL("./", window.location.href).toString());
     } catch (e) {
       setDataError("Import failed: " + e);
@@ -301,6 +328,36 @@ export default function Settings() {
     const date = new Date(value);
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   }
+
+  const restoreCanConfirm = restoreConfirmText === RESTORE_CONFIRMATION;
+
+  const restoreRows: Array<[string, number | string]> = restorePreview ? [
+    ["Projects", restorePreview.projects],
+    ["Permissions", restorePreview.permissions],
+    ["Fields", restorePreview.fields],
+    ["Sessions", restorePreview.sessions],
+    ["Finds", restorePreview.finds],
+    ["Media", restorePreview.media],
+    ["Tracks", restorePreview.tracks],
+  ] : [];
+
+  const currentRows: Array<[string, number | string]> = currentDataCounts ? [
+    ["Projects", currentDataCounts.projects],
+    ["Permissions", currentDataCounts.permissions],
+    ["Fields", currentDataCounts.fields],
+    ["Sessions", currentDataCounts.sessions],
+    ["Finds", currentDataCounts.finds],
+    ["Media", currentDataCounts.media],
+    ["Tracks", currentDataCounts.tracks],
+  ] : [
+    ["Projects", "Checking"],
+    ["Permissions", "Checking"],
+    ["Fields", "Checking"],
+    ["Sessions", "Checking"],
+    ["Finds", "Checking"],
+    ["Media", "Checking"],
+    ["Tracks", "Checking"],
+  ];
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 pb-20 mt-4">
@@ -364,41 +421,65 @@ export default function Settings() {
       )}
 
       {importPendingFile && (
-        <div className="px-4 py-3 mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl text-sm text-blue-800 dark:text-blue-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <span><strong>Restore "{importPendingFile.name}"?</strong> This will replace the current FindSpot data on this device.</span>
-            {restorePreview && (
-              <>
-                <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 gap-2">
-                  {[
-                    ["Projects", restorePreview.projects],
-                    ["Permissions", restorePreview.permissions],
-                    ["Fields", restorePreview.fields],
-                    ["Sessions", restorePreview.sessions],
-                    ["Finds", restorePreview.finds],
-                    ["Media", restorePreview.media],
-                    ["Tracks", restorePreview.tracks],
-                  ].map(([label, count]) => (
-                    <div key={label} className="rounded-lg bg-white/70 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800 px-2 py-1">
-                      <div className="text-[9px] font-black uppercase tracking-widest text-blue-500/70">{label}</div>
+        <div className="px-4 py-4 mb-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 rounded-xl text-sm text-amber-950 dark:text-amber-200">
+          <div className="min-w-0">
+            <span><strong>Restore "{importPendingFile.name}"?</strong> This restore will replace current FindSpot data on this device.</span>
+            <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/75">
+              Treat this like replacing an archive: finds, permissions, sessions, tracks and media currently on this device will be cleared before the backup is loaded.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-amber-700/70 dark:text-amber-300/70">Current data on this device</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {currentRows.map(([label, count]) => (
+                    <div key={label} className="rounded-lg bg-white/75 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-800 px-2 py-1">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-amber-600/70">{label}</div>
                       <div className="text-sm font-black">{count}</div>
                     </div>
                   ))}
                 </div>
-                {restorePreview.exportedAt && (
-                  <p className="mt-2 text-xs text-blue-700/70 dark:text-blue-300/70">
-                    Backup created {formatBackupDate(restorePreview.exportedAt)}
-                  </p>
+              </div>
+              <div>
+                <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-amber-700/70 dark:text-amber-300/70">Backup to restore</div>
+                {restorePreview && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      {restoreRows.map(([label, count]) => (
+                        <div key={label} className="rounded-lg bg-white/75 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-800 px-2 py-1">
+                          <div className="text-[9px] font-black uppercase tracking-widest text-amber-600/70">{label}</div>
+                          <div className="text-sm font-black">{count}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {restorePreview.exportedAt && (
+                      <p className="mt-2 text-xs text-amber-800/80 dark:text-amber-200/75">
+                        Backup created {formatBackupDate(restorePreview.exportedAt)}
+                      </p>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            {restorePreviewError && (
-              <p className="mt-2 text-xs text-blue-700/70 dark:text-blue-300/70">{restorePreviewError}</p>
-            )}
+                {restorePreviewError && (
+                  <p className="text-xs text-amber-800/80 dark:text-amber-200/75">{restorePreviewError}</p>
+                )}
+              </div>
+            </div>
+            <label className="mt-4 block">
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-200">Type RESTORE to confirm replacement</span>
+              <input
+                type="text"
+                value={restoreConfirmText}
+                onChange={(event) => setRestoreConfirmText(event.target.value)}
+                disabled={importing}
+                className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-800 dark:bg-gray-950 dark:text-gray-100"
+                autoCapitalize="characters"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <button onClick={confirmImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing…" : "Confirm Import"}</button>
-            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); }} className="text-blue-700 dark:text-blue-400 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
+          <div className="mt-4 flex gap-2">
+            <button onClick={confirmImport} disabled={importing || !restoreCanConfirm} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing..." : "Confirm Import"}</button>
+            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); setCurrentDataCounts(null); setRestoreConfirmText(""); }} className="text-amber-800 dark:text-amber-300 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
       )}

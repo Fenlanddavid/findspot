@@ -162,6 +162,7 @@ test("settings can export and restore a backup", async ({ page }) => {
     buffer: Buffer.from(JSON.stringify(restore)),
   });
   await expect(page.getByText(/Restore "restore\.json"\?/)).toBeVisible();
+  await page.getByLabel(/Type RESTORE/).fill("RESTORE");
   await Promise.all([
     page.waitForURL(/\/$/),
     page.getByRole("button", { name: "Confirm Import" }).click(),

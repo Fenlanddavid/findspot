@@ -139,6 +139,7 @@ async function importSettingsBackup(page: Page, filename: string, data: object) 
     buffer: Buffer.from(JSON.stringify(data)),
   });
   await expect(page.getByText(new RegExp(`Restore "${filename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"\\?`))).toBeVisible();
+  await page.getByLabel(/Type RESTORE/).fill("RESTORE");
   await Promise.all([
     page.waitForURL(/\/$/),
     page.getByRole("button", { name: "Confirm Import" }).click(),
@@ -344,6 +345,7 @@ test("invalid backup import is rejected without wiping existing local data", asy
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(invalidBackup)),
   });
+  await page.getByLabel(/Type RESTORE/).fill("RESTORE");
   await page.getByRole("button", { name: "Confirm Import" }).click();
   await expect(page.getByText(/permissions\[0\] references an unknown project/)).toBeVisible();
 

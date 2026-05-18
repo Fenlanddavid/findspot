@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { db, Find, Media } from "../db";
 import { generatePASDescription, calculateRecordingScore, getParishAndCounty } from "../services/pas";
@@ -6,6 +6,18 @@ import { getFLOForCounty } from "../services/flo";
 import { getSetting } from "../services/data";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import {
+  REPORT,
+  ReportFooter,
+  ReportHeader,
+  ReportMetricGrid,
+  ReportSectionHeading,
+  ReportSummaryRows,
+  formatReportDate,
+  makeReportReference,
+  reportBodyStyle,
+  reportDocumentStyle,
+} from "./ReportChrome";
 
 interface PASReportModalProps {
   isOpen: boolean;
@@ -23,6 +35,7 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
   const [dailyCount, setDailyCount] = useState(1);
   const [score, setScore] = useState({ score: 0, reasons: [] as string[] });
   const [generating, setGenerating] = useState(false);
+  const generatedAtRef = useRef(new Date());
 
   // Convert blobs to base64 data URLs — html2canvas cannot render blob: URLs
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -153,49 +166,56 @@ Recorded via FindSpot
 
   if (!isOpen) return null;
 
+  const generatedAt = generatedAtRef.current;
+  const reportReference = makeReportReference("PAS", find.id || find.findCode || "LOCAL", generatedAt);
+  const recordId = `${userInitials}-${new Date(find.createdAt).toISOString().split("T")[0].replace(/-/g, "")}-${dailyCount}`;
+  const hasGps = find.lat != null && find.lon != null;
+  const hasDimensions = !!(find.widthMm || find.heightMm || find.depthMm);
+  const targetFlo = flo ? `${flo.name} (${flo.email})` : "Not resolved";
+
   return (
-    <Modal onClose={onClose} title="AUTO PAS REPORT BUILDER">
+    <Modal onClose={onClose} title="PAS Report Builder">
       <div className="flex flex-col gap-6">
         
         {/* Quality & Routing Header */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex items-center justify-between">
                 <div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recording Quality</h3>
-                    <p className="text-2xl font-black text-emerald-500">{score.score}%</p>
+                    <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Recording Quality</h3>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{score.score}%</p>
                 </div>
                 <div className="flex flex-col gap-1 text-right">
                     {score.score >= 80 ? (
-                        <span className="text-[8px] text-emerald-500 font-bold uppercase">✅ Professional</span>
+                        <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold uppercase">Professional</span>
                     ) : (
-                        <span className="text-[8px] text-amber-500 font-bold uppercase">⚠️ Missing</span>
+                        <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold uppercase">Missing data</span>
                     )}
                 </div>
             </div>
 
-            <div className={`border rounded-2xl p-4 flex flex-col justify-center ${flo ? 'bg-blue-900/20 border-blue-500/30' : 'bg-slate-900 border-slate-800 opacity-50'}`}>
-                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target FLO</h3>
-                <p className="text-sm font-black text-blue-400 truncate">{flo ? flo.name : "Detecting Region..."}</p>
-                <p className="text-[9px] text-slate-500 font-mono truncate">{flo ? flo.email : "Locating county..."}</p>
+            <div className={`border rounded-xl p-4 flex flex-col justify-center bg-white dark:bg-gray-900 ${flo ? 'border-emerald-200 dark:border-emerald-800' : 'border-gray-200 dark:border-gray-700 opacity-70'}`}>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Target FLO</h3>
+                <p className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{flo ? flo.name : "Detecting region..."}</p>
+                <p className="text-[9px] text-gray-500 font-mono truncate">{flo ? flo.email : "Locating county..."}</p>
             </div>
         </div>
 
         {/* Data Quality Checklist */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Recording Checklist</h3>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Recording Checklist</h3>
             <div className="flex flex-col gap-2">
-                <CheckItem label="GPS Coordinates" status={find.lat != null && find.lon != null} />
+                <CheckItem label="GPS Coordinates" status={hasGps} />
                 <CheckItem label="Object Weight" status={!!find.weightG} />
-                <CheckItem label="Dimensions (Width/Height)" status={!!(find.widthMm || find.heightMm)} />
+                <CheckItem label="Dimensions" status={hasDimensions} />
                 <CheckItem label="Photos (Min 1)" status={photos.length >= 1} />
                 <CheckItem label="Multi-Angle Photos (Min 3)" status={photos.length >= 3} />
             </div>
             {score.reasons.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-white/5">
-                    <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">How to reach 100%:</p>
+                <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">To improve the record:</p>
                     <ul className="list-none p-0 m-0 flex flex-col gap-1">
                         {score.reasons.map((r, i) => (
-                            <li key={i} className="text-[11px] text-slate-400 font-medium">↳ {r}</li>
+                            <li key={i} className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{r}</li>
                         ))}
                     </ul>
                 </div>
@@ -204,70 +224,88 @@ Recorded via FindSpot
 
         {/* Report Preview Card */}
         <div className="overflow-x-auto">
-            <div id="pas-report-preview" className="min-w-[600px] bg-white text-black p-12 shadow-xl border border-gray-200 font-serif">
-                <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-8">
-                    <div>
-                        <h1 className="text-3xl font-black uppercase tracking-tighter italic leading-none mb-4">
-                            {userName ? `${userName} PAS Report` : "PAS Report"}
-                        </h1>
-                        <p className="text-[11px] font-bold font-sans uppercase tracking-widest opacity-70">
-                            Record ID: {userInitials}-{new Date(find.createdAt).toISOString().split('T')[0].replace(/-/g, "")}-{dailyCount}
-                        </p>
-                    </div>
-                    <div className="text-right text-[10px] font-sans font-bold uppercase tracking-widest">
-                        <p>Recorded: {new Date(find.createdAt).toLocaleDateString()}</p>
-                        <p>NGR: {find.osGridRef}</p>
-                    </div>
-                </div>
+            <div id="pas-report-preview" style={{ ...reportDocumentStyle, minWidth: 680 }}>
+                <ReportHeader
+                  typeLabel="PAS Recording Report"
+                  title={find.objectType || "Unidentified Find"}
+                  subtitle={find.findCode}
+                  reference={reportReference}
+                  conductedBy={userName || "Detectorist"}
+                  dateText={`Recorded ${formatReportDate(find.createdAt, "long") || "Unknown date"}`}
+                  descriptor="Portable Antiquities Scheme recording pack prepared from local FindSpot data, including classification, location, photographs and draft object description."
+                />
 
-                <div className="grid grid-cols-2 gap-10 mb-10">
-                    <div className="flex flex-col gap-8">
-                        <section>
-                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-2 font-sans tracking-widest">Classification</h3>
-                            <div className="flex flex-col gap-1 text-sm">
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Object</span> {find.objectType}</p>
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Period</span> {find.period}</p>
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Material</span> {find.material}</p>
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Weight</span> {find.weightG}g</p>
-                            </div>
-                        </section>
-                        <section>
-                            <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-2 font-sans tracking-widest">Location</h3>
-                            <div className="flex flex-col gap-1 text-sm">
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Parish</span> {location.parish}</p>
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">County</span> {location.county}</p>
-                                <p><span className="font-bold uppercase text-[10px] mr-2 opacity-50 font-sans">Grid Ref</span> {find.osGridRef}</p>
-                            </div>
-                        </section>
-                    </div>
+                <div style={reportBodyStyle}>
+                  <ReportSummaryRows
+                    title="PAS Record Details"
+                    rows={[
+                      { label: "Record ID", value: recordId },
+                      { label: "Object", value: find.objectType || "Not recorded" },
+                      { label: "Period", value: find.period || "Not recorded" },
+                      { label: "Material", value: find.material || "Not recorded" },
+                      { label: "Weight", value: find.weightG ? `${find.weightG}g` : "Not recorded" },
+                      { label: "Grid reference", value: find.osGridRef || "Not recorded" },
+                      { label: "Parish / county", value: `${location.parish || "Not resolved"} / ${location.county || "Not resolved"}` },
+                      { label: "Target FLO", value: targetFlo },
+                    ]}
+                  />
 
-                    {/* High-Res Photo Plate */}
-                    <div className={`grid gap-2 ${photoUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                        {photoUrls.map((url, i) => (
-                            <div key={i} className="bg-gray-50 border border-gray-200 p-2 rounded-lg aspect-square flex items-center justify-center overflow-hidden shadow-inner">
-                                <img src={url} className="max-h-full w-full object-contain" alt={`Plate ${i+1}`} />
-                            </div>
-                        ))}
-                        {photoUrls.length === 0 && (
-                            <div className="bg-gray-50 border border-gray-100 p-8 rounded-lg aspect-square flex items-center justify-center text-center">
-                                <p className="text-gray-300 text-[10px] uppercase font-sans font-bold tracking-widest">No documentation images available</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                  <ReportMetricGrid
+                    stats={[
+                      { label: "Quality", value: `${score.score}%` },
+                      { label: "Photos", value: String(photoUrls.length) },
+                      { label: "GPS", value: hasGps ? "Yes" : "No" },
+                    ]}
+                  />
 
-                <section className="mb-12">
-                    <h3 className="text-[10px] font-bold uppercase border-b-2 border-black pb-1 mb-3 font-sans tracking-widest">Archaeological Description</h3>
-                    <textarea 
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="w-full bg-transparent border-none p-0 text-[15px] leading-relaxed outline-none resize-none font-serif min-h-[150px] italic text-gray-800"
+                  <div data-pdf-block>
+                    <ReportSectionHeading caption="Photographic record for object identification and condition review.">
+                      Photographic Evidence
+                    </ReportSectionHeading>
+                    <div style={{ display: "grid", gridTemplateColumns: photoUrls.length > 1 ? "repeat(2, 1fr)" : "1fr", gap: 10 }}>
+                      {photoUrls.map((url, i) => (
+                        <div key={i} style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 8, aspectRatio: "1 / 1", padding: 8, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                          <img src={url} style={{ maxHeight: "100%", width: "100%", objectFit: "contain", display: "block" }} alt={`Plate ${i + 1}`} />
+                        </div>
+                      ))}
+                      {photoUrls.length === 0 && (
+                        <div style={{ background: REPORT.panelSoft, border: `1px solid ${REPORT.line}`, borderRadius: 8, minHeight: 180, display: "flex", alignItems: "center", justifyContent: "center", color: REPORT.muted, fontSize: 11, fontFamily: "sans-serif", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                          No documentation images available
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div data-pdf-block>
+                    <ReportSectionHeading caption="Editable draft description generated from the find record. Review before submitting.">
+                      Archaeological Description
+                    </ReportSectionHeading>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      style={{
+                        width: "100%",
+                        minHeight: 150,
+                        border: `1px solid ${REPORT.line}`,
+                        borderRadius: 8,
+                        background: REPORT.panel,
+                        color: REPORT.ink,
+                        padding: 12,
+                        outline: "none",
+                        resize: "none",
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                        fontFamily: "Georgia, serif",
+                      }}
                     />
-                </section>
+                  </div>
 
-                <div className="border-t-2 border-black pt-6 flex justify-between items-center opacity-40 text-[10px] font-sans font-bold uppercase tracking-[0.2em]">
-                    <p>Verified via FindSpot</p>
-                    <p>facebook.com/FindSpot</p>
+                  <ReportFooter
+                    reference={reportReference}
+                    generatedAt={generatedAt}
+                    message="Prepared to support accurate archaeological recording."
+                    note="Review this draft before submitting it to the Portable Antiquities Scheme or a Finds Liaison Officer. Treasure and other legally reportable finds must still be reported through the correct official process."
+                  />
                 </div>
             </div>
         </div>
@@ -303,11 +341,11 @@ Recorded via FindSpot
 function CheckItem({ label, status }: { label: string; status: boolean }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs font-bold text-slate-300">{label}</span>
+      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">{label}</span>
       {status ? (
-        <span className="text-emerald-500 font-black text-[10px] bg-emerald-500/10 px-2 py-1 rounded uppercase tracking-tighter">Verified</span>
+        <span className="text-emerald-600 dark:text-emerald-400 font-black text-[10px] bg-emerald-500/10 px-2 py-1 rounded uppercase tracking-tighter">Verified</span>
       ) : (
-        <span className="text-slate-600 font-black text-[10px] bg-slate-800 px-2 py-1 rounded uppercase tracking-tighter">Missing</span>
+        <span className="text-gray-500 dark:text-gray-400 font-black text-[10px] bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded uppercase tracking-tighter">Missing</span>
       )}
     </div>
   );

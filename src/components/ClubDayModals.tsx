@@ -81,7 +81,7 @@ function QRScreen({
       <div className="text-center space-y-1">
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500">Ready to share</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100">{eventName || permissionName}</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">Send the join link to members, or show the QR for people standing nearby.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">Share the join link with members. Use the QR as a quick in-person scan option.</p>
       </div>
 
       {/* Shareable link */}
@@ -116,7 +116,7 @@ function QRScreen({
 
       {/* QR code */}
       <div className="w-full">
-        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">QR code for scanning</p>
+        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">Optional QR code for scanning</p>
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-4 flex items-center justify-center border border-gray-200 dark:border-gray-700">
           <canvas ref={canvasRef} className={`rounded-xl transition-opacity max-w-full ${qrError ? "hidden" : qrReady ? "opacity-100" : "opacity-0"}`} />
           {!qrReady && !qrError && (
@@ -227,7 +227,7 @@ export function CreateClubDayPackModal({
           <div>
             <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Club / Rally Dig</div>
             <h2 className="font-black text-gray-900 dark:text-gray-100">
-              {joinUrl ? "Share with Members" : "Set Up Club/Rally"}
+              {joinUrl ? "Share Join Link" : "Set Up Club/Rally"}
             </h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
@@ -366,7 +366,7 @@ export function CreateClubDayPackModal({
                 disabled={!confirmed || saving}
                 className="flex-1 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
               >
-                {saving ? "Generating..." : "Generate Link / QR"}
+                {saving ? "Generating..." : "Generate Share Link"}
               </button>
             </div>
           </>
@@ -431,7 +431,7 @@ export function ExportClubDayModal({
   }
 
   const mailtoHref = organiserEmail
-    ? `mailto:${organiserEmail}?subject=${encodeURIComponent(`Club Day Finds — ${permissionName}`)}&body=${encodeURIComponent(`Hi,\n\nPlease find my Club Day export for ${permissionName} attached.\n\n${recorderName || ""}`.trim())}`
+    ? `mailto:${organiserEmail}?subject=${encodeURIComponent(`Club Day Finds - ${permissionName}`)}&body=${encodeURIComponent(`Hi,\n\nI am sending through my Club Day export for ${permissionName}.\n\n${recorderName || ""}`.trim())}`
     : null;
 
   return (
@@ -461,7 +461,7 @@ export function ExportClubDayModal({
                 href={mailtoHref!}
                 className="flex items-center justify-center w-full py-3 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
               >
-                Open Email App
+                Open Email Draft
               </a>
             )}
             <button onClick={onClose} className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors">

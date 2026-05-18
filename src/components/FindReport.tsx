@@ -1,6 +1,17 @@
 import React from "react";
 import { Permission, Find, Media, Session } from "../db";
 import { ScaledImage } from "./ScaledImage";
+import {
+  REPORT,
+  ReportFooter,
+  ReportHeader,
+  ReportSectionHeading,
+  ReportSummaryRows,
+  formatReportDate,
+  makeReportReference,
+  reportBodyStyle,
+  reportDocumentStyle,
+} from "./ReportChrome";
 
 export function FindReport(props: {
   find: Find;
@@ -14,98 +25,97 @@ export function FindReport(props: {
   detectoristEmail?: string;
 }) {
   const { find, media, permission, session, insuranceProvider, ncmdNumber, ncmdExpiry, detectoristName, detectoristEmail } = props;
+  const generatedAt = new Date();
+  const reportReference = makeReportReference("FIND", find.id || find.findCode || "LOCAL", generatedAt);
+  const conductedBy = detectoristName || permission?.collector || "Detectorist";
+  const insuranceText = ncmdNumber ? `${insuranceProvider || "Membership"} No. ${ncmdNumber}${ncmdExpiry ? `, expires ${formatReportDate(ncmdExpiry, "short")}` : ""}` : null;
+  const dateFound = formatReportDate(session?.date || find.createdAt, "long") || "Not recorded";
+
+  const objectRows = [
+    { label: "Find code", value: find.findCode || "Not recorded" },
+    { label: "Object type", value: find.objectType || "Unidentified find" },
+    ...(find.pasId ? [{ label: "PAS ID", value: find.pasId }] : []),
+    ...(find.coinType ? [{ label: "Coin type", value: find.coinType }] : []),
+    ...(find.coinDenomination ? [{ label: "Denomination", value: find.coinDenomination }] : []),
+    { label: "Period", value: find.period || "Not recorded" },
+    { label: "Material", value: find.material || "Not recorded" },
+    { label: "Weight", value: find.weightG ? `${find.weightG}g` : "Not recorded" },
+    { label: "Dimensions", value: [find.widthMm && `${find.widthMm}mm W`, find.heightMm && `${find.heightMm}mm H`, find.depthMm && `${find.depthMm}mm D`].filter(Boolean).join(", ") || "Not recorded" },
+    { label: "Completeness", value: find.completeness || "Not recorded" },
+  ];
+
+  const locationRows = [
+    { label: "Permission", value: permission?.name || "Not recorded" },
+    { label: "Date found", value: dateFound },
+    { label: "OS grid ref", value: find.osGridRef || "Not recorded" },
+    { label: "What3Words", value: find.w3w ? `///${find.w3w.replace("///", "")}` : "Not recorded" },
+    { label: "Coordinates", value: find.lat != null && find.lon != null ? `${find.lat.toFixed(6)}, ${find.lon.toFixed(6)}` : "Not recorded" },
+    { label: "GPS accuracy", value: find.gpsAccuracyM ? `+/- ${Math.round(find.gpsAccuracyM)}m` : "Not recorded" },
+    { label: "Detectorist", value: conductedBy },
+  ];
 
   return (
-    <div className="bg-white text-black p-8 max-w-4xl mx-auto print:p-0 print:max-w-none report-container">
-      <header className="border-b-4 border-black pb-4 mb-8 flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-black uppercase tracking-tighter">Find Report</h1>
-          <p className="text-xl font-bold opacity-70">{find.findCode}: {find.objectType || "Unidentified Find"}</p>
-        </div>
-        <div className="text-right font-mono text-sm">
-          <div className="font-bold">{detectoristName || permission?.collector}</div>
-          {detectoristEmail && <div>{detectoristEmail}</div>}
-          <div>Report Generated: {new Date().toLocaleDateString()}</div>
-          {ncmdNumber && <div>{insuranceProvider || 'Membership'} No: {ncmdNumber}</div>}
-          {ncmdExpiry && <div>Insurance Exp: {new Date(ncmdExpiry).toLocaleDateString()}</div>}
-          <div>FindSpot v0.1.0</div>
-        </div>
-      </header>
+    <div className="report-container" style={{ ...reportDocumentStyle, maxWidth: 900, margin: "0 auto" }}>
+      <ReportHeader
+        typeLabel="Find Report"
+        title={find.objectType || "Unidentified Find"}
+        subtitle={find.findCode}
+        reference={reportReference}
+        conductedBy={conductedBy}
+        insuranceText={insuranceText}
+        dateText={`Generated ${formatReportDate(generatedAt, "long")}`}
+        descriptor="Individual find record prepared from local FindSpot data, including object details, discovery context and photographic evidence."
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-        <section className="bg-gray-50 p-6 rounded-xl border border-gray-200 print:bg-transparent print:border-none print:p-0">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 border-b border-gray-200 pb-1">Object Details</h2>
-          <div className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
-            <span className="font-bold">Object Type:</span> <span>{find.objectType}</span>
-            {find.pasId && <><span className="font-bold">PAS ID:</span> <span className="font-mono">{find.pasId}</span></>}
-            {find.coinType && <><span className="font-bold">Coin Type:</span> <span>{find.coinType}</span></>}
-            {find.coinDenomination && <><span className="font-bold">Denomination:</span> <span>{find.coinDenomination}</span></>}
-            <span className="font-bold">Period:</span> <span>{find.period}</span>
-            <span className="font-bold">Material:</span> <span>{find.material}</span>
-            <span className="font-bold">Weight:</span> <span>{find.weightG ? `${find.weightG}g` : "N/A"}</span>
-            <span className="font-bold">Width:</span> <span>{find.widthMm ? `${find.widthMm}mm` : "N/A"}</span>
-            <span className="font-bold">Height:</span> <span>{find.heightMm ? `${find.heightMm}mm` : "N/A"}</span>
-            <span className="font-bold">Depth:</span> <span>{find.depthMm ? `${find.depthMm}mm` : "N/A"}</span>
-            <span className="font-bold">Completeness:</span> <span>{find.completeness}</span>
-            <span className="font-bold">Decoration:</span> <span>{find.decoration || "None recorded"}</span>
-          </div>
-        </section>
+      <div style={reportBodyStyle}>
+        <ReportSummaryRows title="Object Details" rows={objectRows} />
+        <ReportSummaryRows title="Discovery Context" rows={locationRows} />
 
-        <section className="bg-gray-50 p-6 rounded-xl border border-gray-200 print:bg-transparent print:border-none print:p-0">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 border-b border-gray-200 pb-1">Discovery Location</h2>
-          <div className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
-            <span className="font-bold">Land/Permission:</span> <span>{permission?.name || "N/A"}</span>
-            <span className="font-bold">Date Found:</span> <span>{session?.date ? new Date(session.date).toLocaleDateString() : "N/A"}</span>
-            <span className="font-bold">OS Grid Ref:</span> <span className="font-mono">{find.osGridRef || "N/A"}</span>
-            <span className="font-bold">What3Words:</span> <span>///{find.w3w?.replace("///", "") || "N/A"}</span>
-            <span className="font-bold">Coordinates:</span> <span className="font-mono text-xs">{find.lat?.toFixed(6)}, {find.lon?.toFixed(6)}</span>
-            <span className="font-bold">GPS Accuracy:</span> <span>{find.gpsAccuracyM ? `±${Math.round(find.gpsAccuracyM)}m` : "N/A"}</span>
-            <span className="font-bold">Detectorist:</span> <span>{permission?.collector || "N/A"}</span>
+        {(find.decoration || find.notes) && (
+          <div data-pdf-block>
+            <ReportSectionHeading>Find Notes</ReportSectionHeading>
+            <div style={{ borderLeft: `3px solid ${REPORT.accent}`, paddingLeft: 14, fontSize: 12, lineHeight: 1.6, color: REPORT.muted, whiteSpace: "pre-wrap" }}>
+              {[find.decoration, find.notes].filter(Boolean).join("\n\n")}
+            </div>
           </div>
-        </section>
+        )}
+
+        <div data-pdf-block>
+          <ReportSectionHeading caption={`${media.length} ${media.length === 1 ? "image" : "images"} attached to this find record.`}>
+            Photographic Evidence
+          </ReportSectionHeading>
+          {media.length > 0 ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+              {media.map((item) => (
+                <ScaledImage
+                  key={item.id}
+                  media={item}
+                  className="rounded-lg border border-gray-200 bg-gray-50 aspect-square overflow-hidden"
+                  imgClassName="object-contain w-full h-full"
+                />
+              ))}
+            </div>
+          ) : (
+            <div style={{ border: `1px solid ${REPORT.line}`, borderRadius: 9, background: REPORT.panelSoft, minHeight: 120, display: "flex", alignItems: "center", justifyContent: "center", color: REPORT.muted, fontSize: 12 }}>
+              No photographs attached to this find.
+            </div>
+          )}
+        </div>
+
+        {permission?.landownerName && (
+          <div data-pdf-block style={{ border: `1px solid ${REPORT.line}`, borderRadius: 10, background: REPORT.panel, padding: "14px 16px" }}>
+            <ReportSectionHeading>Landowner Confirmation</ReportSectionHeading>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 220px", gap: 24, alignItems: "end", fontSize: 12, color: REPORT.muted, lineHeight: 1.55 }}>
+              <div>
+                This find was recorded against land where permission is held from <strong style={{ color: REPORT.ink }}>{permission.landownerName}</strong>.
+              </div>
+              <div style={{ borderBottom: `1px solid ${REPORT.ink}`, height: 36 }} />
+            </div>
+          </div>
+        )}
+
+        <ReportFooter reference={reportReference} generatedAt={generatedAt} />
       </div>
-
-      {find.notes && (
-        <section className="mb-8">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Find Notes</h2>
-          <p className="text-sm italic border-l-4 border-gray-200 pl-4 whitespace-pre-wrap">{find.notes}</p>
-        </section>
-      )}
-
-      <section className="mb-8">
-        <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-4 border-b border-gray-200 pb-1">Photographic Evidence</h2>
-        <div className="grid grid-cols-2 gap-4">
-          {media.map(m => (
-            <div key={m.id} className="break-inside-avoid">
-              <ScaledImage 
-                media={m} 
-                className="rounded-lg border border-gray-200 bg-gray-50 aspect-square overflow-hidden" 
-                imgClassName="object-contain w-full h-full"
-              />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {permission?.landownerName && (
-        <section className="mt-8 pt-8 border-t border-gray-100">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-2">Landowner Confirmation</h2>
-          <div className="grid grid-cols-2 gap-8 text-sm italic opacity-60">
-            <div>
-                <p>This find was recovered with the express permission of:</p>
-                <p className="font-bold mt-1">{permission.landownerName}</p>
-            </div>
-            <div className="flex items-end justify-end">
-                <div className="border-b border-gray-300 w-48 h-8"></div>
-                <span className="ml-2 text-[10px] non-italic font-black uppercase">Signature</span>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <footer className="mt-12 pt-4 border-t border-gray-200 text-center text-[10px] text-gray-400 font-mono italic">
-        This document was generated using FindSpot. Find Code: {find.findCode}
-      </footer>
     </div>
   );
 }

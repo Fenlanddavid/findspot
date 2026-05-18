@@ -1049,7 +1049,7 @@ export default function PermissionPage(props: {
                       onClick={() => setShowCreatePack(true)}
                       className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
                     >
-                      {isSharedPermission ? "Link / QR" : "Generate Link"}
+                      {isSharedPermission ? "Share Link" : "Create Link"}
                     </button>
                   )}
                 </div>
@@ -1127,7 +1127,7 @@ export default function PermissionPage(props: {
                             onClick={() => setShowCreatePack(true)}
                             className="text-xs sm:text-sm font-black text-white bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded-lg border border-teal-600 transition-all flex-1 sm:flex-none"
                           >
-                            {isSharedPermission ? "Share Link / QR" : "Generate Link / QR"}
+                            {isSharedPermission ? "Share Join Link" : "Generate Share Link"}
                           </button>
                         )}
                         {!isClubDayMember && isEdit && isSharedPermission && (
@@ -2642,7 +2642,6 @@ export default function PermissionPage(props: {
           onClose={() => setAgreementModalOpen(false)} 
           onSaved={(mediaId) => {
             setAgreementId(mediaId);
-            setAgreementModalOpen(false);
           }}
         />
       )}

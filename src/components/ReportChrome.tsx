@@ -188,11 +188,11 @@ export function ReportHeader(props: {
   );
 }
 
-export function ReportSummaryRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
+export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array<{ label: string; value: string }>; title?: string }) {
   return (
     <div data-pdf-block style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, overflow: "hidden" }}>
       <div style={{ padding: "12px 14px", borderBottom: `1px solid ${REPORT.line}`, background: "#fbfaf7" }}>
-        <div style={{ ...reportSectionLabelStyle, color: REPORT.accentDark }}>At a glance</div>
+        <div style={{ ...reportSectionLabelStyle, color: REPORT.accentDark }}>{title}</div>
       </div>
       <div>
         {rows.map((row, index) => (
@@ -270,14 +270,24 @@ export function gpsBadgeStyle(hasGps: boolean): React.CSSProperties {
   };
 }
 
-export function ReportFooter({ reference, generatedAt }: { reference: string; generatedAt: Date }) {
+export function ReportFooter({
+  reference,
+  generatedAt,
+  message = "Thank you for supporting responsible detecting and proper recording of the land.",
+  note = "Activity is summarised for landowner review. Finds should be recorded and reported where required, including through the Portable Antiquities Scheme and Treasure process where applicable.",
+}: {
+  reference: string;
+  generatedAt: Date;
+  message?: string;
+  note?: string;
+}) {
   return (
     <div data-pdf-block style={{ borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, textAlign: "center", fontFamily: "sans-serif" }}>
       <div style={{ fontSize: 13, color: REPORT.ink, lineHeight: 1.55, marginBottom: 8 }}>
-        Thank you for supporting responsible detecting and proper recording of the land.
+        {message}
       </div>
       <div style={{ fontSize: 10.5, color: REPORT.muted, lineHeight: 1.65, maxWidth: 560, margin: "0 auto 12px" }}>
-        Activity is summarised for landowner review. Finds should be recorded and reported where required, including through the Portable Antiquities Scheme and Treasure process where applicable.
+        {note}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: REPORT.faint }}>
         <FindSpotLogoMark gradientId="findspot-report-footer-logo-grad" style={{ width: 20, height: 20, display: "block" }} />
