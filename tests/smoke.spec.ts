@@ -77,6 +77,30 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect(page.getByText("Smoke Test Buckle")).toBeVisible();
 });
 
+test("organiser rally setup continues to share link generation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./");
+  await dismissNonBlockingPrompts(page);
+
+  await page.getByRole("button", { name: "Club/Rally tools" }).click();
+  await page.getByRole("button", { name: "Set Up Club Day" }).click();
+  await page.getByRole("button", { name: "Create New Rally" }).click();
+
+  await expect(page.getByText("Setting up a club/rally?")).toBeVisible();
+  await page.getByLabel("Rally / Event Name").fill("Smoke Organiser Rally");
+  await page.getByRole("button", { name: "Save & Generate Link" }).click();
+
+  await expect(page).toHaveURL(/\/permission\/[^/?#]+\?openClubDay=true$/);
+  await expect(page.getByRole("heading", { name: "Set Up Club/Rally" })).toBeVisible();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Landowner details, agreements and private notes will not be shared with members.").check();
+  await dialog.getByRole("button", { name: "Generate Share Link" }).click();
+
+  await expect(page.getByText("Share Join Link")).toBeVisible();
+  await expect(page.getByText(/\/findspot\/join\?pack=/)).toBeVisible();
+});
+
 test("deleting a permission removes its sessions and finds", async ({ page }) => {
   await createPermission(page, "Smoke Delete Farm");
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];

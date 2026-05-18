@@ -982,7 +982,11 @@ export default function PermissionPage(props: {
           localStorage.setItem('fs_first_permission', '1');
           sessionStorage.setItem('fs_pending_toast', 'Nice — your first permission is set!');
         }
-        props.onSaved(finalId);
+        if (organiserSetupParam && type === "rally") {
+          nav(`/permission/${finalId}?openClubDay=true`);
+        } else {
+          props.onSaved(finalId);
+        }
       }
     } catch (e: any) {
       setError(e?.message ?? "Save failed");
@@ -1009,6 +1013,13 @@ export default function PermissionPage(props: {
   const permissionNeedsCompletion = isEdit && !isRally && !isClubDayMember && (
     !hasPermissionContact || !hasPermissionAccessRecord || !hasPermissionMappedArea
   );
+  const saveButtonLabel = saving
+    ? "Saving..."
+    : isEdit
+      ? (isRally ? "Update Rally" : "Update Details")
+      : isRally
+        ? (organiserSetupParam ? "Save & Generate Link" : "Save Rally")
+        : "Create Record";
 
   function completePermissionDetails() {
     setShowNewPermissionDetails(true);
@@ -1834,7 +1845,7 @@ export default function PermissionPage(props: {
                             disabled={saving || !name.trim()} 
                             className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50`}
                         >
-                            {saving ? "Saving..." : isEdit ? (isRally ? "Update Rally" : "Update Details") : (isRally ? "Save Rally" : "Create Record")}
+                            {saveButtonLabel}
                         </button>
                         {isEdit && (
                             <button 

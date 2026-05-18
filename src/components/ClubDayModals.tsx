@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
 import QRCode from "qrcode";
 import { db, Field } from "../db";
 import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
@@ -77,7 +77,7 @@ function QRScreen({
   }
 
   return (
-    <div className="p-5 space-y-5 overflow-y-auto flex-1 flex flex-col items-center">
+    <div className="p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] space-y-5 overflow-y-auto flex-1 flex flex-col items-center">
       <div className="text-center space-y-1">
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500">Ready to share</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100">{eventName || permissionName}</h3>
@@ -161,6 +161,7 @@ export function CreateClubDayPackModal({
   fields: Field[];
   onClose: () => void;
 }) {
+  const titleId = useId();
   const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(
     new Set(fields.map(f => f.id))
   );
@@ -221,12 +222,18 @@ export function CreateClubDayPackModal({
   const labelClass = "text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1 block";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-lg shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="p-5 pb-3 border-b border-gray-100 dark:border-gray-800 shrink-0 flex items-center justify-between">
           <div>
             <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Club / Rally Dig</div>
-            <h2 className="font-black text-gray-900 dark:text-gray-100">
+            <h2 id={titleId} className="font-black text-gray-900 dark:text-gray-100">
               {joinUrl ? "Share Join Link" : "Set Up Club/Rally"}
             </h2>
           </div>
@@ -357,7 +364,7 @@ export function CreateClubDayPackModal({
               </label>
             </div>
 
-            <div className="p-5 pt-3 border-t border-gray-100 dark:border-gray-800 flex gap-3 shrink-0">
+            <div className="p-5 pt-3 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:pb-5 border-t border-gray-100 dark:border-gray-800 flex gap-3 shrink-0">
               <button onClick={onClose} className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors">
                 Cancel
               </button>
@@ -435,7 +442,7 @@ export function ExportClubDayModal({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
         <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Club Day</div>
         <h2 className="font-black text-gray-900 dark:text-gray-100 mb-2">Send Finds to Organiser</h2>
@@ -562,7 +569,7 @@ export function ImportClubDayDataModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md shadow-2xl p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
