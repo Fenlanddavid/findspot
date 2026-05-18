@@ -118,14 +118,11 @@ export function ReportBrand({ label = "FindSpot report" }: { label?: string }) {
             fontSize: 15,
             lineHeight: 1,
             fontWeight: 900,
-            letterSpacing: "-0.01em",
-            background: `linear-gradient(90deg, ${REPORT.accent}, #14b8a6, ${REPORT.sky})`,
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            color: "transparent",
+            letterSpacing: 0,
           }}
         >
-          FindSpot
+          <span style={{ color: REPORT.accent }}>Find</span>
+          <span style={{ color: REPORT.sky }}>Spot</span>
         </div>
         <div style={{ fontSize: 7, lineHeight: 1.5, letterSpacing: "0.16em", textTransform: "uppercase", color: REPORT.muted }}>{label}</div>
       </div>

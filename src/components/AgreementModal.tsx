@@ -21,7 +21,9 @@ const AGREEMENT_DISCLAIMER =
   "This template is provided as a starting point only and should be reviewed and amended to suit individual agreements. FindSpot does not provide legal advice.";
 
 type SavedAgreement = {
+  mediaId: string;
   filename: string;
+  blob: Blob;
 };
 
 export function AgreementModal(props: {
@@ -37,12 +39,14 @@ export function AgreementModal(props: {
   const [landownerSignature, setLandownerSignature] = useState<string | null>(null);
   const [detectoristSignature, setDetectoristSignature] = useState<string | null>(null);
   
-  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAgreement, setSavedAgreement] = useState<SavedAgreement | null>(null);
   
   const agreementRef = useRef<HTMLDivElement>(null);
   const generatedAtRef = useRef(new Date());
+  const canShare = typeof navigator !== "undefined" && "share" in navigator;
 
   useEffect(() => {
     getSetting("detectorist", "").then(setDetectoristName);
@@ -54,11 +58,13 @@ export function AgreementModal(props: {
   function handleLandownerSignature(value: string | null) {
     setLandownerSignature(value);
     setSavedAgreement(null);
+    setError(null);
   }
 
   function handleDetectoristSignature(value: string | null) {
     setDetectoristSignature(value);
     setSavedAgreement(null);
+    setError(null);
   }
 
   async function buildPDFBlob(): Promise<{ blob: Blob; filename: string }> {
@@ -68,15 +74,23 @@ export function AgreementModal(props: {
 
     const reportEl = agreementRef.current;
     const SCALE = 2;
+
     const containerTop = reportEl.getBoundingClientRect().top;
     type Block = { start: number; end: number };
     const blocks: Block[] = [];
 
     reportEl.querySelectorAll("[data-pdf-block]").forEach(el => {
       const rect = el.getBoundingClientRect();
-      const start = Math.round(rect.top - containerTop);
-      const end = Math.round(rect.bottom - containerTop);
+      const start = Math.round((rect.top - containerTop) * SCALE);
+      const end = Math.round((rect.bottom - containerTop) * SCALE);
       if (start > 10) blocks.push({ start, end });
+    });
+
+    const canvas = await html2canvas(reportEl, {
+      scale: SCALE,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      logging: false,
     });
 
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -84,12 +98,10 @@ export function AgreementModal(props: {
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 10;
     const printW = pageW - margin * 2;
-    const elementWidth = Math.ceil(reportEl.scrollWidth || reportEl.getBoundingClientRect().width);
-    const elementHeight = Math.ceil(reportEl.scrollHeight);
-    const pageCssH = Math.floor(((pageH - margin * 2) / printW) * elementWidth);
+    const pageCanvasH = Math.floor(((pageH - margin * 2) / printW) * canvas.width);
 
     const findSliceEnd = (sliceStart: number): number => {
-      const naturalEnd = Math.min(sliceStart + pageCssH, elementHeight);
+      const naturalEnd = Math.min(sliceStart + pageCanvasH, canvas.height);
       for (const { start, end } of blocks) {
         if (start > sliceStart && start < naturalEnd && end > naturalEnd) {
           // Avoid generating a nearly blank page if a protected block begins
@@ -100,111 +112,104 @@ export function AgreementModal(props: {
       return naturalEnd;
     };
 
-    async function renderSlice(sliceStart: number, sliceH: number): Promise<HTMLCanvasElement> {
-      const host = document.createElement("div");
-      host.style.position = "fixed";
-      host.style.left = "-10000px";
-      host.style.top = "0";
-      host.style.width = `${elementWidth}px`;
-      host.style.height = `${sliceH}px`;
-      host.style.overflow = "hidden";
-      host.style.background = "#ffffff";
-      host.style.pointerEvents = "none";
-
-      const clone = reportEl.cloneNode(true) as HTMLElement;
-      clone.style.width = `${elementWidth}px`;
-      clone.style.maxWidth = "none";
-      clone.style.margin = "0";
-      clone.style.transform = `translateY(-${sliceStart}px)`;
-      clone.style.transformOrigin = "top left";
-
-      host.appendChild(clone);
-      document.body.appendChild(host);
-      try {
-        return await html2canvas(host, {
-          scale: SCALE,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          width: elementWidth,
-          height: sliceH,
-          windowWidth: elementWidth,
-          windowHeight: sliceH,
-          scrollX: 0,
-          scrollY: 0,
-        });
-      } finally {
-        host.remove();
-      }
-    }
-
     let srcYOffset = 0;
     let pageCount = 0;
-    while (srcYOffset < elementHeight) {
+    while (srcYOffset < canvas.height) {
       if (pageCount > 0) pdf.addPage();
-      const sliceEnd = findSliceEnd(srcYOffset);
+      let sliceEnd = findSliceEnd(srcYOffset);
+      if (sliceEnd <= srcYOffset) {
+        sliceEnd = Math.min(srcYOffset + pageCanvasH, canvas.height);
+      }
       const sliceH = sliceEnd - srcYOffset;
-      const sliceCanvas = await renderSlice(srcYOffset, sliceH);
-      const sliceDisplayH = (sliceH / elementWidth) * printW;
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      const sliceCtx = sliceCanvas.getContext("2d");
+      if (!sliceCtx) throw new Error("Failed to get canvas context for PDF slice");
+      sliceCtx.drawImage(canvas, 0, -srcYOffset);
+      const sliceDisplayH = (sliceH / canvas.width) * printW;
       pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceDisplayH);
       srcYOffset = sliceEnd;
       pageCount++;
     }
 
-    const safeName = props.permission.name.replace(/[^a-z0-9]/gi, "_");
-    const filename = `Agreement_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    const safeName = props.permission.name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+    const filename = `landowner-agreement-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
     return { blob: pdf.output("blob"), filename };
   }
 
-  const handleSave = async () => {
+  function requireSignatures() {
     if (!landownerSignature || !detectoristSignature) {
       setError("Both signatures are required.");
-      return;
+      return false;
     }
+    return true;
+  }
 
-    setSaving(true);
+  async function generateAndSaveAgreement(): Promise<SavedAgreement> {
+    if (savedAgreement) return savedAgreement;
+
+    const { blob, filename } = await buildPDFBlob();
+    const mediaId = uuid();
+    const media: Media = {
+      id: mediaId,
+      projectId: props.permission.projectId,
+      permissionId: props.permission.id,
+      type: "document",
+      filename,
+      mime: "application/pdf",
+      blob,
+      caption: "Landowner Agreement",
+      scalePresent: false,
+      createdAt: new Date().toISOString(),
+    };
+
+    await db.media.add(media);
+    await db.permissions.update(props.permission.id, { agreementId: mediaId });
+
+    const saved = { mediaId, filename, blob };
+    setSavedAgreement(saved);
+    props.onSaved(mediaId);
+    return saved;
+  }
+
+  async function handleDownloadPDF() {
+    if (!requireSignatures()) return;
+    setGenerating(true);
     setError(null);
-
     try {
-      const { blob, filename } = await buildPDFBlob();
-      const mediaId = uuid();
-      const media: Media = {
-        id: mediaId,
-        projectId: props.permission.projectId,
-        permissionId: props.permission.id,
-        type: "document",
-        filename,
-        mime: "application/pdf",
-        blob,
-        caption: "Landowner Agreement",
-        scalePresent: false,
-        createdAt: new Date().toISOString(),
-      };
-
-      await db.media.add(media);
-      await db.permissions.update(props.permission.id, { agreementId: mediaId });
-
-      setSavedAgreement({ filename });
-      props.onSaved(mediaId);
+      const { blob, filename } = await generateAndSaveAgreement();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (err: any) {
-      setError("Failed to save agreement: " + err.message);
+      setError("PDF generation failed: " + (err.message || err));
     } finally {
-      setSaving(false);
+      setGenerating(false);
     }
-  };
+  }
 
-  const handleEmail = async () => {
-    const body = [
-      `Hi ${props.permission.landownerName || "Landowner"},`,
-      "",
-      `I am sending through the signed landowner agreement for metal detecting at ${props.permission.name}.`,
-      "",
-      "Best regards,",
-      detectoristName,
-    ].join("\n");
-    const mailto = `mailto:${props.permission.landownerEmail || ""}?subject=${encodeURIComponent(`Landowner Agreement - ${props.permission.name}`)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
-  };
+  async function handleSharePDF() {
+    if (!requireSignatures()) return;
+    setSharing(true);
+    setError(null);
+    try {
+      const { blob, filename } = await generateAndSaveAgreement();
+      const file = new File([blob], filename, { type: "application/pdf" });
+      await navigator.share({ files: [file], title: `Landowner Agreement — ${props.permission.name}` });
+    } catch (err: any) {
+      if ((err as DOMException).name !== "AbortError") {
+        setError("Share failed: " + (err.message || err));
+      }
+    } finally {
+      setSharing(false);
+    }
+  }
 
   const generatedAt = generatedAtRef.current;
   const agreementReference = `FS-AGREE-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${props.permission.id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "LOCAL"}`;
@@ -212,6 +217,34 @@ export function AgreementModal(props: {
   return (
     <Modal title="Landowner Agreement" onClose={props.onClose}>
       <div className="grid gap-6 max-h-[80vh] overflow-y-auto pr-2 pb-6">
+        <div className="sticky top-0 z-10 -mx-1 -mt-1 px-3 py-3 bg-white/95 dark:bg-gray-800/95 backdrop-blur border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-gray-800 dark:text-gray-100 m-0">Preview</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 m-0">{props.permission.name}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={generating || sharing}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-4 py-2 rounded-xl shadow-sm transition-all uppercase tracking-wider text-xs"
+            >
+              {generating ? "Generating..." : "PDF"}
+            </button>
+            {canShare && (
+              <button
+                onClick={handleSharePDF}
+                disabled={generating || sharing}
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 font-black px-4 py-2 rounded-xl transition-all uppercase tracking-wider text-xs"
+              >
+                {sharing ? "Sharing..." : "Share"}
+              </button>
+            )}
+            <button onClick={props.onClose} className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-300 font-bold px-4 py-2 rounded-xl transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-xs">
+              Close
+            </button>
+          </div>
+        </div>
+
         {error && (
           <div className="bg-red-50 text-red-800 p-3 rounded-xl text-sm font-medium border border-red-100 animate-in fade-in slide-in-from-top-2">
             {error}
@@ -225,7 +258,7 @@ export function AgreementModal(props: {
         {savedAgreement && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
             <strong>Agreement saved successfully.</strong>
-            <span className="block mt-1">Open an email draft only after saving. Attach the saved PDF manually before sending: {savedAgreement.filename}</span>
+            <span className="block mt-1">{savedAgreement.filename}</span>
           </div>
         )}
 
@@ -373,23 +406,22 @@ export function AgreementModal(props: {
 
           <div className="flex flex-col sm:flex-row gap-3">
             <button
-              onClick={handleSave}
-              disabled={saving || !landownerSignature || !detectoristSignature}
+              onClick={handleDownloadPDF}
+              disabled={generating || sharing}
               className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {saving ? "Generating PDF..." : savedAgreement ? "Save Updated Agreement" : "Save Signed Agreement"}
+              {generating ? "Generating PDF..." : savedAgreement ? "Download Agreement PDF" : "Save Agreement PDF"}
             </button>
-            <button
-              onClick={handleEmail}
-              disabled={!savedAgreement}
-              className="sm:w-auto bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              Open Email Draft
-            </button>
+            {canShare && (
+              <button
+                onClick={handleSharePDF}
+                disabled={generating || sharing}
+                className="sm:w-auto bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-6 py-4 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {sharing ? "Sharing..." : "Share"}
+              </button>
+            )}
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Browser email drafts cannot attach the PDF automatically. Save the agreement first, then attach the saved PDF manually.
-          </p>
         </div>
       </div>
     </Modal>
