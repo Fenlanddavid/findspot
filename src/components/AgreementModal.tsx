@@ -74,16 +74,9 @@ export function AgreementModal(props: {
 
     reportEl.querySelectorAll("[data-pdf-block]").forEach(el => {
       const rect = el.getBoundingClientRect();
-      const start = Math.round((rect.top - containerTop) * SCALE);
-      const end = Math.round((rect.bottom - containerTop) * SCALE);
+      const start = Math.round(rect.top - containerTop);
+      const end = Math.round(rect.bottom - containerTop);
       if (start > 10) blocks.push({ start, end });
-    });
-
-    const canvas = await html2canvas(reportEl, {
-      scale: SCALE,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
     });
 
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -91,31 +84,68 @@ export function AgreementModal(props: {
     const pageH = pdf.internal.pageSize.getHeight();
     const margin = 10;
     const printW = pageW - margin * 2;
-    const pageCanvasH = Math.floor(((pageH - margin * 2) / printW) * canvas.width);
+    const elementWidth = Math.ceil(reportEl.scrollWidth || reportEl.getBoundingClientRect().width);
+    const elementHeight = Math.ceil(reportEl.scrollHeight);
+    const pageCssH = Math.floor(((pageH - margin * 2) / printW) * elementWidth);
 
     const findSliceEnd = (sliceStart: number): number => {
-      const naturalEnd = Math.min(sliceStart + pageCanvasH, canvas.height);
+      const naturalEnd = Math.min(sliceStart + pageCssH, elementHeight);
       for (const { start, end } of blocks) {
         if (start > sliceStart && start < naturalEnd && end > naturalEnd) {
-          return start;
+          // Avoid generating a nearly blank page if a protected block begins
+          // right after the current page starts.
+          return start - sliceStart > 80 ? start : naturalEnd;
         }
       }
       return naturalEnd;
     };
 
+    async function renderSlice(sliceStart: number, sliceH: number): Promise<HTMLCanvasElement> {
+      const host = document.createElement("div");
+      host.style.position = "fixed";
+      host.style.left = "-10000px";
+      host.style.top = "0";
+      host.style.width = `${elementWidth}px`;
+      host.style.height = `${sliceH}px`;
+      host.style.overflow = "hidden";
+      host.style.background = "#ffffff";
+      host.style.pointerEvents = "none";
+
+      const clone = reportEl.cloneNode(true) as HTMLElement;
+      clone.style.width = `${elementWidth}px`;
+      clone.style.maxWidth = "none";
+      clone.style.margin = "0";
+      clone.style.transform = `translateY(-${sliceStart}px)`;
+      clone.style.transformOrigin = "top left";
+
+      host.appendChild(clone);
+      document.body.appendChild(host);
+      try {
+        return await html2canvas(host, {
+          scale: SCALE,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          width: elementWidth,
+          height: sliceH,
+          windowWidth: elementWidth,
+          windowHeight: sliceH,
+          scrollX: 0,
+          scrollY: 0,
+        });
+      } finally {
+        host.remove();
+      }
+    }
+
     let srcYOffset = 0;
     let pageCount = 0;
-    while (srcYOffset < canvas.height) {
+    while (srcYOffset < elementHeight) {
       if (pageCount > 0) pdf.addPage();
       const sliceEnd = findSliceEnd(srcYOffset);
       const sliceH = sliceEnd - srcYOffset;
-      const sliceCanvas = document.createElement("canvas");
-      sliceCanvas.width = canvas.width;
-      sliceCanvas.height = sliceH;
-      const sliceCtx = sliceCanvas.getContext("2d");
-      if (!sliceCtx) throw new Error("Failed to get canvas context for PDF slice");
-      sliceCtx.drawImage(canvas, 0, -srcYOffset);
-      const sliceDisplayH = (sliceH / canvas.width) * printW;
+      const sliceCanvas = await renderSlice(srcYOffset, sliceH);
+      const sliceDisplayH = (sliceH / elementWidth) * printW;
       pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, printW, sliceDisplayH);
       srcYOffset = sliceEnd;
       pageCount++;
@@ -214,7 +244,7 @@ export function AgreementModal(props: {
               conductedBy={detectoristName || "Detectorist"}
               insuranceText={ncmdNumber ? `${insuranceProvider || "Membership"} No. ${ncmdNumber}` : null}
               dateText={`Prepared ${formatReportDate(generatedAt, "long")}`}
-              descriptor={AGREEMENT_DISCLAIMER}
+              descriptor="Agreement template prepared for landowner and detectorist review before signing."
             />
 
             <div style={reportBodyStyle}>
