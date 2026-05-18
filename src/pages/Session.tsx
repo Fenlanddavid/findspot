@@ -905,7 +905,7 @@ export default function SessionPage(props: {
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto pb-20 px-4">
+    <div className={`max-w-4xl mx-auto px-4 ${isActiveSessionMode ? "pb-40 sm:pb-20" : "pb-20"}`}>
       {milestoneMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
           {milestoneMsg}
@@ -1551,7 +1551,11 @@ export default function SessionPage(props: {
         </div>
       </div>
       {isActiveSessionMode && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.10)] backdrop-blur-md no-print sm:hidden dark:border-gray-800 dark:bg-gray-950/95">
+        <div
+          role="toolbar"
+          aria-label="Active session actions"
+          className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[60] border-t border-gray-200 bg-white/95 px-2 pb-2 pt-2 shadow-[0_-8px_24px_rgba(0,0,0,0.10)] backdrop-blur-md no-print sm:hidden dark:border-gray-800 dark:bg-gray-950/95"
+        >
           <div className="mx-auto grid max-w-4xl grid-cols-3 gap-2">
             <button
               type="button"

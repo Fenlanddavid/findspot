@@ -71,7 +71,7 @@ export default function Modal(props: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="fixed inset-0 bg-white dark:bg-gray-950 z-[100] no-print overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
+        className="fixed inset-0 bg-white dark:bg-gray-950 z-[120] no-print overflow-y-auto animate-in fade-in slide-in-from-bottom-4 duration-300"
         ref={panelRef}
         tabIndex={-1}
       >
@@ -98,7 +98,7 @@ export default function Modal(props: ModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="fixed inset-0 bg-black/45 grid place-items-center p-4 z-50 backdrop-blur-sm no-print"
+      className="fixed inset-0 bg-black/45 grid place-items-center p-4 z-[120] backdrop-blur-sm no-print"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) props.onClose();
       }}

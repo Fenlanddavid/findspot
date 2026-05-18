@@ -1534,7 +1534,7 @@ export default function FindPage(props: {
       </div>
 
       {isPickingLocation && (
-        <React.Suspense fallback={<div className="fixed inset-0 z-50 bg-black/40" />}>
+        <React.Suspense fallback={<div className="fixed inset-0 z-[120] bg-black/40" />}>
           <LocationPickerModal
             initialLat={form.lat}
             initialLon={form.lon}

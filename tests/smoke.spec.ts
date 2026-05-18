@@ -101,6 +101,20 @@ test("organiser rally setup continues to share link generation", async ({ page }
   await expect(page.getByText(/\/findspot\/join\?pack=/)).toBeVisible();
 });
 
+test("active session mobile actions remain above the bottom nav", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await createPermission(page, "Mobile Session Farm");
+
+  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
+  await page.getByRole("button", { name: "Start Session" }).click();
+  await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
+
+  const sessionActions = page.getByRole("toolbar", { name: "Active session actions" });
+  await expect(sessionActions).toBeVisible();
+  await sessionActions.getByRole("button", { name: "Quick Find" }).click();
+  await expect(page).toHaveURL(/\/find\?/);
+});
+
 test("deleting a permission removes its sessions and finds", async ({ page }) => {
   await createPermission(page, "Smoke Delete Farm");
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
