@@ -27,7 +27,7 @@ export const reportDocumentStyle: React.CSSProperties = {
 };
 
 export const reportBodyStyle: React.CSSProperties = {
-  padding: "28px 34px 30px",
+  padding: "28px min(34px, 6%) 30px",
   display: "flex",
   flexDirection: "column",
   gap: 22,
@@ -188,7 +188,7 @@ export function ReportHeader(props: {
 export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array<{ label: string; value: string }>; title?: string }) {
   return (
     <div data-pdf-block style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, overflow: "hidden" }}>
-      <div style={{ padding: "12px 14px", borderBottom: `1px solid ${REPORT.line}`, background: "#fbfaf7" }}>
+      <div style={{ padding: "12px min(14px, 4%)", borderBottom: `1px solid ${REPORT.line}`, background: "#fbfaf7" }}>
         <div style={{ ...reportSectionLabelStyle, color: REPORT.accentDark }}>{title}</div>
       </div>
       <div>
@@ -197,15 +197,15 @@ export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array
             key={row.label}
             style={{
               display: "grid",
-              gridTemplateColumns: "160px 1fr",
-              gap: 18,
-              padding: "10px 14px",
+              gridTemplateColumns: "minmax(108px, 32%) minmax(0, 1fr)",
+              gap: 12,
+              padding: "10px min(14px, 4%)",
               borderTop: index === 0 ? "none" : `1px solid ${REPORT.line}`,
               alignItems: "baseline",
             }}
           >
-            <div style={{ fontSize: 10, color: REPORT.muted, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em" }}>{row.label}</div>
-            <div style={{ fontSize: 13, color: REPORT.ink, lineHeight: 1.45 }}>{row.value}</div>
+            <div style={{ minWidth: 0, fontSize: 10, color: REPORT.muted, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.08em", overflowWrap: "anywhere", hyphens: "auto" }}>{row.label}</div>
+            <div style={{ minWidth: 0, fontSize: 13, color: REPORT.ink, lineHeight: 1.45, overflowWrap: "anywhere", hyphens: "auto" }}>{row.value}</div>
           </div>
         ))}
       </div>
@@ -215,11 +215,11 @@ export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array
 
 export function ReportMetricGrid({ stats }: { stats: Array<{ label: string; value: string }> }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
       {stats.map(({ label, value }) => (
         <div key={label} style={{ background: "#fbfaf7", border: `1px solid ${REPORT.line}`, borderRadius: 9, padding: "12px 13px", minHeight: 70 }}>
           <div style={{ fontSize: 8, fontFamily: "sans-serif", letterSpacing: "0.13em", textTransform: "uppercase", color: REPORT.muted, marginBottom: 7, fontWeight: 800 }}>{label}</div>
-          <div style={{ fontSize: 18, lineHeight: 1.15, fontWeight: 780, color: REPORT.ink }}>{value}</div>
+          <div style={{ minWidth: 0, fontSize: 18, lineHeight: 1.15, fontWeight: 780, color: REPORT.ink, overflowWrap: "anywhere", hyphens: "auto" }}>{value}</div>
         </div>
       ))}
     </div>

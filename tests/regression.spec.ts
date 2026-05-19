@@ -378,6 +378,107 @@ test("deleting a pending find removes attached media", async ({ page }) => {
   expect((media as any[]).some((row) => row.id === "pending-media")).toBe(false);
 });
 
+test("field report summary stays inside the card on narrow Android viewports", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.route("https://services.arcgisonline.com/**", route => route.abort());
+  await bootApp(page);
+
+  const project = (await readIndexedDbStore(page, "projects") as any[])[0];
+  const now = "2026-04-18T10:00:00.000Z";
+  const permissionId = "mobile-report-permission";
+  const sessionId = "mobile-report-session";
+
+  await putIndexedDbRows(page, "permissions", [{
+    id: permissionId,
+    projectId: project.id,
+    name: "Frolsworth Manor",
+    type: "individual",
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    collector: "Regression Detectorist",
+    landType: "pasture",
+    permissionGranted: true,
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+  }]);
+  await putIndexedDbRows(page, "sessions", [{
+    ...regressionSession(sessionId, project.id, permissionId, null, now),
+    isFinished: true,
+    startTime: "2026-04-18T10:00:00.000Z",
+    endTime: "2026-04-18T13:20:00.000Z",
+    keyNotes: ["All gates left as found"],
+  }]);
+  await putIndexedDbRows(page, "finds", [
+    {
+      ...regressionFind("mobile-find-1", project.id, permissionId, null, sessionId, now),
+      objectType: "Coin",
+      period: "Medieval",
+      material: "Silver",
+      coinDenomination: "Penny",
+    },
+    {
+      ...regressionFind("mobile-find-2", project.id, permissionId, null, sessionId, now),
+      objectType: "Coin",
+      period: "Roman",
+      material: "Copper alloy",
+      coinDenomination: "Nummus",
+    },
+    {
+      ...regressionFind("mobile-find-3", project.id, permissionId, null, sessionId, now),
+      objectType: "Harness pendant",
+      period: "Medieval",
+      material: "Copper alloy",
+    },
+  ]);
+
+  await page.goto(`./session/${sessionId}`);
+  await page.getByRole("button", { name: "Field Report" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Preview");
+  await expect(page.getByText("Key highlights")).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const summary = Array.from(document.querySelectorAll<HTMLElement>("[data-pdf-block]"))
+      .find(el => el.textContent?.includes("At a glance") && el.textContent?.includes("Key highlights"));
+    if (!summary) throw new Error("Report summary block not found");
+
+    const summaryRect = summary.getBoundingClientRect();
+    const offenders = Array.from(summary.querySelectorAll<HTMLElement>("div"))
+      .filter(el => {
+        const text = (el.textContent || "").trim();
+        if (!text || text === (summary.textContent || "").trim()) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 && (rect.left < summaryRect.left - 0.5 || rect.right > summaryRect.right + 0.5);
+      })
+      .map(el => {
+        const rect = el.getBoundingClientRect();
+        return {
+          text: (el.textContent || "").trim().slice(0, 80),
+          left: rect.left,
+          right: rect.right,
+        };
+      });
+    const keyLabel = Array.from(summary.querySelectorAll<HTMLElement>("div"))
+      .find(el => (el.textContent || "").trim() === "Key highlights");
+    const keyValue = keyLabel?.nextElementSibling as HTMLElement | null;
+    const keyValueRect = keyValue?.getBoundingClientRect();
+
+    return {
+      offenders,
+      summaryWidth: summaryRect.width,
+      summaryRight: summaryRect.right,
+      keyValueWidth: keyValueRect?.width ?? 0,
+      keyValueRight: keyValueRect?.right ?? 0,
+    };
+  });
+
+  expect(layout.summaryWidth).toBeGreaterThan(200);
+  expect(layout.keyValueWidth).toBeGreaterThan(70);
+  expect(layout.keyValueRight).toBeLessThanOrEqual(layout.summaryRight + 0.5);
+  expect(layout.offenders).toEqual([]);
+});
+
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
   const basePack = {
     type: "findspot-club-day-pack",
