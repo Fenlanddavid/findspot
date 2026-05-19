@@ -184,6 +184,10 @@ export function useFieldGuideMap({
         });
 
         map.on('load', () => {
+            map.addSource('monument-buffers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({ id: 'monument-buffer-fill',    type: 'fill', source: 'monument-buffers', paint: { 'fill-color': '#f97316', 'fill-opacity': 0.16 } });
+            map.addLayer({ id: 'monument-buffer-outline', type: 'line', source: 'monument-buffers', paint: { 'line-color': '#f97316', 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } });
+
             map.addSource('monuments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'monuments-fill',    type: 'fill', source: 'monuments', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.25 } });
             map.addLayer({ id: 'monuments-outline', type: 'line', source: 'monuments', paint: { 'line-color': '#ef4444', 'line-width': 3 } });
@@ -351,7 +355,7 @@ export function useFieldGuideMap({
                     callbacksRef.current.onAnnotationDrop(e.lngLat.lat, e.lngLat.lng);
                     return;
                 }
-                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill'] });
+                const hits = map.queryRenderedFeatures(e.point, { layers: ['targets-circle', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill'] });
                 if (hits.length > 0) return;
                 callbacksRef.current.onMonumentClick(null);
                 callbacksRef.current.onDeselect();
@@ -379,6 +383,11 @@ export function useFieldGuideMap({
                 showLabel(`Route Crossing: ${a} × ${b}`);
             });
             map.on('click', 'monuments-fill', (e) => {
+                if (annotationModeRef.current) return;
+                const name = e.features?.[0]?.properties?.Name as string | undefined;
+                callbacksRef.current.onMonumentClick(name ?? '');
+            });
+            map.on('click', 'monument-buffer-fill', (e) => {
                 if (annotationModeRef.current) return;
                 const name = e.features?.[0]?.properties?.Name as string | undefined;
                 callbacksRef.current.onMonumentClick(name ?? '');
@@ -805,7 +814,7 @@ export function useFieldGuideMap({
     const clearMapSources = () => {
         const map = mapRef.current;
         if (!map) return;
-        const sources = ['monuments', 'trace-targets', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'landscape-context', 'crossings'];
+        const sources = ['monuments', 'monument-buffers', 'trace-targets', 'targets', 'cluster-links', 'historic-routes', 'aim-monuments', 'corridors', 'landscape-context', 'crossings'];
         sources.forEach(id => {
             const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
             if (src) src.setData({ type: 'FeatureCollection', features: [] });

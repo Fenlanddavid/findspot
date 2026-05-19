@@ -22,6 +22,15 @@ export interface WorkerParams {
     waybackIds: { spring: number; summer: number } | null;
 }
 
+export interface WorkerResult {
+    clusters: Cluster[];
+    tilesLoaded: number;
+}
+
+const TILE_SIZE = 256;
+const TILE_GRID_SIZE = 3;
+const UNLOADED_TILE_EDGE_MARGIN_PX = 8;
+
 // ─── Tile fetch helper ────────────────────────────────────────────────────────
 
 async function fetchBitmapTimed(url: string): Promise<ImageBitmap | null> {
@@ -240,19 +249,42 @@ function computeFlowConvergence(
     return Math.min(1.0, (convergingFrac - 0.50) / 0.40);
 }
 
+function bboxTouchesUnloadedTile(
+    minX: number,
+    maxX: number,
+    minY: number,
+    maxY: number,
+    loadedTiles: boolean[],
+): boolean {
+    if (loadedTiles.every(Boolean)) return false;
+
+    const startX = Math.max(0, Math.floor((minX - UNLOADED_TILE_EDGE_MARGIN_PX) / TILE_SIZE));
+    const endX   = Math.min(TILE_GRID_SIZE - 1, Math.floor((maxX + UNLOADED_TILE_EDGE_MARGIN_PX) / TILE_SIZE));
+    const startY = Math.max(0, Math.floor((minY - UNLOADED_TILE_EDGE_MARGIN_PX) / TILE_SIZE));
+    const endY   = Math.min(TILE_GRID_SIZE - 1, Math.floor((maxY + UNLOADED_TILE_EDGE_MARGIN_PX) / TILE_SIZE));
+
+    for (let ty = startY; ty <= endY; ty++) {
+        for (let tx = startX; tx <= endX; tx++) {
+            if (!loadedTiles[ty * TILE_GRID_SIZE + tx]) return true;
+        }
+    }
+    return false;
+}
+
 // ─── Main processing function ─────────────────────────────────────────────────
 
-async function processSource(params: WorkerParams): Promise<Cluster[]> {
+async function processSource(params: WorkerParams): Promise<WorkerResult> {
     const { sourceType, zoom, tX_start, tY_start, bounds, n, waybackIds } = params;
     const stitchSize = 768;
 
     const canvas = new OffscreenCanvas(stitchSize, stitchSize);
     const ctx = canvas.getContext('2d');
-    if (!ctx) return [];
+    if (!ctx) return { clusters: [], tilesLoaded: 0 };
 
     // ── Tile loading ──────────────────────────────────────────────────────────
 
     const promises: Promise<void>[] = [];
+    const loadedTiles = new Array<boolean>(TILE_GRID_SIZE * TILE_GRID_SIZE).fill(false);
     let successCount = 0;
 
     for (let dy = 0; dy < 3; dy++) {
@@ -289,8 +321,9 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 if (primaryUrl) bitmap = await fetchBitmapTimed(primaryUrl);
                 if (!bitmap && fallbackUrl) bitmap = await fetchBitmapTimed(fallbackUrl);
                 if (bitmap) {
-                    ctx.drawImage(bitmap, dxCopy * 256, dyCopy * 256);
+                    ctx.drawImage(bitmap, dxCopy * TILE_SIZE, dyCopy * TILE_SIZE);
                     bitmap.close();
+                    loadedTiles[dyCopy * TILE_GRID_SIZE + dxCopy] = true;
                     successCount++;
                 }
             })());
@@ -298,7 +331,7 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
     }
 
     await Promise.all(promises);
-    if (successCount === 0) return [];
+    if (successCount === 0) return { clusters: [], tilesLoaded: 0 };
 
     // ── Pixel extraction ──────────────────────────────────────────────────────
 
@@ -361,7 +394,7 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
             if (v < minG) minG = v;
             if (v > maxG) maxG = v;
         }
-        if (maxG - minG < 3) return [];
+        if (maxG - minG < 3) return { clusters: [], tilesLoaded: successCount };
         for (let i = 0; i < processed.length; i++) processed[i] = (processed[i] - minG) / (maxG - minG || 1);
     } else {
         const exgData = new Float32Array(stitchSize * stitchSize);
@@ -520,6 +553,7 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
                 const minAxis = Math.min(w, h);
 
                 if (areaPx <= tier.minSize) continue;
+                if (bboxTouchesUnloadedTile(cluster.minX, cluster.maxX, cluster.minY, cluster.maxY, loadedTiles)) continue;
                 if (!sourceType.startsWith('terrain') && sourceType !== 'slope' && sourceType !== 'hydrology') {
                     if (dens <= (config.minSolidity ?? 0.32) && ratio <= (config.minLinearity ?? 4.2)) continue;
                 }
@@ -724,12 +758,12 @@ async function processSource(params: WorkerParams): Promise<Cluster[]> {
         }
     }
 
-    return allClusters;
+    return { clusters: allClusters, tilesLoaded: successCount };
 }
 
 // ─── Worker message handler ───────────────────────────────────────────────────
 
 self.onmessage = async (e: MessageEvent<WorkerParams>) => {
-    const clusters = await processSource(e.data);
-    self.postMessage(clusters);
+    const result = await processSource(e.data);
+    self.postMessage(result);
 };

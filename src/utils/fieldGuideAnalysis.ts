@@ -3,6 +3,8 @@
 
 import { Cluster, HistoricRoute, ModernWay, RouteAssessment, RouteRelationship } from '../pages/fieldGuideTypes';
 
+export const MONUMENT_BOUNDARY_BUFFER_M = 20;
+
 // ─── Polygon hit test (used by NHLE protection and AIM enrichment) ────────────
 
 export function isPointInPolygon(lat: number, lon: number, rings: number[][][]): boolean {
@@ -46,26 +48,47 @@ type NHLELike = {
     features: Array<{ geometry?: { type: string; coordinates: unknown }; properties?: { Name?: string } }>;
 };
 
+function getRingBbox(ring: number[][]): [[number, number], [number, number]] {
+    const lons = ring.map(p => p[0]);
+    const lats = ring.map(p => p[1]);
+    return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+}
+
+function isPointNearAnyRing(pt: [number, number], rings: number[][][]): boolean {
+    return rings.some(ring => {
+        if (!Array.isArray(ring) || ring.length < 2) return false;
+        return getDistanceToLine(pt, ring as [number, number][], getRingBbox(ring)) <= MONUMENT_BOUNDARY_BUFFER_M;
+    });
+}
+
+function getMonumentProtectionMatch(lat: number, lon: number, geometry: { type: string; coordinates: unknown }): { inside: boolean; bufferOnly: boolean } {
+    const pt: [number, number] = [lon, lat];
+    if (geometry.type === 'Polygon') {
+        const rings = geometry.coordinates as number[][][];
+        const inside = isPointInPolygon(lat, lon, rings);
+        return { inside, bufferOnly: !inside && isPointNearAnyRing(pt, rings) };
+    }
+    if (geometry.type === 'MultiPolygon') {
+        for (const poly of geometry.coordinates as number[][][][]) {
+            const inside = isPointInPolygon(lat, lon, poly);
+            if (inside) return { inside: true, bufferOnly: false };
+            if (isPointNearAnyRing(pt, poly)) return { inside: false, bufferOnly: true };
+        }
+    }
+    return { inside: false, bufferOnly: false };
+}
+
 export function applyNHLEProtection(clusters: Cluster[], nhleData: NHLELike): Cluster[] {
     for (const cluster of clusters) {
         const [lon, lat] = cluster.center;
         for (const asset of nhleData.features) {
             if (!asset.geometry) continue;
-            if (asset.geometry.type === 'Polygon') {
-                if (isPointInPolygon(lat, lon, asset.geometry.coordinates as number[][][])) {
-                    cluster.isProtected = true;
-                    cluster.monumentName = asset.properties?.Name;
-                    break;
-                }
-            } else if (asset.geometry.type === 'MultiPolygon') {
-                for (const poly of asset.geometry.coordinates as number[][][][]) {
-                    if (isPointInPolygon(lat, lon, poly)) {
-                        cluster.isProtected = true;
-                        cluster.monumentName = asset.properties?.Name;
-                        break;
-                    }
-                }
-                if (cluster.isProtected) break;
+            const match = getMonumentProtectionMatch(lat, lon, asset.geometry);
+            if (match.inside || match.bufferOnly) {
+                cluster.isProtected = true;
+                cluster.monumentName = asset.properties?.Name;
+                if (match.bufferOnly) cluster.monumentBufferM = MONUMENT_BOUNDARY_BUFFER_M;
+                break;
             }
         }
     }
@@ -722,6 +745,7 @@ function hasHistoricMapOrAIMSupport(c: Cluster): boolean {
 // objects in enhanceHotspotsWithHistoric). Use NHLE protection and monument
 // proximity as the best available proxy for recorded heritage context.
 function hasPASOrHistoricContextNearby(c: Cluster): boolean {
+    if (c.monumentBufferM) return false;
     return c.isProtected === true || c.monumentName !== undefined;
 }
 
@@ -767,8 +791,10 @@ export function assessRouteRelationship(
     cluster: Cluster,
     modernWays: ModernWay[],
 ): RouteAssessment {
-    // Protected clusters are scheduled monuments — never suppress regardless of proximity.
-    if (cluster.isProtected || modernWays.length === 0) return NOT_ROUTE_RELATED;
+    // Protected clusters inside scheduled monument boundaries are never
+    // suppressed. Buffer-only hits are still route-assessed so modern road/track
+    // artefacts do not re-enter the target list via the advisory buffer.
+    if ((cluster.isProtected && !cluster.monumentBufferM) || modernWays.length === 0) return NOT_ROUTE_RELATED;
 
     // Find nearest mapped way within the context radius.
     let nearestWay: ModernWay | undefined;

@@ -1,5 +1,6 @@
 import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
+import * as turf from '@turf/turf';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -24,7 +25,7 @@ import {
 } from '../utils/devAnnotation';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary, HotspotSignalStrength } from '../utils/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
-import { getDistance } from '../utils/fieldGuideAnalysis';
+import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -145,6 +146,41 @@ function getSupportingSignal(explanation: string[]): string | null {
     if (explanation.some(e => e.includes('LiDAR'))) return 'Terrain Signal';
     if (explanation.some(e => e.includes('Spectral'))) return 'Spectral Signal';
     return null;
+}
+
+function getProtectedTargetCopy(f: Cluster): { label: string; body: string; detail: string } {
+    if (f.monumentBufferM) {
+        return {
+            label: 'Scheduled Monument Buffer',
+            body: `This target falls inside the ${f.monumentBufferM} m buffer around a Scheduled Monument boundary.`,
+            detail: 'Treat the buffer as a no-detect zone. Avoid disturbing the site boundary and check current protections before any fieldwork.',
+        };
+    }
+    return {
+        label: 'Scheduled Monument',
+        body: 'This area is protected as a Scheduled Monument.',
+        detail: 'Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.',
+    };
+}
+
+function buildMonumentBufferGeoJSON(data: { features?: unknown[] }): GeoJSON.FeatureCollection {
+    const features = (data.features ?? []).flatMap(feature => {
+        const geoFeature = feature as GeoJSON.Feature;
+        const geometryType = geoFeature.geometry?.type;
+        if (geometryType !== 'Polygon' && geometryType !== 'MultiPolygon') return [];
+        try {
+            const buffered = turf.buffer(geoFeature, MONUMENT_BOUNDARY_BUFFER_M / 1000, { units: 'kilometers' });
+            if (!buffered) return [];
+            buffered.properties = {
+                ...(geoFeature.properties ?? {}),
+                bufferMetres: MONUMENT_BOUNDARY_BUFFER_M,
+            };
+            return [buffered as GeoJSON.Feature];
+        } catch {
+            return [];
+        }
+    });
+    return { type: 'FeatureCollection', features };
 }
 
 type HotspotResultHierarchy = {
@@ -339,6 +375,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
     // Terrain scan centre — for drift guard in historic phase
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+    const terrainScanBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
 
     // Lab export: NHLE/AIM responses, modern ways, and raw clusters stored after scan
     const nhleDataRef      = useRef<{ features: any[] } | null>(null);
@@ -499,13 +536,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     }, [projectFinds, detectedFeatures]);
 
     // Targets that pass both evidence gates — shown in sidebar and list.
-    // Protected targets always show regardless of evidence (they carry their own warning).
+    // Monument interiors always show regardless of evidence; buffer-only hits
+    // still pass the normal target and route-noise gates.
     // Capped at 12 per scan to keep the list actionable.
     const displayTargets = useMemo(() => {
         // Annotate suppression reasons before filtering so the Engine Lab can see
         // exactly why each cluster was rejected at the gate level.
         for (const f of detectedFeatures) {
-            if (f.isProtected) continue;
+            if (f.isProtected && !f.monumentBufferM) continue;
             if (!hasTargetEvidence(f)) {
                 if (!f.suppressedBy) f.suppressedBy = [];
                 if (!f.suppressedBy.includes('failed_evidence_gate')) f.suppressedBy.push('failed_evidence_gate');
@@ -516,7 +554,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             }
         }
         return detectedFeatures
-            .filter(f => f.isProtected || (
+            .filter(f => (f.isProtected && !f.monumentBufferM) || (
                 hasTargetEvidence(f) &&
                 hasLocalPhysicalEvidence(f) &&
                 !f.isRouteArtefactRisk
@@ -687,6 +725,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
         terrainScanCenterRef.current = null;
+        terrainScanBoundsRef.current = null;
         setSourceAvailability(null);
         setScanFromCache(false);
         setRawClusters([]);
@@ -702,10 +741,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const applyNhleToMap = (data: { features: unknown[] }) => {
         const src = mapRef.current?.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
         if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
+        const bufferSrc = mapRef.current?.getSource('monument-buffers') as maplibregl.GeoJSONSource | undefined;
+        if (bufferSrc) bufferSrc.setData(buildMonumentBufferGeoJSON(data));
     };
 
     const applyAimToMap = (data: { features: unknown[] }) => {
-        if (!data.features?.length) return;
         const src = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
         if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
     };
@@ -795,11 +835,9 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             setMobileSheetMode('targets');
         }
 
-        const scanCenter = {
-            lat: mapRef.current!.getCenter().lat,
-            lng: mapRef.current!.getCenter().lng,
-        };
+        const scanCenter = result.scanStartCenter;
         terrainScanCenterRef.current = scanCenter;
+        terrainScanBoundsRef.current = result.scanStartBounds;
 
         // Auto-trigger historic phase — passes ScanContext to skip NHLE/AIM re-fetch
         const context: ScanContext = {
@@ -975,7 +1013,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             lat: pendingAnnotation.lat,
             lon: pendingAnnotation.lon,
             timestamp: Date.now(),
-            engineVersion: 'FG-2026.05.09b',
+            engineVersion: 'FG-2026.05.19a',
             ...annotationForm,
             engineContext: captureEngineContext(pendingAnnotation.lat, pendingAnnotation.lon),
         };
@@ -1000,11 +1038,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         const payload = {
             exportVersion:    '1',
-            engineVersion:    'FG-2026.05.09b',
+            engineVersion:    'FG-2026.05.19a',
             exportedAt:       Date.now(),
             scanId:           tileKey,
             center:           { lat: center.lat, lng: center.lng },
             bounds:           { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() },
+            scanStartCenter:   terrainScanCenterRef.current,
+            scanStartBounds:   terrainScanBoundsRef.current,
             sourceAvailability,
             rawClusters:      cached?.rawClusters ?? [],
             nhleData:         nhleDataRef.current    ?? { features: [] },
@@ -1035,6 +1075,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const loadingPAS = isHistoricScanning;
     const terrainScanComplete = hasScanned && !analyzing && !isTerrainScanning;
     const historicScanComplete = historicMode && historicScanCompleted && !loadingPAS;
+    const selectedTarget = selectedId ? detectedFeatures.find(f => f.id === selectedId) ?? null : null;
 
     // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1319,14 +1360,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <p className="text-[15px] font-black text-white leading-tight truncate">
-                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Scheduled Monument' : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review') : 'Ready to Scan'}
+                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? getProtectedTargetCopy(selectedTarget).label : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review') : 'Ready to Scan'}
                                             </p>
                                             {selectedMonument === undefined && !analyzing && !isTerrainScanning && !loadingPAS && ((historicMode && historicScanComplete) || (!historicMode && hasScanned && mobileSheetMode === 'hotspots' && terrainScanComplete)) && (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
                                             )}
                                         </div>
                                         <p className="text-[10px] font-bold text-white/35 leading-tight truncate">
-                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (detectedFeatures.find(f => f.id === selectedId)?.isProtected ? 'Legal protection applies' : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
+                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
@@ -1488,11 +1529,13 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                     const strengthColour: Record<TargetSignalStrength, string> = {
                                         'Strong Signal': 'text-amber-400', 'Moderate Signal': 'text-emerald-400', 'Supporting Signal': 'text-white/40',
                                     };
-                                    if (f.isProtected) return (
+                                    if (f.isProtected) {
+                                        const protectedCopy = getProtectedTargetCopy(f);
+                                        return (
                                         <div key={f.id} className="space-y-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
+                                                    <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">{protectedCopy.label}</p>
                                                     {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
                                                 </div>
                                                 <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
@@ -1500,8 +1543,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 </button>
                                             </div>
                                             <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
-                                                <p className="text-xs font-bold text-stone-200/85 leading-snug">This area is protected as a Scheduled Monument.</p>
-                                                <p className="text-[11px] font-bold text-stone-300/60 leading-snug">Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.</p>
+                                                <p className="text-xs font-bold text-stone-200/85 leading-snug">{protectedCopy.body}</p>
+                                                <p className="text-[11px] font-bold text-stone-300/60 leading-snug">{protectedCopy.detail}</p>
                                             </div>
                                             {f.aimInfo && (
                                                 <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
@@ -1510,7 +1553,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 </div>
                                             )}
                                         </div>
-                                    );
+                                        );
+                                    }
                                     return (
                                         <div key={f.id} className="space-y-3">
                                             <div className="flex items-start justify-between gap-2">
@@ -1951,7 +1995,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             <div className="min-w-0">
                                                                 {!f.isProtected && <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-emerald-100' : 'text-sky-200/55'}`}>{f.type}</p>}
                                                                 <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-stone-400' : isPrimary ? 'text-emerald-300' : 'text-white/78'}`}>
-                                                                    {f.isProtected ? 'Scheduled Monument' : getTargetVerdict(tI.signalStrength, isPrimary)}
+                                                                    {f.isProtected ? getProtectedTargetCopy(f).label : getTargetVerdict(tI.signalStrength, isPrimary)}
                                                                 </p>
                                                                 {!f.isProtected && <p className={`text-[10px] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
                                                             </div>
@@ -2216,12 +2260,14 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 return (
                                     <div key={f.id} className={`${f.isProtected ? 'p-4' : 'p-4 lg:p-5'} rounded-2xl lg:rounded-3xl border bg-slate-900 shadow-2xl transition-all ${f.isProtected ? 'border-stone-700/50' : borderColour[tInterp.signalStrength]}`}>
                                         <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
-                                        {f.isProtected ? (
+                                        {f.isProtected ? (() => {
+                                            const protectedCopy = getProtectedTargetCopy(f);
+                                            return (
                                             /* Scheduled Monument — restrained heritage warning, no investigation prompts */
                                             <div className="space-y-3">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
-                                                        <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
+                                                        <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">{protectedCopy.label}</p>
                                                         {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
                                                     </div>
                                                     <button onClick={(e) => { e.stopPropagation(); setSelectedId(null); }} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
@@ -2229,8 +2275,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     </button>
                                                 </div>
                                                 <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
-                                                    <p className="text-xs font-bold text-stone-200/85 leading-snug">This area is protected as a Scheduled Monument.</p>
-                                                    <p className="text-[11px] font-bold text-stone-300/60 leading-snug">Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.</p>
+                                                    <p className="text-xs font-bold text-stone-200/85 leading-snug">{protectedCopy.body}</p>
+                                                    <p className="text-[11px] font-bold text-stone-300/60 leading-snug">{protectedCopy.detail}</p>
                                                 </div>
                                                 {f.aimInfo && (
                                                     <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
@@ -2239,7 +2285,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     </div>
                                                 )}
                                             </div>
-                                        ) : (
+                                            );
+                                        })() : (
                                             <>
                                             <div className="flex items-center justify-between gap-2 mb-3">
                                                 {isPrimaryTarget && (
@@ -2668,9 +2715,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             const mb  = mapRef.current?.getBounds();
                                                             const payload = {
                                                                 exportedAt:        new Date().toISOString(),
-                                                                engineVersion:     'FG-2026.05.09b',
+                                                                engineVersion:     'FG-2026.05.19a',
                                                                 fromCache:         scanFromCache,
-                                                                scanCenter:        mc ? { lat: mc.lat, lng: mc.lng } : null,
+                                                                scanCenter:        terrainScanCenterRef.current ?? (mc ? { lat: mc.lat, lng: mc.lng } : null),
+                                                                scanStartBounds:   terrainScanBoundsRef.current,
                                                                 viewportBounds:    mb ? { west: mb.getWest(), south: mb.getSouth(), east: mb.getEast(), north: mb.getNorth() } : null,
                                                                 sourceAvailability,
                                                                 totalTargetCount:  displayTargets.length,

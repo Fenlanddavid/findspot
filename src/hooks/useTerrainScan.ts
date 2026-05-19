@@ -16,7 +16,7 @@ import { scanDataSource } from '../utils/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
-    applyRouteAssessments, getHotspotInput,
+    applyRouteAssessments, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
@@ -49,6 +49,8 @@ export interface TerrainScanResult {
     heritageCount:      number;
     sourceAvailability: Record<string, boolean>;
     fromCache:          boolean;
+    scanStartCenter:    { lat: number; lng: number };
+    scanStartBounds:     { west: number; south: number; east: number; north: number };
 }
 
 interface TerrainScanParams {
@@ -61,6 +63,25 @@ interface TerrainScanParams {
 interface UseTerrainScanOptions {
     onLog:          (msg: string, source?: LogSource, level?: LogLevel) => void;
     onStatusChange: (status: string) => void;
+}
+
+function padBoundsByMetres(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    centerLat: number,
+    metres: number,
+): { west: number; south: number; east: number; north: number } {
+    const latPad = metres / 111_320;
+    const cosLat = Math.max(0.2, Math.abs(Math.cos(centerLat * Math.PI / 180)));
+    const lonPad = metres / (111_320 * cosLat);
+    return {
+        west:  west  - lonPad,
+        south: south - latPad,
+        east:  east  + lonPad,
+        north: north + latPad,
+    };
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -109,11 +130,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.09b';
+        const ENGINE_VERSION = 'FG-2026.05.19a';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
         const center = map.getCenter();
+        const scanStartCenter = { lat: center.lat, lng: center.lng };
         const n      = Math.pow(2, zoom);
         const cX     = (center.lng + 180) / 360 * n;
         const cY     = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
@@ -133,6 +155,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const qSouth = bounds.getSouth();
         const qEast  = bounds.getEast();
         const qNorth = bounds.getNorth();
+        const scanStartBounds = { west: qWest, south: qSouth, east: qEast, north: qNorth };
+        const monumentQueryBounds = padBoundsByMetres(
+            qWest, qSouth, qEast, qNorth, center.lat, MONUMENT_BOUNDARY_BUFFER_M + 5,
+        );
 
         // ── Cache check ───────────────────────────────────────────────────────
         // If the same viewport was scanned within the last 24 hours, skip the
@@ -144,7 +170,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
                 onStatusChange('Checking protected archaeology...');
                 // Still run NHLE/AIM/routes so the historic phase has fresh data.
-                const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+                const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${monumentQueryBounds.west},${monumentQueryBounds.south},${monumentQueryBounds.east},${monumentQueryBounds.north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
                 const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
                 const [nhleData, aimData] = await Promise.all([
                     fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse),
@@ -200,7 +226,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
-                    sourceAvailability: cached.sourceAvailability, fromCache: true,
+                    sourceAvailability: cached.sourceAvailability, fromCache: true, scanStartCenter, scanStartBounds,
                 };
             }
         } catch {
@@ -212,7 +238,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // directly — avoids each worker independently fetching the catalog.
         const waybackPromise = resolveWaybackIds();
 
-        const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+        const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${monumentQueryBounds.west},${monumentQueryBounds.south},${monumentQueryBounds.east},${monumentQueryBounds.north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
         const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
 
         const nhlePromise       = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
@@ -242,7 +268,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
         try {
             // NHLE, AIM, and all six tile workers resolve in parallel
-            const [nhleData, aimData, terrainHits, terrainGlobalHits, slopeHits, hydroHits, springHits, summerHits] = await Promise.all([
+            const [nhleData, aimData, terrainResult, terrainGlobalResult, slopeResult, hydroResult, springResult, summerResult] = await Promise.all([
                 nhlePromise, aimPromise,
                 terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask,
             ]);
@@ -251,6 +277,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 setIsScanning(false);
                 return null;
             }
+
+            const terrainHits       = terrainResult.clusters;
+            const terrainGlobalHits = terrainGlobalResult.clusters;
+            const slopeHits         = slopeResult.clusters;
+            const hydroHits         = hydroResult.clusters;
+            const springHits        = springResult.clusters;
+            const summerHits        = summerResult.clusters;
 
             const monumentPoints: [number, number][] = (nhleData.features || []).flatMap(f => {
                 if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
@@ -287,12 +320,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             // ── Source availability & cache save ─────────────────────────────
             const sourceAvailability: Record<string, boolean> = {
-                terrain:          terrainHits.length > 0,
-                terrain_global:   terrainGlobalHits.length > 0,
-                slope:            slopeHits.length > 0,
-                hydrology:        hydroHits.length > 0,
-                satellite_spring: springHits.length > 0,
-                satellite_summer: summerHits.length > 0,
+                terrain:          terrainResult.tilesLoaded > 0,
+                terrain_global:   terrainGlobalResult.tilesLoaded > 0,
+                slope:            slopeResult.tilesLoaded > 0,
+                hydrology:        hydroResult.tilesLoaded > 0,
+                satellite_spring: springResult.tilesLoaded > 0,
+                satellite_summer: summerResult.tilesLoaded > 0,
             };
             try {
                 const expiredCutoff = Date.now() - CACHE_TTL_MS;
@@ -341,7 +374,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
 
             if (mountedRef.current) setIsScanning(false);
-            return { terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots, nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability, fromCache: false };
+            return {
+                terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
+                nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability,
+                fromCache: false, scanStartCenter, scanStartBounds,
+            };
 
         } catch (e) {
             if (tokenRef.current === token) {

@@ -1,4 +1,28 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { Cluster, ModernWay } from "../src/pages/fieldGuideTypes";
+import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
+
+function routeRegressionCluster(id: string, center: [number, number]): Cluster {
+  return {
+    id,
+    points: [],
+    minX: 0,
+    maxX: 50,
+    minY: 0,
+    maxY: 5,
+    type: "Linear Signal",
+    score: 80,
+    number: 1,
+    isProtected: false,
+    confidence: "High",
+    findPotential: 70,
+    center,
+    source: "terrain",
+    sources: ["terrain"],
+    bearing: 0,
+    metrics: { circularity: 0.1, density: 0.7, ratio: 7, area: 120 },
+  };
+}
 
 function encodePack(pack: object): string {
   return Buffer.from(JSON.stringify(pack), "utf8")
@@ -209,6 +233,47 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) => {
     throw error;
   });
+});
+
+test("monument buffer targets still run through modern route suppression", () => {
+  const nhleData = {
+    features: [{
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [0, 0],
+          [0.001, 0],
+          [0.001, 0.001],
+          [0, 0.001],
+          [0, 0],
+        ]],
+      },
+      properties: { Name: "Regression Scheduled Monument" },
+    }],
+  };
+  const modernWays: ModernWay[] = [{
+    highwayTag: "track",
+    geometry: [[0.00105, 0], [0.00105, 0.001]],
+    bbox: [[0.00105, 0], [0.00105, 0.001]],
+  }];
+
+  const bufferOnly = routeRegressionCluster("buffer-track", [0.00105, 0.0005]);
+  applyNHLEProtection([bufferOnly], nhleData);
+  applyRouteAssessments([bufferOnly], modernWays);
+
+  expect(bufferOnly.isProtected).toBe(true);
+  expect(bufferOnly.monumentBufferM).toBe(20);
+  expect(bufferOnly.isRouteArtefactRisk).toBe(true);
+  expect(bufferOnly.routeAssessment?.relationship).toBe("modern_route_artefact");
+
+  const monumentInterior = routeRegressionCluster("inside-monument", [0.0005, 0.0005]);
+  applyNHLEProtection([monumentInterior], nhleData);
+  applyRouteAssessments([monumentInterior], modernWays);
+
+  expect(monumentInterior.isProtected).toBe(true);
+  expect(monumentInterior.monumentBufferM).toBeUndefined();
+  expect(monumentInterior.isRouteArtefactRisk).toBeUndefined();
+  expect(monumentInterior.routeAssessment?.relationship).toBe("not_route_related");
 });
 
 test("backup restore replaces current data and preserves linked records, settings and media blobs", async ({ page }) => {

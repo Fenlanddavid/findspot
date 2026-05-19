@@ -6,6 +6,7 @@ export interface Cluster {
     type: string; score: number; number: number;
     isProtected: boolean;
     monumentName?: string;
+    monumentBufferM?: number;
     aimInfo?: { type: string; period: string; evidence: string };
     confidence: 'High' | 'Medium' | 'Subtle';
     findPotential: number;

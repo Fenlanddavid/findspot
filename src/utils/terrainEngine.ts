@@ -4,7 +4,7 @@
 
 import { Cluster } from '../pages/fieldGuideTypes';
 import { WaybackIds } from './waybackService';
-import type { WorkerParams } from '../workers/terrainScanWorker';
+import type { WorkerParams, WorkerResult } from '../workers/terrainScanWorker';
 
 type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
 
@@ -25,8 +25,8 @@ export function scanDataSource(
     _assetsGeoJSON: { features: unknown[] },   // kept for API compatibility — unused
     waybackIds: WaybackIds | null = null,
     workerReg?: Worker[],
-): Promise<Cluster[]> {
-    return new Promise<Cluster[]>((resolve) => {
+): Promise<WorkerResult> {
+    return new Promise<WorkerResult>((resolve) => {
         const worker = new Worker(
             new URL('../workers/terrainScanWorker.ts', import.meta.url),
             { type: 'module' },
@@ -41,15 +41,16 @@ export function scanDataSource(
             }
         };
 
-        worker.onmessage = (e: MessageEvent<Cluster[]>) => {
+        worker.onmessage = (e: MessageEvent<WorkerResult | Cluster[]>) => {
             cleanup();
-            resolve(e.data);
+            const data = e.data;
+            resolve(Array.isArray(data) ? { clusters: data, tilesLoaded: data.length > 0 ? 1 : 0 } : data);
             worker.terminate();
         };
 
         worker.onerror = () => {
             cleanup();
-            resolve([]);
+            resolve({ clusters: [], tilesLoaded: 0 });
             worker.terminate();
         };
 
