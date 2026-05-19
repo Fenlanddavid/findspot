@@ -17,7 +17,7 @@ import {
     fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
     parseOverpassRoutes,
 } from '../services/historicScanService';
-import { getDistanceKm, getDriftMetres } from '../utils/fieldGuideAnalysis';
+import { getDistanceKm, getDriftMetres, getHotspotInput } from '../utils/fieldGuideAnalysis';
 import { enhanceHotspotsWithHistoric, buildTerrainHotspots } from '../utils/hotspotEngine';
 import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
@@ -287,7 +287,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 onStatusChange('Building hotspot model...');
 
                 // Stage 1: re-run terrain scoring with historic routes + monument suppression
-                const terrainHotspots = buildTerrainHotspots(opts.terrainClusters, routes, monumentPoints);
+                const terrainHotspots = buildTerrainHotspots(getHotspotInput(opts.terrainClusters), routes, monumentPoints);
 
                 // Stage 2: additive historic enrichment (finds, monuments, place signals)
                 onStatusChange('Comparing landscape signals...');

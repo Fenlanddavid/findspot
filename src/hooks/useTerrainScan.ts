@@ -10,35 +10,18 @@ import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
     NHLEResponse, AIMResponse, OverpassElement,
-    parseOverpassRoutes, fetchScanRoutes, fetchModernWays,
+    parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBounds,
 } from '../services/historicScanService';
 import { scanDataSource } from '../utils/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
-    applyRouteAssessments,
+    applyRouteAssessments, getHotspotInput,
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-function hasStrongIndependentEvidence(c: Cluster): boolean {
-    const hasLidar = c.sources.includes('terrain') || c.sources.includes('terrain_global');
-    const hasMultiSeasonSat = c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
-
-    return (
-        (hasLidar && (hasMultiSeasonSat || c.sources.includes('hydrology') || c.multiScale === true)) ||
-        hasMultiSeasonSat ||
-        c.aimInfo !== undefined
-    );
-}
-
-function getHotspotInput(clusters: Cluster[]): Cluster[] {
-    return clusters.filter(c => !c.isRouteArtefactRisk || hasStrongIndependentEvidence(c));
-}
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -136,6 +119,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const cY     = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
         const tX_start = Math.floor(cX) - 1;
         const tY_start = Math.floor(cY) - 1;
+        const tileLon = (x: number) => x / n * 360 - 180;
+        const tileLat = (y: number) => (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * y / n))) - Math.PI / 2);
+        const scanWest  = tileLon(tX_start);
+        const scanEast  = tileLon(tX_start + 3);
+        const scanNorth = tileLat(tY_start);
+        const scanSouth = tileLat(tY_start + 3);
 
         // Tile-based cache key — deterministic for this exact viewport at Z16.
         const tileKey = `${zoom}-${tX_start}-${tY_start}`;
@@ -201,7 +190,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 // Attaches routeAssessment to each cluster; sets isRouteArtefactRisk on artefacts.
                 let cachedModernWays: import('../pages/fieldGuideTypes').ModernWay[] = [];
                 try {
-                    cachedModernWays = await fetchModernWays(center.lat, center.lng, signal);
+                    cachedModernWays = await fetchModernWaysForBounds(
+                        scanWest, scanSouth, scanEast, scanNorth, signal,
+                    );
                     applyRouteAssessments(contextualized, cachedModernWays);
                 } catch { /* non-critical */ }
                 const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
@@ -227,7 +218,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const nhlePromise       = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
         const aimPromise        = fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse);
         const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
-        const modernWaysPromise = fetchModernWays(center.lat, center.lng, signal).catch(() => []);
+        const modernWaysPromise = fetchModernWaysForBounds(scanWest, scanSouth, scanEast, scanNorth, signal).catch(() => []);
 
         onStatusChange('Reading terrain...');
 

@@ -90,7 +90,7 @@ type EngineAction =
     | { type: 'SCAN_SUCCESS'; features: Cluster[]; hotspots: Hotspot[]; monumentPoints: [number, number][]; routes: HistoricRoute[]; heritageCount: number }
     | { type: 'SCAN_FAIL' }
     | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] }
-    | { type: 'SET_HERITAGE_COUNT'; count: number; monumentPoints: [number, number][] }
+    | { type: 'SET_HERITAGE_COUNT'; count: number; monumentPoints: [number, number][]; routes?: HistoricRoute[] }
     | { type: 'CLEAR_SCAN' };
 
 const initialEngineState: EngineState = {
@@ -122,7 +122,12 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
         case 'HISTORIC_ENHANCE':
             return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
         case 'SET_HERITAGE_COUNT':
-            return { ...state, heritageCount: action.count, monumentPoints: action.monumentPoints };
+            return {
+                ...state,
+                heritageCount: action.count,
+                monumentPoints: action.monumentPoints,
+                historicRoutes: action.routes ?? state.historicRoutes,
+            };
         case 'CLEAR_SCAN':
             return { ...initialEngineState };
         default:
@@ -586,7 +591,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
-        hotspots, selectedHotspotId, detectedFeatures: displayTargets.filter(f => !f.isProtected), traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
+        hotspots, selectedHotspotId, detectedFeatures: displayTargets, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
         fieldBoundaries: [
             ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
             // Fall back to the permission's own boundary when no fields have been drawn
@@ -727,7 +732,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setHistoricScanCompleted(true);
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
-        dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints });
+        dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints, routes: result.routes });
 
         if (!result.drifted && result.enhancedHotspots.length > 0) {
             setSelectedHotspotId(null);   // dismiss the terrain-phase selection; user chooses from enhanced list

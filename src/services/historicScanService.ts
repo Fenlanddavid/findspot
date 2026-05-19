@@ -264,6 +264,33 @@ export async function fetchModernWays(
     const types = ['motorway','trunk','primary','secondary','tertiary','unclassified','residential','service','track','path','footway','bridleway'];
     const query = `[out:json][timeout:15];(${types.map(t => `way["highway"="${t}"](around:${r},${lat},${lng})`).join(';')};);out geom;`;
     const result = await overpassFetch(query, signal);
+    return parseModernWays(result);
+}
+
+/**
+ * Overpass query for modern roads, tracks, and paths across the active scan
+ * footprint, with a small buffer so edge-of-scan route artefacts are still
+ * assessed. Used by the terrain scanner for route-noise suppression.
+ */
+export async function fetchModernWaysForBounds(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal
+): Promise<import('../pages/fieldGuideTypes').ModernWay[]> {
+    const pad = 0.003;
+    const w = Number((west  - pad).toFixed(6));
+    const s = Number((south - pad).toFixed(6));
+    const e = Number((east  + pad).toFixed(6));
+    const n = Number((north + pad).toFixed(6));
+    const types = ['motorway','trunk','primary','secondary','tertiary','unclassified','residential','service','track','path','footway','bridleway'];
+    const query = `[out:json][timeout:15];(${types.map(t => `way["highway"="${t}"](${s},${w},${n},${e})`).join(';')};);out geom;`;
+    const result = await overpassFetch(query, signal);
+    return parseModernWays(result);
+}
+
+function parseModernWays(result: OverpassResponse | null): import('../pages/fieldGuideTypes').ModernWay[] {
     if (!result?.elements) return [];
     return result.elements
         .filter(el => el.geometry && el.geometry.length >= 2)

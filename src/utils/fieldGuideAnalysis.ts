@@ -1018,3 +1018,23 @@ export function computeFieldReliabilityScore(clusters: Cluster[]): FieldReliabil
         score >= 70 ? 'high' : score >= 40 ? 'moderate' : 'low';
     return { score, label, reasons };
 }
+
+// ─── Hotspot input filter ────────────────────────────────────────────────────
+// Route artefacts are hidden from hotspot scoring unless they carry strong,
+// independent evidence. Keep this shared so terrain and historic re-scoring use
+// the same gate and historic enhancement cannot reintroduce suppressed signals.
+
+function hasStrongIndependentEvidence(c: Cluster): boolean {
+    const hasLidar = c.sources.includes('terrain') || c.sources.includes('terrain_global');
+    const hasMultiSeasonSat = c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
+
+    return (
+        (hasLidar && (hasMultiSeasonSat || c.sources.includes('hydrology') || c.multiScale === true)) ||
+        hasMultiSeasonSat ||
+        c.aimInfo !== undefined
+    );
+}
+
+export function getHotspotInput(clusters: Cluster[]): Cluster[] {
+    return clusters.filter(c => !c.isRouteArtefactRisk || hasStrongIndependentEvidence(c));
+}
