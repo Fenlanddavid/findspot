@@ -753,6 +753,26 @@ export function buildTerrainHotspots(
             }
         }
 
+        // ── Route assessment adjustments ──────────────────────────────────────
+        // Applied from member cluster route assessments, averaged across all members
+        // so a single noisy cluster in a multi-member hotspot has proportional impact.
+        // Caps: noise penalty max -15, movement boost max +8.
+        // modern_route_artefact members (-999) are excluded by getHotspotInput before
+        // reaching here, so the effective range is roughly -15 to +8.
+        {
+            const adjValues = members.map(m => m.routeAssessment?.hotspotScoreAdjustment ?? 0);
+            const hasAny    = adjValues.some(v => v !== 0);
+            if (hasAny) {
+                const avg      = adjValues.reduce((s, v) => s + v, 0) / adjValues.length;
+                const clamped  = Math.max(-15, Math.min(8, avg));
+                if (clamped < 0) {
+                    penalty += clamped;
+                } else if (clamped > 0) {
+                    context += clamped;
+                }
+            }
+        }
+
         // ── Disturbance gate ──────────────────────────────────────────────────
         // High-disturbance hotspots are only kept if there is strong independent
         // evidence — AIM data, 3+ sources, multi-season satellite, or LiDAR +

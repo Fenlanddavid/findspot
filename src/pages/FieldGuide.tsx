@@ -1564,6 +1564,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                     <p className="text-[10px] font-bold text-white/80 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                 </div>
                                             )}
+                                            {f.routeAssessment?.relationship === 'route_edge_activity_candidate' && (
+                                                <div className="p-2 rounded-xl border bg-sky-500/10 border-sky-400/30">
+                                                    <p className="text-[9px] font-black uppercase text-sky-300 leading-tight mb-0.5">Route-Edge Signal</p>
+                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">This signal sits beside, not on, a mapped route. It may reflect older movement or route-edge activity.</p>
+                                                </div>
+                                            )}
+                                            {f.routeAssessment?.relationship === 'historic_movement_candidate' && (
+                                                <div className="p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
+                                                    <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Movement Corridor</p>
+                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">Multiple signals suggest this may relate to an older movement corridor rather than a modern track.</p>
+                                                </div>
+                                            )}
+                                            {f.routeAssessment?.relationship === 'possible_modern_route_noise' && (
+                                                <div className="p-2 rounded-xl border bg-amber-500/15 border-amber-400/40">
+                                                    <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Proximity Caution</p>
+                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">This signal lies close to a mapped modern track or road edge. Treat with additional caution.</p>
+                                                </div>
+                                            )}
                                             <div className="border-t border-white/8 pt-2">
                                                 <span
                                                     onClick={() => setExpandedTargetId(expandedTargetId === f.id ? null : f.id)}
@@ -2295,6 +2313,24 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                         <div className="mt-2 p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
                                                             <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Historic verification</p>
                                                             <p className="text-[10px] font-bold text-white/80 leading-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
+                                                        </div>
+                                                    )}
+                                                    {f.routeAssessment?.relationship === 'route_edge_activity_candidate' && (
+                                                        <div className="mt-2 p-2 rounded-xl border bg-sky-500/10 border-sky-400/30">
+                                                            <p className="text-[9px] font-black uppercase text-sky-300 leading-tight mb-0.5">Route-Edge Signal</p>
+                                                            <p className="text-[10px] font-bold text-white/80 leading-tight">This signal sits beside, not on, a mapped route. It may reflect older movement or route-edge activity.</p>
+                                                        </div>
+                                                    )}
+                                                    {f.routeAssessment?.relationship === 'historic_movement_candidate' && (
+                                                        <div className="mt-2 p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
+                                                            <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Movement Corridor</p>
+                                                            <p className="text-[10px] font-bold text-white/80 leading-tight">Multiple signals suggest this may relate to an older movement corridor rather than a modern track.</p>
+                                                        </div>
+                                                    )}
+                                                    {f.routeAssessment?.relationship === 'possible_modern_route_noise' && (
+                                                        <div className="mt-2 p-2 rounded-xl border bg-amber-500/15 border-amber-400/40">
+                                                            <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Proximity Caution</p>
+                                                            <p className="text-[10px] font-bold text-white/80 leading-tight">This signal lies close to a mapped modern track or road edge. Treat with additional caution.</p>
                                                         </div>
                                                     )}
                                                 </div>

@@ -1,7 +1,7 @@
 // ─── Pure analysis functions: consensus merging, context analysis,
 //     disturbance suppression, asset enrichment, drift detection ──────────────
 
-import { Cluster, HistoricRoute, ModernWay } from '../pages/fieldGuideTypes';
+import { Cluster, HistoricRoute, ModernWay, RouteAssessment, RouteRelationship } from '../pages/fieldGuideTypes';
 
 // ─── Polygon hit test (used by NHLE protection and AIM enrichment) ────────────
 
@@ -632,86 +632,350 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 // Import { buildTerrainHotspots, enhanceHotspotsWithHistoric, generateHotspots }
 // from '../utils/hotspotEngine' instead.
 
-// ─── Route artefact suppression ───────────────────────────────────────────────
-// Marks clusters that sit on, or align tightly with, a modern road / track /
-// path. These targets are likely scanner artefacts caused by the road surface
-// or embankment rather than archaeology.
+// ─── Route movement interpretation ───────────────────────────────────────────
+// Single authoritative model for assessing whether a cluster is a modern route
+// artefact or an archaeologically meaningful movement signal.
 //
-// The flag is set in-place on each cluster; target display filters it strictly,
-// while hotspot generation can still keep independently corroborated signals.
+// Replaces the old binary applyRouteArtefactSuppression(). All downstream
+// systems (hotspot engine, trace engine, display filter) read from the
+// RouteAssessment object attached to each cluster — no independent route logic
+// elsewhere.
+//
+// Pipeline position: runs AFTER AIM/NHLE enrichment and analyzeContext so the
+// assessment has full archaeological context (aimInfo, isOnCorridor,
+// isHighConfidenceCrossing, hydrology relationships) before deciding.
 
-// Route artefact suppression applies to all clusters unless formally protected
-// (isProtected). Historic routes are intentionally not used for suppression:
-// they are archaeological context, while modern OSM ways are artefact evidence.
+// ── Distance thresholds ───────────────────────────────────────────────────────
+export const ROUTE_ON_LINE_M    =   8;   // 0–8m: likely directly on modern route
+export const ROUTE_CLOSE_M      =  20;   // 8–20m: possible verge/drainage/track-edge
+export const ROUTE_EDGE_MIN_M   =  20;   // 20m: start of potentially interesting offset zone
+export const ROUTE_EDGE_MAX_M   =  70;   // 70m: end of route-edge activity zone
+export const ROUTE_CONTEXT_MAX_M = 120;  // 120m+: generally unrelated
 
-// Suppression distance and linear-alignment eligibility vary by road class.
-// Major engineered roads have large embankments that generate significant LiDAR
-// noise well away from the centreline — use a wide threshold.
-// Minor roads have a smaller profile — use a tighter threshold.
-// Tracks, paths, and bridleways are NOT suppressed: they are often ancient
-// features and targets near them are archaeologically meaningful.
-function waySuppressionDistance(highwayTag: string): number | null {
-    switch (highwayTag) {
-        case 'motorway':
-        case 'trunk':
-        case 'primary':     return 20;   // major road embankment radius
-        case 'secondary':   return 15;
-        case 'tertiary':
-        case 'unclassified':
-        case 'residential':
-        case 'service':     return 10;   // only suppress if centroid is basically on the road
-        default:            return null; // track, path, footway, bridleway → no suppression
-    }
+// ── Way type risk weights ─────────────────────────────────────────────────────
+// Used to scale distance-based risk by road importance. Major engineered roads
+// have large embankment profiles; minor tracks/paths have minimal infrastructure.
+// Scale: divide by 50 to get a 0–1 multiplier.
+const WAY_TYPE_RISK_WEIGHT: Record<string, number> = {
+    motorway:     50,
+    trunk:        45,
+    primary:      40,
+    secondary:    35,
+    tertiary:     30,
+    unclassified: 24,
+    residential:  20,
+    service:      22,
+    track:        18,
+    path:         10,
+    footway:       8,
+    bridleway:     8,
+};
+
+// ── Geometry helpers ──────────────────────────────────────────────────────────
+
+function isStronglyLinear(c: Cluster): boolean {
+    return (c.metrics?.ratio ?? 0) > 4.0;
 }
 
-// Linear alignment check is only worth running for roads with enough tarmac /
-// embankment mass to generate scanner artefacts — secondary and above.
-function wayHasLinearArtefactRisk(highwayTag: string): boolean {
-    return ['motorway', 'trunk', 'primary', 'secondary'].includes(highwayTag);
+// Long thin linears are the dominant drain/track-scar false-positive shape.
+// Uses the pixel bounding box minor axis (same approach as suppressDisturbance).
+function isLongThinLinear(c: Cluster): boolean {
+    if ((c.metrics?.ratio ?? 0) <= 6.0) return false;
+    const minAxis = Math.min(
+        (c.maxX ?? 0) - (c.minX ?? 0) + 1,
+        (c.maxY ?? 0) - (c.minY ?? 0) + 1,
+    );
+    return minAxis < 8;
 }
 
-export function applyRouteArtefactSuppression(
-    clusters: Cluster[],
+function alignedWithWayBearing(c: Cluster, way: ModernWay): boolean {
+    if (typeof c.bearing !== 'number') return false;
+    const wb = computeRouteBearing(way.geometry);
+    return bearingDiff(c.bearing, wb) <= 20 || bearingDiff(c.bearing, (wb + 180) % 360) <= 20;
+}
+
+function singleSourceOnly(c: Cluster): boolean {
+    return c.sources.length === 1;
+}
+
+// ── Evidence helpers ──────────────────────────────────────────────────────────
+
+function hasMultiScaleConfirmation(c: Cluster): boolean {
+    return c.multiScale === true;
+}
+
+function hasBothSatelliteSeasons(c: Cluster): boolean {
+    return c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
+}
+
+function hasHydrologyOrWetMarginSupport(c: Cluster): boolean {
+    return c.sources.includes('hydrology') ||
+        (c.metrics?.dryMarginScore  ?? 0) >= 0.55 ||
+        (c.metrics?.flowConvergence ?? 0) >= 0.55;
+}
+
+function hasHistoricMapOrAIMSupport(c: Cluster): boolean {
+    return c.aimInfo !== undefined || c.sources.includes('historic');
+}
+
+// On clusters, PAS find enrichment has not yet run (it applies to hotspot
+// objects in enhanceHotspotsWithHistoric). Use NHLE protection and monument
+// proximity as the best available proxy for recorded heritage context.
+function hasPASOrHistoricContextNearby(c: Cluster): boolean {
+    return c.isProtected === true || c.monumentName !== undefined;
+}
+
+function hasMultiSourceSupport(c: Cluster): boolean {
+    const physicalSources = c.sources.filter(s =>
+        s === 'terrain' || s === 'terrain_global' || s === 'hydrology' ||
+        s === 'satellite_spring' || s === 'satellite_summer' || s === 'historic',
+    );
+    return physicalSources.length >= 2;
+}
+
+// Junction / crossing / wet-margin convergence points are archaeologically
+// meaningful beside routes regardless of road type. Do NOT require OSM spring
+// nodes — hydrology context and flow convergence are more useful.
+function isAtRouteJunctionCrossingOrSpring(c: Cluster): boolean {
+    if (c.isHighConfidenceCrossing) return true;
+    if (c.sources.includes('hydrology') && c.isOnCorridor) return true;
+    if ((c.metrics?.flowConvergence ?? 0) >= 0.65 && c.isOnCorridor) return true;
+    return false;
+}
+
+function passesRouteEvidenceGate(c: Cluster): boolean {
+    return (
+        hasMultiSourceSupport(c)          ||
+        hasBothSatelliteSeasons(c)        ||
+        hasHistoricMapOrAIMSupport(c)     ||
+        hasHydrologyOrWetMarginSupport(c) ||
+        hasPASOrHistoricContextNearby(c)  ||
+        isAtRouteJunctionCrossingOrSpring(c)
+    );
+}
+
+// ── Core assessment ───────────────────────────────────────────────────────────
+
+const NOT_ROUTE_RELATED: RouteAssessment = {
+    relationship: 'not_route_related',
+    risk: 0, confidence: 1,
+    hotspotScoreAdjustment: 0, traceScoreAdjustment: 0,
+    hideFromDefaultView: false, reasons: [], debugFlags: [],
+};
+
+export function assessRouteRelationship(
+    cluster: Cluster,
     modernWays: ModernWay[],
-    _historicRoutes: HistoricRoute[],
+): RouteAssessment {
+    // Protected clusters are scheduled monuments — never suppress regardless of proximity.
+    if (cluster.isProtected || modernWays.length === 0) return NOT_ROUTE_RELATED;
+
+    // Find nearest mapped way within the context radius.
+    let nearestWay: ModernWay | undefined;
+    let nearestDist = Infinity;
+    for (const way of modernWays) {
+        const d = getDistanceToLine(cluster.center, way.geometry, way.bbox);
+        if (d < nearestDist) { nearestDist = d; nearestWay = way; }
+    }
+    if (!nearestWay || nearestDist > ROUTE_CONTEXT_MAX_M) return NOT_ROUTE_RELATED;
+
+    const wayWeight   = WAY_TYPE_RISK_WEIGHT[nearestWay.highwayTag] ?? 5;
+    const weightScale = wayWeight / 50.0; // 0.16 (bridleway) → 1.0 (motorway)
+
+    let risk = 0;
+    const reasons:    string[] = [];
+    const debugFlags: string[] = [];
+
+    // ── Distance-based risk (scaled by way-type importance) ───────────────────
+    // Major roads contribute full distance risk; minor tracks/paths contribute
+    // a fraction, so geometry evidence is required to reach suppression threshold.
+    if (nearestDist <= ROUTE_ON_LINE_M) {
+        risk += Math.round(35 * weightScale);
+        reasons.push(`Within ${nearestDist.toFixed(0)}m of mapped ${nearestWay.highwayTag}`);
+        debugFlags.push('distance_on_line');
+    } else if (nearestDist <= ROUTE_CLOSE_M) {
+        risk += Math.round(18 * weightScale);
+        reasons.push(`Within ${nearestDist.toFixed(0)}m of mapped ${nearestWay.highwayTag}`);
+        debugFlags.push('distance_close');
+    } else if (nearestDist >= ROUTE_EDGE_MIN_M && nearestDist <= ROUTE_EDGE_MAX_M) {
+        risk -= 8;   // offset from route is archaeologically interesting
+        debugFlags.push('distance_offset_edge_zone');
+    }
+
+    // ── Geometry-based risk additions (cluster shape, not road type) ──────────
+    if (isStronglyLinear(cluster))             { risk += 18; debugFlags.push('strongly_linear'); }
+    if (alignedWithWayBearing(cluster, nearestWay)) { risk += 22; debugFlags.push('aligned_with_way'); }
+    if (singleSourceOnly(cluster))             { risk += 12; debugFlags.push('single_source'); }
+    if (isLongThinLinear(cluster))             { risk += 15; debugFlags.push('long_thin_linear'); }
+
+    // Parallel to any secondary mapped way within 50m (field-edge tracks, drainage lines).
+    if (isStronglyLinear(cluster) && typeof cluster.bearing === 'number') {
+        for (const way of modernWays) {
+            if (way === nearestWay) continue;
+            const d = getDistanceToLine(cluster.center, way.geometry, way.bbox);
+            if (d > 50) continue;
+            const wb = computeRouteBearing(way.geometry);
+            if (bearingDiff(cluster.bearing, wb) <= 25 || bearingDiff(cluster.bearing, (wb + 180) % 360) <= 25) {
+                risk += 10;
+                debugFlags.push('parallel_to_secondary_way');
+                break;
+            }
+        }
+    }
+
+    // ── Evidence-based risk reductions ────────────────────────────────────────
+    if (hasMultiScaleConfirmation(cluster))        { risk -= 15; debugFlags.push('has_multiscale'); }
+    if (hasBothSatelliteSeasons(cluster))          { risk -= 15; debugFlags.push('has_both_sat_seasons'); }
+    if (hasHydrologyOrWetMarginSupport(cluster))   { risk -= 10; debugFlags.push('has_hydrology_wetmargin'); }
+    if (hasHistoricMapOrAIMSupport(cluster))        {
+        risk -= 25;
+        reasons.push('AIM/historic map evidence present');
+        debugFlags.push('has_historic_aim');
+    }
+    if (hasPASOrHistoricContextNearby(cluster))    { risk -=  8; debugFlags.push('has_monument_context'); }
+    if (nearestDist >= ROUTE_EDGE_MIN_M && nearestDist <= ROUTE_EDGE_MAX_M) {
+        risk -= 10;
+        debugFlags.push('offset_from_route');
+    }
+    if (isAtRouteJunctionCrossingOrSpring(cluster)) {
+        risk -= 12;
+        reasons.push('Junction / crossing / wet-margin convergence');
+        debugFlags.push('junction_or_crossing');
+    }
+
+    // ── Classification ────────────────────────────────────────────────────────
+    const linear       = isStronglyLinear(cluster);
+    const aligned      = alignedWithWayBearing(cluster, nearestWay);
+    const evidenceGate = passesRouteEvidenceGate(cluster);
+    const isOffset     = nearestDist >= ROUTE_EDGE_MIN_M && nearestDist <= ROUTE_EDGE_MAX_M;
+
+    // ── Major road hard-suppress floor ────────────────────────────────────────
+    // Unconditional distance-threshold suppression for engineered roads
+    // (motorway → service). Thresholds mirror the former waySuppressionDistance().
+    //
+    // No evidence override here — the old display filter was unconditional.
+    // getHotspotInput() handles the separate question of whether a suppressed
+    // cluster can still contribute to hotspot scoring (it checks
+    // hasStrongIndependentEvidence independently of this flag).
+    //
+    // Tracks, paths, and bridleways (weight < 20) have NO hard floor — their
+    // suppression is entirely governed by the risk model above, which requires
+    // geometry + evidence conditions. That is the key architectural change from
+    // the old system.
+    const majorRoadHardThreshold =
+        wayWeight >= 40 ? 20 :   // motorway / trunk / primary
+        wayWeight >= 35 ? 15 :   // secondary
+        wayWeight >= 20 ? 10 :   // tertiary / unclassified / residential / service
+        0;
+
+    // Protected clusters already returned early at the top of this function,
+    // so isProtected === true can never reach here.
+    const majorRoadHardSuppress =
+        majorRoadHardThreshold > 0 &&
+        nearestDist <= majorRoadHardThreshold;
+
+    let relationship: RouteRelationship;
+    let hotspotScoreAdjustment = 0;
+    let traceScoreAdjustment   = 0;
+    let hideFromDefaultView    = false;
+
+    if (majorRoadHardSuppress || (risk >= 45 && linear && aligned && !evidenceGate)) {
+        relationship           = 'modern_route_artefact';
+        hideFromDefaultView    = true;
+        hotspotScoreAdjustment = -999; // belt-and-braces: primary suppression is hideFromDefaultView
+        traceScoreAdjustment   = -999;
+        if (majorRoadHardSuppress) {
+            reasons.push(`Within ${nearestDist.toFixed(0)}m of ${nearestWay.highwayTag} — suppressed by major-road threshold`);
+            debugFlags.push('hidden_modern_route_noise', 'major_road_hard_suppress');
+        } else {
+            reasons.push(`Signal follows mapped ${nearestWay.highwayTag} alignment without archaeological corroboration`);
+            debugFlags.push('hidden_modern_route_noise', `strong_alignment_with_mapped_${nearestWay.highwayTag}`);
+        }
+        if (singleSourceOnly(cluster)) debugFlags.push('single_source_linear');
+
+    } else if (risk >= 45) {
+        // High risk but some evidence present — visible with strong caution penalty.
+        relationship           = 'possible_modern_route_noise';
+        hotspotScoreAdjustment = -12;
+        traceScoreAdjustment   = -18;
+        reasons.push(`High route-noise risk near mapped ${nearestWay.highwayTag}`);
+        debugFlags.push('possible_route_noise_high');
+
+    } else if (risk >= 25) {
+        relationship           = 'possible_modern_route_noise';
+        hotspotScoreAdjustment = -8;
+        traceScoreAdjustment   = -15;
+        reasons.push(`Close to mapped ${nearestWay.highwayTag} — interpret cautiously`);
+        debugFlags.push('possible_route_noise');
+
+    } else if (hasHistoricMapOrAIMSupport(cluster) && (!linear || !aligned)) {
+        // AIM/historic support and not strongly matching modern route geometry —
+        // most likely an older movement corridor rather than a modern artefact.
+        relationship           = 'historic_movement_candidate';
+        hotspotScoreAdjustment = +8;
+        traceScoreAdjustment   = +5;
+        reasons.push('AIM or historic evidence suggests older movement corridor');
+        debugFlags.push('historic_movement_candidate');
+
+    } else if (isOffset && evidenceGate) {
+        // Offset from route with supporting evidence — route-edge archaeology candidate.
+        relationship           = 'route_edge_activity_candidate';
+        hotspotScoreAdjustment = +3;
+        traceScoreAdjustment   =  0;
+        reasons.push('Offset from route with supporting evidence — possible route-edge archaeology');
+        debugFlags.push('route_edge_activity');
+
+    } else if (nearestDist > ROUTE_CLOSE_M && evidenceGate) {
+        // Not close to route, has evidence — retain without penalty.
+        relationship           = 'route_edge_activity_candidate';
+        hotspotScoreAdjustment =  0;
+        traceScoreAdjustment   =  0;
+        reasons.push('Near route but offset, supported by evidence');
+
+    } else {
+        relationship = 'not_route_related';
+    }
+
+    const confidence = Math.max(0, Math.min(1, 1 - risk / 100));
+
+    return {
+        relationship,
+        risk,
+        confidence,
+        nearestWay,
+        distanceM:          nearestDist,
+        alignedWithWay:     aligned,
+        hotspotScoreAdjustment,
+        traceScoreAdjustment,
+        hideFromDefaultView,
+        reasons,
+        debugFlags,
+    };
+}
+
+// ── Pipeline entry point ──────────────────────────────────────────────────────
+// Runs assessRouteRelationship once per enriched consensus cluster and attaches
+// the result. Also sets isRouteArtefactRisk / routeArtefactReason for backward
+// compatibility with display filters, map layers, and field reliability scoring.
+
+export function applyRouteAssessments(
+    clusters:   Cluster[],
+    modernWays: ModernWay[],
 ): void {
     if (modernWays.length === 0) return;
 
     for (const c of clusters) {
-        if (c.isProtected) continue;
+        const assessment = assessRouteRelationship(c, modernWays);
+        c.routeAssessment = assessment;
 
-        // ── Proximity check: centroid within road-class-specific threshold ────
-        let reason: Cluster['routeArtefactReason'] | undefined;
-
-        for (const way of modernWays) {
-            const threshold = waySuppressionDistance(way.highwayTag);
-            if (threshold === null) continue;   // tracks/paths — skip
-            const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-            if (dist <= threshold) { reason = 'centroid_near_modern_way'; break; }
-        }
-
-        // ── Linear alignment check: major roads only ──────────────────────────
-        // High-ratio target whose bearing matches a nearby major-road within 15°.
-        // Only applied to roads with significant embankment mass; smaller roads
-        // don't generate enough LiDAR ridge noise to warrant this check.
-        if (!reason && c.metrics && c.metrics.ratio > 4 && typeof c.bearing === 'number') {
-            for (const way of modernWays) {
-                if (!wayHasLinearArtefactRisk(way.highwayTag)) continue;
-                const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-                if (dist > 30) continue;
-                const wayBearing = computeRouteBearing(way.geometry);
-                if (bearingDiff(c.bearing, wayBearing) <= 15 || bearingDiff(c.bearing, (wayBearing + 180) % 360) <= 15) {
-                    reason = 'linear_alignment_with_modern_way';
-                    break;
-                }
-            }
-        }
-
-        if (reason) {
-            c.isRouteArtefactRisk = true;
-            c.routeArtefactReason = reason;
+        if (assessment.hideFromDefaultView) {
+            c.isRouteArtefactRisk  = true;
+            c.routeArtefactReason  = assessment.reasons[0] ?? 'modern_route_artefact';
             if (!c.suppressedBy) c.suppressedBy = [];
-            c.suppressedBy.push(reason === 'centroid_near_modern_way' ? 'route_alignment' : 'route_linear_alignment');
+            if (!c.suppressedBy.includes('route_assessment')) c.suppressedBy.push('route_assessment');
+            (assessment.debugFlags ?? []).forEach(f => {
+                if (!c.suppressedBy!.includes(f)) c.suppressedBy!.push(f);
+            });
         }
     }
 }

@@ -16,7 +16,7 @@ import { scanDataSource } from '../utils/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
-    applyRouteArtefactSuppression,
+    applyRouteAssessments,
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
@@ -197,11 +197,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
                     .map((c, i) => ({ ...c, number: i + 1 }));
-                // Suppress targets that sit on modern roads/paths before hotspot generation
+                // Assess route relationships for all clusters before hotspot generation.
+                // Attaches routeAssessment to each cluster; sets isRouteArtefactRisk on artefacts.
                 let cachedModernWays: import('../pages/fieldGuideTypes').ModernWay[] = [];
                 try {
                     cachedModernWays = await fetchModernWays(center.lat, center.lng, signal);
-                    applyRouteArtefactSuppression(contextualized, cachedModernWays, routes);
+                    applyRouteAssessments(contextualized, cachedModernWays);
                 } catch { /* non-critical */ }
                 const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
@@ -335,12 +336,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
 
-            // Suppress target display near modern roads/paths, while allowing
-            // corroborated signals to keep contributing to hotspot context.
-            // modernWaysPromise was started in parallel with other fetches.
-            onStatusChange('Filtering modern route artefacts...');
+            // Assess route relationships for all clusters — attaches routeAssessment,
+            // sets isRouteArtefactRisk on confirmed artefacts. Runs after AIM/NHLE
+            // enrichment and analyzeContext so full archaeological context is available.
+            onStatusChange('Interpreting route signals...');
             const modernWays = await modernWaysPromise;
-            applyRouteArtefactSuppression(contextualized, modernWays, routes);
+            applyRouteAssessments(contextualized, modernWays);
 
             onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);

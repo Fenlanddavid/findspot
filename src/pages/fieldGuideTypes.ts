@@ -47,11 +47,15 @@ export interface Cluster {
     isOnCorridor?: boolean;
     linkedClusterIds?: string[];
     scale?: 'Micro' | 'Local' | 'Landscape';
-    // Set when a target centroid or linear form aligns too closely with a road,
-    // track, or path. Suppressed from target display; may still inform hotspots
-    // when independently corroborated.
+    // Set when a target centroid or linear form aligns too closely with a modern road,
+    // track, or path. Derived from routeAssessment.hideFromDefaultView; suppressed
+    // from target display but may still inform hotspots when independently corroborated.
     isRouteArtefactRisk?: boolean;
-    routeArtefactReason?: 'centroid_near_modern_way' | 'linear_alignment_with_modern_way';
+    routeArtefactReason?: string;
+    // Full route interpretation — single source of truth for all route-related logic.
+    // Attached by applyRouteAssessments() after AIM/NHLE/context enrichment, before
+    // hotspot and trace systems consume it.
+    routeAssessment?: RouteAssessment;
     // Suppression audit trail — populated by each suppression function.
     // Gives the Engine Lab visibility into why each cluster was rejected.
     suppressedBy?: string[];
@@ -67,6 +71,32 @@ export interface ModernWay {
     geometry: [number, number][];
     bbox:     [[number, number], [number, number]];
     highwayTag: string;
+}
+
+// ─── Route relationship classification ───────────────────────────────────────
+// Produced by assessRouteRelationship() and attached to each enriched cluster.
+// All downstream systems (hotspot engine, trace engine, display filter) read
+// from this object — there is no independent route logic elsewhere.
+
+export type RouteRelationship =
+    | 'modern_route_artefact'          // likely caused by modern road/track infrastructure
+    | 'possible_modern_route_noise'    // close to a route, some archaeological potential but contaminated
+    | 'route_edge_activity_candidate'  // offset from route, possibly meaningful route-edge archaeology
+    | 'historic_movement_candidate'    // supported by AIM/historic evidence — older movement corridor
+    | 'not_route_related';             // not meaningfully associated with any nearby modern way
+
+export interface RouteAssessment {
+    relationship:            RouteRelationship;
+    risk:                    number;   // computed risk score (higher = more likely modern artefact)
+    confidence:              number;   // 0–1, derived from risk
+    nearestWay?:             ModernWay;
+    distanceM?:              number;
+    alignedWithWay?:         boolean;
+    hotspotScoreAdjustment:  number;   // applied by buildTerrainHotspots (averaged across members)
+    traceScoreAdjustment:    number;   // applied by computeTraceScore
+    hideFromDefaultView:     boolean;  // primary suppression gate — sets isRouteArtefactRisk
+    reasons:                 string[];
+    debugFlags?:             string[]; // for Engine Lab / debug exports
 }
 
 export interface HistoricFind {
@@ -281,6 +311,7 @@ export interface TraceTarget {
     relativeElevation?: Cluster['relativeElevation'];
     aimInfo?: Cluster['aimInfo'];
     isRouteArtefactRisk?: boolean;
+    routeAssessment?: RouteAssessment;
     // Trace-specific fields
     traceScore: number;                      // 0–100 trace confidence (own scale)
     traceType: TraceType;

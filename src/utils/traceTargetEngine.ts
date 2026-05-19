@@ -48,10 +48,13 @@ function hasLocalPhysicalEvidence(f: Cluster): boolean {
     );
 }
 
-// ─── Trace-tier route artefact check ─────────────────────────────────────────
-// Stricter than the display-target check (40 m centroid vs 20 m; 50 m linear
-// alignment vs 30 m) because trace signals are the weakest evidence tier and
-// most susceptible to road-embankment LiDAR noise.
+// ─── Trace-tier route check ───────────────────────────────────────────────────
+// Primary: reads from cluster.routeAssessment (set by applyRouteAssessments).
+// Traces apply stricter rules than display targets — possible_modern_route_noise
+// is hidden from traces even when it survives in the display target list.
+//
+// Fallback: if routeAssessment is not set (e.g. no modern ways were fetched),
+// the legacy geometry check below is used so behaviour is unchanged.
 
 function computeWayBearing(geometry: [number, number][]): number {
     if (geometry.length < 2) return 0;
@@ -65,12 +68,12 @@ function computeWayBearing(geometry: [number, number][]): number {
     return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 }
 
-function isNearModernWay(c: Cluster, modernWays: ModernWay[]): boolean {
+// Legacy fallback — only used when cluster.routeAssessment is not available.
+function isNearModernWayFallback(c: Cluster, modernWays: ModernWay[]): boolean {
     if (modernWays.length === 0) return false;
     for (const way of modernWays) {
         const dist = getDistanceToLine(c.center, way.geometry, way.bbox);
-        if (dist <= 40) return true;   // 40 m centroid — catches embankment ridges
-        // Linear features: also flag if bearing aligns within a wider band
+        if (dist <= 40) return true;
         if (dist <= 50 && c.metrics && c.metrics.ratio > 3.5 && typeof c.bearing === 'number') {
             const wb = computeWayBearing(way.geometry);
             const diff = Math.abs(c.bearing - wb) % 360;
@@ -79,6 +82,17 @@ function isNearModernWay(c: Cluster, modernWays: ModernWay[]): boolean {
         }
     }
     return false;
+}
+
+// Returns true when the trace should be hidden based on route assessment.
+// Trace tier is stricter: possible_modern_route_noise is also hidden.
+function isTraceRouteNoisy(c: Cluster, modernWays: ModernWay[]): boolean {
+    if (c.routeAssessment) {
+        return c.routeAssessment.relationship === 'modern_route_artefact' ||
+               c.routeAssessment.relationship === 'possible_modern_route_noise';
+    }
+    // Fallback when no assessment is attached (ways unavailable during scan)
+    return isNearModernWayFallback(c, modernWays);
 }
 
 // ─── Suppression annotation helper ───────────────────────────────────────────
@@ -184,6 +198,17 @@ function computeTraceScore(c: Cluster, nearestDisplayDist: number): number {
     // Combined wet-margin context: dry margin + convergence near a low zone.
     if (dms >= 0.55 && fcs >= 0.50 && !isHighAspectLinear) {
         score += 3;
+    }
+
+    // ── Route assessment adjustment ───────────────────────────────────────────
+    // Apply traceScoreAdjustment from the cluster's route assessment.
+    // Clamped: noise penalties max -20, movement boosts max +10.
+    // modern_route_artefact (-999) and possible_modern_route_noise clusters are
+    // already excluded before computeTraceScore is called, so this primarily
+    // handles route_edge_activity (+0/+5) and historic_movement (+5) upgrades.
+    if (c.routeAssessment) {
+        const adj = c.routeAssessment.traceScoreAdjustment;
+        score += Math.max(-20, Math.min(10, adj));
     }
 
     return Math.max(0, Math.min(100, score));
@@ -400,11 +425,13 @@ export function computeTraceTargets(
 
         // ── Filtering rules ───────────────────────────────────────────────────
 
-        // Route artefacts excluded entirely — already marked by applyRouteArtefactSuppression.
+        // modern_route_artefact clusters are excluded entirely (isRouteArtefactRisk = true).
         if (c.isRouteArtefactRisk) continue;
 
-        // Trace-tier route proximity: stricter 40m threshold catches embankment ridges.
-        if (ways.length > 0 && isNearModernWay(c, ways)) {
+        // Trace tier is stricter than display targets: possible_modern_route_noise
+        // is also hidden. Uses routeAssessment when available; falls back to legacy
+        // geometry check when no assessment is attached.
+        if (isTraceRouteNoisy(c, ways)) {
             markSuppressed(c, 'route_proximity_trace'); continue;
         }
 
@@ -468,6 +495,7 @@ export function computeTraceTargets(
             relativeElevation:     c.relativeElevation,
             aimInfo:               c.aimInfo,
             isRouteArtefactRisk:   c.isRouteArtefactRisk,
+            routeAssessment:       c.routeAssessment,
             traceScore,
             traceType,
             traceLabel:            getTraceLabel(traceType, c.sources),
@@ -503,6 +531,7 @@ export function computeTraceTargets(
             relativeElevation:     raw.relativeElevation,
             aimInfo:               raw.aimInfo,
             isRouteArtefactRisk:   raw.isRouteArtefactRisk,
+            routeAssessment:       raw.routeAssessment,
             traceScore,
             traceType:             'merged_echo',
             traceLabel:            'Merged Source Echo',
