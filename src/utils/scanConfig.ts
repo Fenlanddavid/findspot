@@ -18,4 +18,8 @@ export const SCAN_CONFIG = {
 
     // Zoom warning threshold (terrain scan is locked at Z16, but warn if user zooms in beyond this)
     ZOOM_WARNING: 16.5,
+
+    // Historic service lookups use a hidden query footprint no tighter than
+    // roughly one wheel step below the visible max-scan warning.
+    HISTORIC_QUERY_MAX_ZOOM: 15.5,
 } as const;

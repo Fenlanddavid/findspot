@@ -255,6 +255,8 @@ export type FieldGuideScanCache = {
   createdAt: number;    // Unix ms
   rawClusters: any[];
   sourceAvailability: Record<string, boolean>;
+  modernWays?: any[];
+  modernWaysFetchedAt?: number;
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
 };
 

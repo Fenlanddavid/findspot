@@ -1006,6 +1006,42 @@ export function applyRouteAssessments(
     }
 }
 
+// When the mapped-road service is unavailable, do not treat "no road data" as
+// proof that linear signals are safe. Fail closed for road-like target shapes:
+// keep only linears with strong independent evidence.
+export function applyRouteUnavailableFallback(clusters: Cluster[]): number {
+    let hidden = 0;
+
+    for (const c of clusters) {
+        if ((c.isProtected && !c.monumentBufferM) || c.isRouteArtefactRisk) continue;
+
+        const routeLikeType =
+            c.type.includes('Linear') ||
+            c.type.includes('Movement Signal') ||
+            c.type.includes('Corridor');
+
+        if (!routeLikeType || hasStrongIndependentEvidence(c)) continue;
+
+        c.isRouteArtefactRisk = true;
+        c.routeArtefactReason = 'Modern road data unavailable; linear signal hidden until route suppression can verify it';
+        c.routeAssessment = {
+            relationship: 'modern_route_artefact',
+            risk: 60,
+            confidence: 0.4,
+            hotspotScoreAdjustment: -999,
+            traceScoreAdjustment: -999,
+            hideFromDefaultView: true,
+            reasons: [c.routeArtefactReason],
+            debugFlags: ['fallback_modern_way_unavailable', 'linear_route_like_signal'],
+        };
+        if (!c.suppressedBy) c.suppressedBy = [];
+        if (!c.suppressedBy.includes('route_data_unavailable_fallback')) c.suppressedBy.push('route_data_unavailable_fallback');
+        hidden++;
+    }
+
+    return hidden;
+}
+
 // ─── Field reliability scoring ────────────────────────────────────────────────
 // Per-scan measure of how much modern noise dominates the cluster population.
 // Used by buildTerrainHotspots to proportionally soften confidence in noisy fields.

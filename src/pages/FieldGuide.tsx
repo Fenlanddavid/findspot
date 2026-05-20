@@ -1013,7 +1013,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             lat: pendingAnnotation.lat,
             lon: pendingAnnotation.lon,
             timestamp: Date.now(),
-            engineVersion: 'FG-2026.05.19a',
+            engineVersion: 'FG-2026.05.20b',
             ...annotationForm,
             engineContext: captureEngineContext(pendingAnnotation.lat, pendingAnnotation.lon),
         };
@@ -1038,7 +1038,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
         const payload = {
             exportVersion:    '1',
-            engineVersion:    'FG-2026.05.19a',
+            engineVersion:    'FG-2026.05.20b',
             exportedAt:       Date.now(),
             scanId:           tileKey,
             center:           { lat: center.lat, lng: center.lng },
@@ -1366,7 +1366,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
                                             )}
                                         </div>
-                                        <p className="text-[10px] font-bold text-white/35 leading-tight truncate">
+                                        <p className={`text-[10px] font-bold leading-tight truncate ${!analyzing && !isTerrainScanning && !loadingPAS && !selectedUserFind && !selectedPASFind && !(selectedId && !selectedHotspotId) && selectedMonument === undefined && (historicMode || (hasScanned && !(sortedHotspots.length === 0 && displayTargets.length === 0))) ? 'text-amber-400' : 'text-white/35'}`}>
                                             {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
                                         </p>
                                     </div>
@@ -2715,7 +2715,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             const mb  = mapRef.current?.getBounds();
                                                             const payload = {
                                                                 exportedAt:        new Date().toISOString(),
-                                                                engineVersion:     'FG-2026.05.19a',
+                                                                engineVersion:     'FG-2026.05.20b',
                                                                 fromCache:         scanFromCache,
                                                                 scanCenter:        terrainScanCenterRef.current ?? (mc ? { lat: mc.lat, lng: mc.lng } : null),
                                                                 scanStartBounds:   terrainScanBoundsRef.current,

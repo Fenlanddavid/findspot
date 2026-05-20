@@ -51,6 +51,21 @@ interface UseHistoricScanOptions {
     onStatusChange: (status: string) => void;
 }
 
+function getHistoricQueryBounds(
+    bounds: maplibregl.LngLatBounds,
+    center: maplibregl.LngLat,
+    zoom: number,
+): { west: number; south: number; east: number; north: number } {
+    const queryZoom = Math.min(zoom, SCAN_CONFIG.HISTORIC_QUERY_MAX_ZOOM);
+    const scale = Math.pow(2, Math.max(0, zoom - queryZoom));
+    return {
+        west:  center.lng - ((center.lng - bounds.getWest())  * scale),
+        south: center.lat - ((center.lat - bounds.getSouth()) * scale),
+        east:  center.lng + ((bounds.getEast()  - center.lng) * scale),
+        north: center.lat + ((bounds.getNorth() - center.lat) * scale),
+    };
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOptions) {
@@ -94,15 +109,17 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
 
         const center = map.getCenter();
         const bounds = map.getBounds();
+        const queryBounds = getHistoricQueryBounds(bounds, center, zoom);
 
-        // Build a capped bounding box for Overpass queries
+        // Build a capped bbox for historic lookups. At high rendered zooms, use
+        // a wider virtual footprint without moving the map or changing the UI.
         const maxDelta  = SCAN_CONFIG.MAX_BBOX_DELTA;
         const latBuffer = SCAN_CONFIG.LAT_BUFFER;
         const lonBuffer = SCAN_CONFIG.LON_BUFFER;
-        const west  = Number(Math.max(center.lng - maxDelta, Math.min(bounds.getWest(),  center.lng - lonBuffer)).toFixed(6));
-        const south = Number(Math.max(center.lat - maxDelta, Math.min(bounds.getSouth(), center.lat - latBuffer)).toFixed(6));
-        const east  = Number(Math.min(center.lng + maxDelta, Math.max(bounds.getEast(),  center.lng + lonBuffer)).toFixed(6));
-        const north = Number(Math.min(center.lat + maxDelta, Math.max(bounds.getNorth(), center.lat + latBuffer)).toFixed(6));
+        const west  = Number(Math.max(center.lng - maxDelta, Math.min(queryBounds.west,  center.lng - lonBuffer)).toFixed(6));
+        const south = Number(Math.max(center.lat - maxDelta, Math.min(queryBounds.south, center.lat - latBuffer)).toFixed(6));
+        const east  = Number(Math.min(center.lng + maxDelta, Math.max(queryBounds.east,  center.lng + lonBuffer)).toFixed(6));
+        const north = Number(Math.min(center.lat + maxDelta, Math.max(queryBounds.north, center.lat + latBuffer)).toFixed(6));
 
         onLog(`> LANDSCAPE CONTEXT SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 'historic');
         onLog('> STAGE: Reading location, heritage records, monuments and routes...', 'historic');
@@ -111,6 +128,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // Always fetch: location label, etymology signals, OSM heritage features
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
             onStatusChange('Reading historic records...');
+            const hasTerrainRouteAttempt = !!opts.nhleData || !!opts.aimData;
             const [geoData, etymData, osmData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
                 fetchLocationLabel(center.lat, center.lng, signal),
                 fetchEtymologySignals(center.lat, center.lng, signal),
@@ -121,7 +139,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 opts.aimData
                     ? Promise.resolve(null)
                     : fetchAIMData(west, south, east, north, signal),
-                opts.routes.length === 0
+                opts.routes.length === 0 && !hasTerrainRouteAttempt
                     ? fetchHistoricRoutes(center.lat, center.lng, signal)
                     : Promise.resolve(null),
             ]);

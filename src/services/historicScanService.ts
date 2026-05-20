@@ -32,6 +32,11 @@ export interface OverpassResponse {
     elements: OverpassElement[];
 }
 
+export interface ModernWaysFetchResult {
+    ways: import('../pages/fieldGuideTypes').ModernWay[];
+    available: boolean;
+}
+
 export interface NHLEGeometry {
     type: 'Point' | 'Polygon' | 'MultiPolygon';
     coordinates: number[] | number[][][] | number[][][][];
@@ -82,35 +87,68 @@ export interface NominatimResponse {
 
 // ─── Service functions ────────────────────────────────────────────────────────
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_URLS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.osm.ch/api/interpreter',
+];
+const OVERPASS_ENDPOINT_TIMEOUT_MS = 6000;
+const OVERPASS_TOTAL_TIMEOUT_MS = 12000;
+const OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS = 12000;
+const OVERPASS_BROAD_TOTAL_TIMEOUT_MS = 24000;
+const GENERAL_FETCH_TIMEOUT_MS = 7000;
+
+type OverpassFetchOptions = {
+    endpointTimeoutMs?: number;
+    totalTimeoutMs?: number;
+};
 
 function isAbortError(e: unknown): boolean {
     return e instanceof DOMException && e.name === 'AbortError';
 }
 
+function withTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number) {
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), timeoutMs);
+    const combined = AbortSignal.any
+        ? AbortSignal.any([timeout.signal, ...(signal ? [signal] : [])])
+        : timeout.signal;
+    return {
+        signal: combined,
+        clear:  () => clearTimeout(timer),
+    };
+}
+
 // POST is the recommended approach for Overpass — avoids URL length limits
 // and is more reliably accepted across all Overpass instances.
-async function overpassFetch(query: string, signal?: AbortSignal): Promise<OverpassResponse | null> {
-    const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), 15000);
-    try {
-        const combined = AbortSignal.any
-            ? AbortSignal.any([timeout.signal, ...(signal ? [signal] : [])])
-            : timeout.signal;
-        const res = await fetch(OVERPASS_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'data=' + encodeURIComponent(query),
-            signal: combined,
-        });
-        if (!res.ok) return null;
-        return await res.json() as OverpassResponse;
-    } catch (e) {
-        if (signal && isAbortError(e) && signal.aborted) throw e;
-        return null;
-    } finally {
-        clearTimeout(timer);
+async function overpassFetch(
+    query: string,
+    signal?: AbortSignal,
+    options: OverpassFetchOptions = {},
+): Promise<OverpassResponse | null> {
+    const endpointTimeoutMs = options.endpointTimeoutMs ?? OVERPASS_ENDPOINT_TIMEOUT_MS;
+    const totalTimeoutMs = options.totalTimeoutMs ?? OVERPASS_TOTAL_TIMEOUT_MS;
+    const started = Date.now();
+    for (const url of OVERPASS_URLS) {
+        const remainingMs = totalTimeoutMs - (Date.now() - started);
+        if (remainingMs <= 0) break;
+        const timed = withTimeoutSignal(signal, Math.min(endpointTimeoutMs, remainingMs));
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'data=' + encodeURIComponent(query),
+                signal: timed.signal,
+            });
+            if (!res.ok) continue;
+            return await res.json() as OverpassResponse;
+        } catch (e) {
+            if (signal && isAbortError(e) && signal.aborted) throw e;
+        } finally {
+            timed.clear();
+        }
     }
+    return null;
 }
 
 /**
@@ -121,13 +159,16 @@ export async function fetchLocationLabel(
     lng: number,
     signal?: AbortSignal
 ): Promise<NominatimResponse | null> {
+    const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
-        const res = await fetch(url, { signal });
+        const res = await fetch(url, { signal: timed.signal });
         return await res.json() as NominatimResponse;
     } catch (e) {
-        if (isAbortError(e)) throw e;
+        if (signal && isAbortError(e) && signal.aborted) throw e;
         return null;
+    } finally {
+        timed.clear();
     }
 }
 
@@ -144,7 +185,10 @@ export async function fetchEtymologySignals(
 ): Promise<OverpassResponse | null> {
     const r = 4000;
     const query = `[out:json][timeout:25];(node["place"](around:${r},${lat},${lng});way["place"](around:${r},${lat},${lng});rel["place"](around:${r},${lat},${lng});node["natural"](around:${r},${lat},${lng});way["natural"](around:${r},${lat},${lng});node["historic"](around:${r},${lat},${lng});way["historic"](around:${r},${lat},${lng});node["landuse"="farmyard"](around:${r},${lat},${lng});way["landuse"="farmyard"](around:${r},${lat},${lng}););out center;`;
-    return overpassFetch(query, signal);
+    return overpassFetch(query, signal, {
+        endpointTimeoutMs: OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS,
+        totalTimeoutMs:    OVERPASS_BROAD_TOTAL_TIMEOUT_MS,
+    });
 }
 
 /**
@@ -156,7 +200,10 @@ export async function fetchHeritageFeatures(
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
     const query = `[out:json][timeout:25];(node["historic"](around:2000,${lat},${lng});way["historic"](around:2000,${lat},${lng});node["heritage"](around:2000,${lat},${lng});way["heritage"](around:2000,${lat},${lng}););out center;`;
-    return overpassFetch(query, signal);
+    return overpassFetch(query, signal, {
+        endpointTimeoutMs: OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS,
+        totalTimeoutMs:    OVERPASS_BROAD_TOTAL_TIMEOUT_MS,
+    });
 }
 
 /**
@@ -169,13 +216,16 @@ export async function fetchScheduledMonuments(
     north: number,
     signal?: AbortSignal
 ): Promise<NHLEResponse> {
+    const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-        const res = await fetch(url, { signal });
+        const res = await fetch(url, { signal: timed.signal });
         return await res.json() as NHLEResponse;
     } catch (e) {
-        if (isAbortError(e)) throw e;
+        if (signal && isAbortError(e) && signal.aborted) throw e;
         return { features: [] };
+    } finally {
+        timed.clear();
     }
 }
 
@@ -189,13 +239,16 @@ export async function fetchAIMData(
     north: number,
     signal?: AbortSignal
 ): Promise<AIMResponse> {
+    const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
-        const res = await fetch(url, { signal });
+        const res = await fetch(url, { signal: timed.signal });
         return await res.json() as AIMResponse;
     } catch (e) {
-        if (isAbortError(e)) throw e;
+        if (signal && isAbortError(e) && signal.aborted) throw e;
         return { features: [] };
+    } finally {
+        timed.clear();
     }
 }
 
@@ -207,7 +260,7 @@ export async function fetchHistoricRoutes(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    const query = `[out:json][timeout:25];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng}););out geom;`;
+    const query = `[out:json][timeout:12];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng}););out geom;`;
     return overpassFetch(query, signal);
 }
 
@@ -245,7 +298,7 @@ export async function fetchScanRoutes(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    const query = `[out:json][timeout:25];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng}););out geom;`;
+    const query = `[out:json][timeout:12];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng}););out geom;`;
     return overpassFetch(query, signal);
 }
 
@@ -262,7 +315,7 @@ export async function fetchModernWays(
 ): Promise<import('../pages/fieldGuideTypes').ModernWay[]> {
     const r = 300;
     const types = ['motorway','trunk','primary','secondary','tertiary','unclassified','residential','service','track','path','footway','bridleway'];
-    const query = `[out:json][timeout:15];(${types.map(t => `way["highway"="${t}"](around:${r},${lat},${lng})`).join(';')};);out geom;`;
+    const query = `[out:json][timeout:12];(${types.map(t => `way["highway"="${t}"](around:${r},${lat},${lng})`).join(';')};);out geom;`;
     const result = await overpassFetch(query, signal);
     return parseModernWays(result);
 }
@@ -279,15 +332,29 @@ export async function fetchModernWaysForBounds(
     north: number,
     signal?: AbortSignal
 ): Promise<import('../pages/fieldGuideTypes').ModernWay[]> {
+    const result = await fetchModernWaysForBoundsResult(west, south, east, north, signal);
+    return result.ways;
+}
+
+export async function fetchModernWaysForBoundsResult(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal
+): Promise<ModernWaysFetchResult> {
     const pad = 0.003;
     const w = Number((west  - pad).toFixed(6));
     const s = Number((south - pad).toFixed(6));
     const e = Number((east  + pad).toFixed(6));
     const n = Number((north + pad).toFixed(6));
     const types = ['motorway','trunk','primary','secondary','tertiary','unclassified','residential','service','track','path','footway','bridleway'];
-    const query = `[out:json][timeout:15];(${types.map(t => `way["highway"="${t}"](${s},${w},${n},${e})`).join(';')};);out geom;`;
+    const query = `[out:json][timeout:12];(${types.map(t => `way["highway"="${t}"](${s},${w},${n},${e})`).join(';')};);out geom;`;
     const result = await overpassFetch(query, signal);
-    return parseModernWays(result);
+    return {
+        ways:      parseModernWays(result),
+        available: result !== null,
+    };
 }
 
 function parseModernWays(result: OverpassResponse | null): import('../pages/fieldGuideTypes').ModernWay[] {

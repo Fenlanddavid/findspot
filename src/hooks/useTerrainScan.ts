@@ -10,13 +10,14 @@ import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
     NHLEResponse, AIMResponse, OverpassElement,
-    parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBounds,
+    parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
+    fetchScheduledMonuments, fetchAIMData,
 } from '../services/historicScanService';
 import { scanDataSource } from '../utils/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
-    applyRouteAssessments, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
+    applyRouteAssessments, applyRouteUnavailableFallback, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
 } from '../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
@@ -130,7 +131,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.19a';
+        const ENGINE_VERSION = 'FG-2026.05.20b';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -170,11 +171,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
                 onStatusChange('Checking protected archaeology...');
                 // Still run NHLE/AIM/routes so the historic phase has fresh data.
-                const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${monumentQueryBounds.west},${monumentQueryBounds.south},${monumentQueryBounds.east},${monumentQueryBounds.north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-                const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
                 const [nhleData, aimData] = await Promise.all([
-                    fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse),
-                    fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse),
+                    fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal),
+                    fetchAIMData(bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(), signal),
                 ]);
                 if (tokenRef.current !== token || signal.aborted || !mountedRef.current) { setIsScanning(false); return null; }
 
@@ -214,13 +213,39 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     .map((c, i) => ({ ...c, number: i + 1 }));
                 // Assess route relationships for all clusters before hotspot generation.
                 // Attaches routeAssessment to each cluster; sets isRouteArtefactRisk on artefacts.
-                let cachedModernWays: import('../pages/fieldGuideTypes').ModernWay[] = [];
+                let cachedModernWays = (Array.isArray(cached.modernWays)
+                    ? cached.modernWays
+                    : []) as import('../pages/fieldGuideTypes').ModernWay[];
+                const hadStoredModernWayResult = Array.isArray(cached.modernWays) &&
+                    (cachedModernWays.length > 0 || typeof cached.modernWaysFetchedAt === 'number');
+                let modernWaysAvailable = hadStoredModernWayResult;
                 try {
-                    cachedModernWays = await fetchModernWaysForBounds(
-                        scanWest, scanSouth, scanEast, scanNorth, signal,
-                    );
-                    applyRouteAssessments(contextualized, cachedModernWays);
-                } catch { /* non-critical */ }
+                    if (!hadStoredModernWayResult) {
+                        const modernWayResult = await fetchModernWaysForBoundsResult(
+                            scanWest, scanSouth, scanEast, scanNorth, signal,
+                        );
+                        cachedModernWays = modernWayResult.ways;
+                        modernWaysAvailable = modernWayResult.available;
+                        if (modernWaysAvailable) {
+                            try {
+                                await db.fieldGuideCache.update(tileKey, { modernWays: cachedModernWays, modernWaysFetchedAt: Date.now() });
+                            } catch { /* cache update failure is non-fatal */ }
+                        }
+                    }
+                    if (cachedModernWays.length > 0) {
+                        applyRouteAssessments(contextualized, cachedModernWays);
+                        const routeSuppressed = contextualized.filter(c => c.isRouteArtefactRisk).length;
+                        onLog(`> Route suppression: cached scan - ${cachedModernWays.length} mapped way${cachedModernWays.length !== 1 ? 's' : ''} checked${hadStoredModernWayResult ? ' from route cache' : ''}, ${routeSuppressed} road-aligned signal${routeSuppressed !== 1 ? 's' : ''} hidden.`, 'terrain');
+                    } else if (modernWaysAvailable) {
+                        onLog(`> Route suppression: cached scan - no mapped ways found${hadStoredModernWayResult ? ' from route cache' : ''}; 0 road-aligned signals hidden.`, 'terrain');
+                    } else {
+                        const fallbackHidden = applyRouteUnavailableFallback(contextualized);
+                        onLog(`> Route suppression: modern road data unavailable; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
+                    }
+                } catch {
+                    const fallbackHidden = applyRouteUnavailableFallback(contextualized);
+                    onLog(`> Route suppression: modern road data failed; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
+                }
                 const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
                 if (mountedRef.current) setIsScanning(false);
                 return {
@@ -238,13 +263,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // directly — avoids each worker independently fetching the catalog.
         const waybackPromise = resolveWaybackIds();
 
-        const nhleUrl = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${monumentQueryBounds.west},${monumentQueryBounds.south},${monumentQueryBounds.east},${monumentQueryBounds.north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-        const aimUrl  = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${qWest},${qSouth},${qEast},${qNorth}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
-
-        const nhlePromise       = fetch(nhleUrl, { signal }).then(r => r.json() as Promise<NHLEResponse>).catch(() => ({ features: [] }) as NHLEResponse);
-        const aimPromise        = fetch(aimUrl,  { signal }).then(r => r.json() as Promise<AIMResponse>).catch(() => ({ features: [] }) as AIMResponse);
+        const nhlePromise       = fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal);
+        const aimPromise        = fetchAIMData(qWest, qSouth, qEast, qNorth, signal);
         const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
-        const modernWaysPromise = fetchModernWaysForBounds(scanWest, scanSouth, scanEast, scanNorth, signal).catch(() => []);
+        const modernWaysPromise = fetchModernWaysForBoundsResult(scanWest, scanSouth, scanEast, scanNorth, signal)
+            .catch(() => ({ ways: [], available: false }));
 
         onStatusChange('Reading terrain...');
 
@@ -318,7 +341,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
 
-            // ── Source availability & cache save ─────────────────────────────
+            // ── Source availability ──────────────────────────────────────────
             const sourceAvailability: Record<string, boolean> = {
                 terrain:          terrainResult.tilesLoaded > 0,
                 terrain_global:   terrainGlobalResult.tilesLoaded > 0,
@@ -327,11 +350,6 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 satellite_spring: springResult.tilesLoaded > 0,
                 satellite_summer: summerResult.tilesLoaded > 0,
             };
-            try {
-                const expiredCutoff = Date.now() - CACHE_TTL_MS;
-                await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
-                await db.fieldGuideCache.put({ id: tileKey, createdAt: Date.now(), rawClusters: rawCombined, sourceAvailability, engineVersion: ENGINE_VERSION });
-            } catch { /* cache failure is non-fatal */ }
 
             const merged      = findConsensus(rawCombined);
             const aimEnriched = applyAIMEnrichment(merged, aimData);
@@ -364,8 +382,27 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             // sets isRouteArtefactRisk on confirmed artefacts. Runs after AIM/NHLE
             // enrichment and analyzeContext so full archaeological context is available.
             onStatusChange('Interpreting route signals...');
-            const modernWays = await modernWaysPromise;
-            applyRouteAssessments(contextualized, modernWays);
+            const modernWayResult = await modernWaysPromise;
+            const modernWays = modernWayResult.ways;
+            if (modernWays.length > 0) {
+                applyRouteAssessments(contextualized, modernWays);
+                const routeSuppressed = contextualized.filter(c => c.isRouteArtefactRisk).length;
+                onLog(`> Route suppression: fresh scan - ${modernWays.length} mapped way${modernWays.length !== 1 ? 's' : ''} checked, ${routeSuppressed} road-aligned signal${routeSuppressed !== 1 ? 's' : ''} hidden.`, 'terrain');
+            } else if (modernWayResult.available) {
+                onLog('> Route suppression: fresh scan - no mapped ways found; 0 road-aligned signals hidden.', 'terrain');
+            } else {
+                const fallbackHidden = applyRouteUnavailableFallback(contextualized);
+                onLog(`> Route suppression: modern road data unavailable; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
+            }
+            try {
+                const expiredCutoff = Date.now() - CACHE_TTL_MS;
+                await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
+                await db.fieldGuideCache.put({
+                    id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
+                    sourceAvailability, engineVersion: ENGINE_VERSION,
+                    ...(modernWayResult.available ? { modernWays, modernWaysFetchedAt: Date.now() } : {}),
+                });
+            } catch { /* cache failure is non-fatal */ }
 
             onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
