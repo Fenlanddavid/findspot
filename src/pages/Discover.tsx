@@ -255,6 +255,16 @@ function typeLabel(t: EventType): string {
   }
 }
 
+const RALLY_VERIFY_TEXT = "Verify with organiser before attending.";
+
+function hasEventPublicLink(event: DetectingEvent): boolean {
+  return !!(event.sourceUrl || event.facebookUrl);
+}
+
+function hasClubPublicLink(club: ClubListing): boolean {
+  return !!(club.facebookUrl || club.websiteUrl);
+}
+
 async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
   try {
     const cached = localStorage.getItem(cacheKey);
@@ -359,6 +369,7 @@ function EventCard({
   going,
   planned,
   onClick,
+  onSubmitUpdate,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
@@ -366,11 +377,14 @@ function EventCard({
   going?: boolean;
   planned?: boolean;
   onClick: () => void;
+  onSubmitUpdate: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
   const scoreTag = getScoreLabel(score);
   const qualityTag = getQualityLabel(event);
+  const hasPublicLink = hasEventPublicLink(event);
+  const isRally = event.type === "rally";
 
   return (
     <article
@@ -427,6 +441,11 @@ function EventCard({
       {location && (
         <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{location}</div>
       )}
+      {isRally && (
+        <div className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+          {RALLY_VERIFY_TEXT}
+        </div>
+      )}
       <div className="mt-2.5 flex items-center gap-2 flex-wrap">
         {going && (
           <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800">
@@ -448,13 +467,25 @@ function EventCard({
           <span className="text-[9px] text-gray-400 dark:text-gray-500">{event.entryFee}</span>
         )}
       </div>
+      {!hasPublicLink && (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/20">
+          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">No public link yet</span>
+          <button
+            type="button"
+            onClick={onSubmitUpdate}
+            className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-800 underline underline-offset-2 dark:text-amber-300"
+          >
+            Submit update
+          </button>
+        </div>
+      )}
       <button
         type="button"
         onClick={onClick}
         className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-gray-700 dark:bg-gray-900/60 dark:text-emerald-300 dark:hover:border-emerald-700"
         aria-label={`View details for ${event.title}`}
       >
-        <span>View details</span>
+        <span>{hasPublicLink ? "View details" : "Details needed"}</span>
         <span className="text-gray-400">Plan / going</span>
       </button>
     </article>
@@ -463,10 +494,19 @@ function EventCard({
 
 // ─── ClubCard ─────────────────────────────────────────────────────────────────
 
-function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number }) {
+function ClubCard({
+  club,
+  distanceKm,
+  onSubmitUpdate,
+}: {
+  club: ClubListing;
+  distanceKm?: number;
+  onSubmitUpdate: () => void;
+}) {
   const dist = distanceKm != null ? `${(distanceKm * 0.621371).toFixed(1)} mi` : null;
   const location = [club.town, club.county].filter(Boolean).join(", ");
   const meta = [location, dist].filter(Boolean).join(" • ");
+  const hasPublicLink = hasClubPublicLink(club);
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
@@ -493,7 +533,7 @@ function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number
           {club.digDays}
         </div>
       )}
-      {(club.facebookUrl || club.websiteUrl) && (
+      {hasPublicLink ? (
         <div className="mt-3 flex gap-2">
           {club.facebookUrl && (
             <a
@@ -518,6 +558,17 @@ function ClubCard({ club, distanceKm }: { club: ClubListing; distanceKm?: number
             </a>
           )}
         </div>
+      ) : (
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/20">
+          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">No public link yet</span>
+          <button
+            type="button"
+            onClick={onSubmitUpdate}
+            className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-800 underline underline-offset-2 dark:text-amber-300"
+          >
+            Submit update
+          </button>
+        </div>
       )}
     </div>
   );
@@ -534,6 +585,7 @@ function EventDetailModal({
   onClose,
   onPlanSession,
   onToggleGoing,
+  onSubmitUpdate,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
@@ -543,11 +595,14 @@ function EventDetailModal({
   onClose: () => void;
   onPlanSession: () => void;
   onToggleGoing: () => void;
+  onSubmitUpdate: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi away` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
   const scoreTag = getScoreLabel(score);
   const qualityTag = getQualityLabel(event);
+  const hasPublicLink = hasEventPublicLink(event);
+  const isRally = event.type === "rally";
 
   return (
     <div
@@ -581,6 +636,12 @@ function EventDetailModal({
           </span>
         </div>
 
+        {isRally && (
+          <div className="mb-4 text-[10px] text-amber-600 dark:text-amber-400">
+            {RALLY_VERIFY_TEXT}
+          </div>
+        )}
+
         <div className="grid gap-3 text-sm">
           <Row label="Date">
             {formatDate(event.startDate)}
@@ -600,6 +661,21 @@ function EventDetailModal({
 
 
         <div className="mt-5 flex flex-col gap-2">
+          {!hasPublicLink && (
+            <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/70 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+              <div className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Contact details needed</div>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                This listing has no public Facebook, website, or booking link yet.
+              </p>
+              <button
+                type="button"
+                onClick={onSubmitUpdate}
+                className="mt-2 text-[9px] font-black uppercase tracking-widest text-amber-800 underline underline-offset-2 dark:text-amber-300"
+              >
+                Submit update
+              </button>
+            </div>
+          )}
           {/* Primary actions row */}
           <div className="flex gap-2">
             {event.sourceUrl && (
@@ -704,16 +780,21 @@ const EMPTY_DRAFT: DraftEvent = {
 function SubmitEventModal({
   onClose,
   onSubmitted,
+  initialDraft,
+  mode = "new",
 }: {
   onClose: () => void;
   onSubmitted: () => void;
+  initialDraft?: Partial<DraftEvent>;
+  mode?: "new" | "update";
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [draft, setDraft] = useState<DraftEvent>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<DraftEvent>(() => ({ ...EMPTY_DRAFT, ...initialDraft }));
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [reviewQueued, setReviewQueued] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isUpdate = mode === "update";
 
   const update = (patch: Partial<DraftEvent>) => setDraft((p) => ({ ...p, ...patch }));
 
@@ -731,6 +812,7 @@ function SubmitEventModal({
         startTime: draft.startTime || undefined,
         town: draft.town.trim() || undefined,
         county: draft.county.trim() || undefined,
+        postcode: draft.postcode.trim() || undefined,
         organiserName: draft.organiserName.trim() || undefined,
         sourceUrl: draft.sourceUrl.trim() || undefined,
         entryFee: draft.entryFee.trim() || undefined,
@@ -759,12 +841,12 @@ function SubmitEventModal({
       ].filter(Boolean).join("\n");
 
       const queued = await submitForReview({
-        subject: `FindSpot Event Submission: ${newEvent.title}`,
+        subject: `FindSpot Event ${isUpdate ? "Update" : "Submission"}: ${newEvent.title}`,
         message: details,
         fromName: newEvent.organiserName || "FindSpot User",
       });
 
-      saveLocalSubmission(newEvent);
+      if (!isUpdate) saveLocalSubmission(newEvent);
       setReviewQueued(queued);
       setDone(true);
     } catch (e: any) {
@@ -781,9 +863,13 @@ function SubmitEventModal({
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4 text-2xl font-black text-emerald-600">✓</div>
           <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Submitted!</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
-            {reviewQueued
-              ? "Thanks — your submission has been sent for review. Once approved it will appear in Discover for everyone to see."
-              : "Your event has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
+            {isUpdate
+              ? reviewQueued
+                ? "Thanks — your update has been sent for review."
+                : "This build is not configured to send central review submissions, so the update was not shared."
+              : reviewQueued
+                ? "Thanks — your submission has been sent for review. Once approved it will appear in Discover for everyone to see."
+                : "Your event has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
           </p>
           <button
             onClick={() => { onSubmitted(); onClose(); }}
@@ -819,7 +905,7 @@ function SubmitEventModal({
         <div className="p-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
           <div>
             <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Step {step} of 4</div>
-            <h2 className="font-black text-gray-900 dark:text-gray-100">Submit an Event</h2>
+            <h2 className="font-black text-gray-900 dark:text-gray-100">{isUpdate ? "Submit Event Update" : "Submit an Event"}</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
@@ -912,7 +998,7 @@ function SubmitEventModal({
           {step === 4 && (
             <>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Organiser details (optional, but helps with verification)
+                Organiser details {isUpdate ? "and source link" : "(optional, but helps with verification)"}
               </p>
               <div>
                 <label className={labelClass}>Organiser Name</label>
@@ -923,7 +1009,9 @@ function SubmitEventModal({
                 <input value={draft.sourceUrl} onChange={(e) => update({ sourceUrl: e.target.value })} placeholder="Facebook event, website, Eventbrite…" className={inputClass} />
               </div>
               <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
-                Your submission will appear in Discover with an <strong>Unconfirmed</strong> badge. A source link helps us verify and promote it to <strong>Verified</strong> status.
+                {isUpdate
+                  ? "Add the organiser's Facebook page, website, booking page, or any public source we can use to update this listing."
+                  : <>Your submission will appear in Discover with an <strong>Unconfirmed</strong> badge. A source link helps us verify and promote it to <strong>Verified</strong> status.</>}
               </div>
             </>
           )}
@@ -952,7 +1040,7 @@ function SubmitEventModal({
               disabled={submitting}
               className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
             >
-              {submitting ? "Submitting…" : "Submit Event"}
+              {submitting ? "Submitting…" : isUpdate ? "Submit Update" : "Submit Event"}
             </button>
           )}
         </div>
@@ -983,15 +1071,20 @@ const EMPTY_DRAFT_CLUB: DraftClub = {
 function SubmitClubModal({
   onClose,
   onSubmitted,
+  initialDraft,
+  mode = "new",
 }: {
   onClose: () => void;
   onSubmitted: () => void;
+  initialDraft?: Partial<DraftClub>;
+  mode?: "new" | "update";
 }) {
-  const [draft, setDraft] = useState<DraftClub>(EMPTY_DRAFT_CLUB);
+  const [draft, setDraft] = useState<DraftClub>(() => ({ ...EMPTY_DRAFT_CLUB, ...initialDraft }));
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [reviewQueued, setReviewQueued] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isUpdate = mode === "update";
 
   const update = (patch: Partial<DraftClub>) => setDraft((p) => ({ ...p, ...patch }));
   const canSubmit = !!draft.name.trim() && !!(draft.town.trim() || draft.county.trim() || draft.postcode.trim());
@@ -1006,6 +1099,7 @@ function SubmitClubModal({
         description: draft.description.trim() || undefined,
         town: draft.town.trim() || undefined,
         county: draft.county.trim() || undefined,
+        postcode: draft.postcode.trim() || undefined,
         facebookUrl: draft.facebookUrl.trim() || undefined,
         websiteUrl: draft.websiteUrl.trim() || undefined,
         digDays: draft.digDays.trim() || undefined,
@@ -1026,12 +1120,12 @@ function SubmitClubModal({
       ].filter(Boolean).join("\n");
 
       const queued = await submitForReview({
-        subject: `FindSpot Club Submission: ${newClub.name}`,
+        subject: `FindSpot Club ${isUpdate ? "Update" : "Submission"}: ${newClub.name}`,
         message: details,
         fromName: newClub.contactName || "FindSpot User",
       });
 
-      saveLocalClubSubmission(newClub);
+      if (!isUpdate) saveLocalClubSubmission(newClub);
       setReviewQueued(queued);
       setDone(true);
     } catch (e: any) {
@@ -1050,11 +1144,15 @@ function SubmitClubModal({
       <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
         <div className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-8 shadow-2xl text-center">
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mx-auto mb-4 text-2xl font-black text-emerald-600">✓</div>
-          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">Club Listed!</h2>
+          <h2 className="text-xl font-black text-gray-900 dark:text-gray-100">{isUpdate ? "Submitted!" : "Club Listed!"}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
-            {reviewQueued
-              ? "Your club has been submitted for review. Once approved it will appear in the clubs directory for detectorists near you."
-              : "Your club has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
+            {isUpdate
+              ? reviewQueued
+                ? "Thanks — your club update has been sent for review."
+                : "This build is not configured to send central review submissions, so the update was not shared."
+              : reviewQueued
+                ? "Your club has been submitted for review. Once approved it will appear in the clubs directory for detectorists near you."
+                : "Your club has been saved on this device with an Unconfirmed badge. This build is not configured to send central review submissions."}
           </p>
           <button
             onClick={() => { onSubmitted(); onClose(); }}
@@ -1079,7 +1177,7 @@ function SubmitClubModal({
         <div className="p-5 pb-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
           <div>
             <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Club Directory</div>
-            <h2 className="font-black text-gray-900 dark:text-gray-100">List Your Club</h2>
+            <h2 className="font-black text-gray-900 dark:text-gray-100">{isUpdate ? "Submit Club Update" : "List Your Club"}</h2>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg">✕</button>
         </div>
@@ -1091,7 +1189,9 @@ function SubmitClubModal({
             </div>
           )}
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Add your club to the directory so other detectorists nearby can find you.
+            {isUpdate
+              ? "Add a public Facebook page, website, or updated details for this club."
+              : "Add your club to the directory so other detectorists nearby can find you."}
           </p>
           <div>
             <label className={labelClass}>Club Name *</label>
@@ -1132,7 +1232,9 @@ function SubmitClubModal({
             <input value={draft.contactName} onChange={(e) => update({ contactName: e.target.value })} placeholder="Contact name for verification" className={inputClass} />
           </div>
           <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
-            Your club will appear immediately on your device with an <strong>Unconfirmed</strong> badge. Once we've verified it, it'll show as <strong>Verified</strong> for everyone nearby.
+            {isUpdate
+              ? "A public Facebook page or website lets us replace the contact-details-needed state with a useful link."
+              : <>Your club will appear immediately on your device with an <strong>Unconfirmed</strong> badge. Once we've verified it, it'll show as <strong>Verified</strong> for everyone nearby.</>}
           </div>
         </div>
 
@@ -1142,7 +1244,7 @@ function SubmitClubModal({
             disabled={!canSubmit || submitting}
             className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
           >
-            {submitting ? "Submitting…" : "List My Club"}
+            {submitting ? "Submitting…" : isUpdate ? "Submit Update" : "List My Club"}
           </button>
         </div>
       </div>
@@ -1168,12 +1270,14 @@ function EventSection({
   goingIds,
   plannedKeys,
   onSelect,
+  onSubmitUpdate,
 }: {
   title: string;
   entries: { event: DetectingEvent; distanceKm?: number; score: number }[];
   goingIds: Set<string>;
   plannedKeys: Set<string>;
   onSelect: (event: DetectingEvent) => void;
+  onSubmitUpdate: (event: DetectingEvent) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? entries : entries.slice(0, 4);
@@ -1191,6 +1295,7 @@ function EventSection({
             going={goingIds.has(event.id)}
             planned={plannedKeys.has(`${event.title}|${event.startDate}`)}
             onClick={() => onSelect(event)}
+            onSubmitUpdate={() => onSubmitUpdate(event)}
           />
         ))}
       </div>
@@ -1232,8 +1337,10 @@ export default function Discover({ projectId }: { projectId: string }) {
 
   const [selectedEvent, setSelectedEvent] = useState<DetectingEvent | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [eventUpdateDraft, setEventUpdateDraft] = useState<Partial<DraftEvent> | null>(null);
   const [submissionTick, setSubmissionTick] = useState(0);
   const [showSubmitClub, setShowSubmitClub] = useState(false);
+  const [clubUpdateDraft, setClubUpdateDraft] = useState<Partial<DraftClub> | null>(null);
   const [clubSubmissionTick, setClubSubmissionTick] = useState(0);
   const [localClubs, setLocalClubs] = useState<ClubListing[]>([]);
   const [showAllClubs, setShowAllClubs] = useState(false);
@@ -1274,6 +1381,40 @@ export default function Discover({ projectId }: { projectId: string }) {
     setLocationEnabled(false);
     setUserLocation(null);
     setLocationError(false);
+  }
+
+  function openEventUpdate(event: DetectingEvent) {
+    setSelectedEvent(null);
+    setEventUpdateDraft({
+      type: event.type,
+      title: event.title,
+      description: event.description ?? "",
+      startDate: event.startDate,
+      endDate: event.endDate ?? "",
+      startTime: event.startTime ?? "",
+      town: event.town ?? "",
+      county: event.county ?? "",
+      postcode: event.postcode ?? "",
+      organiserName: event.organiserName ?? "",
+      sourceUrl: event.sourceUrl || event.facebookUrl || "",
+      entryFee: event.entryFee ?? "",
+    });
+    setShowSubmit(true);
+  }
+
+  function openClubUpdate(club: ClubListing) {
+    setClubUpdateDraft({
+      name: club.name,
+      description: club.description ?? "",
+      town: club.town ?? "",
+      county: club.county ?? "",
+      postcode: club.postcode ?? "",
+      facebookUrl: club.facebookUrl ?? "",
+      websiteUrl: club.websiteUrl ?? "",
+      digDays: club.digDays ?? "",
+      contactName: club.contactName ?? "",
+    });
+    setShowSubmitClub(true);
   }
 
   useEffect(() => { requestLocation(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1396,7 +1537,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Local club directory</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">List a club so nearby detectorists can find it</p>
         </div>
-        <button onClick={() => setShowSubmitClub(true)} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
+        <button onClick={() => { setClubUpdateDraft(null); setShowSubmitClub(true); }} className="shrink-0 bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
           List a Club
         </button>
       </div>
@@ -1422,7 +1563,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           <>
             <div className="grid gap-3">
               {(showAllClubs ? processedClubs : processedClubs.slice(0, 4)).map(({ club, distanceKm }) => (
-                <ClubCard key={club.id} club={club} distanceKm={distanceKm} />
+                <ClubCard key={club.id} club={club} distanceKm={distanceKm} onSubmitUpdate={() => openClubUpdate(club)} />
               ))}
             </div>
             {processedClubs.length > 4 && (
@@ -1441,7 +1582,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Rallies and club digs</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Submit an event so other detectorists can find it</p>
         </div>
-        <button onClick={() => setShowSubmit(true)} className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
+        <button onClick={() => { setEventUpdateDraft(null); setShowSubmit(true); }} className="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 px-5 rounded-xl text-[10px] uppercase tracking-widest transition-colors">
           Submit Event
         </button>
       </div>
@@ -1494,7 +1635,7 @@ export default function Discover({ projectId }: { projectId: string }) {
       ) : (
         <>
           {weekendEvents.length > 0 ? (
-            <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+            <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
           ) : (
             <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl text-center">
               <p className="text-xs font-bold text-gray-400 dark:text-gray-500">Nothing nearby this weekend</p>
@@ -1502,10 +1643,10 @@ export default function Discover({ projectId }: { projectId: string }) {
             </div>
           )}
           {soonEvents.length > 0 && (
-            <EventSection title="Next 14 Days" entries={soonEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+            <EventSection title="Next 14 Days" entries={soonEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
           )}
           {laterEvents.length > 0 && (
-            <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
+            <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
           )}
         </>
       )}
@@ -1525,6 +1666,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           planned={plannedKeys.has(`${selectedEvent.title}|${selectedEvent.startDate}`)}
           onClose={() => setSelectedEvent(null)}
           onToggleGoing={() => toggleGoingId(selectedEvent.id)}
+          onSubmitUpdate={() => openEventUpdate(selectedEvent)}
           onPlanSession={() => {
             const e = selectedEvent;
             const params = new URLSearchParams({ type: "rally" });
@@ -1543,10 +1685,20 @@ export default function Discover({ projectId }: { projectId: string }) {
         />
       )}
       {showSubmit && (
-        <SubmitEventModal onClose={() => setShowSubmit(false)} onSubmitted={() => setSubmissionTick((t) => t + 1)} />
+        <SubmitEventModal
+          mode={eventUpdateDraft ? "update" : "new"}
+          initialDraft={eventUpdateDraft ?? undefined}
+          onClose={() => { setShowSubmit(false); setEventUpdateDraft(null); }}
+          onSubmitted={() => { setSubmissionTick((t) => t + 1); setEventUpdateDraft(null); }}
+        />
       )}
       {showSubmitClub && (
-        <SubmitClubModal onClose={() => setShowSubmitClub(false)} onSubmitted={() => setClubSubmissionTick((t) => t + 1)} />
+        <SubmitClubModal
+          mode={clubUpdateDraft ? "update" : "new"}
+          initialDraft={clubUpdateDraft ?? undefined}
+          onClose={() => { setShowSubmitClub(false); setClubUpdateDraft(null); }}
+          onSubmitted={() => { setClubSubmissionTick((t) => t + 1); setClubUpdateDraft(null); }}
+        />
       )}
     </div>
   );

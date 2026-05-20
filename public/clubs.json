@@ -94,7 +94,8 @@
     "county": "Greater Manchester",
     "postcode": "SK4",
     "facebookUrl": "https://www.facebook.com/groups/656148037447500/",
-    "verificationStatus": "verified"
+    "verificationStatus": "verified",
+    "websiteUrl": "https://www.smmdc.co.uk/"
   },
   {
     "id": "club-012",
@@ -168,7 +169,8 @@
     "name": "Dales & Matlock Metal Detecting Club",
     "county": "Derbyshire",
     "postcode": "DE",
-    "verificationStatus": "community"
+    "verificationStatus": "community",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/dales-and-matlock-metal-detecting-club"
   },
   {
     "id": "club-021",
@@ -184,7 +186,8 @@
     "name": "Lincolnshire Search Society",
     "county": "Lincolnshire",
     "postcode": "LN",
-    "verificationStatus": "community"
+    "verificationStatus": "community",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/lincolnshire-search-society"
   },
   {
     "id": "club-023",
@@ -217,14 +220,16 @@
     "name": "Wymondham & Attleborough Detecting Club",
     "county": "Norfolk",
     "postcode": "NR",
-    "verificationStatus": "community"
+    "verificationStatus": "community",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/wymondham-%26-attleborough-detecting-club"
   },
   {
     "id": "club-027",
     "name": "St Edmunds Searchers",
     "county": "Suffolk",
     "postcode": "IP",
-    "verificationStatus": "community"
+    "verificationStatus": "community",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/st.-edmunds-searchers"
   },
   {
     "id": "club-028",
@@ -367,6 +372,673 @@
     "town": "Leicester",
     "county": "Leicestershire",
     "facebookUrl": "https://www.facebook.com/share/g/1Gxh2WpaAk/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-045",
+    "name": "Tyne & Wear Metal Detecting",
+    "county": "Tyne and Wear",
+    "postcode": "NE",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/tyne-%26-wear-metal-detecting",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-046",
+    "name": "South Lancashire and Cheshire Metal Detecting Club",
+    "county": "Cheshire",
+    "postcode": "WA8",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/south-lancashire-and-cheshire-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-047",
+    "name": "Cinque Ports Detecting Club",
+    "county": "Kent",
+    "postcode": "CT",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/cinque-ports-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-048",
+    "name": "Invicta Seekers Metal Detecting Club",
+    "county": "Kent",
+    "postcode": "CT",
+    "websiteUrl": "https://invictaseekers.weebly.com/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-049",
+    "name": "Mid Kent Metal Detecting Club",
+    "town": "Maidstone",
+    "county": "Kent",
+    "postcode": "ME14",
+    "websiteUrl": "https://midkentmdc.org.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-050",
+    "name": "North West Surrey Searchers",
+    "county": "Surrey",
+    "postcode": "KT",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/north-west-surrey-searchers",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-051",
+    "name": "Berks Surrey And Bucks Detecting Club",
+    "county": "Berkshire",
+    "postcode": "RG",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/berks-surrey-and-bucks-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-052",
+    "name": "Sussex Metal Detecting Club",
+    "county": "Sussex",
+    "postcode": "BN",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/sussex-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-053",
+    "name": "Cotswolds Metal Detecting Club",
+    "county": "Gloucestershire",
+    "postcode": "GL",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/cotswolds-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-054",
+    "name": "Merthyr Tydfil Metal Detecting Club",
+    "town": "Merthyr Tydfil",
+    "county": "Merthyr Tydfil",
+    "postcode": "CF47",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/merthyr-tydfil-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-055",
+    "name": "Pembrokeshire Prospectors Metal Detecting Society",
+    "county": "Pembrokeshire",
+    "postcode": "SA61",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/pembrokeshire-prospectors-metal-detecting-society",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-056",
+    "name": "R.A.R.E - Rhondda Artefacts & Research Enthusiasts",
+    "town": "Pontypridd",
+    "county": "Rhondda Cynon Taf",
+    "postcode": "CF38",
+    "websiteUrl": "http://www.raredetectingclub.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-057",
+    "name": "Hayle MDC",
+    "town": "Hayle",
+    "county": "Cornwall",
+    "postcode": "TR27",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/hayle-mdc",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-058",
+    "name": "North Cornwall Metal Detecting",
+    "county": "Cornwall",
+    "postcode": "PL27",
+    "websiteUrl": "https://www.duchymetaldetectors.co.uk/north-cornwall-metal-detecting/",
+    "facebookUrl": "https://www.facebook.com/groups/2065956027035507/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-059",
+    "name": "Isca Metal Detecting Club",
+    "county": "Devon",
+    "postcode": "EX",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/isca-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-060",
+    "name": "Newton Abbot District Metal Detecting Club",
+    "town": "Newton Abbot",
+    "county": "Devon",
+    "postcode": "TQ12",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/newton-abbot-district-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-061",
+    "name": "Southwest Searchers",
+    "county": "Devon",
+    "postcode": "PL",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/southwest-searchers",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-062",
+    "name": "Teignbridge History Finders",
+    "county": "Devon",
+    "postcode": "TQ",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/teignbridge-history-finders",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-063",
+    "name": "Torbay Metal Detectors Club",
+    "town": "Torbay",
+    "county": "Devon",
+    "postcode": "TQ2",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/torbay-metal-detectors-club.-members-only.",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-064",
+    "name": "UK History Finders - Metal Detecting Group",
+    "town": "Totnes",
+    "county": "Devon",
+    "postcode": "TQ9",
+    "websiteUrl": "https://www.uk-historyfinders.co.uk/",
+    "facebookUrl": "https://www.facebook.com/ukhistoryfinders",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-065",
+    "name": "Bournemouth Metal Detecting Club",
+    "town": "Bournemouth",
+    "county": "Dorset",
+    "postcode": "BH",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/bournemouth-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-066",
+    "name": "Gloucestershire Detectorists Metal Detecting",
+    "county": "Gloucestershire",
+    "postcode": "GL",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/gloucestershire-detectorists-metal-detecting",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-067",
+    "name": "Gloucestershire Metal Detecting Club (GMDC)",
+    "county": "Gloucestershire",
+    "postcode": "GL",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/gloucestershire-metal-detecting-club-g.m.d.c",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-068",
+    "name": "Weston Super Mare Metal Detecting Club",
+    "town": "Weston-super-Mare",
+    "county": "Somerset",
+    "postcode": "BS23",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/weston-super-mare-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-069",
+    "name": "Trowbridge & District Metal Detecting Club",
+    "town": "Trowbridge",
+    "county": "Wiltshire",
+    "postcode": "BA14",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/trowbridge-%26-district-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-070",
+    "name": "Bentpath Metal Detecting Club",
+    "county": "Dumfries and Galloway",
+    "postcode": "DG13",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/bentpath-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-071",
+    "name": "Golden Valley Searchers Metal Detecting Group",
+    "county": "Herefordshire",
+    "postcode": "HR",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/golden-valley-searchers-metal-detecting-group",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-072",
+    "name": "Herefordshire Searchers MDC",
+    "county": "Herefordshire",
+    "postcode": "HR",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/herefordshire-searchers-m.d.c",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-073",
+    "name": "Shrewsbury & Shropshire Metal Detecting Club",
+    "town": "Shrewsbury",
+    "county": "Shropshire",
+    "postcode": "SY1",
+    "facebookUrl": "https://www.facebook.com/groups/1234562763703479/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-074",
+    "name": "The Iron Men Metal Detecting Club",
+    "county": "Shropshire",
+    "postcode": "SY",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/the-iron-men-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-075",
+    "name": "Midland Metal Detecting Club",
+    "county": "Staffordshire",
+    "postcode": "ST",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/midland-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-076",
+    "name": "North Staffs Metal Detecting Club",
+    "county": "Staffordshire",
+    "postcode": "ST5",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/north-staffs-metal-detecting-club-(private-club)",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-077",
+    "name": "Go Detecting Ltd (Midlands)",
+    "county": "West Midlands",
+    "postcode": "B",
+    "facebookUrl": "https://www.facebook.com/groups/2291434567799331/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-078",
+    "name": "Spades Metal Detecting Club",
+    "county": "West Midlands",
+    "postcode": "B",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/spades-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-079",
+    "name": "Mercia Metal Detecting Club",
+    "county": "Worcestershire",
+    "postcode": "WR",
+    "websiteUrl": "https://www.merciamdc.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-080",
+    "name": "NERDS - North & East Riding Detecting Squad",
+    "county": "East Riding of Yorkshire",
+    "postcode": "YO",
+    "websiteUrl": "https://www.nerds-neridingds.org/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-081",
+    "name": "North Detecting Events",
+    "county": "North Yorkshire",
+    "postcode": "YO",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/north-detecting-events",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-082",
+    "name": "Ripon Relic Hunters Metal Detecting Club",
+    "town": "Ripon",
+    "county": "North Yorkshire",
+    "postcode": "HG4",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/ripon-relic-hunters-metal-detecting-club",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-083",
+    "name": "West Riding Detecting Group",
+    "county": "West Yorkshire",
+    "postcode": "WF",
+    "websiteUrl": "https://www.ukdetectorist.co.uk/club-detail/west-riding-detecting-group",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-084",
+    "name": "Dumfries & Galloway Metal Detecting",
+    "county": "Dumfries and Galloway",
+    "postcode": "DG",
+    "facebookUrl": "https://www.facebook.com/groups/2558482444221000/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-085",
+    "name": "Highland Metal Detectorists",
+    "county": "Highland",
+    "postcode": "IV",
+    "facebookUrl": "https://www.facebook.com/groups/highlandmetaldetectorists/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-086",
+    "name": "Metal Detecting North East Scotland",
+    "county": "Aberdeenshire",
+    "postcode": "AB",
+    "facebookUrl": "https://www.facebook.com/groups/456213837478806/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-087",
+    "name": "Ross-Shire Relic",
+    "county": "Highland",
+    "postcode": "IV",
+    "facebookUrl": "https://www.facebook.com/groups/339607538976857/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-088",
+    "name": "Toddys Metal Detecting Scotland",
+    "county": "Scotland",
+    "postcode": "FK",
+    "facebookUrl": "https://www.facebook.com/groups/diggingscotland/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-089",
+    "name": "East Durham Detectors",
+    "county": "Durham",
+    "postcode": "DH",
+    "facebookUrl": "https://www.facebook.com/groups/452942178986736/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-090",
+    "name": "Stockport Metal Detecting Club",
+    "town": "Stockport",
+    "county": "Greater Manchester",
+    "postcode": "SK",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-091",
+    "name": "Hyndburn and Ribble Valley Detectorist Club",
+    "county": "Lancashire",
+    "postcode": "BB5",
+    "facebookUrl": "https://www.facebook.com/groups/243293866020988/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-092",
+    "name": "Down to Earth Digs",
+    "county": "North Yorkshire",
+    "postcode": "YO",
+    "facebookUrl": "https://www.facebook.com/groups/1101250450773684/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-093",
+    "name": "DIGGERS DEN",
+    "town": "Doncaster",
+    "county": "South Yorkshire",
+    "postcode": "DN",
+    "facebookUrl": "https://www.facebook.com/groups/230968132175436/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-094",
+    "name": "South Yorkshire Metal Detecting",
+    "county": "South Yorkshire",
+    "postcode": "S",
+    "facebookUrl": "https://www.facebook.com/groups/426642821527454/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-095",
+    "name": "Midlands Detecting Days",
+    "county": "West Midlands",
+    "postcode": "B",
+    "facebookUrl": "https://www.facebook.com/groups/457186331626427/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-096",
+    "name": "Wheaton Aston Metal Detecting Club",
+    "town": "Wheaton Aston",
+    "county": "Staffordshire",
+    "postcode": "ST19",
+    "facebookUrl": "https://www.facebook.com/p/Wheaton-Aston-Metal-Detecting-Club-100069516553645/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-097",
+    "name": "Detecting Warwickshire",
+    "county": "Warwickshire",
+    "postcode": "CV",
+    "facebookUrl": "https://www.facebook.com/groups/523007356752762/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-098",
+    "name": "Can You Dig It",
+    "county": "West Midlands",
+    "postcode": "B",
+    "facebookUrl": "https://www.facebook.com/groups/372712155525167/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-099",
+    "name": "Dragon Diggers",
+    "county": "West Midlands",
+    "postcode": "B",
+    "facebookUrl": "https://www.facebook.com/groups/1042184113522590/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-100",
+    "name": "Noble Pursuits Metal Detecting",
+    "county": "West Midlands",
+    "postcode": "B",
+    "facebookUrl": "https://www.facebook.com/groups/NoblePursuits/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-101",
+    "name": "WodensDay MDC",
+    "county": "Shropshire",
+    "postcode": "SY",
+    "websiteUrl": "https://wodensdaymdc.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-102",
+    "name": "Southlincs Searcher",
+    "county": "Lincolnshire",
+    "postcode": "LN",
+    "facebookUrl": "https://www.facebook.com/southlincs.searcher",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-103",
+    "name": "Metal Detectives",
+    "county": "Buckinghamshire",
+    "postcode": "MK",
+    "websiteUrl": "http://www.metaldetectives.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-104",
+    "name": "Clacton Lost Item Recovery And Dig Days",
+    "town": "Clacton-on-Sea",
+    "county": "Essex",
+    "postcode": "CO15",
+    "facebookUrl": "https://www.facebook.com/groups/183490379293934/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-105",
+    "name": "Dedham Vale Detectorists",
+    "county": "Essex",
+    "postcode": "CO",
+    "facebookUrl": "https://www.facebook.com/groups/dedhamvaledetectorists/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-106",
+    "name": "Friends of Mistley Metal Detecting",
+    "town": "Mistley",
+    "county": "Essex",
+    "postcode": "CO11",
+    "facebookUrl": "https://www.facebook.com/groups/mistleymetaldetectingclub/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-107",
+    "name": "Hayling Detect",
+    "town": "Hayling Island",
+    "county": "Hampshire",
+    "postcode": "PO11",
+    "websiteUrl": "https://haylingdetect.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-108",
+    "name": "Medway History Finders",
+    "town": "Medway",
+    "county": "Kent",
+    "postcode": "ME",
+    "facebookUrl": "https://www.facebook.com/groups/600000297083973/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-109",
+    "name": "Brighton Detecting Club",
+    "town": "Brighton",
+    "county": "East Sussex",
+    "postcode": "BN",
+    "facebookUrl": "https://www.facebook.com/groups/1023528699092272/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-110",
+    "name": "LEGISE - Landscape Explorers Group",
+    "county": "South East",
+    "postcode": "GU",
+    "websiteUrl": "https://www.legise.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-111",
+    "name": "Devon, Cornwall and Dorset Detecting Group (DCDD)",
+    "county": "Devon",
+    "postcode": "EX",
+    "websiteUrl": "https://www.dcdd.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-112",
+    "name": "Mid Devon Detectorists",
+    "county": "Devon",
+    "postcode": "EX",
+    "facebookUrl": "https://www.facebook.com/groups/632760862452413/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-113",
+    "name": "Dorset and West Pastfinders",
+    "county": "Dorset",
+    "postcode": "DT",
+    "facebookUrl": "https://www.facebook.com/groups/448762728637683/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-114",
+    "name": "Minehead Area Detectorists",
+    "town": "Minehead",
+    "county": "Somerset",
+    "postcode": "TA24",
+    "facebookUrl": "https://www.facebook.com/groups/177055292708851/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-115",
+    "name": "Somerset Metal Detectorists UK",
+    "county": "Somerset",
+    "postcode": "TA",
+    "facebookUrl": "https://www.facebook.com/groups/1553007488704478/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-116",
+    "name": "South West Searchers MD Club",
+    "town": "Plymouth",
+    "county": "Devon",
+    "postcode": "PL",
+    "facebookUrl": "https://www.facebook.com/groups/2265631370327124/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-117",
+    "name": "Manx Detectorists Society",
+    "county": "Isle of Man",
+    "postcode": "IM",
+    "facebookUrl": "https://www.facebook.com/groups/972669852798024/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-118",
+    "name": "Flintshire Finders",
+    "county": "Flintshire",
+    "postcode": "CH",
+    "websiteUrl": "https://flintshirefinders.co.uk/",
+    "verificationStatus": "verified"
+  },
+  {
+    "id": "club-119",
+    "name": "Knights Templar Metal Detecting",
+    "county": "South Wales",
+    "postcode": "CF",
+    "facebookUrl": "https://www.facebook.com/groups/660114558628435/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-120",
+    "name": "Metal Detecting Passport",
+    "county": "Wales",
+    "postcode": "CF",
+    "facebookUrl": "https://www.facebook.com/metaldetectingpassport",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-121",
+    "name": "Mid Wales Metal Detecting",
+    "county": "Mid Wales",
+    "postcode": "SY",
+    "facebookUrl": "https://www.facebook.com/groups/355710841279673/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-122",
+    "name": "Muddy Boots Detecting Group",
+    "county": "UK Wide",
+    "facebookUrl": "https://www.facebook.com/groups/1667456343506263/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-123",
+    "name": "The Silver Sniffers",
+    "county": "UK Wide",
+    "facebookUrl": "https://www.facebook.com/groups/2787481674906158/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-124",
+    "name": "Six on Sticks Metal Detecting",
+    "county": "UK Wide",
+    "facebookUrl": "https://www.facebook.com/groups/535839605858924/",
+    "verificationStatus": "community"
+  },
+  {
+    "id": "club-125",
+    "name": "Sons of Archaeology Metaldetecting Club",
+    "county": "UK Wide",
+    "facebookUrl": "https://www.facebook.com/groups/700108382326989/",
     "verificationStatus": "community"
   }
 ]
