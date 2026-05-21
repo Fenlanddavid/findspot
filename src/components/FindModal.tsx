@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Find, Media, Permission, Session } from "../db";
+import { db, Find, Media, Session } from "../db";
 import { Modal } from "./Modal";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
@@ -24,7 +24,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   
   const [calibratingMedia, setCalibratingMedia] = useState<{ media: Media; url: string } | null>(null);
 
-  const [permission, setPermission] = useState<Permission | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [detectorList, setDetectorList] = useState<string[]>([]);
 
@@ -37,7 +36,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   useEffect(() => {
     if (find) {
       setDraft(find);
-      db.permissions.get(find.permissionId).then(p => setPermission(p || null));
       if (find.sessionId) db.sessions.get(find.sessionId).then(s => setSession(s || null));
       getSetting("detectors", []).then(setDetectorList);
     }
@@ -886,7 +884,6 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             ref={shareCardRef}
             type={draft.isFavorite ? 'find-of-the-day' : 'find'}
             find={draft}
-            permission={permission || undefined}
             photoUrlFront={imageUrls[0]?.url}
             photoUrlBack={imageUrls[1]?.url}
           />

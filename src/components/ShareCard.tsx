@@ -1,77 +1,95 @@
 import React from 'react';
-import { Find, Permission } from '../db';
+import { Find } from '../db';
 
 interface ShareCardProps {
   find?: Find;
   photoUrl?: string; // legacy fallback
   photoUrlFront?: string;
   photoUrlBack?: string;
-  permission?: Permission;
   type: 'find' | 'find-of-the-day';
 }
 
-function CardLogoGroup() {
+function clean(value?: string | number | null): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text.length > 0 ? text : null;
+}
+
+function formatNumber(value?: number | null, suffix = ''): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return `${Number(value.toFixed(2))}${suffix}`;
+}
+
+function formatDateRange(value?: string | null): string | null {
+  const text = clean(value);
+  if (!text) return null;
+  if (/^\d{1,4}$/.test(text)) return `AD ${text}`;
+  return text;
+}
+
+function formatDimension(width?: number | null, height?: number | null): string | null {
+  const w = formatNumber(width);
+  const h = formatNumber(height);
+  if (w && h) return `${w} x ${h}mm`;
+  if (w) return `${w}mm`;
+  if (h) return `${h}mm`;
+  return null;
+}
+
+function titleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+}
+
+function LogoMark() {
   return (
     <div className="flex items-center gap-4">
-      <svg width="52" height="52" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="logo-grad-card-v15" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="50%" stopColor="#14b8a6" />
-            <stop offset="100%" stopColor="#0ea5e9" />
-          </linearGradient>
-        </defs>
-        <circle cx="256" cy="256" r="200" stroke="url(#logo-grad-card-v15)" strokeWidth="32" fill="none" />
-        <circle cx="256" cy="256" r="120" stroke="url(#logo-grad-card-v15)" strokeWidth="24" fill="none" opacity="0.6" />
-        <circle cx="256" cy="256" r="50" fill="url(#logo-grad-card-v15)" />
-        <rect x="244" y="20" width="24" height="80" rx="4" fill="url(#logo-grad-card-v15)" opacity="0.4" />
-        <rect x="244" y="412" width="24" height="80" rx="4" fill="url(#logo-grad-card-v15)" opacity="0.4" />
-        <rect x="20" y="244" width="80" height="24" rx="4" fill="url(#logo-grad-card-v15)" opacity="0.4" />
-        <rect x="412" y="244" width="80" height="24" rx="4" fill="url(#logo-grad-card-v15)" opacity="0.4" />
+      <svg width="46" height="46" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="256" cy="256" r="190" stroke="#0f766e" strokeWidth="28" fill="none" />
+        <circle cx="256" cy="256" r="112" stroke="#14b8a6" strokeWidth="22" fill="none" opacity="0.62" />
+        <circle cx="256" cy="256" r="44" fill="#0f766e" />
+        <rect x="245" y="36" width="22" height="72" rx="4" fill="#f59e0b" opacity="0.75" />
+        <rect x="245" y="404" width="22" height="72" rx="4" fill="#f59e0b" opacity="0.75" />
+        <rect x="36" y="245" width="72" height="22" rx="4" fill="#f59e0b" opacity="0.75" />
+        <rect x="404" y="245" width="72" height="22" rx="4" fill="#f59e0b" opacity="0.75" />
       </svg>
-
       <div className="flex flex-col leading-none">
-        <svg width="190" height="38" viewBox="0 0 190 38" xmlns="http://www.w3.org/2000/svg">
+        <svg width="178" height="36" viewBox="0 0 178 36" xmlns="http://www.w3.org/2000/svg" aria-label="FindSpot">
           <defs>
-            <linearGradient id="findspot-text-grad-v15" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="findspot-wordmark-share-v3" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#10b981" />
-              <stop offset="50%" stopColor="#14b8a6" />
+              <stop offset="52%" stopColor="#14b8a6" />
               <stop offset="100%" stopColor="#0ea5e9" />
             </linearGradient>
           </defs>
           <text
             x="0"
-            y="32"
-            fill="url(#findspot-text-grad-v15)"
-            style={{ fontSize: '34px', fontWeight: 900, fontFamily: '"Inter", sans-serif', letterSpacing: '-0.06em' }}
+            y="29"
+            fill="url(#findspot-wordmark-share-v3)"
+            style={{ fontSize: '32px', fontWeight: 900, fontFamily: '"Inter", sans-serif', letterSpacing: '0' }}
           >
             FindSpot
           </text>
         </svg>
-        <span className="text-[11px] uppercase tracking-[0.35em] text-white/35 font-bold mt-0.5">
-          Discovery Record
-        </span>
+        <div className="mt-1 text-[13px] leading-none font-bold uppercase text-[#66736f]">Discovery record</div>
       </div>
     </div>
   );
 }
 
-function ImagePanel({
-  src,
-  label,
-}: {
-  src?: string;
-  label: string;
-}) {
+function ImagePanel({ src, label }: { src?: string; label?: string | null }) {
   return (
-    <div className="relative h-full rounded-[2rem] overflow-hidden border border-white/10 bg-[#08111f] shadow-[0_20px_60px_-20px_rgba(0,0,0,0.85)]">
-      <div className="absolute top-4 left-4 z-10 px-3 py-1.5 rounded-full bg-black/45 backdrop-blur-md border border-white/10">
-        <span className="text-[11px] uppercase tracking-[0.25em] text-white/75 font-bold">{label}</span>
-      </div>
+    <div className="relative h-full overflow-hidden rounded-lg border border-[#d7dfdc] bg-[#edf2ef]">
+      {label && (
+        <div className="absolute left-5 top-5 z-10 rounded-md border border-[#d7dfdc] bg-white/92 px-4 py-2">
+          <span className="text-[13px] font-black uppercase text-[#33413d]">{label}</span>
+        </div>
+      )}
 
       {src ? (
         <div
-          className="w-full h-full"
+          className="h-full w-full"
           style={{
             backgroundImage: `url(${src})`,
             backgroundSize: 'contain',
@@ -80,38 +98,34 @@ function ImagePanel({
           }}
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-white/10 uppercase tracking-[0.45em] text-sm font-black">
-          No Image
+        <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-[#8a9893]">
+          <svg width="84" height="84" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="M8 13l2.2-2.2a1 1 0 011.4 0L15 14.2" />
+            <path d="M14 13l1.2-1.2a1 1 0 011.4 0L21 16.2" />
+            <circle cx="8" cy="9" r="1.2" />
+          </svg>
+          <div className="text-[18px] font-black uppercase">No image added</div>
         </div>
       )}
-
-      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/35 to-transparent pointer-events-none" />
     </div>
   );
 }
 
-function MetaChip({
-  label,
-  value,
-  align = 'left',
-}: {
-  label: string;
-  value?: string | number | null;
-  align?: 'left' | 'center' | 'right';
-}) {
-  const alignClass =
-    align === 'center' ? 'items-center text-center' : align === 'right' ? 'items-end text-right' : 'items-start text-left';
-
+function Fact({ label, value }: { label: string; value: string }) {
+  const isRecord = label === 'Record';
   return (
-    <div className={`flex flex-col ${alignClass} rounded-2xl border border-white/8 bg-white/[0.03] px-5 py-4`}>
-      <div className="text-[11px] uppercase font-black tracking-[0.28em] text-emerald-400/55 mb-2">{label}</div>
-      <div className="text-[24px] font-bold text-white/88 leading-tight break-words">{value || '--'}</div>
+    <div className="min-h-[112px] rounded-lg border border-[#d7dfdc] bg-white px-5 py-4">
+      <div className="mb-2 text-[12px] font-black uppercase text-[#6b7773]">{label}</div>
+      <div className={`${isRecord ? 'whitespace-nowrap text-[20px]' : 'break-words text-[24px]'} font-black leading-tight text-[#16251f]`}>
+        {value}
+      </div>
     </div>
   );
 }
 
 export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props, ref) => {
-  const { find, photoUrl, photoUrlFront, photoUrlBack, permission, type } = props;
+  const { find, photoUrl, photoUrlFront, photoUrlBack, type } = props;
 
   if (!find) return null;
 
@@ -122,22 +136,72 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
     !!find.coinDenomination ||
     (!find.findCategory && find.objectType?.toLowerCase().includes('coin'));
 
-  const mainTitle = isCoin && find.coinType ? `${find.coinType} Coin` : find.objectType || 'Recorded Find';
-  const subTitle = isCoin ? find.coinDenomination : find.ruler || null;
-
+  const periodLabel = clean(find.period);
+  const dateLabel = formatDateRange(find.dateRange);
+  const periodTitlePrefix = find.period && find.period !== 'Unknown' ? find.period : null;
   const frontImage = photoUrlFront || photoUrl;
   const backImage = photoUrlBack;
   const hasBack = !!backImage;
-
-  const frontLabel = hasBack ? (isCoin ? 'Obverse' : 'Front') : 'Image';
+  const frontLabel = hasBack ? (isCoin ? 'Obverse' : 'Front') : null;
   const backLabel = isCoin ? 'Reverse' : 'Back';
+
+  const coinTitleParts = [clean(find.coinType), clean(find.coinDenomination)].filter(Boolean) as string[];
+  const coinTitle = coinTitleParts.length > 0 ? coinTitleParts.join(' ') : null;
+  const objectTitle = titleCase(clean(find.objectType) || clean(find.findCategory) || 'Recorded find');
+  const nonCoinTitle = periodTitlePrefix && !objectTitle.toLowerCase().includes(periodTitlePrefix.toLowerCase())
+    ? `${periodTitlePrefix} ${objectTitle}`
+    : objectTitle;
+  const title = isCoin ? coinTitle || objectTitle || 'Recorded coin' : nonCoinTitle;
+  const titleSize = title.length > 42 ? '48px' : title.length > 30 ? '54px' : '62px';
+
+  const reference = isCoin
+    ? clean(find.coinSpink ? `Spink ${find.coinSpink}` : null) || clean(find.ruler)
+    : clean(find.findCategory) || clean(find.ruler);
+
+  const measurementParts = [
+    formatNumber(find.weightG, 'g'),
+    formatDimension(find.widthMm, find.heightMm),
+  ].filter(Boolean) as string[];
+
+  const categoryLabel = find.findCategory && find.findCategory !== 'Other'
+    ? find.findCategory.toLowerCase()
+    : 'find';
+  const subtitle = isCoin
+    ? [
+        clean(find.ruler),
+        find.coinSpink ? `Spink ${find.coinSpink}` : null,
+        dateLabel || periodLabel,
+      ].filter(Boolean).join(' / ')
+    : [
+        clean(find.material),
+        `${categoryLabel} recorded with FindSpot`,
+      ].filter(Boolean).join(' ');
+  const detailLine = isCoin
+    ? [
+        clean(find.material),
+        ...measurementParts,
+      ].filter(Boolean).join(' • ')
+    : measurementParts.join(' • ');
+
+  const facts = (isCoin
+    ? [
+        { label: 'Period', value: periodLabel },
+        { label: 'Material', value: clean(find.material) },
+        { label: 'Reference', value: reference },
+        { label: 'Record', value: clean(find.findCode) },
+      ]
+    : [
+        { label: 'Period', value: periodLabel },
+        { label: 'Material', value: clean(find.material) },
+        { label: 'Record', value: clean(find.findCode) },
+      ]
+  ).filter((item): item is { label: string; value: string } => !!item.value);
 
   const cardStyle: React.CSSProperties = {
     width: '1080px',
     height: '1350px',
-    background:
-      'radial-gradient(circle at top, rgba(16,185,129,0.10) 0%, rgba(2,6,23,1) 38%), linear-gradient(180deg, #07111f 0%, #020617 100%)',
-    color: 'white',
+    background: 'linear-gradient(180deg, #f7faf8 0%, #edf3f0 100%)',
+    color: '#13201c',
     display: 'flex',
     flexDirection: 'column',
     position: 'relative',
@@ -145,92 +209,56 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
     fontFamily: '"Inter", "system-ui", sans-serif',
   };
 
-  const serifStyle: React.CSSProperties = {
-    fontFamily: 'Georgia, serif',
-  };
-
   return (
-    <div ref={ref} style={cardStyle} className="relative">
-      {/* Ambient detail */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[820px] h-[820px] rounded-full bg-emerald-500/6 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.05]" style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
-          backgroundSize: '44px 44px',
-        }} />
-      </div>
-
-      {/* Header */}
-      <div className="relative z-10 px-14 pt-14 pb-8 flex items-start justify-between">
-        <CardLogoGroup />
-        <div className="flex flex-col items-end pt-1">
-          <div className="text-[12px] uppercase tracking-[0.3em] text-white/35 font-bold mb-2">
-            {type === 'find-of-the-day' ? 'Find of the Day' : 'Recorded Find'}
-          </div>
-          <div className="text-[18px] font-semibold text-emerald-300/75">facebook.com/FindSpot</div>
-        </div>
-      </div>
-
-      {/* Title block */}
-      <div className="relative z-10 px-14 pb-8">
-        <div className="rounded-[2rem] border border-white/8 bg-white/[0.035] backdrop-blur-sm px-8 py-7 shadow-[0_24px_70px_-28px_rgba(0,0,0,0.85)]">
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0 flex-1">
-              <h1 style={serifStyle} className="text-[56px] leading-[1.02] font-black tracking-tight text-white">
-                {mainTitle}
-              </h1>
-
-              {(subTitle || find.ruler) && (
-                <div className="mt-3 text-[28px] font-bold text-emerald-300 tracking-tight leading-tight">
-                  {subTitle && find.ruler && subTitle !== find.ruler
-                    ? `${subTitle} — ${find.ruler}`
-                    : subTitle || find.ruler}
-                </div>
-              )}
-
-
-            </div>
-
-            <div className="shrink-0 rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.06] px-5 py-4 text-right min-w-[210px]">
-              <div className="text-[11px] uppercase tracking-[0.28em] text-emerald-400/60 font-black mb-2">
-                Chronology
-              </div>
-              <div className="text-[28px] font-black text-white leading-tight">
-                {find.dateRange || find.period || '--'}
-              </div>
+    <div ref={ref} style={cardStyle}>
+      <div className="flex h-full flex-col p-[56px]">
+        <header className="flex items-center justify-between border-b border-[#ccd8d3] pb-8">
+          <LogoMark />
+          <div className="text-right">
+            <div className="text-[15px] font-black uppercase text-[#0f766e]">
+              {type === 'find-of-the-day' ? 'Find of the day' : 'Recorded find'}
             </div>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Image section */}
-      <div className="relative z-10 px-14 pb-8">
-        <div className={`grid gap-6 ${hasBack ? 'grid-cols-2' : 'grid-cols-1'}`} style={{ height: '520px' }}>
+        <section className={`mt-8 grid gap-5 ${hasBack ? 'grid-cols-2' : 'grid-cols-1'}`} style={{ height: hasBack ? '560px' : '620px' }}>
           <ImagePanel src={frontImage} label={frontLabel} />
           {hasBack && <ImagePanel src={backImage} label={backLabel} />}
-        </div>
-      </div>
+        </section>
 
-      {/* Metadata */}
-      <div className="relative z-10 px-14">
-        <div className="grid grid-cols-3 gap-5">
-          <MetaChip label="Detector" value={find.detector || '---'} />
-          <MetaChip label="Signal ID" value={find.targetId ?? '--'} align="center" />
-          <MetaChip label="Depth" value={find.depthCm ? `${find.depthCm}cm` : '--'} align="right" />
-        </div>
-      </div>
+        <section className="mt-8 border-y border-[#ccd8d3] py-8">
+          <div className="text-[17px] font-black uppercase text-[#0f766e]">Discovery record</div>
+          <h1
+            className="mt-3 break-words font-black leading-[1.03] text-[#13201c]"
+            style={{ fontSize: titleSize }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <div className="mt-4 break-words text-[28px] font-bold leading-tight text-[#39534c]">
+              {subtitle}
+            </div>
+          )}
+          {detailLine && (
+            <div className="mt-4 break-words text-[28px] font-black leading-tight text-[#13201c]">
+              {detailLine}
+            </div>
+          )}
+        </section>
 
-      {/* Footer */}
-      <div className="relative z-10 mt-auto px-14 pb-10 pt-8">
-        <div className="flex items-center justify-between border-t border-white/8 pt-6">
-          <div className="text-[12px] uppercase tracking-[0.32em] text-white/28 font-black">
-            Logged with FindSpot
+        <section className={`mt-7 grid gap-4 ${facts.length >= 4 ? 'grid-cols-4' : facts.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          {facts.map((item) => (
+            <Fact key={item.label} label={item.label} value={item.value} />
+          ))}
+        </section>
+
+        <footer className="mt-auto flex items-end justify-between border-t border-[#ccd8d3] pt-7">
+          <div>
+            <div className="text-[18px] font-black text-[#13201c]">Logged with FindSpot</div>
+            <div className="mt-1 text-[14px] font-bold text-[#66736f]">Private by default. Shared only when you choose.</div>
           </div>
-          <div className="text-[14px] font-semibold text-white/38">
-            findspot.uk
-          </div>
-        </div>
+          <div className="text-[16px] font-black text-[#0f766e]">findspot.uk</div>
+        </footer>
       </div>
     </div>
   );

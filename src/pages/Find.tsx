@@ -69,6 +69,7 @@ type FormState = {
   findCategory: Find["findCategory"] | "";
   coinType: string;
   coinDenomination: string;
+  coinSpink: string;
   ruler: string;
   mint: string;
   lat: number | null;
@@ -113,6 +114,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     findCategory: "",
     coinType: "",
     coinDenomination: "",
+    coinSpink: "",
     ruler: "",
     mint: "",
     lat: initialLat ?? null,
@@ -343,6 +345,11 @@ export default function FindPage(props: {
             findCode: f.findCode,
             objectType: f.objectType === "Pending Quick Find" ? "" : f.objectType,
             findCategory: f.findCategory || "",
+            coinType: f.coinType || "",
+            coinDenomination: f.coinDenomination || "",
+            coinSpink: f.coinSpink || "",
+            ruler: f.ruler || "",
+            mint: f.mint || "",
             lat: f.lat,
             lon: f.lon,
             acc: f.gpsAccuracyM,
@@ -490,6 +497,7 @@ export default function FindPage(props: {
         findCategory: form.findCategory || undefined,
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
+        coinSpink: form.coinSpink.trim() || undefined,
         ruler: form.ruler.trim(),
         mint: form.mint.trim() || undefined,
         lat: form.lat,
@@ -585,6 +593,7 @@ export default function FindPage(props: {
         findCategory: form.findCategory || undefined,
         coinType: form.coinType.trim(),
         coinDenomination: form.coinDenomination.trim(),
+        coinSpink: form.coinSpink.trim() || undefined,
         ruler: form.ruler.trim(),
         mint: form.mint.trim() || undefined,
         lat: form.lat,
@@ -648,7 +657,11 @@ export default function FindPage(props: {
         findCode: form.findCode.trim() || makeFindCode(),
         objectType: form.objectType.trim() || "",
         findCategory: form.findCategory || undefined,
-        coinType: "", coinDenomination: "", ruler: "",
+        coinType: form.coinType.trim(),
+        coinDenomination: form.coinDenomination.trim(),
+        coinSpink: form.coinSpink.trim() || undefined,
+        ruler: form.ruler.trim(),
+        mint: form.mint.trim() || undefined,
         lat: form.lat, lon: form.lon, gpsAccuracyM: form.acc,
         osGridRef: form.osGridRef, w3w: "",
         period: form.period, material: form.material,
@@ -1241,6 +1254,15 @@ export default function FindPage(props: {
                         <option value="Crown" /><option value="Sovereign" /><option value="Guinea" />
                         <option value="Noble" /><option value="Ryal" /><option value="Jetton" />
                       </datalist>
+                    </label>
+                    <label className="block">
+                      <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">Spink No.</div>
+                      <input
+                        value={form.coinSpink}
+                        onChange={(e) => update({ coinSpink: e.target.value })}
+                        placeholder="e.g., 1270"
+                        className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                      />
                     </label>
                     <label className="block">
                       <div className="mb-1.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
