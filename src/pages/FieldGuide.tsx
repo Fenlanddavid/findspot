@@ -4,7 +4,7 @@ import * as turf from '@turf/turf';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, FieldGuideInvestigationStatus, Find, Media } from '../db';
+import { db, Find, Media } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
@@ -188,14 +188,6 @@ type HotspotResultHierarchy = {
     whyItMatters: string;
     nextAction: string;
 };
-
-const INVESTIGATION_STATUSES: Array<{ value: FieldGuideInvestigationStatus; label: string }> = [
-    { value: 'unreviewed',    label: 'Unreviewed' },
-    { value: 'investigating', label: 'Investigating' },
-    { value: 'visited',       label: 'Visited' },
-    { value: 'productive',    label: 'Productive' },
-    { value: 'archived',      label: 'Archived' },
-];
 
 function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength): HotspotResultHierarchy {
     const signalStrength =
@@ -399,10 +391,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         () => db.finds.where('projectId').equals(projectId).toArray(),
         [projectId]
     ) ?? [];
-    const investigations = useLiveQuery(
-        () => db.fieldGuideInvestigations.where('projectId').equals(projectId).toArray(),
-        [projectId]
-    ) ?? [];
 
     const selectedUserFindMedia = useLiveQuery<Media | undefined>(
         () => selectedUserFind
@@ -463,10 +451,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         return result;
     }, [sourceAvailability, sortedHotspots]);
 
-    const investigationMap = useMemo(() => {
-        return new Map(investigations.map(i => [i.hotspotId, i]));
-    }, [investigations]);
-
     const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument' | 'trace') => {
         if (keep !== 'target') setSelectedId(null);
         if (keep !== 'hotspot') setSelectedHotspotId(null);
@@ -480,30 +464,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         setSheetExpanded(expanded);
         try { localStorage.setItem('fs_fg_sheet', expanded ? '1' : '0'); } catch {}
     }, []);
-
-    const updateHotspotInvestigation = useCallback(async (
-        hotspotId: string,
-        changes: { status?: FieldGuideInvestigationStatus; notes?: string },
-    ) => {
-        const id = `${projectId}:${hotspotId}`;
-        const now = new Date().toISOString();
-        await db.transaction('rw', db.fieldGuideInvestigations, async () => {
-            const existing = await db.fieldGuideInvestigations.get(id);
-            await db.fieldGuideInvestigations.put({
-                id,
-                projectId,
-                hotspotId,
-                status: changes.status ?? existing?.status ?? 'unreviewed',
-                notes: changes.notes ?? existing?.notes,
-                createdAt: existing?.createdAt ?? now,
-                updatedAt: now,
-            });
-        });
-    }, [projectId]);
-
-    const setHotspotInvestigationStatus = useCallback(async (hotspotId: string, status: FieldGuideInvestigationStatus) => {
-        await updateHotspotInvestigation(hotspotId, { status });
-    }, [updateHotspotInvestigation]);
 
     const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
         sheetDragStartY.current = e.touches[0].clientY;
@@ -2100,7 +2060,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                 const hBorder = hStrength === 'Strong Zone' ? 'bg-black/95 border-amber-500/35' : hStrength === 'Moderate Zone' ? 'bg-black/95 border-emerald-500/35' : 'bg-black/95 border-white/15';
                                 const hStrengthColour = hStrength === 'Strong Zone' ? 'text-amber-400' : hStrength === 'Moderate Zone' ? 'text-emerald-400' : 'text-slate-200';
                                 const isPrimaryHotspot = h.number === 1;
-                                const investigationStatus = investigationMap.get(h.id)?.status ?? 'unreviewed';
                                 return (
                                 <div key={h.id} className={`p-4 lg:p-5 rounded-2xl lg:rounded-3xl border shadow-2xl transition-all backdrop-blur-xl ${hBorder}`}>
                                     <div className="mx-auto mb-3 h-1 w-6 rounded-full bg-white/15 lg:hidden" />
@@ -2146,16 +2105,6 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                         <button onClick={() => setSelectedHotspotId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                         </button>
-                                    </div>
-                                    <div className="mb-3 lg:mb-4 flex items-center justify-between gap-3 rounded-xl lg:rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                                        <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.18em]">Investigation</span>
-                                        <select
-                                            value={investigationStatus}
-                                            onChange={(e) => void setHotspotInvestigationStatus(h.id, e.target.value as FieldGuideInvestigationStatus)}
-                                            className="bg-slate-950/80 border border-white/10 rounded-lg px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider outline-none"
-                                        >
-                                            {INVESTIGATION_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                                        </select>
                                     </div>
                                     {h.isHighConfidenceCrossing && (
                                         <div className="bg-blue-600/30 p-2 rounded-xl lg:rounded-2xl border border-blue-400/70 mb-3 lg:mb-4 animate-pulse">
