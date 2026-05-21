@@ -127,6 +127,7 @@ export type Find = {
   findCategory?: "Coin" | "Artefact" | "Jewellery" | "Button / Fastener" | "Token / Jetton" | "Other";
   coinType?: string;
   coinDenomination?: string;
+  coinSpink?: string;
   pasId?: string;
   
   isFavorite?: boolean;

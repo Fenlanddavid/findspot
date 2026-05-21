@@ -351,12 +351,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 )}
 
                 {/* TERTIARY — supplementary fields */}
-                {(draft.coinType || draft.coinDenomination || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
+                {(draft.coinType || draft.coinDenomination || draft.coinSpink || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
                   <>
                     <div className="border-t border-gray-100 dark:border-white/[0.05] my-4" />
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
                       {draft.coinType && <DetailItem label="Coin Type" value={draft.coinType} />}
                       {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
+                      {draft.coinSpink && <DetailItem label="Spink No." value={draft.coinSpink} />}
                       {draft.ruler && <DetailItem label="Ruler" value={draft.ruler} />}
                       {draft.mint && <DetailItem label="Mint" value={draft.mint} />}
                       <DetailItem label="PAS ID" value={draft.pasId} />
@@ -535,6 +536,15 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                               value={draft.dateRange || ""}
                               onChange={(e) => setDraft({ ...draft, dateRange: e.target.value })}
                               placeholder="e.g., 1272-1307"
+                          />
+                      </label>
+                      <label className="grid gap-1">
+                          <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Spink No.</span>
+                          <input
+                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              value={draft.coinSpink || ""}
+                              onChange={(e) => setDraft({ ...draft, coinSpink: e.target.value })}
+                              placeholder="e.g., 1270"
                           />
                       </label>
                   </div>

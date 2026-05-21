@@ -37,6 +37,7 @@ export function FindReport(props: {
     ...(find.pasId ? [{ label: "PAS ID", value: find.pasId }] : []),
     ...(find.coinType ? [{ label: "Coin type", value: find.coinType }] : []),
     ...(find.coinDenomination ? [{ label: "Denomination", value: find.coinDenomination }] : []),
+    ...(find.coinSpink ? [{ label: "Spink No.", value: find.coinSpink }] : []),
     { label: "Period", value: find.period || "Not recorded" },
     { label: "Material", value: find.material || "Not recorded" },
     { label: "Weight", value: find.weightG ? `${find.weightG}g` : "Not recorded" },
