@@ -15,13 +15,14 @@ import {
   ReportPillList,
   ReportSectionHeading,
   ReportSummaryRows,
+  GpsFindBadge,
   formatReportDate,
   formatSessionDateRange,
   getNotableFindLabels,
-  gpsBadgeStyle,
   makeReportReference,
   reportBodyStyle,
   reportDocumentStyle,
+  reportKeepTogetherStyle,
   plural,
 } from "./ReportChrome";
 
@@ -499,7 +500,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
             <ReportSummaryRows rows={summaryRows} />
 
             {isGroupReport && (
-              <div data-pdf-block style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, padding: "15px 16px", fontFamily: "sans-serif" }}>
+              <div data-pdf-block style={{ ...reportKeepTogetherStyle, background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, padding: "15px 16px", fontFamily: "sans-serif" }}>
                 <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: REPORT.muted, marginBottom: 10, fontWeight: 800 }}>Club/Rally Event Details</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
                   <div>
@@ -535,7 +536,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
 
             {/* Combined map */}
             {hasMap && (
-              <div data-pdf-block>
+              <div data-pdf-block style={reportKeepTogetherStyle}>
                 <ReportSectionHeading caption="Find locations and recorded search activity across this permission.">
                   GPS Tracks &amp; Find Locations
                 </ReportSectionHeading>
@@ -562,10 +563,8 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
                     const detail = toFarmerDetail(find);
                     const sessionDate = find.sessionId ? sessionDateMap.get(find.sessionId) : null;
                     return (
-                      <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 12px", background: REPORT.panel, borderRadius: 9, border: `1px solid ${REPORT.line}` }}>
-                        <div style={{ ...gpsBadgeStyle(hasGps), marginTop: detail ? 1 : 0 }}>
-                          {num}
-                        </div>
+                      <div key={find.id} data-pdf-block style={{ ...reportKeepTogetherStyle, display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 12px", background: REPORT.panel, borderRadius: 9, border: `1px solid ${REPORT.line}` }}>
+                        <GpsFindBadge num={num} hasGps={hasGps} style={{ marginTop: detail ? 1 : 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: REPORT.ink, fontWeight: 720 }}>{toFarmerLabel(find)}</div>
                           {detail && <div style={{ fontSize: 11, color: REPORT.muted, marginTop: 3, fontFamily: "sans-serif" }}>{detail}</div>}
@@ -606,7 +605,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
             )}
 
             {/* Compliance */}
-            <div data-pdf-block style={{ borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, fontSize: 11, color: REPORT.muted, lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
+            <div data-pdf-block style={{ ...reportKeepTogetherStyle, borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, fontSize: 11, color: REPORT.muted, lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
               All activity conducted in accordance with the Code of Practice for Responsible Metal Detecting in England and Wales. All finds recorded and reported as required.
             </div>
 

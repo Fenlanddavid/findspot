@@ -22,11 +22,12 @@ import {
   ReportPillList,
   ReportSectionHeading,
   ReportSummaryRows,
+  GpsFindBadge,
   getNotableFindLabels,
-  gpsBadgeStyle,
   makeReportReference,
   reportBodyStyle,
   reportDocumentStyle,
+  reportKeepTogetherStyle,
   plural,
 } from "./ReportChrome";
 
@@ -595,7 +596,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
             {/* Combined map */}
             {hasMap && (
-              <div data-pdf-block>
+              <div data-pdf-block style={reportKeepTogetherStyle}>
                 <ReportSectionHeading caption="Find locations and recorded search activity from this visit.">
                   GPS Track &amp; Find Locations
                 </ReportSectionHeading>
@@ -621,10 +622,8 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                     const hasGps = find.lat != null && find.lon != null;
                     const detail = toFarmerDetail(find);
                     return (
-                      <div key={find.id} data-pdf-block style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 12px", background: REPORT.panel, borderRadius: 9, border: `1px solid ${REPORT.line}` }}>
-                        <div style={{ ...gpsBadgeStyle(hasGps), marginTop: detail ? 1 : 0 }}>
-                          {num}
-                        </div>
+                      <div key={find.id} data-pdf-block style={{ ...reportKeepTogetherStyle, display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 12px", background: REPORT.panel, borderRadius: 9, border: `1px solid ${REPORT.line}` }}>
+                        <GpsFindBadge num={num} hasGps={hasGps} style={{ marginTop: detail ? 1 : 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 13, color: REPORT.ink, fontWeight: 720 }}>{toFarmerLabel(find)}</div>
                           {detail && (
@@ -655,7 +654,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
             {/* Site Conduct Summary */}
             {(keyNotes.length > 0 || scrapCount > 0 || customNote.trim()) && (
-              <div data-pdf-block style={{ background: REPORT.accentSoft, border: "1px solid #bdebd2", borderRadius: 10, padding: "14px 16px" }}>
+              <div data-pdf-block style={{ ...reportKeepTogetherStyle, background: REPORT.accentSoft, border: "1px solid #bdebd2", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: REPORT.accentDark, marginBottom: 8, fontWeight: 800 }}>Site Conduct Summary</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {keyNotes.map(note => (
@@ -681,7 +680,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             )}
 
             {/* Compliance */}
-            <div data-pdf-block style={{ borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, fontSize: 11, color: REPORT.muted, lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
+            <div data-pdf-block style={{ ...reportKeepTogetherStyle, borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, fontSize: 11, color: REPORT.muted, lineHeight: 1.7, textAlign: "center", fontFamily: "sans-serif" }}>
               All activity conducted in accordance with the Code of Practice for Responsible Metal Detecting in England and Wales. All finds recorded and reported as required.
             </div>
 

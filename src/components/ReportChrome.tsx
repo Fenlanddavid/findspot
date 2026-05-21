@@ -33,6 +33,11 @@ export const reportBodyStyle: React.CSSProperties = {
   gap: 22,
 };
 
+export const reportKeepTogetherStyle: React.CSSProperties = {
+  breakInside: "avoid",
+  pageBreakInside: "avoid",
+};
+
 export const reportSectionLabelStyle: React.CSSProperties = {
   fontSize: 8,
   fontFamily: "sans-serif",
@@ -187,7 +192,7 @@ export function ReportHeader(props: {
 
 export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array<{ label: string; value: string }>; title?: string }) {
   return (
-    <div data-pdf-block style={{ background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, overflow: "hidden" }}>
+    <div data-pdf-block style={{ ...reportKeepTogetherStyle, background: REPORT.panel, border: `1px solid ${REPORT.line}`, borderRadius: 10, overflow: "hidden" }}>
       <div style={{ padding: "12px min(14px, 4%)", borderBottom: `1px solid ${REPORT.line}`, background: "#fbfaf7" }}>
         <div style={{ ...reportSectionLabelStyle, color: REPORT.accentDark }}>{title}</div>
       </div>
@@ -215,9 +220,9 @@ export function ReportSummaryRows({ rows, title = "At a glance" }: { rows: Array
 
 export function ReportMetricGrid({ stats }: { stats: Array<{ label: string; value: string }> }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
+    <div data-pdf-block style={{ ...reportKeepTogetherStyle, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
       {stats.map(({ label, value }) => (
-        <div key={label} style={{ background: "#fbfaf7", border: `1px solid ${REPORT.line}`, borderRadius: 9, padding: "12px 13px", minHeight: 70 }}>
+        <div key={label} style={{ ...reportKeepTogetherStyle, background: "#fbfaf7", border: `1px solid ${REPORT.line}`, borderRadius: 9, padding: "12px 13px", minHeight: 70 }}>
           <div style={{ fontSize: 8, fontFamily: "sans-serif", letterSpacing: "0.13em", textTransform: "uppercase", color: REPORT.muted, marginBottom: 7, fontWeight: 800 }}>{label}</div>
           <div style={{ minWidth: 0, fontSize: 18, lineHeight: 1.15, fontWeight: 780, color: REPORT.ink, overflowWrap: "anywhere", hyphens: "auto" }}>{value}</div>
         </div>
@@ -229,7 +234,7 @@ export function ReportMetricGrid({ stats }: { stats: Array<{ label: string; valu
 export function ReportPillList({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div data-pdf-block style={{ border: `1px solid ${REPORT.line}`, borderRadius: 10, padding: "14px 16px", background: REPORT.panel }}>
+    <div data-pdf-block style={{ ...reportKeepTogetherStyle, border: `1px solid ${REPORT.line}`, borderRadius: 10, padding: "14px 16px", background: REPORT.panel }}>
       <div style={{ ...reportSectionLabelStyle, marginBottom: 9 }}>{title}</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
         {items.map(label => (
@@ -249,22 +254,27 @@ export function ReportSectionHeading({ children, caption }: { children: React.Re
   );
 }
 
-export function gpsBadgeStyle(hasGps: boolean): React.CSSProperties {
-  return {
-    width: 24,
-    height: 24,
-    borderRadius: "50%",
-    background: hasGps ? "#ffffff" : "#f8fafc",
-    border: `1.6px solid ${hasGps ? REPORT.accent : "#cbd5e1"}`,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    color: hasGps ? REPORT.accentDark : "#64748b",
-    fontSize: 9,
-    fontWeight: 850,
-    fontFamily: "sans-serif",
-  };
+function makeGpsBadgeDataUri(num: number, hasGps: boolean): string {
+  const text = String(num);
+  const fontSize = text.length >= 3 ? 7.5 : text.length === 2 ? 8.6 : 9.4;
+  const svg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">`,
+    `<circle cx="12" cy="12" r="10.8" fill="${hasGps ? "#ffffff" : "#f8fafc"}" stroke="${hasGps ? REPORT.accent : "#cbd5e1"}" stroke-width="1.6"/>`,
+    `<text x="12" y="12.35" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="800" fill="${hasGps ? REPORT.accentDark : "#64748b"}">${text}</text>`,
+    `</svg>`,
+  ].join("");
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+export function GpsFindBadge({ num, hasGps, style }: { num: number; hasGps: boolean; style?: React.CSSProperties }) {
+  return (
+    <img
+      src={makeGpsBadgeDataUri(num, hasGps)}
+      alt=""
+      style={{ width: 24, height: 24, display: "block", flexShrink: 0, ...style }}
+      draggable={false}
+    />
+  );
 }
 
 export function ReportFooter({
@@ -279,7 +289,7 @@ export function ReportFooter({
   note?: string;
 }) {
   return (
-    <div data-pdf-block style={{ borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, textAlign: "center", fontFamily: "sans-serif" }}>
+    <div data-pdf-block style={{ ...reportKeepTogetherStyle, borderTop: `1px solid ${REPORT.line}`, paddingTop: 16, textAlign: "center", fontFamily: "sans-serif" }}>
       <div style={{ fontSize: 13, color: REPORT.ink, lineHeight: 1.55, marginBottom: 8 }}>
         {message}
       </div>

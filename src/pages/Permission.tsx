@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { db, Permission, Find, Media, GeoJSONPolygon } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
@@ -106,6 +106,7 @@ export default function PermissionPage(props: {
   const [agreementId, setAgreementId] = useState<string | undefined>();
   const [agreementModalOpen, setAgreementModalOpen] = useState(false);
   const [proofModalOpen, setProofModalOpen] = useState(false);
+  const agreementUploadRef = useRef<HTMLInputElement | null>(null);
   
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -995,6 +996,41 @@ export default function PermissionPage(props: {
     }
   }
 
+  async function uploadExistingAgreement(file: File | null | undefined) {
+    if (!file || !id) return;
+    setError(null);
+    try {
+      const now = new Date().toISOString();
+      const mediaId = uuid();
+      await db.transaction("rw", [db.media, db.permissions], async () => {
+        await db.media.add({
+          id: mediaId,
+          projectId: props.projectId,
+          permissionId: id,
+          type: "document",
+          filename: file.name || `landowner-agreement-${now.slice(0, 10)}`,
+          mime: file.type || "application/octet-stream",
+          blob: file,
+          caption: "Uploaded landowner agreement",
+          scalePresent: false,
+          createdAt: now,
+        });
+        await db.permissions.update(id, {
+          agreementId: mediaId,
+          permissionGranted: true,
+          updatedAt: now,
+        });
+      });
+      setAgreementId(mediaId);
+      setPermissionGranted(true);
+      setSaved(true);
+    } catch (e: any) {
+      setError("Agreement upload failed: " + (e?.message ?? "Unknown error"));
+    } finally {
+      if (agreementUploadRef.current) agreementUploadRef.current.value = "";
+    }
+  }
+
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading details...</div>;
 
   const isRally = type === 'rally';
@@ -1037,7 +1073,7 @@ export default function PermissionPage(props: {
   const currentPermission: Permission | null = id ? {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
     landownerName, landownerPhone, landownerEmail, landownerAddress,
-    landType, permissionGranted, validFrom, notes,
+    landType, permissionGranted, validFrom, agreementId, notes,
     createdAt: "", updatedAt: ""
   } : null;
 
@@ -1965,6 +2001,15 @@ export default function PermissionPage(props: {
 
                         {/* Row 3 — action buttons */}
                         <div className="flex flex-wrap gap-2 items-center">
+                            {!isRally && (
+                              <input
+                                ref={agreementUploadRef}
+                                type="file"
+                                accept="application/pdf,image/*,.doc,.docx,.rtf,.txt"
+                                className="hidden"
+                                onChange={(event) => uploadExistingAgreement(event.target.files?.[0])}
+                              />
+                            )}
                             {permissionNeedsCompletion && (
                                 <button
                                     onClick={completePermissionDetails}
@@ -1983,13 +2028,28 @@ export default function PermissionPage(props: {
                             )}
                             {!isRally && (
                             <button
+                                type="button"
                                 onClick={() => setAgreementModalOpen(true)}
                                 className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                             >
                                 {agreementId ? "Update Agreement" : "Generate Agreement"}
                             </button>
                             )}
+                            {!isRally && (
+                              <button
+                                type="button"
+                                onClick={() => agreementUploadRef.current?.click()}
+                                className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all flex items-center gap-1.5 shadow-sm"
+                              >
+                                {agreementId ? "Replace Agreement File" : "Upload Signed Agreement"}
+                              </button>
+                            )}
                         </div>
+                        {!isRally && agreementFile && (
+                          <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold truncate">
+                            Agreement file: {agreementFile.filename}
+                          </p>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
