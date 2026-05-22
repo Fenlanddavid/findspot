@@ -1405,7 +1405,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             {/* Scrollable content — inspector (when selected) or list */}
                             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
                                 {!selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
-                                    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-[9px] font-bold leading-snug text-white/32">
+                                    <div className="px-1 text-center text-[9px] font-medium leading-snug text-slate-400">
                                         {FIELDGUIDE_SHORT_NOTICE}
                                     </div>
                                 )}

@@ -367,7 +367,7 @@ function Shell() {
 
       <footer className="hidden sm:flex items-center justify-between gap-4 border-t border-gray-200/80 px-4 py-3 text-[10px] font-bold text-gray-400 dark:border-gray-800 dark:text-gray-600">
         <span>{FINDSPOT_COPYRIGHT_NOTICE}</span>
-        <Link to="/settings?tab=legal" className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">
+        <Link to="/settings?tab=app&section=terms" className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">
           Terms &amp; IP
         </Link>
       </footer>

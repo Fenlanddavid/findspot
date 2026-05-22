@@ -10,7 +10,7 @@ export const FIELDGUIDE_PROPRIETARY_NOTICE =
   "FieldGuide is FindSpot's proprietary landscape intelligence engine. It combines terrain, LiDAR, satellite imagery, historic mapping, environmental, hydrology and archaeological context to help identify areas of likely past activity. FindSpot does not claim ownership of third-party source datasets, but the selection, combination, sequencing, transformation, weighting, scoring, classification and generated interpretation of those datasets within FieldGuide remain the intellectual property of FindSpot.";
 
 export const FIELDGUIDE_SHORT_NOTICE =
-  "FindSpot FieldGuide is proprietary landscape intelligence. Research aid only.";
+  "FieldGuide™ uses proprietary methods to support landscape interpretation. Intellectual property of FindSpot.";
 
 export const FIELDGUIDE_USE_RESTRICTION =
   "FieldGuide analysis outputs are provided for field research support only and must not be copied, scraped, reverse engineered, commercially reused, or used to recreate competing systems without written permission.";

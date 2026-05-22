@@ -35,12 +35,17 @@ type RestorePreview = RestoreCounts & {
   exportedAt?: string;
 };
 
-type SettingsTab = "data" | "profile" | "detectors" | "app" | "legal";
+type SettingsTab = "data" | "profile" | "detectors" | "app";
 
 const RESTORE_CONFIRMATION = "RESTORE";
 
 function isSettingsTab(value: string | null): value is SettingsTab {
-  return value === "data" || value === "profile" || value === "detectors" || value === "app" || value === "legal";
+  return value === "data" || value === "profile" || value === "detectors" || value === "app";
+}
+
+function normalizeSettingsTab(value: string | null): SettingsTab | null {
+  if (value === "legal") return "app";
+  return isSettingsTab(value) ? value : null;
 }
 
 function countBackupRows(value: unknown) {
@@ -113,10 +118,17 @@ export default function Settings() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(() => {
     const tabParam = searchParams.get("tab");
     const savedTab = localStorage.getItem("fs_settings_tab");
-    if (isSettingsTab(tabParam)) return tabParam;
-    if (isSettingsTab(savedTab)) return savedTab;
+    const normalizedTab = normalizeSettingsTab(tabParam);
+    const normalizedSavedTab = normalizeSettingsTab(savedTab);
+    if (normalizedTab) return normalizedTab;
+    if (normalizedSavedTab) return normalizedSavedTab;
     return "data";
   });
+  const [termsOpen, setTermsOpen] = useState(() => (
+    searchParams.get("tab") === "legal" ||
+    searchParams.get("section") === "terms" ||
+    localStorage.getItem("fs_settings_tab") === "legal"
+  ));
   const [persistent, setPersistent] = useState<boolean | null>(null);
   const [detectorist, setDetectorist] = useState("");
   const [recorderName, setRecorderName] = useState("");
@@ -176,11 +188,31 @@ export default function Settings() {
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
+    const sectionParam = searchParams.get("section");
+    if (tabParam === "legal") {
+      setSettingsTab("app");
+      setTermsOpen(true);
+      localStorage.setItem("fs_settings_tab", "app");
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", "app");
+        next.set("section", "terms");
+        return next;
+      }, { replace: true });
+      return;
+    }
     if (isSettingsTab(tabParam) && tabParam !== settingsTab) {
       setSettingsTab(tabParam);
       localStorage.setItem("fs_settings_tab", tabParam);
     }
-  }, [searchParams, settingsTab]);
+    if (sectionParam === "terms") {
+      setTermsOpen(true);
+      if (settingsTab !== "app") {
+        setSettingsTab("app");
+        localStorage.setItem("fs_settings_tab", "app");
+      }
+    }
+  }, [searchParams, setSearchParams, settingsTab]);
 
   function selectSettingsTab(tab: SettingsTab) {
     setSettingsTab(tab);
@@ -189,8 +221,24 @@ export default function Settings() {
       const next = new URLSearchParams(prev);
       if (tab === "data") next.delete("tab");
       else next.set("tab", tab);
+      next.delete("section");
       return next;
     }, { replace: true });
+  }
+
+  function openTerms() {
+    setSettingsTab("app");
+    setTermsOpen(true);
+    localStorage.setItem("fs_settings_tab", "app");
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", "app");
+      next.set("section", "terms");
+      return next;
+    }, { replace: false });
+    window.requestAnimationFrame(() => {
+      document.getElementById("findspot-terms")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   async function handleRequestPersistence() {
@@ -382,13 +430,12 @@ export default function Settings() {
         </div>
       )}
       <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900 sm:grid-cols-5">
+      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900 sm:grid-cols-4">
         {[
           ["data", "Backup"],
           ["profile", "Profile"],
           ["detectors", "Detector"],
           ["app", "App"],
-          ["legal", "Terms"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -858,9 +905,15 @@ export default function Settings() {
                 {FINDSPOT_COPYRIGHT_NOTICE}
               </p>
             </div>
-            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-              Version 3.0
-            </span>
+            <button
+              type="button"
+              onClick={openTerms}
+              aria-controls="findspot-terms"
+              aria-expanded={termsOpen}
+              className="shrink-0 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 transition-colors hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+            >
+              Terms
+            </button>
           </div>
           <div className="mt-4 space-y-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
             <p>{FINDSPOT_CORE_IP_NOTICE}</p>
@@ -869,23 +922,9 @@ export default function Settings() {
           </div>
         </section>
 
-        <div className="mt-2 px-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
-            {typeof installCount === 'number' && (
-              <div className="flex items-center gap-1 opacity-40">
-                <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
-                <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-        </div>
-        </>
-        )}
-
-        {settingsTab === "legal" && (
+        {termsOpen && (
         <>
-        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <section id="findspot-terms" className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 scroll-mt-24">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Terms of Use &amp; IP Notice</h2>
@@ -915,6 +954,21 @@ export default function Settings() {
         </section>
         </>
         )}
+
+        <div className="mt-2 px-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
+            {typeof installCount === 'number' && (
+              <div className="flex items-center gap-1 opacity-40">
+                <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
+                <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        </>
+        )}
+
       </div>
     </div>
   );
