@@ -11,6 +11,15 @@ import {
   markExternalBackupSaved,
 } from "../services/data";
 import { db } from "../db";
+import {
+  FIELDGUIDE_PROPRIETARY_NOTICE,
+  FIELDGUIDE_USE_RESTRICTION,
+  FINDSPOT_COPYRIGHT_NOTICE,
+  FINDSPOT_CORE_IP_NOTICE,
+  TERMS_OF_USE_INTRO,
+  TERMS_OF_USE_SECTIONS,
+  TERMS_OF_USE_VERSION,
+} from "../utils/legalCopy";
 
 type RestoreCounts = {
   projects: number;
@@ -26,12 +35,12 @@ type RestorePreview = RestoreCounts & {
   exportedAt?: string;
 };
 
-type SettingsTab = "data" | "profile" | "detectors" | "app";
+type SettingsTab = "data" | "profile" | "detectors" | "app" | "legal";
 
 const RESTORE_CONFIRMATION = "RESTORE";
 
 function isSettingsTab(value: string | null): value is SettingsTab {
-  return value === "data" || value === "profile" || value === "detectors" || value === "app";
+  return value === "data" || value === "profile" || value === "detectors" || value === "app" || value === "legal";
 }
 
 function countBackupRows(value: unknown) {
@@ -373,12 +382,13 @@ export default function Settings() {
         </div>
       )}
       <h1 className="text-2xl sm:text-3xl font-black mb-4 bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">Settings</h1>
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900 sm:grid-cols-5">
         {[
           ["data", "Backup"],
           ["profile", "Profile"],
           ["detectors", "Detector"],
           ["app", "App"],
+          ["legal", "Terms"],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -838,6 +848,27 @@ export default function Settings() {
           </p>
         </section>
 
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold mb-2 flex items-center gap-2">
+                About FindSpot
+              </h2>
+              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                {FINDSPOT_COPYRIGHT_NOTICE}
+              </p>
+            </div>
+            <span className="shrink-0 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+              Version 3.0
+            </span>
+          </div>
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+            <p>{FINDSPOT_CORE_IP_NOTICE}</p>
+            <p>{FIELDGUIDE_PROPRIETARY_NOTICE}</p>
+            <p>{FIELDGUIDE_USE_RESTRICTION}</p>
+          </div>
+        </section>
+
         <div className="mt-2 px-2">
           <div className="flex items-center justify-between gap-3">
             <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
@@ -849,6 +880,39 @@ export default function Settings() {
             )}
           </div>
         </div>
+        </>
+        )}
+
+        {settingsTab === "legal" && (
+        <>
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Terms of Use &amp; IP Notice</h2>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">{TERMS_OF_USE_INTRO}</p>
+            </div>
+            <span className="w-fit shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+              v{TERMS_OF_USE_VERSION}
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3">
+            {TERMS_OF_USE_SECTIONS.map((section) => (
+              <article key={section.title} className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+                <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">{section.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">{section.body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="bg-emerald-50 dark:bg-emerald-900/20 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">
+          <h2 className="text-lg font-bold text-emerald-800 dark:text-emerald-300 mb-2">Ownership Summary</h2>
+          <div className="space-y-3 text-sm leading-relaxed text-emerald-800 dark:text-emerald-300">
+            <p>Users own their own finds records, photos, permission information, field boundaries and local exports.</p>
+            <p>{FINDSPOT_CORE_IP_NOTICE}</p>
+            <p>{FIELDGUIDE_PROPRIETARY_NOTICE}</p>
+          </div>
+        </section>
         </>
         )}
       </div>

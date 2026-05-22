@@ -26,6 +26,7 @@ import {
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary, HotspotSignalStrength } from '../utils/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
 import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
+import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -44,6 +45,14 @@ function getPotentialTierShort(score: number): string {
     if (score > 60) return 'STRG';
     if (score > 35) return 'MOD';
     return 'LOW';
+}
+
+function getSignalBand(value: number | null | undefined, cap = 100): string {
+    const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
+    if (ratio >= 0.72) return 'Strong';
+    if (ratio >= 0.42) return 'Moderate';
+    if (ratio > 0.08) return 'Trace';
+    return 'Not present';
 }
 
 // Human-readable titles that replace engine classification labels in the UI.
@@ -1395,6 +1404,11 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
 
                             {/* Scrollable content — inspector (when selected) or list */}
                             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
+                                {!selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
+                                    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-[9px] font-bold leading-snug text-white/32">
+                                        {FIELDGUIDE_SHORT_NOTICE}
+                                    </div>
+                                )}
                                 {/* Your Find — in panel (mobile) */}
                                 {selectedUserFind && (() => {
                                     const PERIOD_CHIP: Record<string, string> = {
@@ -1888,10 +1902,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                     <div key={label} className="flex items-center gap-2">
                                                                         <span className="text-[7px] text-white/45 w-16 shrink-0">{label}</span>
                                                                         <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} /></div>
-                                                                        <span className="text-[7px] text-white/40 w-8 text-right shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                        <span className="text-[7px] text-white/40 w-14 text-right shrink-0">{getSignalBand(val, cap)}</span>
                                                                     </div>
                                                                 ))}
-                                                                {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/35 mt-1">Penalty: {h.metrics.penalty} · Final: {h.score}</p>}
+                                                                {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/35 mt-1">Modern disturbance or noise was discounted before interpretation.</p>}
                                                             </div>
                                                         </div>
                                                     );
@@ -1930,7 +1944,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                 <p className="text-[8px] font-black text-white uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
                                                                 <p className="text-[10px] font-bold text-white/70 leading-tight truncate">{hier.signalStrength}</p>
                                                             </div>
-                                                            <span className="text-[10px] font-black text-white/25 shrink-0">{h.score}%</span>
+                                                            <span className="text-[8px] font-black text-white/25 shrink-0 uppercase tracking-widest">{getPotentialTierShort(h.score)}</span>
                                                         </div>
                                                     </button>
                                                 );
@@ -1961,7 +1975,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             </div>
                                                             {isPrimary && !f.isProtected
                                                                 ? <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>
-                                                                : !f.isProtected && <span className="text-[8px] font-mono text-white/24 shrink-0 pt-0.5">{f.findPotential}</span>}
+                                                                : !f.isProtected && <span className="text-[8px] font-black uppercase tracking-widest text-white/24 shrink-0 pt-0.5">{getPotentialTierShort(f.findPotential)}</span>}
                                                         </div>
                                                     </button>
                                                 );
@@ -2006,7 +2020,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                             ))}
                                                         </div>
                                                         <div className="flex items-center justify-end gap-2 pt-0.5">
-                                                            <span className="text-[8px] font-mono text-white/22 shrink-0">{distanceLabel} / {t.traceScore}</span>
+                                                            <span className="text-[8px] font-mono text-white/22 shrink-0">{distanceLabel}</span>
                                                         </div>
                                                     </div>
                                                 );
@@ -2173,10 +2187,10 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                     <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
                                                                         <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
                                                                     </div>
-                                                                    <span className="text-[7px] text-white/50 w-8 text-right flex-shrink-0">{Math.min(val, cap)}/{cap}</span>
+                                                                    <span className="text-[7px] text-white/50 w-14 text-right flex-shrink-0">{getSignalBand(val, cap)}</span>
                                                                 </div>
                                                             ))}
-                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Penalty: {h.metrics.penalty} &nbsp;·&nbsp; Final: {h.score}</p>}
+                                                            {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Modern disturbance or noise was discounted before interpretation.</p>}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -2413,7 +2427,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <div className="flex justify-between items-start px-5 pt-4 pb-0">
                                 <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Landscape Context</p>
                                 <div className="flex items-center gap-2 -mt-1 -mr-1">
-                                    {sourceAvailability && (
+                                    {devMode && sourceAvailability && (
                                         <button onClick={handleLabExport} className="text-[8px] font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest transition-colors px-2 py-1 border border-amber-500/30 rounded-lg bg-amber-500/10 hover:bg-amber-500/20">
                                             ↓ Export for Lab
                                         </button>
@@ -2626,22 +2640,22 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                                                     )}
                                                                     <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
                                                                     <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-emerald-500" style={{ width: `${potentialScore.breakdown?.terrain || 0}%` }} /></div>
-                                                                    <span className="text-lg font-black text-emerald-500">{potentialScore.breakdown?.terrain || '0'}<span className="text-[10px] text-emerald-500/50 italic">%</span></span>
+                                                                    <span className="text-sm font-black text-emerald-500">{getSignalBand(potentialScore.breakdown?.terrain)}</span>
                                                                 </div>
                                                                 <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
                                                                     <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
                                                                     <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-blue-500" style={{ width: `${potentialScore.breakdown?.hydro || 0}%` }} /></div>
-                                                                    <span className="text-lg font-black text-blue-500">{potentialScore.breakdown?.hydro || '0'}<span className="text-[10px] text-blue-500/50 italic">%</span></span>
+                                                                    <span className="text-sm font-black text-blue-500">{getSignalBand(potentialScore.breakdown?.hydro)}</span>
                                                                 </div>
                                                                 <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
                                                                     <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
                                                                     <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-amber-500" style={{ width: `${potentialScore.breakdown?.historic || 0}%` }} /></div>
-                                                                    <span className="text-lg font-black text-amber-500">{potentialScore.breakdown?.historic || '0'}<span className="text-[10px] text-amber-500/50 italic">%</span></span>
+                                                                    <span className="text-sm font-black text-amber-500">{getSignalBand(potentialScore.breakdown?.historic)}</span>
                                                                 </div>
                                                                 <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
                                                                     <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
                                                                     <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.signals || 0}%` }} /></div>
-                                                                    <span className="text-lg font-black text-purple-500">{potentialScore.breakdown?.signals || '0'}<span className="text-[10px] text-purple-500/50 italic">%</span></span>
+                                                                    <span className="text-sm font-black text-purple-500">{getSignalBand(potentialScore.breakdown?.signals)}</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2650,7 +2664,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                                             )}
 
                                             {/* Export scan data — for validation / debugging */}
-                                            {sourceAvailability && sortedHotspots.length > 0 && (
+                                            {devMode && sourceAvailability && sortedHotspots.length > 0 && (
                                                 <div className="pt-2 border-t border-white/8 flex flex-col gap-1">
                                                     <button
                                                         onClick={handleLabExport}
@@ -2763,7 +2777,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                             <span className="text-[8px] font-mono text-white/30">phase: <span className="text-emerald-400">{scanPhase}</span></span>
-                            {potentialScore && <span className="text-[8px] font-mono text-white/30">score: <span className="text-emerald-400">{potentialScore.score}%</span></span>}
+                            {potentialScore && <span className="text-[8px] font-mono text-white/30">tier: <span className="text-emerald-400">{getPotentialTier(potentialScore.score)}</span></span>}
                             {scanConfidence && <span className="text-[8px] font-mono text-white/30">conf: <span className="text-emerald-400">{scanConfidence}</span></span>}
                         </div>
                         {sourceAvailability && (

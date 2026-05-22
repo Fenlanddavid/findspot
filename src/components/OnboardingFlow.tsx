@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
+import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 
 const FLAG = 'fs_onboarding_done';
 
@@ -362,14 +363,14 @@ export default function OnboardingFlow() {
                     </>
                 )}
 
-                {/* ── Step 3B: Field Guide ─────────────────────────────────── */}
+                {/* ── Step 3B: FieldGuide ─────────────────────────────────── */}
                 {step === 'fieldguide' && (
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Field Guide</h2>
+                            <h2 className="text-xl font-black text-white tracking-tight mb-3">FindSpot FieldGuide</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-2">
-                                Field Guide scans the landscape using terrain, satellite, and historic data to highlight where past activity may have occurred.
+                                FieldGuide by FindSpot combines terrain, historic mapping, environmental signals and archaeological context to highlight areas of likely past activity.
                             </p>
 
                             <p className="text-[13px] text-emerald-400 font-bold mb-4">
@@ -381,8 +382,9 @@ export default function OnboardingFlow() {
                                     It's a starting point for deciding where to focus — not a guarantee of finds.
                                 </p>
                             </div>
+                            <p className="text-[10px] text-white/25 leading-relaxed mb-4">{FIELDGUIDE_SHORT_NOTICE}</p>
 
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">How Field Guide works</p>
+                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">How FieldGuide works</p>
                             <div className="space-y-2 mb-4">
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">▣</span>
@@ -445,7 +447,7 @@ export default function OnboardingFlow() {
                             onClick={() => go('/fieldguide')}
                             className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
                         >
-                            Open Field Guide
+                            Open FieldGuide
                         </button>
 
                         <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">

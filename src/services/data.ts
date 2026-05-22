@@ -1,5 +1,10 @@
 import { db, Media, Field, ImportedPackage } from "../db";
 import { v4 as uuid } from "uuid";
+import {
+  FINDSPOT_COPYRIGHT_NOTICE,
+  REPORT_PROTECTION_NOTICE,
+  TERMS_OF_USE_VERSION,
+} from "../utils/legalCopy";
 
 export async function markExternalBackupSaved() {
   const now = new Date().toISOString();
@@ -31,6 +36,10 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const data = {
     version: 2,
     exportedAt: new Date().toISOString(),
+    generatedBy: "FindSpot",
+    termsVersion: TERMS_OF_USE_VERSION,
+    copyrightNotice: FINDSPOT_COPYRIGHT_NOTICE,
+    exportNotice: `User records in this backup remain owned by the user. ${REPORT_PROTECTION_NOTICE}`,
     projects,
     permissions,
     fields,

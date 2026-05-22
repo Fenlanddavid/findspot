@@ -16,6 +16,7 @@ import OnboardingFlow from "./components/OnboardingFlow";
 import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 import { useConfirmDialog } from "./components/ConfirmModal";
 import { Logo } from "./components/Logo";
+import { FINDSPOT_COPYRIGHT_NOTICE } from "./utils/legalCopy";
 
 export { Logo } from "./components/Logo";
 
@@ -363,6 +364,13 @@ function Shell() {
         </Suspense>
         </PageErrorBoundary>
       </main>
+
+      <footer className="hidden sm:flex items-center justify-between gap-4 border-t border-gray-200/80 px-4 py-3 text-[10px] font-bold text-gray-400 dark:border-gray-800 dark:text-gray-600">
+        <span>{FINDSPOT_COPYRIGHT_NOTICE}</span>
+        <Link to="/settings?tab=legal" className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">
+          Terms &amp; IP
+        </Link>
+      </footer>
 
       <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">

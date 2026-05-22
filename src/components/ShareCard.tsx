@@ -1,5 +1,6 @@
 import React from 'react';
 import { Find } from '../db';
+import { FINDSPOT_COPYRIGHT_NOTICE } from '../utils/legalCopy';
 
 interface ShareCardProps {
   find?: Find;
@@ -254,8 +255,9 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
 
         <footer className="mt-auto flex items-end justify-between border-t border-[#ccd8d3] pt-7">
           <div>
-            <div className="text-[18px] font-black text-[#13201c]">Logged with FindSpot</div>
+            <div className="text-[18px] font-black text-[#13201c]">FindShare by FindSpot</div>
             <div className="mt-1 text-[14px] font-bold text-[#66736f]">Private by default. Shared only when you choose.</div>
+            <div className="mt-2 text-[11px] font-bold text-[#8a9893]">{FINDSPOT_COPYRIGHT_NOTICE} Share-card format protected.</div>
           </div>
           <div className="text-[16px] font-black text-[#0f766e]">findspot.uk</div>
         </footer>
