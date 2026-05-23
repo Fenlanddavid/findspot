@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media, Find } from "../db";
 import { v4 as uuid } from "uuid";
@@ -7,6 +7,7 @@ import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
+import { CoachTip, CoachTips } from "../components/CoachTips";
 
 const LocationPickerModal = React.lazy(() =>
   import("../components/LocationPickerModal").then((mod) => ({ default: mod.LocationPickerModal }))
@@ -24,6 +25,8 @@ const coinMaterials: Find["material"][] = [
 const completenesses: Find["completeness"][] = ["Complete", "Incomplete", "Fragment"];
 
 const DRAFT_KEY = "fs_find_draft";
+const FIRST_FIND_KEY = "fs_first_find";
+const FIND_HELPERS_SEEN_KEY = "fs_find_helpers_seen";
 
 const toFloat = (v: string): number | null => { const n = parseFloat(v); return isFinite(n) ? n : null; };
 
@@ -154,6 +157,7 @@ export default function FindPage(props: {
   manual?: boolean;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [locationName, setLocationName] = useState("");
   const [fieldId, setFieldId] = useState<string | null>(props.fieldId);
   const [sessionId, setSessionId] = useState<string | null>(props.sessionId);
@@ -258,6 +262,11 @@ export default function FindPage(props: {
   // #5 — GPS capturing state
   const [gpsCapturing, setGpsCapturing] = useState(false);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
+  const [hasRecordedFindBefore, setHasRecordedFindBefore] = useState(() => {
+    try { return localStorage.getItem(FIRST_FIND_KEY) === "1"; } catch { return false; }
+  });
+  const [findCoachActive, setFindCoachActive] = useState(false);
+  const [findCoachStep, setFindCoachStep] = useState(0);
 
   // #14 — draft restore flag
   const [draftRestored, setDraftRestored] = useState(false);
@@ -543,8 +552,13 @@ export default function FindPage(props: {
       committedDraftIdsRef.current.add(id);
       setSavedId(id);
 
-      if (!localStorage.getItem('fs_first_find')) {
-        localStorage.setItem('fs_first_find', '1');
+      let isFirstFind = !hasRecordedFindBefore;
+      try {
+        isFirstFind = !localStorage.getItem(FIRST_FIND_KEY);
+        if (isFirstFind) localStorage.setItem(FIRST_FIND_KEY, "1");
+      } catch {}
+      if (isFirstFind) {
+        setHasRecordedFindBefore(true);
         setMilestoneMsg('Nice — your first find recorded!');
         setTimeout(() => setMilestoneMsg(null), 4000);
       }
@@ -788,6 +802,39 @@ export default function FindPage(props: {
 
   const noLocation = !locationName.trim();
   const isQuick = recordMode === "quick" && !props.quickId;
+  const findCoachEnabled = !hasRecordedFindBefore && !props.quickId && !savedId;
+  const findCoachTips: CoachTip[] = [
+    {
+      title: "Quick or full",
+      body: "Quick is for recording in the field. Full Record adds catalogue detail when you have time.",
+      accent: "text-emerald-300",
+      border: "border-emerald-400/35",
+      position: "top-[118px] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+    },
+    {
+      title: "Location and object",
+      body: "Set the permission or location, then give the find a simple title such as coin, buckle or button.",
+      accent: "text-blue-300",
+      border: "border-blue-400/35",
+      position: "top-[40%] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+    },
+    {
+      title: "Photos",
+      body: "Add an in-situ photo now if you can. Cleaned photos can be added later.",
+      accent: "text-amber-300",
+      border: "border-amber-400/35",
+      button: "Add photo",
+      action: () => stickyPhotoRef.current?.click(),
+      position: "top-[52%] left-4 right-4 sm:left-auto sm:right-6 sm:max-w-[300px]",
+    },
+    {
+      title: "Save or finish later",
+      body: "Save completes the record. Finish Later keeps a pending find you can clean up afterwards.",
+      accent: "text-purple-300",
+      border: "border-purple-400/35",
+      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[340px] sm:-translate-x-1/2",
+    },
+  ];
 
   // Shared GPS block used in both modes
   const gpsBlock = (
@@ -895,6 +942,20 @@ export default function FindPage(props: {
 
   return (
     <div className="grid gap-6 max-w-4xl mx-auto pb-8 sm:pb-[calc(8rem+env(safe-area-inset-bottom))] scroll-pb-[calc(10rem+env(safe-area-inset-bottom))]">
+      <CoachTips
+        storageKey={FIND_HELPERS_SEEN_KEY}
+        tips={findCoachTips}
+        enabled={findCoachEnabled}
+        forceShow={searchParams.get("tips") === "1"}
+        onDismiss={() => {
+          setFindCoachActive(false);
+          setFindCoachStep(0);
+        }}
+        onStepChange={(index) => {
+          setFindCoachActive(true);
+          setFindCoachStep(index);
+        }}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-1">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
@@ -928,7 +989,7 @@ export default function FindPage(props: {
 
       {/* #1 — Quick / Full mode toggle (hidden in quickId editing flow) */}
       {!props.quickId && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl ${findCoachActive && findCoachStep === 0 ? "ring-4 ring-emerald-400/25" : ""}`}>
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
             <button
               onClick={() => changeMode("quick")}
@@ -1057,7 +1118,7 @@ export default function FindPage(props: {
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Left column — form */}
-        <div className={`order-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm grid gap-5 h-fit transition-opacity ${savedId && !props.quickId ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`order-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm grid gap-5 h-fit transition-opacity ${savedId && !props.quickId ? 'opacity-50 pointer-events-none' : ''} ${findCoachActive && findCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
 
           {/* Location — always shown */}
           <label className="block">
@@ -1462,7 +1523,7 @@ export default function FindPage(props: {
         </div>
 
         {/* Right column — Photos */}
-        <div className="order-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col gap-4 h-fit lg:sticky lg:top-4">
+        <div className={`order-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col gap-4 h-fit lg:sticky lg:top-4 ${findCoachActive && findCoachStep === 2 ? "ring-4 ring-amber-300/30" : ""}`}>
           <div className="flex flex-col gap-4 mb-2">
             <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Photos</h2>
 
@@ -1508,7 +1569,7 @@ export default function FindPage(props: {
       )}
 
       {/* #2 — Sticky bottom save bar */}
-      <div className="relative sm:fixed sm:bottom-0 sm:left-0 sm:right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-gray-200 dark:border-gray-700 sm:border-x-0 sm:border-b-0 rounded-2xl sm:rounded-none px-3 sm:px-4 pt-2 sm:pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+      <div className={`relative sm:fixed sm:bottom-0 sm:left-0 sm:right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-gray-200 dark:border-gray-700 sm:border-x-0 sm:border-b-0 rounded-2xl sm:rounded-none px-3 sm:px-4 pt-2 sm:pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] ${findCoachActive && findCoachStep === 3 ? "ring-4 ring-purple-300/30" : ""}`}>
         <div className="basis-full min-w-0 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
           <span className="truncate">{saveBarContext}</span>
           {gpsStatus && <span className={`shrink-0 ${gpsStatus.color}`}>{gpsStatus.label}</span>}

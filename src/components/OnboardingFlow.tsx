@@ -22,6 +22,7 @@ export default function OnboardingFlow() {
     const [visible, setVisible]               = useState(() => !localStorage.getItem(FLAG) || FORCED_THIS_LOAD);
     const [step, setStep]                     = useState<Step>('welcome');
     const [pendingDestination, setPending]    = useState('/');
+    const [demoExpanded, setDemoExpanded]     = useState(false);
     const nav = useNavigate();
 
     // Async guard — skip if user already has meaningful data.
@@ -91,9 +92,9 @@ export default function OnboardingFlow() {
                                     <circle cx="256" cy="256" r="48" fill="#10b981" />
                                 </svg>
                             </div>
-                            <h1 className="text-2xl font-black text-white tracking-tight mb-3">Welcome to FindSpot</h1>
+                            <h1 className="text-2xl font-black text-white tracking-tight mb-3">Understand where people used the landscape</h1>
                             <p className="text-sm text-white/70 leading-relaxed">
-                                FindSpot helps you record your finds, manage landowner permissions, and analyse the landscape before you go out.
+                                Not just maps. Scan the land, record finds, and create reports from the same field record.
                             </p>
                         </div>
 
@@ -134,7 +135,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(1)}
                         <div className="text-center mb-7">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-2">What do you want to do first?</h2>
+                            <h2 className="text-xl font-black text-white tracking-tight mb-2">What brought you here?</h2>
                             <p className="text-sm text-white/60">Pick a starting point — you can do everything else later.</p>
                         </div>
 
@@ -174,8 +175,8 @@ export default function OnboardingFlow() {
                                 <div className="flex items-center gap-4">
                                     <span className="text-2xl">🗺️</span>
                                     <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Analyse land</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Scan for signs of past activity</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Read a field before detecting</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Scan for places people may have preferred</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -368,86 +369,71 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">FindSpot FieldGuide</h2>
-                            <p className="text-[13px] text-white/60 leading-relaxed mb-2">
-                                FieldGuide by FindSpot combines terrain, historic mapping, environmental signals and archaeological context to highlight areas of likely past activity.
+                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Read the land first</h2>
+                            <p className="text-[13px] text-white/60 leading-relaxed mb-4">
+                                FieldGuide gives you a quick way to understand why one part of a field may be worth checking before another.
                             </p>
 
-                            <p className="text-[13px] text-emerald-400 font-bold mb-4">
-                                No setup needed — start scanning straight away.
-                            </p>
+                            <button
+                                onClick={() => setDemoExpanded(v => !v)}
+                                className="w-full text-left rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-4 mb-4 transition-colors hover:border-emerald-400/60"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Demo FieldGuide scan</p>
+                                        <p className="mt-1 text-base font-black text-white">Settlement Edge Candidate</p>
+                                        <p className="mt-0.5 text-[11px] font-black uppercase tracking-widest text-amber-300">Strong Zone</p>
+                                    </div>
+                                    <span className="shrink-0 rounded-lg border border-emerald-400/30 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-200">
+                                        {demoExpanded ? 'Hide' : 'Why'}
+                                    </span>
+                                </div>
 
-                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4">
-                                <p className="text-[12px] text-amber-300/90 leading-relaxed">
-                                    It's a starting point for deciding where to focus — not a guarantee of finds.
-                                </p>
-                            </div>
-                            <p className="text-[10px] text-white/25 leading-relaxed mb-4">{FIELDGUIDE_SHORT_NOTICE}</p>
+                                {demoExpanded ? (
+                                    <div className="mt-4 space-y-2">
+                                        {[
+                                            'Dry ground beside wetter margins',
+                                            'Historic movement route nearby',
+                                            'Repeated surface stress',
+                                        ].map(reason => (
+                                            <div key={reason} className="flex items-center gap-2 rounded-xl bg-white/[0.05] px-3 py-2">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                                                <span className="text-[12px] font-bold text-white/70">{reason}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="mt-4 text-[12px] font-bold text-emerald-200/80">Tap to understand why this area stands out.</p>
+                                )}
+                            </button>
 
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">How FieldGuide works</p>
-                            <div className="space-y-2 mb-4">
-                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">▣</span>
-                                    <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Terrain scan</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Tap Terrain to read relief, cropmark, water, and route signals around the map centre.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">⌄</span>
-                                    <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Expandable review panel</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">After a scan, expand the panel to review terrain results, switch to Targets, and tap items for details.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">●</span>
-                                    <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Historic review</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Tap Historic to add heritage records, old routes, crossings, and landscape context to the same area.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Map options</p>
-                            <div className="space-y-2 mb-4">
-                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">▤</span>
-                                    <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">Layers button</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Use the map Layers button to switch satellite view on, and to show LiDAR or old map overlays.</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
-                                    <span className="text-base shrink-0">≋</span>
-                                    <div>
-                                        <p className="text-[12px] font-black text-white mb-0.5">LiDAR &amp; historic maps</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">LiDAR shows subtle relief that satellite can miss. Old map overlays include OS 1895 and OS 1900.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Confidence levels</p>
-                            <div className="space-y-1.5">
+                            <div className="grid grid-cols-2 gap-2 mb-4">
                                 {[
-                                    { label: 'Strongest Signal', colour: 'text-amber-400',   desc: 'Multiple strong signals agree - worth prioritising' },
-                                    { label: 'Strong Signal',    colour: 'text-emerald-400', desc: 'Good agreement across data sources' },
-                                    { label: 'Developing Signal', colour: 'text-white/60',   desc: 'Some signals present - interesting but not confirmed' },
-                                    { label: 'Weak Signal',      colour: 'text-white/35',    desc: 'Limited evidence - treat as exploratory' },
-                                ].map(({ label, colour, desc }) => (
-                                    <div key={label} className="flex items-start gap-3">
-                                        <span className={`text-[11px] font-black ${colour} w-28 shrink-0 leading-snug`}>{label}</span>
-                                        <span className="text-[11px] text-white/45 leading-snug">{desc}</span>
+                                    ['Terrain', 'Relief and surface form'],
+                                    ['Movement', 'Routes and crossings'],
+                                    ['Landscape', 'Dry, wet, edge and slope'],
+                                    ['Historic Context', 'Records and old maps'],
+                                ].map(([label, detail]) => (
+                                    <div key={label} className="rounded-xl bg-white/5 px-3 py-3">
+                                        <p className="text-[12px] font-black text-white">{label}</p>
+                                        <p className="mt-1 text-[10px] leading-snug text-white/40">{detail}</p>
                                     </div>
                                 ))}
                             </div>
+
+                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-3 mb-4">
+                                <p className="text-[12px] text-amber-300/90 leading-relaxed">
+                                    This does not predict finds. It highlights places people may have preferred so you can plan your search more carefully.
+                                </p>
+                            </div>
+                            <p className="text-[10px] text-white/25 leading-relaxed">{FIELDGUIDE_SHORT_NOTICE}</p>
                         </div>
 
                         <button
                             onClick={() => go('/fieldguide')}
                             className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
                         >
-                            Open FieldGuide
+                            Try your first scan
                         </button>
 
                         <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">

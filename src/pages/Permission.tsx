@@ -18,6 +18,7 @@ import { FieldModal } from "../components/FieldModal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import PermissionProofModal from "../components/PermissionProofModal";
 import { useConfirmDialog } from "../components/ConfirmModal";
+import { CoachTip, CoachTips } from "../components/CoachTips";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
@@ -26,6 +27,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const landTypes: Permission["landType"][] = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
 ];
+const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
 function getBoundaryCenter(boundary?: GeoJSONPolygon | null): { lat: number; lon: number } | null {
   const ring = boundary?.coordinates?.[0];
@@ -133,6 +135,8 @@ export default function PermissionPage(props: {
   const [showCreatePack, setShowCreatePack] = useState(false);
   const [showExportClubDay, setShowExportClubDay] = useState(false);
   const [showImportClubDayData, setShowImportClubDayData] = useState(false);
+  const [permissionCoachActive, setPermissionCoachActive] = useState(false);
+  const [permissionCoachStep, setPermissionCoachStep] = useState(0);
 
   const fields = useLiveQuery(async () => {
     if (!id) return [];
@@ -1056,6 +1060,32 @@ export default function PermissionPage(props: {
       : isRally
         ? (organiserSetupParam ? "Save & Generate Link" : "Save Rally")
         : "Create Record";
+  const permissionCoachEnabled = !!isFirstPermission && isEditing && !isRally && !isClubDayMember;
+  const permissionCoachTips: CoachTip[] = [
+    {
+      title: "Name first",
+      body: "Add the farm or field name. That is all you need to create your first permission.",
+      accent: "text-emerald-300",
+      border: "border-emerald-400/35",
+      position: "top-[128px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+    },
+    {
+      title: "Optional details",
+      body: "Tap Add details now for landowner, GPS and boundaries, or keep the first record quick.",
+      accent: "text-blue-300",
+      border: "border-blue-400/35",
+      button: "Show details",
+      action: () => setShowNewPermissionDetails(true),
+      position: "top-[42%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+    },
+    {
+      title: "Create record",
+      body: "Save now. You can add sessions, finds, agreements and reports from the permission page.",
+      accent: "text-amber-300",
+      border: "border-amber-400/35",
+      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+    },
+  ];
 
   function completePermissionDetails() {
     setShowNewPermissionDetails(true);
@@ -1079,6 +1109,20 @@ export default function PermissionPage(props: {
 
   return (
     <div className="max-w-4xl mx-auto pb-20 px-4">
+      <CoachTips
+        storageKey={PERMISSION_HELPERS_SEEN_KEY}
+        tips={permissionCoachTips}
+        enabled={permissionCoachEnabled}
+        forceShow={searchParams.get("tips") === "1"}
+        onDismiss={() => {
+          setPermissionCoachActive(false);
+          setPermissionCoachStep(0);
+        }}
+        onStepChange={(index) => {
+          setPermissionCoachActive(true);
+          setPermissionCoachStep(index);
+        }}
+      />
       {milestoneMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
           {milestoneMsg}
@@ -1529,12 +1573,12 @@ export default function PermissionPage(props: {
 	                        value={name}
 	                        onChange={(e) => setName(e.target.value)}
 	                        placeholder={type === 'rally' ? "e.g., Weekend Rally, Club Dig North" : "e.g., Smith's Farm, North Field"}
-	                        className="w-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-base"
+	                        className={`w-full bg-white dark:bg-gray-900 border-2 border-gray-200 dark:border-gray-600 rounded-xl p-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-base ${permissionCoachActive && permissionCoachStep === 0 ? "ring-4 ring-emerald-400/30 border-emerald-400" : ""}`}
 	                    />
 	                    </label>
 
 	                    {!showOptionalPermissionDetails && (
-	                      <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20">
+	                      <div className={`rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20 ${permissionCoachActive && permissionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
 	                        <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fast setup</div>
 	                        <p className="mt-1 text-sm font-medium text-emerald-900 dark:text-emerald-100">
 	                          Create the permission now. Landowner details, GPS, field boundaries, agreements and notes can be added from the permission page afterwards.
@@ -1879,7 +1923,7 @@ export default function PermissionPage(props: {
                         <button 
                             onClick={save} 
                             disabled={saving || !name.trim()} 
-                            className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50`}
+                            className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50 ${permissionCoachActive && permissionCoachStep === 2 ? "ring-4 ring-amber-300/40" : ""}`}
                         >
                             {saveButtonLabel}
                         </button>

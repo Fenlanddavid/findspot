@@ -17,9 +17,13 @@ import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
 import { useConfirmDialog } from "../components/ConfirmModal";
+import { CoachTip, CoachTips } from "../components/CoachTips";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+
+const FIRST_SESSION_KEY = "fs_first_session";
+const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
 
 function SessionSummary({
   coverage,
@@ -245,6 +249,11 @@ export default function SessionPage(props: {
   const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
   const [coverageError, setCoverageError] = useState(false);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
+  const [hasStartedSessionBefore, setHasStartedSessionBefore] = useState(() => {
+    try { return localStorage.getItem(FIRST_SESSION_KEY) === "1"; } catch { return false; }
+  });
+  const [sessionCoachActive, setSessionCoachActive] = useState(false);
+  const [sessionCoachStep, setSessionCoachStep] = useState(0);
   const [showFieldNotes, setShowFieldNotes] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
@@ -736,8 +745,13 @@ export default function SessionPage(props: {
       } else {
         await db.sessions.add(session);
         setIsEditing(false);
-        if (!localStorage.getItem('fs_first_session')) {
-          localStorage.setItem('fs_first_session', '1');
+        let isFirstSession = !hasStartedSessionBefore;
+        try {
+          isFirstSession = !localStorage.getItem(FIRST_SESSION_KEY);
+          if (isFirstSession) localStorage.setItem(FIRST_SESSION_KEY, "1");
+        } catch {}
+        if (isFirstSession) {
+          setHasStartedSessionBefore(true);
           setMilestoneMsg('First session started — enjoy the dig!');
           setTimeout(() => setMilestoneMsg(null), 4000);
         }
@@ -904,8 +918,47 @@ export default function SessionPage(props: {
 
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
+  const sessionCoachEnabled = !hasStartedSessionBefore && !isEdit && isEditing;
+  const sessionCoachTips: CoachTip[] = [
+    {
+      title: "Session basics",
+      body: "The date is already set. Pick a field if you know it, or leave it as the whole permission.",
+      accent: "text-emerald-300",
+      border: "border-emerald-400/35",
+      position: "top-[136px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
+    },
+    {
+      title: "Location and ground",
+      body: "GPS and ground condition help later reports, but they are optional when starting quickly.",
+      accent: "text-blue-300",
+      border: "border-blue-400/35",
+      position: "top-[43%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+    },
+    {
+      title: "Start detecting",
+      body: "Start the session first. Mapping and find recording are available once it is saved.",
+      accent: "text-amber-300",
+      border: "border-amber-400/35",
+      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
+    },
+  ];
+
   return (
     <div className="max-w-4xl mx-auto pb-20 px-4">
+      <CoachTips
+        storageKey={SESSION_HELPERS_SEEN_KEY}
+        tips={sessionCoachTips}
+        enabled={sessionCoachEnabled}
+        forceShow={searchParams.get("tips") === "1"}
+        onDismiss={() => {
+          setSessionCoachActive(false);
+          setSessionCoachStep(0);
+        }}
+        onStepChange={(index) => {
+          setSessionCoachActive(true);
+          setSessionCoachStep(index);
+        }}
+      />
       {milestoneMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
           {milestoneMsg}
@@ -1255,7 +1308,7 @@ export default function SessionPage(props: {
 
                 {isEditing && (
                   <>
-                    <label className="block">
+                    <label className={`block rounded-2xl ${sessionCoachActive && sessionCoachStep === 0 ? "ring-4 ring-emerald-400/25" : ""}`}>
                         <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Date & Time</div>
                         <input 
                             type="datetime-local" 
@@ -1265,7 +1318,7 @@ export default function SessionPage(props: {
                         />
                     </label>
 
-                    <label className="block">
+                    <label className={`block rounded-2xl ${sessionCoachActive && sessionCoachStep === 0 ? "ring-4 ring-emerald-400/25" : ""}`}>
                       <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Field / Area</div>
                       <select 
                         value={fieldId ?? ""} 
@@ -1279,7 +1332,7 @@ export default function SessionPage(props: {
                       </select>
                     </label>
 
-                    <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
+                    <div className={`bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between ${sessionCoachActive && sessionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
                         <div className="flex flex-col gap-1">
                             <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
                             <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
@@ -1298,7 +1351,7 @@ export default function SessionPage(props: {
                         </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                    <div className={`flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 ${sessionCoachActive && sessionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
                         <div className="flex flex-col gap-2">
                             <div className="text-xs font-black uppercase tracking-widest opacity-50">Ground Condition</div>
                             <div className="flex flex-wrap gap-2">
@@ -1361,7 +1414,7 @@ export default function SessionPage(props: {
                     </label>
 
                     <div className="flex gap-4">
-                        <button onClick={save} disabled={saving} className="mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50">
+                        <button onClick={save} disabled={saving} className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50 ${sessionCoachActive && sessionCoachStep === 2 ? "ring-4 ring-amber-300/40" : ""}`}>
                             {saving ? "Saving..." : isEdit ? "Save Details" : "Start Session"}
                         </button>
                         {isEdit && (

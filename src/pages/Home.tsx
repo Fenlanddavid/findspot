@@ -142,6 +142,12 @@ export default function Home(props: {
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
   const completedFindCount = recentFinds?.length ?? 0;
   const isFirstRun = !!permissions && realPermissions.length === 0 && completedFindCount === 0;
+  const fieldGuideScanCount = (() => {
+    try {
+      const parsed = parseInt(localStorage.getItem('fs_fg_scan_count') || '0', 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    } catch { return 0; }
+  })();
 
   const appSettings = useLiveQuery(async () => {
     const [detectorist, lastBackupDate] = await Promise.all([
@@ -173,6 +179,26 @@ export default function Home(props: {
         detail: sessionPermName ? `Session on: ${sessionPermName}` : undefined,
         cta: 'Resume Session',
         action: () => nav(`/session/${activeSession.id}`),
+      });
+    }
+    const hasNoSavedFieldwork = !!permissions && !!finds && realPermissions.length === 0 && completedFindCount === 0 && (pendingFinds?.length ?? 0) === 0;
+    if (hasNoSavedFieldwork && fieldGuideScanCount === 0) {
+      items.push({
+        type: 'first_fieldguide_scan',
+        dismissKey: 'first_fieldguide_scan',
+        message: 'Read a field before setting anything up',
+        detail: 'Run a FieldGuide scan to compare terrain, movement, landscape and historic context.',
+        cta: 'Scan Land',
+        action: props.goFieldGuide,
+      });
+    } else if (hasNoSavedFieldwork && fieldGuideScanCount > 0) {
+      items.push({
+        type: 'post_fieldguide_scan',
+        dismissKey: 'post_fieldguide_scan',
+        message: 'Save the land you want to work',
+        detail: 'Create a simple permission now; boundaries and landowner details can come later.',
+        cta: 'Create Permission',
+        action: props.goPermission,
       });
     }
     if (!props.isStandalone && !installNextStepDismissed) {
@@ -253,7 +279,7 @@ export default function Home(props: {
       }
     }
     return items;
-  }, [pendingFinds, activeSession, permissions, nav, props, installNextStepDismissed]);
+  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed]);
 
   const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
 

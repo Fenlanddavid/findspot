@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Find, Media } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
+import { CoachTip, CoachTips } from '../components/CoachTips';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
@@ -27,6 +28,8 @@ import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, 
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
 import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
+
+const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -348,6 +351,8 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
     const [showLayerPicker,        setShowLayerPicker]        = useState(false);
+    const [helperActive,           setHelperActive]           = useState(false);
+    const [helperTipIndex,         setHelperTipIndex]         = useState(0);
     const [fieldPickerStep,        setFieldPickerStep]        = useState<'top' | string>('top'); // string = permId drilling into its fields
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
@@ -1046,6 +1051,35 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
     const historicScanComplete = historicMode && historicScanCompleted && !loadingPAS;
     const selectedTarget = selectedId ? detectedFeatures.find(f => f.id === selectedId) ?? null : null;
 
+    const helperTips: CoachTip[] = [
+        {
+            title: 'Map layers',
+            body: 'Tap the layers button to toggle satellite, LiDAR, old OS maps and your finds.',
+            accent: 'text-emerald-300',
+            border: 'border-emerald-400/35',
+            button: 'Show layers',
+            action: () => setShowLayerPicker(true),
+            position: 'top-[72px] right-4 left-4 sm:left-auto sm:right-[68px] sm:max-w-[240px]',
+        },
+        {
+            title: 'Scan panel',
+            body: 'Use Terrain or Historic to scan. Tap the panel handle to expand results and switch between Hotspots and Targets.',
+            accent: 'text-blue-300',
+            border: 'border-blue-400/35',
+            button: 'Expand panel',
+            action: () => persistSheetExpanded(true),
+            position: 'bottom-[152px] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[280px]',
+        },
+        {
+            title: 'Targets and hotspots',
+            body: 'After a scan, tap target pins or hotspot areas on the map to open their detail cards.',
+            accent: 'text-amber-300',
+            border: 'border-amber-400/35',
+            button: 'Got it',
+            position: 'top-[34%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[280px]',
+        },
+    ];
+
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
@@ -1210,7 +1244,7 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                             <button
                                 onClick={() => setShowLayerPicker(v => !v)}
                                 aria-label="Map layers"
-                                className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
+                                className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <polygon points="12 2 2 7 12 12 22 7 12 2"/>
@@ -1312,10 +1346,19 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
                         )}
                     </div>
 
+                    <CoachTips
+                        storageKey={FIELDGUIDE_HELPERS_SEEN_KEY}
+                        tips={helperTips}
+                        enabled={!annotationMode}
+                        forceShow={searchParams.get('tips') === '1'}
+                        onDismiss={() => { setHelperActive(false); setHelperTipIndex(0); }}
+                        onStepChange={(index) => { setHelperActive(true); setHelperTipIndex(index); }}
+                    />
+
                     {/* Mobile Bottom Sheet */}
                     {(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId)) && (
                         <div
-                            className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'}`}
+                            className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
                         >
                             {/* Handle + Status + Actions — always visible */}
                             <div
