@@ -8,10 +8,13 @@ import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions, EnrichedPermission } from "../services/permissions";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
+import { useConfirmDialog } from "../components/ConfirmModal";
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
 );
+
+const CLUB_RALLY_HOME_CARD_DISMISSED_KEY = "fs_club_rally_home_card_dismissed";
 
 export default function Home(props: {
   projectId: string;
@@ -31,7 +34,11 @@ export default function Home(props: {
   const [searchQuery, setSearchQuery] = useState("");
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [clubRallyCardDismissed, setClubRallyCardDismissed] = useState(() => {
+    try { return localStorage.getItem(CLUB_RALLY_HOME_CARD_DISMISSED_KEY) === "1"; } catch { return false; }
+  });
   const [installNextStepDismissed, setInstallNextStepDismissed] = useState(() => {
     try {
       return sessionStorage.getItem('fs_install_next_step_dismissed') === 'true';
@@ -71,6 +78,18 @@ export default function Home(props: {
     try { sessionStorage.setItem('fs_install_next_step_dismissed', 'true'); } catch {}
     setInstallNextStepDismissed(true);
   }, []);
+
+  const dismissClubRallyCard = useCallback(async () => {
+    const confirmed = await confirmAction({
+      title: "Hide Club / Rally Shortcut?",
+      message: "This will remove the Run a club dig or rally shortcut from your Home screen permanently on this device.\n\nYou can still open the feature from the Club/Rally button at the top, next to Settings.",
+      confirmLabel: "Hide Shortcut",
+      cancelLabel: "Keep It",
+    });
+    if (!confirmed) return;
+    try { localStorage.setItem(CLUB_RALLY_HOME_CARD_DISMISSED_KEY, "1"); } catch {}
+    setClubRallyCardDismissed(true);
+  }, [confirmAction]);
 
   const closeInstallGuide = useCallback(() => {
     setShowInstallGuide(false);
@@ -351,7 +370,7 @@ export default function Home(props: {
     const pool: Action[] = isNewUser ? [
       { label: 'Create Permission',    mobileLabel: 'Permission', action: props.goPermission },
       { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
-      { label: 'Search for a Rally',   mobileLabel: 'Find Rally',  action: () => setShowClubRallyModal(true) },
+      { label: 'Discover Rallies',     mobileLabel: 'Rallies',     action: () => nav('/discover') },
     ] : isEstablished ? [
       backupNeeded   ? { label: 'Back Up Your Data',   mobileLabel: 'Back Up',       action: () => nav('/settings') } : null,
       nameNotSet     ? { label: 'Set Your Name',        mobileLabel: 'Set Name',      action: () => nav('/settings') } : null,
@@ -362,7 +381,7 @@ export default function Home(props: {
                      ? { label: 'Export to CSV',        mobileLabel: 'Export CSV',    action: () => nav('/settings') } : null,
       realPerms.length > 0
                      ? { label: 'Share a Permission',   mobileLabel: 'Share',         action: () => setShowClubRallyModal(true) } : null,
-      { label: 'Search for a Rally',   mobileLabel: 'Find Rally', action: () => setShowClubRallyModal(true) },
+      { label: 'Discover Rallies',     mobileLabel: 'Rallies', action: () => nav('/discover') },
       { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
     ] : [
       { label: 'Record Find',          action: () => props.goFind() },
@@ -487,7 +506,7 @@ export default function Home(props: {
               { label: "Scan Land", detail: "Read the landscape before setting up a permission.", action: props.goFieldGuide },
               { label: "Add Permission", detail: "Save a farm, field or event you can detect on.", action: props.goPermission },
               { label: "Record Find", detail: "Log a quick find now and finish details later.", action: () => props.goFind() },
-              { label: "Find a Rally", detail: "Browse clubs, rallies and club digs.", action: () => setShowClubRallyModal(true) },
+              { label: "Discover Rallies", detail: "Browse clubs, rallies and club digs.", action: () => nav('/discover') },
             ].map(item => (
               <button
                 key={item.label}
@@ -604,6 +623,40 @@ export default function Home(props: {
           <button
             onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
             className="min-h-11 shrink-0 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all"
+          >
+            Open
+          </button>
+        </div>
+      )}
+
+      {!isFirstRun && !clubRallyCardDismissed && (
+        <div
+          className="relative flex items-center gap-4 p-3 pr-10 bg-white dark:bg-gray-800 border border-teal-100 dark:border-teal-900/60 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
+          onClick={() => setShowClubRallyModal(true)}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); void dismissClubRallyCard(); }}
+            className="absolute right-1.5 top-1.5 flex h-8 w-8 items-center justify-center rounded-lg text-base leading-none text-gray-500 transition-colors hover:bg-gray-50 hover:text-red-500 dark:text-gray-400 dark:hover:bg-gray-900/60 dark:hover:text-red-400"
+            aria-label="Hide club/rally shortcut"
+          >
+            ×
+          </button>
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-teal-200 bg-teal-50 text-teal-700 transition-colors group-hover:border-teal-300 group-hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-300 dark:group-hover:border-teal-700">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M8.5 11.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M15.5 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M3.5 18.5c.8-2.8 2.5-4.2 5-4.2s4.2 1.4 5 4.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              <path d="M13.5 15c2.6.2 4.2 1.4 4.9 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors">Run a club dig or rally</div>
+            <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Set up a club day pack, join with a link, or log rally finds.</div>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowClubRallyModal(true); }}
+            className="min-h-11 shrink-0 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/30 rounded-lg hover:bg-teal-600 hover:text-white hover:border-teal-600 transition-all"
           >
             Open
           </button>
@@ -870,6 +923,7 @@ export default function Home(props: {
             .map(p => ({ id: p.id, name: p.name, type: p.type }))}
         />
       )}
+      {confirmDialog}
     </div>
   );
 }

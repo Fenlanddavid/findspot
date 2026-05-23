@@ -234,6 +234,7 @@ export default function SessionPage(props: {
   const [cropType, setCropType] = useState("");
   const [isStubble, setIsStubble] = useState(false);
   const [notes, setNotes] = useState("");
+  const [startTime, setStartTime] = useState<string | null>(null);
   const [isFinished, setIsFinished] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
@@ -585,6 +586,7 @@ export default function SessionPage(props: {
         setCropType(s.cropType);
         setIsStubble(s.isStubble);
         setNotes(s.notes);
+        setStartTime(s.startTime ?? null);
         setIsFinished(!!s.isFinished);
         setKeyNotes(s.keyNotes ?? []);
         setLoading(false);
@@ -778,7 +780,11 @@ export default function SessionPage(props: {
             // Record start time if not already set
             const s = await db.sessions.get(sessionId);
             if (s && !s.startTime) {
-                await db.sessions.update(sessionId, { startTime: new Date().toISOString() });
+                const startedAt = new Date().toISOString();
+                await db.sessions.update(sessionId, { startTime: startedAt });
+                setStartTime(startedAt);
+            } else if (s?.startTime) {
+                setStartTime(s.startTime);
             }
         } catch (e: any) {
             setError(e?.message ?? "Could not start tracking — check location permissions");
@@ -905,16 +911,42 @@ export default function SessionPage(props: {
     }
   }
 
-  const activeStartedAt = new Date(date + ':00Z').getTime();
+  const sessionDateMs = new Date(date).getTime();
+  const trackingStartMs = startTime ? new Date(startTime).getTime() : NaN;
+  const activeStartedAt = Number.isFinite(trackingStartMs)
+    ? trackingStartMs
+    : Number.isFinite(sessionDateMs)
+      ? sessionDateMs
+      : nowTick;
   const activeDurationText = formatElapsed(nowTick - activeStartedAt);
   const activeFindCount = finds?.filter(f => !f.isPending).length ?? 0;
+  const activeHudFindCount = finds?.length ?? 0;
   const activePendingCount = finds?.filter(f => f.isPending).length ?? 0;
   const activeCoveragePercent = activeCoverage?.percentCovered ?? null;
+  const activeDistanceText = activeDistanceKm !== null
+    ? (activeDistanceKm < 1 ? `${Math.round(activeDistanceKm * 1000)}m` : `${activeDistanceKm.toFixed(1)}km`)
+    : null;
   const activeAcres = selectedField?.boundary
     ? turfArea(selectedField.boundary) / 4046.86
     : permission?.boundary
       ? turfArea(permission.boundary) / 4046.86
       : null;
+  const fullscreenQuickFindSession = permission
+    ? { id: sessionId, projectId: props.projectId, permissionId: permission.id, fieldId }
+    : null;
+  const getLatestTrackLocation = React.useCallback(() => {
+    const latest = (tracks || [])
+      .flatMap(track => track.points || [])
+      .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon))
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .at(-1);
+    if (!latest) return null;
+    return {
+      lat: latest.lat,
+      lon: latest.lon,
+      gpsAccuracyM: latest.accuracy ?? null,
+    };
+  }, [tracks]);
 
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
@@ -1052,7 +1084,7 @@ export default function SessionPage(props: {
                                       <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">{activeFindCount === 1 ? "Find" : "Finds"}</div>
                                     </div>
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
-                                      <div className="truncate text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDistanceKm !== null ? (activeDistanceKm < 1 ? `${Math.round(activeDistanceKm * 1000)}m` : `${activeDistanceKm.toFixed(1)}km`) : "--"}</div>
+                                      <div className="truncate text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDistanceText ?? "--"}</div>
                                       <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">Walked</div>
                                     </div>
                                     <button
@@ -1655,10 +1687,20 @@ export default function SessionPage(props: {
           onClose={() => setShowFieldNotes(false)}
         />
       )}
-      <TrackingOverlay 
-        isVisible={showTrackingOverlay} 
-        onClose={() => setShowTrackingOverlay(false)} 
-        wakeLockSupported={isWakeLockSupported()} 
+      <TrackingOverlay
+        isVisible={showTrackingOverlay}
+        onClose={() => setShowTrackingOverlay(false)}
+        wakeLockSupported={isWakeLockSupported()}
+        projectId={props.projectId}
+        sessionContext={fullscreenQuickFindSession}
+        stats={{
+          durationText: activeDurationText,
+          findsCount: activeHudFindCount,
+          distanceText: activeDistanceText,
+          coveragePercent: activeCoveragePercent,
+          hasBoundary: !!(selectedField?.boundary || permission?.boundary),
+        }}
+        getPreferredLocation={getLatestTrackLocation}
       />
       {confirmDialog}
     </div>
