@@ -39,13 +39,12 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
 function getPolygonCenter(boundary: any): [number, number] | null {
     const ring = boundary?.coordinates?.[0];
     if (!Array.isArray(ring) || ring.length === 0) return null;
-    const points = ring.filter((p: unknown): p is [number, number] =>
-        Array.isArray(p) && typeof p[0] === 'number' && typeof p[1] === 'number'
-    );
-    if (points.length === 0) return null;
-    const lons = points.map(p => p[0]);
-    const lats = points.map(p => p[1]);
-    return [(Math.min(...lons) + Math.max(...lons)) / 2, (Math.min(...lats) + Math.max(...lats)) / 2];
+    try {
+        const coords = turf.centroid(boundary).geometry.coordinates;
+        return [coords[0], coords[1]];
+    } catch {
+        return null;
+    }
 }
 
 function makeFieldLabelElement(label: string) {

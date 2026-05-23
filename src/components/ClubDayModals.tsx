@@ -50,14 +50,13 @@ function QRScreen({
     if (!canvasRef.current) return;
     setQrReady(false);
     setQrError(null);
-    QRCode.toCanvas(canvasRef.current, joinUrl, {
-      width: 320,
-      margin: 2,
-      errorCorrectionLevel: "M",
-      color: { dark: "#111827", light: "#ffffff" },
-    }).then(() => setQrReady(true)).catch(() => {
-      setQrError("This pack is still too large for a reliable QR code. Copy the join link, or include fewer mapped fields.");
-    });
+    const opts = { width: 320, margin: 2, color: { dark: "#111827", light: "#ffffff" } };
+    QRCode.toCanvas(canvasRef.current, joinUrl, { ...opts, errorCorrectionLevel: "M" })
+      .catch(() => QRCode.toCanvas(canvasRef.current!, joinUrl, { ...opts, errorCorrectionLevel: "L" }))
+      .then(() => setQrReady(true))
+      .catch(() => {
+        setQrError("This pack is still too large for a reliable QR code. Copy the join link, or include fewer mapped fields.");
+      });
   }, [joinUrl]);
 
   async function handleShare() {
@@ -206,7 +205,7 @@ export function CreateClubDayPackModal({
       // createClubDayPack strips private data and includes the selected fields.
       const packJson = await createClubDayPack(permissionId, Array.from(selectedFieldIds));
       const updated = await db.permissions.get(permissionId);
-      const sid = (updated as any)?.sharedPermissionId ?? permissionId;
+      const sid = updated?.sharedPermissionId ?? permissionId;
       setSharedPermissionId(sid);
 
       const url = buildJoinUrl({ packJson: compactClubDayPackJson(packJson) });

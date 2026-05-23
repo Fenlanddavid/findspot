@@ -438,33 +438,35 @@ export default function FindPage(props: {
       if (preferred?.projectId === props.projectId) return preferred.id;
     }
 
-    const existing = await db.permissions
-      .where("projectId")
-      .equals(props.projectId)
-      .filter(l => l.name.toLowerCase() === trimmedName.toLowerCase())
-      .first();
-    if (existing) return existing.id;
-
-    const newId = uuid();
     const defaultDetectorist = await getSetting("detectorist", "");
-    await db.permissions.add({
-      id: newId,
-      projectId: props.projectId,
-      name: trimmedName,
-      type: "individual",
-      lat: null,
-      lon: null,
-      gpsAccuracyM: null,
-      collector: defaultDetectorist as string,
-      landType: "other",
-      permissionGranted: false,
-      notes: trimmedName === "No Location"
-        ? "Auto-created — location not set at time of recording"
-        : "Automatically created via Club/Rally Dig",
-      createdAt: now,
-      updatedAt: now,
+    const newId = uuid();
+    return db.transaction("rw", db.permissions, async () => {
+      const existing = await db.permissions
+        .where("projectId")
+        .equals(props.projectId)
+        .filter(l => l.name.toLowerCase() === trimmedName.toLowerCase())
+        .first();
+      if (existing) return existing.id;
+
+      await db.permissions.add({
+        id: newId,
+        projectId: props.projectId,
+        name: trimmedName,
+        type: "individual",
+        lat: null,
+        lon: null,
+        gpsAccuracyM: null,
+        collector: defaultDetectorist as string,
+        landType: "other",
+        permissionGranted: false,
+        notes: trimmedName === "No Location"
+          ? "Auto-created — location not set at time of recording"
+          : "Automatically created via Club/Rally Dig",
+        createdAt: now,
+        updatedAt: now,
+      });
+      return newId;
     });
-    return newId;
   }
 
   async function getClubDayAttribution(permissionId: string): Promise<{ sharedPermissionId?: string; recorderId?: string; recorderName?: string }> {

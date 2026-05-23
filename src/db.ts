@@ -300,6 +300,7 @@ export class FindSpotDB extends Dexie {
       settings: "key",
     });
 
+    // v4: schema identical to v3 — no-op bump kept for continuity with deployed clients
     this.version(4).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
