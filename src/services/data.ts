@@ -565,14 +565,10 @@ export async function createClubDayPack(
   const sharedPermissionId = permission.sharedPermissionId ?? uuid();
   const now = new Date().toISOString();
 
-  if (!permission.sharedPermissionId) {
+  if (!permission.sharedPermissionId || !permission.isSharedPermission || permission.type !== "rally") {
     await db.permissions.update(permissionId, {
+      type: "rally",
       sharedPermissionId,
-      isSharedPermission: true,
-      updatedAt: now,
-    });
-  } else if (!permission.isSharedPermission) {
-    await db.permissions.update(permissionId, {
       isSharedPermission: true,
       updatedAt: now,
     });
@@ -837,6 +833,8 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
 }
 
 export type ClubDayMergeResult = {
+  permissionId: string;
+  sharedPermissionId: string;
   recorderName: string;
   newSessions: number;
   newFinds: number;
@@ -925,6 +923,8 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
   });
 
   return {
+    permissionId: permission.id,
+    sharedPermissionId: data.sharedPermissionId,
     recorderName: data.recorderName || "Unnamed detectorist",
     newSessions: newSessions.length,
     newFinds: newFinds.length,

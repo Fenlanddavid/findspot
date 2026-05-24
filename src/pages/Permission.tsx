@@ -3,6 +3,7 @@ import { db, Permission, Find, Media, GeoJSONPolygon } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting } from "../services/data";
+import { loadRallyDayReview } from "../services/rallyDayReview";
 import { CreateClubDayPackModal, ExportClubDayModal, ImportClubDayDataModal } from "../components/ClubDayModals";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -10,6 +11,7 @@ import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
 import { StaticMapPreview } from "../components/StaticMapPreview";
+import { RallyDayReviewPanel } from "../components/RallyDayReviewPanel";
 import PermissionReportModal from "../components/PermissionReportModal";
 import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
@@ -245,6 +247,13 @@ export default function PermissionPage(props: {
     const perm = await db.permissions.get(id);
     if (!perm?.isSharedPermission || !perm.sharedPermissionId) return [];
     return db.importedPackages.where("sharedPermissionId").equals(perm.sharedPermissionId).sortBy("importedAt");
+  }, [id]);
+
+  const rallyDayReview = useLiveQuery(async () => {
+    if (!id) return null;
+    const perm = await db.permissions.get(id);
+    if (!perm?.isSharedPermission || perm.isClubDayMember) return null;
+    return loadRallyDayReview(id);
   }, [id]);
 
   // Fetch all media for the report
@@ -1012,10 +1021,10 @@ export default function PermissionPage(props: {
           projectId: props.projectId,
           permissionId: id,
           type: "document",
-          filename: file.name || `landowner-agreement-${now.slice(0, 10)}`,
+          filename: file.name || `${type === "rally" || isSharedPermission ? "club-rally-agreement" : "landowner-agreement"}-${now.slice(0, 10)}`,
           mime: file.type || "application/octet-stream",
           blob: file,
-          caption: "Uploaded landowner agreement",
+          caption: type === "rally" || isSharedPermission ? "Uploaded club/rally agreement" : "Uploaded landowner agreement",
           scalePresent: false,
           createdAt: now,
         });
@@ -1050,6 +1059,15 @@ export default function PermissionPage(props: {
   const hasPermissionContact = !!landownerName.trim();
   const hasPermissionAccessRecord = permissionGranted || !!validFrom || !!agreementId;
   const hasPermissionMappedArea = (lat != null && lon != null) || !!boundary || (fields?.some(f => !!f.boundary) ?? false);
+  const canUseAgreement = isEdit && !isClubDayMember && !isPersonalRallyRecord;
+  const agreementKindLabel = isRally || isSharedPermission ? "Club/Rally Agreement" : "Agreement";
+  const generateAgreementLabel = agreementId ? `Update ${agreementKindLabel}` : `Generate ${agreementKindLabel}`;
+  const uploadAgreementLabel = agreementId ? "Replace Agreement File" : "Upload Signed Agreement";
+  const showOrganiserHub = isEdit && isRally && !isEditing && !isClubDayMember && !isPersonalRallyRecord;
+  const organiserMemberCount = submittedMembers?.length ?? 0;
+  const organiserFieldCount = fields?.length ?? 0;
+  const organiserFindCount = finds?.length ?? 0;
+  const organiserPendingFindCount = pendingFinds?.length ?? 0;
   const permissionNeedsCompletion = isEdit && !isRally && !isClubDayMember && (
     !hasPermissionContact || !hasPermissionAccessRecord || !hasPermissionMappedArea
   );
@@ -1104,6 +1122,9 @@ export default function PermissionPage(props: {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
     landownerName, landownerPhone, landownerEmail, landownerAddress,
     landType, permissionGranted, validFrom, agreementId, notes,
+    isSharedPermission, sharedPermissionId,
+    organiserContactNumber, organiserEmail,
+    significantFindInstructions, clubDayPublicNotes,
     createdAt: "", updatedAt: ""
   } : null;
 
@@ -1135,7 +1156,7 @@ export default function PermissionPage(props: {
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
                   </h2>
-                  {canManageClubDayPack && !isEditing && (
+                  {canManageClubDayPack && !showOrganiserHub && !isEditing && (
                     <button
                       onClick={() => setShowCreatePack(true)}
                       className="text-[10px] text-amber-500 dark:text-amber-400 hover:text-amber-400 dark:hover:text-amber-300 transition-colors tracking-wide border-0 bg-transparent p-0 shrink-0"
@@ -1213,7 +1234,7 @@ export default function PermissionPage(props: {
                             Leave Event
                           </button>
                         )}
-                        {canManageClubDayPack && (
+                        {canManageClubDayPack && !showOrganiserHub && (
                           <button
                             onClick={() => setShowCreatePack(true)}
                             className="text-xs sm:text-sm font-black text-white bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded-lg border border-teal-600 transition-all flex-1 sm:flex-none"
@@ -1221,7 +1242,7 @@ export default function PermissionPage(props: {
                             {isSharedPermission ? "Share Join Link" : "Generate Share Link"}
                           </button>
                         )}
-                        {!isClubDayMember && isEdit && isSharedPermission && (
+                        {!isClubDayMember && isEdit && isSharedPermission && !showOrganiserHub && (
                           <button
                             onClick={() => setShowImportClubDayData(true)}
                             className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
@@ -1456,6 +1477,94 @@ export default function PermissionPage(props: {
                                     Call organiser: {organiserContactNumber}
                                 </a>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showOrganiserHub && (
+                <div className="lg:col-span-3" role="region" aria-label="Organiser Hub">
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 sm:p-6 shadow-sm">
+                        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5 mb-5">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Organiser Hub</div>
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100 break-words">{name || "Unnamed Rally"}</h3>
+                                <p className="text-xs font-bold text-amber-800/70 dark:text-amber-200/70 mt-1 leading-relaxed">
+                                    {isSharedPermission
+                                      ? "Join link is ready. Import member files here when detectorists send their day exports."
+                                      : "Generate the join link to turn this into the active club/rally record for members."}
+                                </p>
+                            </div>
+                            <div className={`shrink-0 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest ${isSharedPermission ? "bg-teal-600 border-teal-600 text-white" : "bg-white dark:bg-gray-900 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"}`}>
+                                {isSharedPermission ? "Join link ready" : "Setup needed"}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+                            {[
+                                { label: "Members", value: organiserMemberCount },
+                                { label: "Fields", value: organiserFieldCount },
+                                { label: "Finds", value: organiserFindCount },
+                                { label: "Pending", value: organiserPendingFindCount },
+                            ].map(stat => (
+                                <div key={stat.label} className="bg-white dark:bg-gray-900/80 border border-amber-100 dark:border-amber-800/70 rounded-xl p-3">
+                                    <div className="text-xl font-black text-gray-900 dark:text-gray-100 leading-none">{stat.value}</div>
+                                    <div className="text-[9px] font-black uppercase tracking-widest text-amber-700/60 dark:text-amber-300/60 mt-1">{stat.label}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {isSharedPermission && rallyDayReview && (rallyDayReview.totalFinds > 0 || organiserMemberCount > 0) ? (
+                            <div className="mb-5">
+                                <RallyDayReviewPanel review={rallyDayReview} />
+                            </div>
+                        ) : (
+                            <div className="mb-5 rounded-xl bg-white/80 dark:bg-gray-900/70 border border-amber-100 dark:border-amber-800/70 p-4">
+                                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700/70 dark:text-amber-300/70 mb-1">Day Summary</div>
+                                <p className="text-xs font-bold leading-relaxed text-gray-600 dark:text-gray-300">
+                                    {isSharedPermission
+                                      ? "Import member data to build the finds summary, activity zones and field signal for the day."
+                                      : "Generate the join link first. Once members send exports back, the finds summary appears here in the hub."}
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setShowCreatePack(true)}
+                                className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                            >
+                                {isSharedPermission ? "Share Join Link" : "Generate Join Link"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => isSharedPermission ? setShowImportClubDayData(true) : setShowCreatePack(true)}
+                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm ${isSharedPermission ? "bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30" : "bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"}`}
+                            >
+                                {isSharedPermission ? "Import Member Data" : "Generate Link First"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAgreementModalOpen(true)}
+                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                            >
+                                {agreementKindLabel}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsAddingField(true)}
+                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                            >
+                                {organiserFieldCount > 0 ? "Add Another Field" : "Add Field"}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReportTarget(undefined)}
+                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                            >
+                                Landowner Report
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2045,7 +2154,7 @@ export default function PermissionPage(props: {
 
                         {/* Row 3 — action buttons */}
                         <div className="flex flex-wrap gap-2 items-center">
-                            {!isRally && (
+                            {canUseAgreement && (
                               <input
                                 ref={agreementUploadRef}
                                 type="file"
@@ -2070,26 +2179,26 @@ export default function PermissionPage(props: {
                                     FieldGuide
                                 </button>
                             )}
-                            {!isRally && (
+                            {canUseAgreement && (
                             <button
                                 type="button"
                                 onClick={() => setAgreementModalOpen(true)}
                                 className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                             >
-                                {agreementId ? "Update Agreement" : "Generate Agreement"}
+                                {generateAgreementLabel}
                             </button>
                             )}
-                            {!isRally && (
+                            {canUseAgreement && (
                               <button
                                 type="button"
                                 onClick={() => agreementUploadRef.current?.click()}
                                 className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all flex items-center gap-1.5 shadow-sm"
                               >
-                                {agreementId ? "Replace Agreement File" : "Upload Signed Agreement"}
+                                {uploadAgreementLabel}
                               </button>
                             )}
                         </div>
-                        {!isRally && agreementFile && (
+                        {canUseAgreement && agreementFile && (
                           <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold truncate">
                             Agreement file: {agreementFile.filename}
                           </p>
@@ -2841,6 +2950,9 @@ export default function PermissionPage(props: {
             // Reload shared permission state
             db.permissions.get(id).then(p => {
               if (p) {
+                setName(p.name);
+                setType(p.type || "individual");
+                setValidFrom(p.validFrom || "");
                 setIsSharedPermission(!!(p as any).isSharedPermission);
                 setSharedPermissionId((p as any).sharedPermissionId);
                 setOrganiserContactNumber((p as any).organiserContactNumber);

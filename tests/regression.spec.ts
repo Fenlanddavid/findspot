@@ -690,6 +690,8 @@ test("Club Day organiser merge normalises member data and deduplicates a later r
   });
   await expect(page.getByText("Import complete")).toBeVisible();
   await expect(page.getByText("Already present").locator("..")).toContainText("2");
+  await expect(page.getByLabel("Organiser Hub").getByText("What did today reveal?")).toBeVisible();
+  await expect(page.getByLabel("Organiser Hub").getByText("More mapped finds are needed before a spatial pattern is useful.")).toBeVisible();
 
   const [sessions, finds, media, importedPackages] = await Promise.all([
     readIndexedDbStore(page, "sessions"),

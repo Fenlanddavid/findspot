@@ -101,6 +101,58 @@ test("organiser rally setup continues to share link generation", async ({ page }
   await expect(page.getByText(/\/findspot\/join\?pack=/)).toBeVisible();
 });
 
+test("saved organiser rally opens to the organiser hub before link generation", async ({ page }) => {
+  await page.goto("./permission?type=rally");
+  await page.getByLabel("Rally / Event Name").fill("Smoke Hub Rally");
+  await page.getByLabel("Organiser / Contact Name").fill("Smoke Rally Club");
+  await page.getByRole("button", { name: "Save Rally" }).click();
+  await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
+
+  const hub = page.getByRole("region", { name: "Organiser Hub" });
+  await expect(hub).toBeVisible();
+  await expect(hub).toContainText("Setup needed");
+  await expect(hub).toContainText("Day Summary");
+  await expect(hub).toContainText("Once members send exports back, the finds summary appears here in the hub.");
+  await expect(hub.getByRole("button", { name: "Generate Join Link" })).toBeVisible();
+  await expect(hub.getByRole("button", { name: "Generate Link First" })).toBeVisible();
+
+  await hub.getByRole("button", { name: "Club/Rally Agreement" }).click();
+  const agreement = page.getByRole("dialog", { name: "Club/Rally Agreement" });
+  await agreement.getByRole("button", { name: "Edit Template" }).click();
+  await expect(agreement.getByRole("textbox", { name: "Landowner / occupier" })).toHaveValue("");
+  await expect(agreement.getByRole("textbox", { name: "Organiser", exact: true })).toHaveValue("Smoke Rally Club");
+});
+
+test("existing individual permission becomes a club/rally permission when shared", async ({ page }) => {
+  await createPermission(page, "Existing Rally Field");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  if (!permissionId) throw new Error("Could not read created permission id from URL");
+
+  await page.goto(`./permission/${permissionId}?openClubDay=true`);
+  await expect(page.getByRole("heading", { name: "Set Up Club/Rally" })).toBeVisible();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Landowner details, agreements and private notes will not be shared with members.").check();
+  await dialog.getByRole("button", { name: "Generate Share Link" }).click();
+  await expect(page.getByText("Share Join Link")).toBeVisible();
+
+  const permissions = await readIndexedDbStore(page, "permissions") as any[];
+  const converted = permissions.find((row) => row.id === permissionId);
+  expect(converted).toMatchObject({
+    type: "rally",
+    isSharedPermission: true,
+  });
+  expect(converted.sharedPermissionId).toEqual(expect.any(String));
+
+  await page.getByRole("dialog").locator("button").first().click();
+  await expect(page.getByRole("heading", { name: "Rally Details" })).toBeVisible();
+  const hub = page.getByRole("region", { name: "Organiser Hub" });
+  await expect(hub).toBeVisible();
+  await expect(hub).toContainText("Join link ready");
+  await expect(hub.getByRole("button", { name: "Share Join Link" })).toBeVisible();
+  await expect(hub.getByRole("button", { name: "Import Member Data" })).toBeVisible();
+});
+
 test("active session mobile uses in-page actions without a redundant bottom bar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await createPermission(page, "Mobile Session Farm");

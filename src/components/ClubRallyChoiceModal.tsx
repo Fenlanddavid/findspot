@@ -106,7 +106,7 @@ export function ClubRallyChoiceModal({
     return (
       <Modal onClose={onClose} title="Set up your club/rally">
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-5 leading-relaxed">
-          Use an existing permission or create a new one.
+          Use an existing permission or create a new one. Generating the link turns the chosen record into a club/rally permission.
         </p>
 
         {permissions.length > 0 && (

@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useId } from "react";
 import QRCode from "qrcode";
+import { useLiveQuery } from "dexie-react-hooks";
 import { db, Field } from "../db";
 import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
+import { loadRallyDayReview } from "../services/rallyDayReview";
+import { RallyDayReviewPanel } from "./RallyDayReviewPanel";
 
 // ─── Build join URL from event details ───────────────────────────────────────
 
@@ -194,6 +197,7 @@ export function CreateClubDayPackModal({
       const now = new Date().toISOString();
       await db.permissions.update(permissionId, {
         name: eventName.trim() || permissionName,
+        type: "rally",
         validFrom: eventDate || undefined,
         organiserContactNumber: contactNumber || undefined,
         organiserEmail: organiserEmail || undefined,
@@ -544,6 +548,10 @@ export function ImportClubDayDataModal({
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ClubDayMergeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const rallyDayReview = useLiveQuery(
+    () => result?.permissionId ? loadRallyDayReview(result.permissionId) : Promise.resolve(null),
+    [result?.permissionId, result?.newFinds, result?.newSessions, result?.alreadyPresent]
+  );
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -616,6 +624,7 @@ export function ImportClubDayDataModal({
                 </div>
               ))}
             </div>
+            <RallyDayReviewPanel review={rallyDayReview} compact />
             <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center">Import another member's file or close when done.</p>
 
             {/* Allow importing another file without closing */}

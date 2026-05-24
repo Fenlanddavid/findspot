@@ -21,6 +21,49 @@ import {
 const AGREEMENT_DISCLAIMER =
   "This template is provided as a starting point only and should be reviewed and amended to suit individual agreements. FindSpot does not provide legal advice.";
 
+const CLUB_RALLY_DISCLAIMER =
+  "This editable template is provided as a starting point for the organiser and landowner/occupier to review, amend and sign. FindSpot does not decide the event terms and does not provide legal advice.";
+
+type ClubRallySectionKey =
+  | "permission"
+  | "organiser"
+  | "participants"
+  | "groundCare"
+  | "finds"
+  | "treasure"
+  | "ownership"
+  | "termination";
+
+const CLUB_RALLY_SECTION_LABELS: Record<ClubRallySectionKey, string> = {
+  permission: "Permission & Event Scope",
+  organiser: "Organiser Responsibilities",
+  participants: "Participant Requirements",
+  groundCare: "Ground Care, Crops & Livestock",
+  finds: "Finds, Recording & Confidentiality",
+  treasure: "Treasure & Protected Sites",
+  ownership: "Ownership & Reward / Value Split",
+  termination: "Variation & Termination",
+};
+
+const DEFAULT_CLUB_RALLY_SECTIONS: Record<ClubRallySectionKey, string> = {
+  permission: "The Landowner/Occupier grants the Organiser permission to run the club/rally detecting event on the agreed date, within the permitted areas only.\nAny fields, access routes, parking areas, no-go zones, crop restrictions, livestock restrictions or time limits should be confirmed before detecting starts.",
+  organiser: "The Organiser is responsible for briefing attendees, controlling access, keeping attendees within the agreed areas, managing parking, and making sure the landowner's instructions are followed.\nThe Organiser should keep a record of attendees and provide a point of contact during the event.",
+  participants: "Attendees may only detect as part of this organised event and must follow all instructions from the Organiser and Landowner/Occupier.\nNo guests, night detecting, detecting outside the agreed areas, or return visits are permitted unless separately agreed.",
+  groundCare: "All attendees must minimise disturbance, recover targets neatly, reinstate ground fully, avoid standing crops unless agreed, leave gates as found, avoid livestock, and remove dug scrap/litter from the land.\nDetecting must stop if ground conditions, weather, livestock, crops or landowner instructions make continuing unsuitable.",
+  finds: "Finds should be shown to the Organiser and Landowner/Occupier as agreed. Significant finds should be reported to the Organiser immediately.\nFind locations and event records may be kept by the Organiser for rally administration, landowner reporting and responsible finds recording.\nThe land name, precise location, maps and identifiable imagery must not be published or shared without the Landowner/Occupier's prior consent.",
+  treasure: "Potential Treasure must be reported in accordance with the Treasure Act process within 14 days of discovery or of realising the find may be Treasure. The Organiser will support the finder with landowner details and reporting information where needed.\nNo detecting is permitted on scheduled/protected archaeology or other restricted areas unless the necessary written consent has been obtained.",
+  ownership: "Ownership of non-treasure finds, any value threshold, sale decision, reward split or return of personal/sentimental items should be agreed by the Organiser and Landowner/Occupier before detecting starts.\nAny Treasure reward split should be agreed in writing between the eligible parties, taking account of the Treasure process and any official valuation or reward decision.",
+  termination: "Any changes to this agreement should be confirmed in writing, including by email or text.\nThe Landowner/Occupier may stop the event or exclude areas at any time. Serious breach of instructions, damage, unsafe conduct, or detecting outside agreed areas may result in immediate removal from the event.",
+};
+
+type ClubRallyDetails = {
+  landownerName: string;
+  organiserName: string;
+  eventDate: string;
+  permittedAreas: string;
+  attendeeLimit: string;
+};
+
 type SavedAgreement = {
   mediaId: string;
   filename: string;
@@ -32,6 +75,7 @@ export function AgreementModal(props: {
   onClose: () => void;
   onSaved: (mediaId: string) => void;
 }) {
+  const isClubRallyAgreement = props.permission.type === "rally" || !!props.permission.isSharedPermission;
   const [detectoristName, setDetectoristName] = useState("");
   const [detectoristEmail, setDetectoristEmail] = useState("");
   const [insuranceProvider, setInsuranceProvider] = useState("");
@@ -44,10 +88,30 @@ export function AgreementModal(props: {
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAgreement, setSavedAgreement] = useState<SavedAgreement | null>(null);
+  const [clubRallyEditorOpen, setClubRallyEditorOpen] = useState(false);
+  const clubRallyOrganiserName = isClubRallyAgreement
+    ? ((props.permission as any).organiserName || props.permission.landownerName || "")
+    : props.permission.collector || "";
+  const [clubRallyDetails, setClubRallyDetails] = useState<ClubRallyDetails>({
+    landownerName: isClubRallyAgreement ? "" : props.permission.landownerName || "",
+    organiserName: clubRallyOrganiserName,
+    eventDate: props.permission.validFrom || "",
+    permittedAreas: props.permission.name,
+    attendeeLimit: "",
+  });
+  const [clubRallySections, setClubRallySections] = useState<Record<ClubRallySectionKey, string>>(DEFAULT_CLUB_RALLY_SECTIONS);
   
   const agreementRef = useRef<HTMLDivElement>(null);
   const generatedAtRef = useRef(new Date());
   const canShare = typeof navigator !== "undefined" && "share" in navigator;
+  const agreementKind = isClubRallyAgreement ? "Club/Rally Agreement" : "Landowner Agreement";
+  const agreementReferencePrefix = isClubRallyAgreement ? "FS-RALLY" : "FS-AGREE";
+  const agreementFilenamePrefix = isClubRallyAgreement ? "club-rally-agreement" : "landowner-agreement";
+  const agreementSubtitle = isClubRallyAgreement ? "Organised Metal Detecting Event" : "Metal Detecting & Archaeological Recovery";
+  const agreementDescriptor = isClubRallyAgreement
+    ? "Editable agreement template prepared for organiser and landowner review before signing."
+    : "Agreement template prepared for landowner and detectorist review before signing.";
+  const templateDisclaimer = isClubRallyAgreement ? CLUB_RALLY_DISCLAIMER : AGREEMENT_DISCLAIMER;
 
   useEffect(() => {
     getSetting("detectorist", "").then(setDetectoristName);
@@ -55,6 +119,36 @@ export function AgreementModal(props: {
     getSetting("insuranceProvider", "").then(setInsuranceProvider);
     getSetting("ncmdNumber", "").then(setNcmdNumber);
   }, []);
+
+  function markTemplateChanged() {
+    setSavedAgreement(null);
+    setError(null);
+  }
+
+  function updateClubRallyDetail(key: keyof ClubRallyDetails, value: string) {
+    setClubRallyDetails(prev => ({ ...prev, [key]: value }));
+    markTemplateChanged();
+  }
+
+  function updateClubRallySection(key: ClubRallySectionKey, value: string) {
+    setClubRallySections(prev => ({ ...prev, [key]: value }));
+    markTemplateChanged();
+  }
+
+  function renderAgreementText(text: string) {
+    return text
+      .split(/\n+/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map((line, index) => <p key={`${index}-${line}`} style={{ margin: 0 }}>{line}</p>);
+  }
+
+  function formatClubRallyEventDate(value: string) {
+    if (!value.trim()) return "To be agreed";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return formatReportDate(parsed, "long") || value;
+  }
 
   function handleLandownerSignature(value: string | null) {
     setLandownerSignature(value);
@@ -135,22 +229,22 @@ export function AgreementModal(props: {
     }
 
     const generatedAt = generatedAtRef.current;
-    const agreementReference = `FS-AGREE-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${props.permission.id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "LOCAL"}`;
+    const agreementReference = `${agreementReferencePrefix}-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${props.permission.id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "LOCAL"}`;
     applyReportPdfMetadata(pdf, {
-      title: `Landowner Agreement - ${props.permission.name}`,
+      title: `${agreementKind} - ${props.permission.name}`,
       subject: `${agreementReference} generated by FindSpot for permission agreement review.`,
       reference: agreementReference,
       generatedAt,
     });
 
     const safeName = props.permission.name.replace(/[^a-z0-9]/gi, "-").toLowerCase();
-    const filename = `landowner-agreement-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
+    const filename = `${agreementFilenamePrefix}-${safeName}-${new Date().toISOString().slice(0, 10)}.pdf`;
     return { blob: pdf.output("blob"), filename };
   }
 
   function requireSignatures() {
     if (!landownerSignature || !detectoristSignature) {
-      setError("Both signatures are required.");
+      setError(isClubRallyAgreement ? "Landowner/occupier and organiser signatures are required." : "Both signatures are required.");
       return false;
     }
     return true;
@@ -169,7 +263,7 @@ export function AgreementModal(props: {
       filename,
       mime: "application/pdf",
       blob,
-      caption: "Landowner Agreement",
+      caption: agreementKind,
       scalePresent: false,
       createdAt: new Date().toISOString(),
     };
@@ -211,7 +305,7 @@ export function AgreementModal(props: {
     try {
       const { blob, filename } = await generateAndSaveAgreement();
       const file = new File([blob], filename, { type: "application/pdf" });
-      await navigator.share({ files: [file], title: `Landowner Agreement — ${props.permission.name}` });
+      await navigator.share({ files: [file], title: `${agreementKind} — ${props.permission.name}` });
     } catch (err: any) {
       if ((err as DOMException).name !== "AbortError") {
         setError("Share failed: " + (err.message || err));
@@ -222,10 +316,10 @@ export function AgreementModal(props: {
   }
 
   const generatedAt = generatedAtRef.current;
-  const agreementReference = `FS-AGREE-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${props.permission.id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "LOCAL"}`;
+  const agreementReference = `${agreementReferencePrefix}-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${props.permission.id.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "LOCAL"}`;
 
   return (
-    <Modal title="Landowner Agreement" onClose={props.onClose}>
+    <Modal title={agreementKind} onClose={props.onClose}>
       <div className="grid gap-6 max-h-[80vh] overflow-y-auto pr-2 pb-6">
         <div className="sticky top-0 z-10 -mx-1 -mt-1 px-3 py-3 bg-white/95 dark:bg-gray-800/95 backdrop-blur border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -262,13 +356,78 @@ export function AgreementModal(props: {
         )}
 
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          {AGREEMENT_DISCLAIMER}
+          {templateDisclaimer}
         </div>
 
         {savedAgreement && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
             <strong>Agreement saved successfully.</strong>
             <span className="block mt-1">{savedAgreement.filename}</span>
+          </div>
+        )}
+
+        {isClubRallyAgreement && (
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div>
+                <p className="text-sm font-black text-gray-800 dark:text-gray-100 m-0">Editable club/rally template</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 m-0 mt-0.5">
+                  {clubRallyEditorOpen ? "Adjust the details and wording before the organiser and landowner sign." : "Open the editor only if these template terms need changing."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClubRallyEditorOpen(open => !open)}
+                className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+              >
+                {clubRallyEditorOpen ? "Hide Editor" : "Edit Template"}
+              </button>
+            </div>
+
+            {clubRallyEditorOpen && (
+              <div className="grid gap-4 border-t border-gray-100 dark:border-gray-800 p-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {[
+                    { key: "landownerName" as const, label: "Landowner / occupier", placeholder: "Name shown on agreement" },
+                    { key: "organiserName" as const, label: "Organiser", placeholder: "Club, rally organiser or contact name" },
+                    { key: "eventDate" as const, label: "Event date", placeholder: "Date or date range" },
+                    { key: "attendeeLimit" as const, label: "Attendee limit", placeholder: "e.g. 30 detectorists" },
+                  ].map(field => (
+                    <label key={field.key} className="grid gap-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{field.label}</span>
+                      <input
+                        value={clubRallyDetails[field.key]}
+                        onChange={e => updateClubRallyDetail(field.key, e.target.value)}
+                        placeholder={field.placeholder}
+                        className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 text-sm font-medium text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </label>
+                  ))}
+                  <label className="grid gap-1 sm:col-span-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Permitted areas / exclusions</span>
+                    <input
+                      value={clubRallyDetails.permittedAreas}
+                      onChange={e => updateClubRallyDetail("permittedAreas", e.target.value)}
+                      placeholder="Fields, boundaries, no-go areas, parking/access notes"
+                      className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 text-sm font-medium text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-3">
+                  {(Object.keys(CLUB_RALLY_SECTION_LABELS) as ClubRallySectionKey[]).map(key => (
+                    <label key={key} className="grid gap-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{CLUB_RALLY_SECTION_LABELS[key]}</span>
+                      <textarea
+                        value={clubRallySections[key]}
+                        onChange={e => updateClubRallySection(key, e.target.value)}
+                        rows={key === "groundCare" || key === "finds" ? 4 : 3}
+                        className="w-full resize-y rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 text-sm font-medium leading-relaxed text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -280,24 +439,32 @@ export function AgreementModal(props: {
             style={{ ...reportDocumentStyle, width: "800px" }}
           >
             <ReportHeader
-              typeLabel="Landowner Agreement"
+              typeLabel={agreementKind}
               title={props.permission.name}
-              subtitle="Metal Detecting & Archaeological Recovery"
+              subtitle={agreementSubtitle}
               reference={agreementReference}
-              conductedBy={detectoristName || "Detectorist"}
+              conductedBy={isClubRallyAgreement ? (clubRallyDetails.organiserName || "Organiser") : (detectoristName || "Detectorist")}
               insuranceText={ncmdNumber ? `${insuranceProvider || "Membership"} No. ${ncmdNumber}` : null}
               dateText={`Prepared ${formatReportDate(generatedAt, "long")}`}
-              descriptor="Agreement template prepared for landowner and detectorist review before signing."
+              descriptor={agreementDescriptor}
             />
 
             <div style={reportBodyStyle}>
               <div data-pdf-block style={{ border: `1px solid ${REPORT.line}`, borderRadius: 10, background: REPORT.panel, padding: "13px 15px", fontSize: 11, lineHeight: 1.55, color: REPORT.muted, fontFamily: "sans-serif" }}>
-                <strong style={{ color: REPORT.ink }}>Template notice:</strong> {AGREEMENT_DISCLAIMER}
+                <strong style={{ color: REPORT.ink }}>Template notice:</strong> {templateDisclaimer}
               </div>
 
               <ReportSummaryRows
                 title="Agreement Details"
-                rows={[
+                rows={isClubRallyAgreement ? [
+                  { label: "Agreement date", value: formatReportDate(generatedAt, "long") || generatedAt.toLocaleDateString() },
+                  { label: "Landowner / occupier", value: clubRallyDetails.landownerName || "____________________" },
+                  { label: "Organiser", value: clubRallyDetails.organiserName || "____________________" },
+                  { label: "Event date", value: formatClubRallyEventDate(clubRallyDetails.eventDate) },
+                  { label: "Event / permission", value: props.permission.name },
+                  { label: "Permitted areas", value: clubRallyDetails.permittedAreas || "To be agreed" },
+                  { label: "Attendee limit", value: clubRallyDetails.attendeeLimit || "To be agreed" },
+                ] : [
                   { label: "Agreement date", value: formatReportDate(generatedAt, "long") || generatedAt.toLocaleDateString() },
                   { label: "Landowner", value: `${props.permission.landownerName || "____________________"}${props.permission.landownerAddress ? `, ${props.permission.landownerAddress}` : ""}` },
                   { label: "Detectorist", value: `${detectoristName || "____________________"}${detectoristEmail ? ` (${detectoristEmail})` : ""}` },
@@ -305,6 +472,19 @@ export function AgreementModal(props: {
                 ]}
               />
 
+              {isClubRallyAgreement ? (
+                <>
+                  {(Object.keys(CLUB_RALLY_SECTION_LABELS) as ClubRallySectionKey[]).map(key => (
+                    <div key={key} data-pdf-block>
+                      <ReportSectionHeading>{CLUB_RALLY_SECTION_LABELS[key]}</ReportSectionHeading>
+                      <div style={{ display: "grid", gap: 7, fontSize: 11.5, lineHeight: 1.62, color: REPORT.ink }}>
+                        {renderAgreementText(clubRallySections[key])}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+              <>
               <div data-pdf-block>
                 <ReportSectionHeading>Permission</ReportSectionHeading>
                 <div style={{ display: "grid", gap: 7, fontSize: 11.5, lineHeight: 1.62, color: REPORT.ink }}>
@@ -379,11 +559,13 @@ export function AgreementModal(props: {
                   <p style={{ margin: 0 }}>14. The Landowner may terminate this agreement at any time. Serious breach, including damage, failing to follow instructions, or guests without permission, may result in immediate termination.</p>
                 </div>
               </div>
+              </>
+              )}
 
               <div data-pdf-block style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 34, marginTop: 10 }}>
                 {[
-                  { label: "Landowner Signature", signature: landownerSignature },
-                  { label: "Detectorist Signature", signature: detectoristSignature },
+                  { label: isClubRallyAgreement ? "Landowner / Occupier Signature" : "Landowner Signature", signature: landownerSignature },
+                  { label: isClubRallyAgreement ? "Organiser Signature" : "Detectorist Signature", signature: detectoristSignature },
                 ].map(({ label, signature }) => (
                   <div key={label} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div style={{ height: 78, borderBottom: `1px solid ${REPORT.ink}`, display: "flex", alignItems: "flex-end", justifyContent: "center", background: REPORT.panel }}>
@@ -403,12 +585,12 @@ export function AgreementModal(props: {
         <div className="grid gap-6 border-t-2 border-gray-100 dark:border-gray-700 pt-6">
           <div className="grid sm:grid-cols-2 gap-4">
             <SignaturePad 
-              label="Sign here: Landowner" 
+              label={isClubRallyAgreement ? "Sign here: Landowner / Occupier" : "Sign here: Landowner"} 
               onSave={handleLandownerSignature}
               className="dark:text-white"
             />
             <SignaturePad 
-              label="Sign here: Detectorist" 
+              label={isClubRallyAgreement ? "Sign here: Organiser" : "Sign here: Detectorist"} 
               onSave={handleDetectoristSignature}
               className="dark:text-white"
             />
