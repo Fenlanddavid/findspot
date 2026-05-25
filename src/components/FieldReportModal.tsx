@@ -176,6 +176,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
   const [generating, setGenerating] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const canShare = typeof navigator !== "undefined" && "share" in navigator;
 
   const mapDivRef = useRef<HTMLDivElement>(null);
@@ -207,7 +208,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
         const ncmdNumber = (await getSetting("ncmdNumber", "")) as string;
 
         const field = session.fieldId ? await db.fields.get(session.fieldId) : null;
-        const boundary = field?.boundary ?? (permission as any).boundary;
+        const boundary = field?.boundary ?? permission.boundary;
         const fieldName = field?.name ?? null;
 
         let coveragePct: number | null = null;
@@ -432,6 +433,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
   async function handleDownloadPDF() {
     if (!reportRef.current || !data) return;
+    setPdfError(null);
     setGenerating(true);
     try {
       const { blob, filename } = await buildPDFBlob();
@@ -442,7 +444,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      alert("PDF generation failed: " + (e.message || e));
+      setPdfError("PDF generation failed: " + (e.message || e));
     } finally {
       setGenerating(false);
     }
@@ -450,6 +452,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
   async function handleSharePDF() {
     if (!reportRef.current || !data) return;
+    setPdfError(null);
     setSharing(true);
     try {
       const { blob, filename } = await buildPDFBlob();
@@ -457,7 +460,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
       await navigator.share({ files: [file], title: `Field Report — ${data.permission.name}` });
     } catch (e: any) {
       if ((e as DOMException).name !== "AbortError") {
-        alert("Share failed: " + (e.message || e));
+        setPdfError("Share failed: " + (e.message || e));
       }
     } finally {
       setSharing(false);
@@ -571,6 +574,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
         {mapCapturing && <div className="text-center text-sm text-gray-500 animate-pulse py-1">Rendering map...</div>}
         {mapError && <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">{mapError}</div>}
+        {pdfError && <div className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2">{pdfError}</div>}
 
         {/* Off-screen map canvas */}
         <div ref={mapDivRef} style={{ position: "fixed", left: -9999, top: -9999, width: 920, height: 540, zIndex: -1 }} />

@@ -163,6 +163,7 @@ export async function fetchLocationLabel(
     try {
         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
         const res = await fetch(url, { signal: timed.signal });
+        if (!res.ok) return null;
         return await res.json() as NominatimResponse;
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
@@ -220,6 +221,7 @@ export async function fetchScheduledMonuments(
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
         const res = await fetch(url, { signal: timed.signal });
+        if (!res.ok) return { features: [] };
         return await res.json() as NHLEResponse;
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
@@ -243,6 +245,7 @@ export async function fetchAIMData(
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         const res = await fetch(url, { signal: timed.signal });
+        if (!res.ok) return { features: [] };
         return await res.json() as AIMResponse;
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;

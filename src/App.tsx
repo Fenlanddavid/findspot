@@ -52,6 +52,34 @@ function Shell() {
   const nav = useNavigate();
   const location = useLocation();
 
+  const checkBackupStatus = useCallback(async () => {
+    // Check if there is any data worth backing up
+    const permCount = await db.permissions.filter(p => !p.isDefault).count();
+    const findCount = await db.finds.count();
+    if (permCount === 0 && findCount === 0) {
+      setShowBackupReminder(false);
+      return;
+    }
+
+    const snoozedUntil = await getSetting<string | null>("backupSnoozedUntil", null);
+    if (snoozedUntil && new Date(snoozedUntil) > new Date()) {
+      setShowBackupReminder(false);
+      return;
+    }
+
+    const lastBackup = await getSetting<string | null>("lastBackupDate", null);
+    if (!lastBackup) {
+      setShowBackupReminder(true);
+      return;
+    }
+
+    const lastDate = new Date(lastBackup).getTime();
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    if (Date.now() - lastDate > thirtyDays) {
+      setShowBackupReminder(true);
+    }
+  }, []);
+
   useEffect(() => {
     ensureDefaultProject().then(async (id) => {
       await ensureDefaultPermission(id);
@@ -60,16 +88,21 @@ function Shell() {
     requestPersistentStorage();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
 
-    // Track unique installation (one-time per device)
+    // Track unique installation (one-time per device).
+    // Flag lives in IndexedDB (durable) with a one-time migration from localStorage.
     const trackInstallation = async () => {
-      const isInstalled = localStorage.getItem("fs_installed");
-      if (!isInstalled) {
+      const inLocalStorage = !!localStorage.getItem("fs_installed");
+      const inDB = await getSetting<boolean>("fs_installed", false);
+      if (!inLocalStorage && !inDB) {
         try {
           await fetch("https://findspot-counter.trials-uk.workers.dev/up");
-          localStorage.setItem("fs_installed", "true");
+          await setSetting("fs_installed", true);
         } catch (e) {
           // silent fail — will retry on next launch
         }
+      } else if (inLocalStorage && !inDB) {
+        // Migrate existing users without re-firing the counter
+        await setSetting("fs_installed", true);
       }
     };
     trackInstallation();
@@ -106,7 +139,7 @@ function Shell() {
       } catch {}
     };
     checkStorageQuota();
-  }, []);
+  }, [checkBackupStatus]);
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
@@ -139,34 +172,6 @@ function Shell() {
   }, [installPromptEvent]);
 
   const androidIntentUrl = `intent://${window.location.host}${window.location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
-
-  async function checkBackupStatus() {
-    // Check if there is any data worth backing up
-    const permCount = await db.permissions.filter(p => !p.isDefault).count();
-    const findCount = await db.finds.count();
-    if (permCount === 0 && findCount === 0) {
-      setShowBackupReminder(false);
-      return;
-    }
-
-    const snoozedUntil = await getSetting<string | null>("backupSnoozedUntil", null);
-    if (snoozedUntil && new Date(snoozedUntil) > new Date()) {
-      setShowBackupReminder(false);
-      return;
-    }
-
-    const lastBackup = await getSetting<string | null>("lastBackupDate", null);
-    if (!lastBackup) {
-      setShowBackupReminder(true);
-      return;
-    }
-
-    const lastDate = new Date(lastBackup).getTime();
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    if (Date.now() - lastDate > thirtyDays) {
-      setShowBackupReminder(true);
-    }
-  }
 
   async function snoozeBackup() {
     const thirtyDaysFromNow = new Date();

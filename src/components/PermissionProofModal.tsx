@@ -120,6 +120,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
                   onClick={() => {
                     const url = URL.createObjectURL(agreementFile.blob);
                     window.open(url, "_blank");
+                    setTimeout(() => URL.revokeObjectURL(url), 0);
                   }}
                   className="w-full bg-white dark:bg-gray-900 border-2 border-emerald-500/50 p-6 rounded-3xl shadow-lg hover:shadow-emerald-500/10 transition-all group flex flex-col items-center gap-3"
                 >

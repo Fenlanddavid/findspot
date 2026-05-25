@@ -690,17 +690,17 @@ export default function PermissionPage(props: {
           setPermissionGranted(l.permissionGranted);
           setValidFrom(l.validFrom || "");
           setBoundary(l.boundary);
-          setAgreementId((l as any).agreementId);
+          setAgreementId(l.agreementId);
           setNotes(l.notes);
-          setIsClubDayMember(!!(l as any).isClubDayMember);
-          setIsPersonalRallyRecord(!!(l as any).isPersonalRallyRecord);
-          setIsSharedPermission(!!(l as any).isSharedPermission);
-          setSharedPermissionId((l as any).sharedPermissionId);
-          setOrganiserContactNumber((l as any).organiserContactNumber);
-          setOrganiserEmail((l as any).organiserEmail);
-          setSubmittedAt((l as any).submittedAt);
-          setSignificantFindInstructions((l as any).significantFindInstructions);
-          setClubDayPublicNotes((l as any).clubDayPublicNotes);
+          setIsClubDayMember(!!l.isClubDayMember);
+          setIsPersonalRallyRecord(!!l.isPersonalRallyRecord);
+          setIsSharedPermission(!!l.isSharedPermission);
+          setSharedPermissionId(l.sharedPermissionId);
+          setOrganiserContactNumber(l.organiserContactNumber);
+          setOrganiserEmail(l.organiserEmail);
+          setSubmittedAt(l.submittedAt);
+          setSignificantFindInstructions(l.significantFindInstructions);
+          setClubDayPublicNotes(l.clubDayPublicNotes);
         }
         setLoading(false);
       }).catch(err => {
@@ -972,23 +972,19 @@ export default function PermissionPage(props: {
         boundary,
         agreementId,
         notes,
+        organiserContactNumber: type === "rally" ? (landownerPhone || undefined) : undefined,
+        organiserEmail:         type === "rally" ? (landownerEmail || undefined) : undefined,
         createdAt: now,
         updatedAt: now,
       };
 
-      if (type === "rally") {
-        (permission as any).organiserContactNumber = landownerPhone || undefined;
-        (permission as any).organiserEmail = landownerEmail || undefined;
-      }
-
       if (isEdit) {
         const { createdAt, ...updates } = permission;
         await db.permissions.update(id, updates);
-        
+
         setIsEditing(false);
         setSaved(true);
       } else {
-        (permission as any).createdAt = now;
         await db.permissions.add(permission);
 
         setIsEditing(false);
@@ -2804,9 +2800,9 @@ export default function PermissionPage(props: {
 
                                             <div className="flex justify-between items-start mb-1">
                                                 <div className="flex flex-col gap-0.5 min-w-0">
-                                                    {(s as any).recorderName && (
+                                                    {s.recorderName && (
                                                         <div className="text-[10px] font-black text-teal-600 dark:text-teal-400 truncate">
-                                                            {(s as any).recorderName}
+                                                            {s.recorderName}
                                                         </div>
                                                     )}
                                                     <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
@@ -2953,12 +2949,12 @@ export default function PermissionPage(props: {
                 setName(p.name);
                 setType(p.type || "individual");
                 setValidFrom(p.validFrom || "");
-                setIsSharedPermission(!!(p as any).isSharedPermission);
-                setSharedPermissionId((p as any).sharedPermissionId);
-                setOrganiserContactNumber((p as any).organiserContactNumber);
-                setOrganiserEmail((p as any).organiserEmail);
-                setSignificantFindInstructions((p as any).significantFindInstructions);
-                setClubDayPublicNotes((p as any).clubDayPublicNotes);
+                setIsSharedPermission(!!p.isSharedPermission);
+                setSharedPermissionId(p.sharedPermissionId);
+                setOrganiserContactNumber(p.organiserContactNumber);
+                setOrganiserEmail(p.organiserEmail);
+                setSignificantFindInstructions(p.significantFindInstructions);
+                setClubDayPublicNotes(p.clubDayPublicNotes);
               }
             });
           }}

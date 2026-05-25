@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
@@ -145,8 +145,8 @@ export function useFieldGuideMap({
     const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
 
     // Keep callbacks and annotation mode ref current on every render
-    useLayoutEffect(() => { callbacksRef.current = callbacks; });
-    useLayoutEffect(() => { annotationModeRef.current = annotationMode; });
+    useEffect(() => { callbacksRef.current = callbacks; });
+    useEffect(() => { annotationModeRef.current = annotationMode; });
 
     // ── Map initialisation (runs once) ────────────────────────────────────────
     useEffect(() => {

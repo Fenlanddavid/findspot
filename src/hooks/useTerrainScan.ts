@@ -164,6 +164,18 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // ── Cache check ───────────────────────────────────────────────────────
         // If the same viewport was scanned within the last 24 hours, skip the
         // expensive tile processing and return the cached raw clusters.
+        // Ways data has a longer TTL — roads rarely change, so stale ways from an
+        // expired tile record are rescued here and reused if a fresh Overpass fetch fails.
+        const MODERN_WAYS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+        let rescuedModernWays: import('../pages/fieldGuideTypes').ModernWay[] | null = null;
+        try {
+            const stale = await db.fieldGuideCache.get(tileKey);
+            if (stale && Array.isArray(stale.modernWays) && stale.modernWays.length > 0 &&
+                typeof stale.modernWaysFetchedAt === 'number' &&
+                (Date.now() - stale.modernWaysFetchedAt) < MODERN_WAYS_TTL_MS) {
+                rescuedModernWays = stale.modernWays as import('../pages/fieldGuideTypes').ModernWay[];
+            }
+        } catch { /* non-fatal */ }
         try {
             const cached = await db.fieldGuideCache.get(tileKey);
             if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
@@ -383,13 +395,21 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             // enrichment and analyzeContext so full archaeological context is available.
             onStatusChange('Interpreting route signals...');
             const modernWayResult = await modernWaysPromise;
-            const modernWays = modernWayResult.ways;
+            let modernWays = modernWayResult.ways;
+            let modernWaysFetchedAt: number | undefined = modernWayResult.available ? Date.now() : undefined;
             if (modernWays.length > 0) {
                 applyRouteAssessments(contextualized, modernWays);
                 const routeSuppressed = contextualized.filter(c => c.isRouteArtefactRisk).length;
                 onLog(`> Route suppression: fresh scan - ${modernWays.length} mapped way${modernWays.length !== 1 ? 's' : ''} checked, ${routeSuppressed} road-aligned signal${routeSuppressed !== 1 ? 's' : ''} hidden.`, 'terrain');
             } else if (modernWayResult.available) {
                 onLog('> Route suppression: fresh scan - no mapped ways found; 0 road-aligned signals hidden.', 'terrain');
+            } else if (rescuedModernWays && rescuedModernWays.length > 0) {
+                // Overpass unavailable — use ways rescued from the previous cache record.
+                modernWays = rescuedModernWays;
+                modernWaysFetchedAt = undefined; // keep original fetchedAt from the rescued record
+                applyRouteAssessments(contextualized, modernWays);
+                const routeSuppressed = contextualized.filter(c => c.isRouteArtefactRisk).length;
+                onLog(`> Route suppression: fresh scan - ${modernWays.length} rescued cached way${modernWays.length !== 1 ? 's' : ''} used (Overpass unavailable), ${routeSuppressed} road-aligned signal${routeSuppressed !== 1 ? 's' : ''} hidden.`, 'terrain', 'warn');
             } else {
                 const fallbackHidden = applyRouteUnavailableFallback(contextualized);
                 onLog(`> Route suppression: modern road data unavailable; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
@@ -400,7 +420,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 await db.fieldGuideCache.put({
                     id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
                     sourceAvailability, engineVersion: ENGINE_VERSION,
-                    ...(modernWayResult.available ? { modernWays, modernWaysFetchedAt: Date.now() } : {}),
+                    ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
                 });
             } catch { /* cache failure is non-fatal */ }
 

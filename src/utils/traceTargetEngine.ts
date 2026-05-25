@@ -91,7 +91,21 @@ function isTraceRouteNoisy(c: Cluster, modernWays: ModernWay[]): boolean {
         return c.routeAssessment.relationship === 'modern_route_artefact' ||
                c.routeAssessment.relationship === 'possible_modern_route_noise';
     }
-    // Fallback when no assessment is attached (ways unavailable during scan)
+    if (modernWays.length === 0) {
+        // No way data at all — cannot verify road proximity. Fail closed:
+        // suppress route-like cluster types and elongated linear signals.
+        // Do NOT apply the strong-evidence exemption used in the hotspot fallback —
+        // terrain + hydrology in drained landscapes merely indicates a ditch, which
+        // may run alongside a minor road rather than marking an archaeological feature.
+        const routeLikeType =
+            c.type.includes('Linear') ||
+            c.type.includes('Movement Signal') ||
+            c.type.includes('Corridor');
+        const elongatedLinear =
+            (c.metrics?.ratio ?? 0) > 3.5 && typeof c.bearing === 'number';
+        return routeLikeType || elongatedLinear;
+    }
+    // Fallback when assessment is absent but way data is available
     return isNearModernWayFallback(c, modernWays);
 }
 
@@ -545,22 +559,28 @@ export function computeTraceTargets(
     // Lower number = higher priority (more archaeologically specific / less likely
     // to be a modern artefact).  Within each tier, traces sort by traceScore.
     // Route-related and generic linear types are pushed to the back of the queue.
+    // ── To revert to pre-25-May-2026 priorities, replace the block below with: ──
+    // dry_margin_trace:        5,  wet_margin_trace: 6,  terrain_dry_margin_trace: 7,
+    // weak_multiscale:         6,  spectral_trace:   7,  suppressed_physical: 8,
+    // single_source_landscape: 9,  below_cut_supporting: 10, boundary_trace: 11,
+    // corridor_trace:          12, merged_echo: 13
+    // ─────────────────────────────────────────────────────────────────────────────
     const TRACE_TYPE_PRIORITY: Record<TraceType, number> = {
-        suppressed_circular:     1,  // ring ditch, barrow, roundhouse — most specific
-        fragmented_enclosure:    2,  // partial enclosure form
-        weak_structural:         3,  // possible building platform / remains
-        hydrology_trace:         4,  // palaeochannel / wet-margin signal
-        dry_margin_trace:        5,  // raised ground beside hydrology-backed margin
-        wet_margin_trace:        6,  // strong terrain-water signal (dryMarginScore + flowConvergence)
-        terrain_dry_margin_trace: 7, // terrain geometry only, no mapped watercourse
-        weak_multiscale:         6,  // multi-scale agreement, evidence gate failed
-        spectral_trace:          7,  // satellite-only anomaly
-        suppressed_physical:     8,  // physical basis, failed a gate
-        single_source_landscape: 9,  // single credible source
-        below_cut_supporting:    10, // ranked outside top-12 (handled separately)
-        boundary_trace:          11, // linear ditch/bank — often field boundary or ditch
-        corridor_trace:          12, // route-side signal — highest route-artefact risk
-        merged_echo:             13, // pre-consensus echo — handled separately
+        suppressed_circular:      1,  // ring ditch, barrow, roundhouse — most specific
+        fragmented_enclosure:     2,  // partial enclosure form
+        weak_structural:          3,  // possible building platform / remains
+        hydrology_trace:          4,  // palaeochannel / wet-margin signal
+        wet_margin_trace:         5,  // dryMarginScore ≥ 0.70 + flowConvergence ≥ 0.55 — dual threshold
+        dry_margin_trace:         6,  // hydrology source + raised polarity — single signal
+        terrain_dry_margin_trace: 7,  // terrain geometry only, no mapped watercourse
+        spectral_trace:           8,  // satellite-only anomaly
+        weak_multiscale:          9,  // multi-scale agreement, evidence gate failed
+        suppressed_physical:      10, // physical basis, failed a gate
+        single_source_landscape:  11, // single credible source
+        below_cut_supporting:     12, // ranked outside top-12 (handled separately)
+        boundary_trace:           13, // linear ditch/bank — often field boundary or ditch
+        corridor_trace:           14, // route-side signal — highest route-artefact risk
+        merged_echo:              15, // pre-consensus echo — handled separately
     };
 
     function traceTypePriority(t: TraceTarget): number {

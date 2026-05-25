@@ -734,15 +734,32 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
     }
 
     // ── Multi-scale agreement boost ───────────────────────────────────────────
+    // Bucket clusters into a spatial grid so each cluster only checks nearby
+    // candidates (O(n) build + O(n·k) lookup) instead of O(n²).
     const MULTI_SCALE_DIST = 0.0004;
+    const GRID_CELL = 0.001; // >= MULTI_SCALE_DIST, so a 3×3 neighbourhood covers all candidates
+    const grid = new Map<string, Cluster[]>();
+    for (const c of allClusters) {
+        const key = `${Math.floor(c.center[0] / GRID_CELL)},${Math.floor(c.center[1] / GRID_CELL)}`;
+        const bucket = grid.get(key);
+        if (bucket) bucket.push(c); else grid.set(key, [c]);
+    }
     for (const c of allClusters) {
         const agreedTiers = new Set<string>([c.scaleTier ?? '']);
-        for (const other of allClusters) {
-            if (other === c || other.scaleTier === c.scaleTier) continue;
-            const dx = c.center[0] - other.center[0];
-            const dy = c.center[1] - other.center[1];
-            if (Math.sqrt(dx * dx + dy * dy) < MULTI_SCALE_DIST) {
-                agreedTiers.add(other.scaleTier ?? '');
+        const gx = Math.floor(c.center[0] / GRID_CELL);
+        const gy = Math.floor(c.center[1] / GRID_CELL);
+        for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+                const neighbours = grid.get(`${gx + ox},${gy + oy}`);
+                if (!neighbours) continue;
+                for (const other of neighbours) {
+                    if (other === c || other.scaleTier === c.scaleTier) continue;
+                    const dx = c.center[0] - other.center[0];
+                    const dy = c.center[1] - other.center[1];
+                    if (Math.sqrt(dx * dx + dy * dy) < MULTI_SCALE_DIST) {
+                        agreedTiers.add(other.scaleTier ?? '');
+                    }
+                }
             }
         }
         if (agreedTiers.size >= 2) {
