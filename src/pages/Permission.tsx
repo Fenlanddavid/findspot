@@ -1064,6 +1064,12 @@ export default function PermissionPage(props: {
   const organiserFieldCount = fields?.length ?? 0;
   const organiserFindCount = finds?.length ?? 0;
   const organiserPendingFindCount = pendingFinds?.length ?? 0;
+  const submittedMemberFindCounts = new Map<string, number>();
+  (finds ?? []).forEach(find => {
+    const key = find.recorderId || find.recorderName?.trim();
+    if (!key) return;
+    submittedMemberFindCounts.set(key, (submittedMemberFindCounts.get(key) ?? 0) + 1);
+  });
   const permissionNeedsCompletion = isEdit && !isRally && !isClubDayMember && (
     !hasPermissionContact || !hasPermissionAccessRecord || !hasPermissionMappedArea
   );
@@ -1481,30 +1487,31 @@ export default function PermissionPage(props: {
             {showOrganiserHub && (
                 <div className="lg:col-span-3" role="region" aria-label="Organiser Hub">
                     <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 sm:p-6 shadow-sm">
-                        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5 mb-5">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
                             <div className="min-w-0">
                                 <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Organiser Hub</div>
-                                <h3 className="text-2xl font-black text-gray-900 dark:text-gray-100 break-words">{name || "Unnamed Rally"}</h3>
-                                <p className="text-xs font-bold text-amber-800/70 dark:text-amber-200/70 mt-1 leading-relaxed">
-                                    {isSharedPermission
-                                      ? "Join link is ready. Import member files here when detectorists send their day exports."
-                                      : "Generate the join link to turn this into the active club/rally record for members."}
-                                </p>
+                                <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 break-words">{name || "Unnamed Rally"}</h3>
+                                {validFrom && (
+                                    <p className="text-sm text-amber-800/70 dark:text-amber-200/70 mt-0.5">
+                                        {new Date(validFrom).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })}
+                                        {landownerName ? ` · ${landownerName}` : ""}
+                                    </p>
+                                )}
                             </div>
-                            <div className={`shrink-0 px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest ${isSharedPermission ? "bg-teal-600 border-teal-600 text-white" : "bg-white dark:bg-gray-900 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"}`}>
-                                {isSharedPermission ? "Join link ready" : "Setup needed"}
+                            <div className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${isSharedPermission ? "bg-teal-600 text-white" : "bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200"}`}>
+                                {isSharedPermission ? "✓ Link ready" : "Setup needed"}
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
                             {[
-                                { label: "Members", value: organiserMemberCount },
-                                { label: "Fields", value: organiserFieldCount },
-                                { label: "Finds", value: organiserFindCount },
-                                { label: "Pending", value: organiserPendingFindCount },
+                                { label: "Members", value: organiserMemberCount, highlight: true },
+                                { label: "Fields", value: organiserFieldCount, highlight: false },
+                                { label: "Finds", value: organiserFindCount, highlight: true },
+                                { label: "Pending", value: organiserPendingFindCount, highlight: false },
                             ].map(stat => (
                                 <div key={stat.label} className="bg-white dark:bg-gray-900/80 border border-amber-100 dark:border-amber-800/70 rounded-xl p-3">
-                                    <div className="text-xl font-black text-gray-900 dark:text-gray-100 leading-none">{stat.value}</div>
+                                    <div className={`text-xl font-black leading-none ${stat.highlight ? "text-teal-600 dark:text-teal-400" : "text-gray-900 dark:text-gray-100"}`}>{stat.value}</div>
                                     <div className="text-[9px] font-black uppercase tracking-widest text-amber-700/60 dark:text-amber-300/60 mt-1">{stat.label}</div>
                                 </div>
                             ))}
@@ -1515,53 +1522,126 @@ export default function PermissionPage(props: {
                                 <RallyDayReviewPanel review={rallyDayReview} />
                             </div>
                         ) : (
-                            <div className="mb-5 rounded-xl bg-white/80 dark:bg-gray-900/70 border border-amber-100 dark:border-amber-800/70 p-4">
-                                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700/70 dark:text-amber-300/70 mb-1">Day Summary</div>
-                                <p className="text-xs font-bold leading-relaxed text-gray-600 dark:text-gray-300">
-                                    {isSharedPermission
-                                      ? "Import member data to build the finds summary, activity zones and field signal for the day."
-                                      : "Generate the join link first. Once members send exports back, the finds summary appears here in the hub."}
-                                </p>
+                            <div className="mb-5 flex items-center gap-4 rounded-xl bg-white/80 dark:bg-gray-900/70 border border-amber-100 dark:border-amber-800/70 p-4">
+                                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
+                                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                                        <circle cx="12" cy="10" r="3" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-amber-700/70 dark:text-amber-300/70 mb-0.5">Day Summary</div>
+                                    <p className="text-xs font-medium leading-relaxed text-gray-600 dark:text-gray-300 m-0">
+                                        {isSharedPermission
+                                          ? "Import member data to build the finds summary, activity zones and field signal for the day."
+                                          : "Generate the join link first. Once members send exports back, the finds summary appears here."}
+                                    </p>
+                                </div>
                             </div>
                         )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                             <button
                                 type="button"
                                 onClick={() => setShowCreatePack(true)}
-                                className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                                className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-500 text-white px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
                             >
-                                {isSharedPermission ? "Share Join Link" : "Generate Join Link"}
+                                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="3" width="7" height="7" />
+                                    <rect x="14" y="3" width="7" height="7" />
+                                    <rect x="14" y="14" width="7" height="7" />
+                                    <rect x="3" y="14" width="7" height="7" />
+                                </svg>
+                                {isSharedPermission ? "Share join link" : "Generate join link"}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => isSharedPermission ? setShowImportClubDayData(true) : setShowCreatePack(true)}
-                                className={`px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm ${isSharedPermission ? "bg-white dark:bg-gray-900 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-900/30" : "bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"}`}
+                                className={`flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm ${isSharedPermission ? "bg-teal-800 hover:bg-teal-700 text-white" : "bg-white dark:bg-gray-900 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"}`}
                             >
-                                {isSharedPermission ? "Import Member Data" : "Generate Link First"}
+                                <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                                {isSharedPermission ? "Import member data" : "Generate link first"}
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setAgreementModalOpen(true)}
-                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
-                            >
-                                {agreementKindLabel}
-                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <button
                                 type="button"
                                 onClick={() => setIsAddingField(true)}
-                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                                className="flex min-h-10 items-center justify-center gap-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-teal-400 hover:text-teal-700 dark:hover:text-teal-300 px-2.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest leading-tight transition-colors"
                             >
-                                {organiserFieldCount > 0 ? "Add Another Field" : "Add Field"}
+                                <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+                                </svg>
+                                Add field
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setReportTarget(undefined)}
-                                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shadow-sm"
+                                className="flex min-h-10 items-center justify-center gap-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-teal-400 hover:text-teal-700 dark:hover:text-teal-300 px-2.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest leading-tight transition-colors"
                             >
-                                Landowner Report
+                                <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg>
+                                Report
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAgreementModalOpen(true)}
+                                className="flex min-h-10 items-center justify-center gap-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-teal-400 hover:text-teal-700 dark:hover:text-teal-300 px-2.5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest leading-tight transition-colors"
+                            >
+                                <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                                {agreementKindLabel}
                             </button>
                         </div>
+
+                        {organiserMemberCount > 0 && submittedMembers && (
+                            <div className="mt-5 pt-4 border-t border-amber-200/60 dark:border-amber-800/50">
+                                <div className="text-[9px] font-black uppercase tracking-widest text-amber-700/60 dark:text-amber-300/60 mb-2">
+                                    Submitted data · {organiserMemberCount}
+                                </div>
+                                <div className="space-y-1.5">
+                                    {submittedMembers.map(member => {
+                                        const initials = (member.recorderName || "?")
+                                            .split(" ")
+                                            .map((word: string) => word[0])
+                                            .join("")
+                                            .slice(0, 2)
+                                            .toUpperCase();
+                                        const memberKey = member.recorderId || member.recorderName?.trim();
+                                        const memberFindCount = memberKey ? submittedMemberFindCounts.get(memberKey) ?? 0 : 0;
+                                        return (
+                                            <div key={member.id} className="flex items-center gap-3 bg-white/70 dark:bg-gray-900/50 border border-amber-100 dark:border-amber-800/50 rounded-xl px-3 py-2.5">
+                                                <div className="w-7 h-7 rounded-full bg-teal-100 dark:bg-teal-900/60 flex items-center justify-center text-[10px] font-black text-teal-700 dark:text-teal-300 shrink-0">
+                                                    {initials}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-100 truncate m-0">
+                                                        {member.recorderName || "Unnamed detectorist"}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                                        {memberFindCount} {memberFindCount === 1 ? "find" : "finds"}
+                                                    </span>
+                                                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300">
+                                                        Data sent
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -2136,7 +2216,7 @@ export default function PermissionPage(props: {
                         )}
 
                         {/* Organiser: submitted members list */}
-                        {!isClubDayMember && isSharedPermission && submittedMembers && submittedMembers.length > 0 && (
+                        {!showOrganiserHub && !isClubDayMember && isSharedPermission && submittedMembers && submittedMembers.length > 0 && (
                           <div className="flex flex-col gap-1.5">
                             <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Members submitted</div>
                             {submittedMembers.map(m => (
