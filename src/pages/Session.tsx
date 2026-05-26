@@ -18,6 +18,7 @@ import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { CoachTip, CoachTips } from "../components/CoachTips";
+import type { WorkflowState } from "../types/significantFind";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -212,6 +213,7 @@ function formatElapsed(ms: number): string {
 
 export default function SessionPage(props: {
   projectId: string;
+  onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
 }) {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -1143,6 +1145,19 @@ export default function SessionPage(props: {
                             className="flex min-h-[5.5rem] w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-center text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
                           >
                             <span className="text-xl font-black">Add Find</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => props.onSignificantFind?.({
+                              permissionId: permission?.id ?? permissionId,
+                              sessionId,
+                              lat,
+                              lon,
+                              gpsAccuracyM: acc,
+                            })}
+                            className="w-full rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-red-700 shadow-sm transition-all hover:border-red-300 hover:bg-red-100 active:scale-[0.99] dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300 dark:hover:border-red-700"
+                          >
+                            Significant Find
                           </button>
                           <button
                             type="button"

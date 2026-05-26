@@ -17,6 +17,11 @@ import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 import { useConfirmDialog } from "./components/ConfirmModal";
 import { Logo } from "./components/Logo";
 import { FINDSPOT_COPYRIGHT_NOTICE } from "./utils/legalCopy";
+import SignificantFindWorkflow from "./components/SignificantFindWorkflow";
+import { useSignificantFindWorkflow } from "./hooks/useSignificantFindWorkflow";
+import type { WorkflowState } from "./types/significantFind";
+import { detectJurisdiction } from "./utils/jurisdictionDetect";
+import { toOSGridRef } from "./services/gps";
 
 export { Logo } from "./components/Logo";
 
@@ -51,6 +56,7 @@ function Shell() {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const nav = useNavigate();
   const location = useLocation();
+  const sfWorkflow = useSignificantFindWorkflow(projectId ?? "");
 
   const checkBackupStatus = useCallback(async () => {
     // Check if there is any data worth backing up
@@ -201,6 +207,72 @@ function Shell() {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
+  // Keep sfWorkflow.projectId in sync if projectId changes (edge case)
+  React.useEffect(() => {
+    if (projectId && sfWorkflow.workflowState.projectId !== projectId) {
+      sfWorkflow.updateState({ projectId });
+    }
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openSignificantFind = React.useCallback(async (
+    triggeredBy: "auto" | "manual",
+    initialContext: Partial<WorkflowState> = {},
+  ) => {
+    if (!projectId) return;
+
+    const linkedFind = initialContext.linkedFindId
+      ? await db.finds.get(initialContext.linkedFindId).catch(() => undefined)
+      : undefined;
+
+    const activeSession = await db.sessions
+      .where("projectId").equals(projectId)
+      .filter(s => !s.isFinished)
+      .sortBy("updatedAt")
+      .then(arr => arr[arr.length - 1])
+      .catch(() => undefined);
+
+    let permissionId =
+      initialContext.permissionId ??
+      linkedFind?.permissionId ??
+      activeSession?.permissionId ??
+      null;
+
+    let permission = permissionId ? await db.permissions.get(permissionId).catch(() => undefined) : undefined;
+    if (permission?.projectId !== projectId) permission = undefined;
+
+    if (!permission) {
+      permission = await db.permissions
+        .where("projectId").equals(projectId)
+        .toArray()
+        .then(rows => rows.find(p => !p.isDefault) ?? rows[0])
+        .catch(() => undefined);
+      permissionId = permission?.id ?? null;
+    }
+
+    const lat = initialContext.lat ?? linkedFind?.lat ?? activeSession?.lat ?? permission?.lat ?? null;
+    const lon = initialContext.lon ?? linkedFind?.lon ?? activeSession?.lon ?? permission?.lon ?? null;
+    const gpsAccuracyM = initialContext.gpsAccuracyM ?? linkedFind?.gpsAccuracyM ?? activeSession?.gpsAccuracyM ?? permission?.gpsAccuracyM ?? null;
+    const osGridRef = initialContext.osGridRef ?? linkedFind?.osGridRef ?? (lat != null && lon != null ? toOSGridRef(lat, lon) : "");
+    const w3w = initialContext.w3w ?? linkedFind?.w3w ?? "";
+
+    const enrichedContext: Partial<WorkflowState> = {
+      ...initialContext,
+      projectId,
+      permissionId,
+      sessionId: initialContext.sessionId ?? linkedFind?.sessionId ?? activeSession?.id ?? null,
+      lat,
+      lon,
+      gpsAccuracyM,
+      osGridRef,
+      w3w,
+      jurisdiction: initialContext.jurisdiction ?? (lat != null && lon != null ? detectJurisdiction(lat, lon) : "unknown"),
+      linkedFindId: initialContext.linkedFindId ?? null,
+      findDescription: initialContext.findDescription ?? linkedFind?.objectType ?? "",
+    };
+
+    sfWorkflow.open({ triggeredBy, initialContext: enrichedContext });
+  }, [projectId, sfWorkflow.open]);
 
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
@@ -355,14 +427,14 @@ function Shell() {
             <Route path="/permission" element={<PermissionPage projectId={projectId} onSaved={(id) => nav(`/permission/${id}`)} />} />
             <Route path="/permission/:id" element={<PermissionPage projectId={projectId} onSaved={() => {}} />} />
             <Route path="/permissions" element={<AllPermissions projectId={projectId} />} />
-            <Route path="/session/new" element={<SessionPage projectId={projectId} />} />
-            <Route path="/session/:id" element={<SessionPage projectId={projectId} />} />
-            <Route path="/find" element={<FindRouter projectId={projectId} />} />
+            <Route path="/session/new" element={<SessionPage projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
+            <Route path="/session/:id" element={<SessionPage projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
+            <Route path="/find" element={<FindRouter projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/pending" element={<PendingFinds projectId={projectId} />} />
-            <Route path="/fieldguide" element={<FieldGuide projectId={projectId} />} />
+            <Route path="/fieldguide" element={<FieldGuide projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("auto", context); }} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/join" element={<JoinClubDay />} />
         </Routes>
@@ -410,9 +482,17 @@ function Shell() {
         />
       )}
 
-      <GlobalActions projectId={projectId} />
+      <GlobalActions projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />
       <OnboardingFlow />
       {confirmDialog}
+      <SignificantFindWorkflow
+        isOpen={sfWorkflow.isOpen}
+        workflowState={sfWorkflow.workflowState}
+        onClose={sfWorkflow.close}
+        updateState={sfWorkflow.updateState}
+        goToStep={sfWorkflow.goToStep}
+        setPath={sfWorkflow.setPath}
+      />
     </div>
   );
 }
@@ -444,7 +524,7 @@ function HomeRouter({ projectId, isStandalone, promptInstall }: { projectId: str
   );
 }
 
-function FindRouter({ projectId }: { projectId: string }) {
+function FindRouter({ projectId, onSignificantFind }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void }) {
   const [params] = useSearchParams();
   const permissionId = params.get("permissionId");
   const sessionId = params.get("sessionId");
@@ -464,6 +544,7 @@ function FindRouter({ projectId }: { projectId: string }) {
     initialLon={lon ? parseFloat(lon) : null}
     initialMode={mode === "quick" || mode === "full" ? mode : null}
     manual={manual}
+    onSignificantFind={onSignificantFind}
   />;
 }
 

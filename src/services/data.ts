@@ -1,4 +1,4 @@
-import { db, Media, Field, ImportedPackage } from "../db";
+import { db, Media, Field, ImportedPackage, SignificantFind } from "../db";
 import { v4 as uuid } from "uuid";
 import {
   FINDSPOT_COPYRIGHT_NOTICE,
@@ -23,6 +23,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const settings = await db.settings.toArray();
   const importedPackages = await db.importedPackages.toArray();
   const fields = await db.fields.toArray();
+  const significantFinds = await db.significantFinds.toArray();
 
   let mediaExport: any[] = [];
   if (includeMedia) {
@@ -34,7 +35,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   }
 
   const data = {
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     generatedBy: "FindSpot",
     termsVersion: TERMS_OF_USE_VERSION,
@@ -45,6 +46,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     fields,
     sessions,
     finds,
+    significantFinds,
     tracks,
     media: mediaExport,
     settings,
@@ -105,6 +107,7 @@ type BackupData = {
   fields: any[];
   sessions: any[];
   finds: any[];
+  significantFinds: any[];
   tracks: any[];
   media: any[];
   settings: any[];
@@ -140,6 +143,7 @@ function validateBackupData(data: any): BackupData {
     fields: requireArray(data, "fields"),
     sessions: requireArray(data, "sessions"),
     finds: requireArray(data, "finds"),
+    significantFinds: requireArray(data, "significantFinds"),
     tracks: requireArray(data, "tracks"),
     media: requireArray(data, "media"),
     settings: requireArray(data, "settings"),
@@ -151,6 +155,7 @@ function validateBackupData(data: any): BackupData {
   assertRowsHaveId(backup.fields, "fields");
   assertRowsHaveId(backup.sessions, "sessions");
   assertRowsHaveId(backup.finds, "finds");
+  assertRowsHaveId(backup.significantFinds, "significantFinds");
   assertRowsHaveId(backup.tracks, "tracks");
   assertRowsHaveId(backup.media, "media");
   assertRowsHaveId(backup.importedPackages, "importedPackages");
@@ -159,6 +164,7 @@ function validateBackupData(data: any): BackupData {
   const permissionIds = new Set(backup.permissions.map(p => p.id));
   const sessionIds = new Set(backup.sessions.map(s => s.id));
   const findIds = new Set(backup.finds.map(f => f.id));
+  const significantFindIds = new Set(backup.significantFinds.map(f => f.id));
 
   backup.permissions.forEach((permission, index) => {
     if (!projectIds.has(permission.projectId)) {
@@ -187,6 +193,18 @@ function validateBackupData(data: any): BackupData {
     }
   });
 
+  backup.significantFinds.forEach((find, index) => {
+    if (!projectIds.has(find.projectId)) {
+      throw new Error(`Invalid format: significantFinds[${index}] references an unknown project`);
+    }
+    if (find.sessionId && !sessionIds.has(find.sessionId)) {
+      throw new Error(`Invalid format: significantFinds[${index}] references an unknown session`);
+    }
+    if (find.linkedFindId && !findIds.has(find.linkedFindId)) {
+      throw new Error(`Invalid format: significantFinds[${index}] references an unknown find`);
+    }
+  });
+
   backup.tracks.forEach((track, index) => {
     if (track.sessionId && !sessionIds.has(track.sessionId)) {
       throw new Error(`Invalid format: tracks[${index}] references an unknown session`);
@@ -197,8 +215,8 @@ function validateBackupData(data: any): BackupData {
     if (typeof media.blob !== "string" || !media.blob.startsWith("data:")) {
       throw new Error(`Invalid format: media[${index}] has an invalid blob`);
     }
-    if (media.findId && !findIds.has(media.findId)) {
-      throw new Error(`Invalid format: media[${index}] references an unknown find`);
+    if (media.findId && !findIds.has(media.findId) && !significantFindIds.has(media.findId)) {
+      throw new Error(`Invalid format: media[${index}] references an unknown find or significant find`);
     }
     if (media.permissionId && !permissionIds.has(media.permissionId)) {
       throw new Error(`Invalid format: media[${index}] references an unknown permission`);
@@ -234,7 +252,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.media, db.tracks, db.settings, db.importedPackages], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -243,6 +261,7 @@ export async function importData(json: string) {
     await db.fields.clear();
     await db.sessions.clear();
     await db.finds.clear();
+    await db.significantFinds.clear();
     await db.tracks.clear();
     await db.settings.clear();
     await db.media.clear();
@@ -253,6 +272,7 @@ export async function importData(json: string) {
     if (backup.fields.length) await db.fields.bulkPut(backup.fields);
     if (backup.sessions.length) await db.sessions.bulkPut(backup.sessions);
     if (backup.finds.length) await db.finds.bulkPut(backup.finds);
+    if (backup.significantFinds.length) await db.significantFinds.bulkPut(backup.significantFinds as SignificantFind[]);
     if (backup.tracks.length) await db.tracks.bulkPut(backup.tracks);
     if (backup.settings.length) await db.settings.bulkPut(backup.settings);
     if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
@@ -779,6 +799,7 @@ export type ClubDayExport = {
   exportedAt: string;
   sessions: object[];
   finds: object[];
+  significantFinds?: object[];
   media: object[];
 };
 
@@ -803,14 +824,19 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
     .where("permissionId").equals(localPermission.id)
     .toArray();
 
+  const significantFinds = await db.significantFinds
+    .where("permissionId").equals(localPermission.id)
+    .toArray();
+
   // Prefer recorder name already stamped on sessions (recorded at detection time),
   // then the modal override, then current settings — avoids mid-event name change drift.
   const sessionRecorderName = (sessions as any[]).find(s => s.recorderName)?.recorderName as string | undefined;
   const recorderName = nameOverride?.trim() || sessionRecorderName || await getSetting<string>("recorderName", "Unnamed detectorist");
 
   const findIds = new Set(finds.map(f => f.id));
+  const significantFindIds = new Set(significantFinds.map(f => f.id));
   const allMedia = await db.media.toArray();
-  const relatedMedia = allMedia.filter(m => m.findId && findIds.has(m.findId));
+  const relatedMedia = allMedia.filter(m => m.findId && (findIds.has(m.findId) || significantFindIds.has(m.findId)));
 
   const mediaExport = await Promise.all(
     relatedMedia.map(async m => ({ ...m, blob: await blobToBase64(m.blob) }))
@@ -825,6 +851,7 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
     exportedAt: new Date().toISOString(),
     sessions,
     finds,
+    significantFinds,
     media: mediaExport,
   };
 
@@ -837,6 +864,7 @@ export type ClubDayMergeResult = {
   recorderName: string;
   newSessions: number;
   newFinds: number;
+  newSignificantFinds: number;
   alreadyPresent: number;
 };
 
@@ -879,21 +907,30 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
   const existingFinds = await db.finds
     .where("permissionId").equals(permission.id)
     .toArray();
+  const existingSignificantFinds = await db.significantFinds
+    .where("permissionId").equals(permission.id)
+    .toArray();
 
   const existingSessionIds = new Set(existingSessions.map(s => s.id));
   const existingFindIds = new Set(existingFinds.map(f => f.id));
+  const existingSignificantFindIds = new Set(existingSignificantFinds.map(f => f.id));
 
   const incomingSessions = data.sessions as any[];
   const incomingFinds = data.finds as any[];
+  const incomingSignificantFinds = (data.significantFinds ?? []) as any[];
 
   const newSessions = incomingSessions.filter(s => !existingSessionIds.has(s.id));
   const newFinds = incomingFinds.filter(f => !existingFindIds.has(f.id));
-  const alreadyPresent = incomingSessions.length + incomingFinds.length - newSessions.length - newFinds.length;
+  const newSignificantFinds = incomingSignificantFinds.filter(f => !existingSignificantFindIds.has(f.id));
+  const alreadyPresent =
+    incomingSessions.length + incomingFinds.length + incomingSignificantFinds.length -
+    newSessions.length - newFinds.length - newSignificantFinds.length;
 
   // Normalise to organiser's permission so merged records appear in their session list,
   // the session page resolves the permission correctly, and a single query covers all data.
   const fixedSessions = newSessions.map((s: any) => ({ ...s, projectId: permission.projectId, permissionId: permission.id }));
   const fixedFinds = newFinds.map((f: any) => ({ ...f, projectId: permission.projectId, permissionId: permission.id }));
+  const fixedSignificantFinds = newSignificantFinds.map((f: any) => ({ ...f, projectId: permission.projectId, permissionId: permission.id }));
 
   // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
   // IndexedDB operation and awaiting it inside a transaction causes IDB to
@@ -907,9 +944,10 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
     ? await db.importedPackages.filter(p => p.sharedPermissionId === data.sharedPermissionId && p.recorderId === data.recorderId).first()
     : undefined;
 
-  await db.transaction("rw", [db.sessions, db.finds, db.media, db.importedPackages], async () => {
+  await db.transaction("rw", [db.sessions, db.finds, db.significantFinds, db.media, db.importedPackages], async () => {
     if (fixedSessions.length > 0) await db.sessions.bulkPut(fixedSessions);
     if (fixedFinds.length > 0) await db.finds.bulkPut(fixedFinds);
+    if (fixedSignificantFinds.length > 0) await db.significantFinds.bulkPut(fixedSignificantFinds as SignificantFind[]);
     if (mediaItems.length > 0) await db.media.bulkPut(mediaItems);
     await db.importedPackages.put({
       id: existingEntry?.id ?? uuid(),
@@ -927,6 +965,7 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
     recorderName: data.recorderName || "Unnamed detectorist",
     newSessions: newSessions.length,
     newFinds: newFinds.length,
+    newSignificantFinds: newSignificantFinds.length,
     alreadyPresent,
   };
 }

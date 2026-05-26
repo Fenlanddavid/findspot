@@ -165,6 +165,45 @@ test("active session mobile uses in-page actions without a redundant bottom bar"
   await expect(page.getByRole("button", { name: "Finish Session" })).toBeVisible();
   await page.getByRole("button", { name: "Add Find to Session" }).click();
   await expect(page).toHaveURL(/\/find\?/);
+  await expect(page.getByRole("button", { name: "Significant Find" }).first()).toBeVisible();
+});
+
+test("significant find workflow saves a located notable record", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_fab_used", "1");
+  });
+  await createPermission(page, "Significant Smoke Farm");
+
+  const permissions = await readIndexedDbStore(page, "permissions") as any[];
+  const realPermission = permissions.find((row) => row.name === "Significant Smoke Farm");
+  expect(realPermission).toBeTruthy();
+
+  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
+  await page.getByRole("button", { name: "Start Session" }).click();
+  await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
+  await page.getByRole("button", { name: /Significant find/i }).click();
+  await page.getByRole("button", { name: /Notable Find/i }).click();
+  await page.getByRole("button", { name: /Skip photos/i }).click();
+  await page.getByRole("button", { name: "Lock My Position" }).click();
+  await expect(page.getByText(/Locked/)).toBeVisible();
+  await page.getByRole("button", { name: /Location recorded/i }).click();
+  await page.getByRole("button", { name: /Saved — describe the find/i }).click();
+  await page.getByRole("button", { name: /Skip for now/i }).click();
+  await expect(page.getByText("Record complete.")).toBeVisible();
+  await page.getByRole("button", { name: /Done — view record/i }).click();
+
+  await expect(page).toHaveURL(/\/finds-box\?tab=significant$/);
+  await expect(page.getByText("Notable Find").first()).toBeVisible();
+
+  const significantFinds = await readIndexedDbStore(page, "significantFinds") as any[];
+  expect(significantFinds).toHaveLength(1);
+  expect(significantFinds[0]).toMatchObject({
+    path: "notable_find",
+    status: "in_progress",
+    permissionId: realPermission.id,
+  });
+  expect(significantFinds[0].lat).toEqual(expect.any(Number));
+  expect(significantFinds[0].osGridRef).toEqual(expect.any(String));
 });
 
 test("deleting a permission removes its sessions and finds", async ({ page }) => {

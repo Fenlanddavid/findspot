@@ -5,6 +5,7 @@ import { db, Session } from "../db";
 import { captureGPS } from "../services/gps";
 import { fileToBlob } from "../services/photos";
 import { v4 as uuid } from "uuid";
+import type { WorkflowState } from "../types/significantFind";
 
 export type QuickFindLocation = {
   lat: number;
@@ -22,6 +23,7 @@ type QuickFindFabProps = {
   containerClassName?: string;
   getPreferredLocation?: () => QuickFindLocation | null;
   onRecorded?: (findId: string) => void;
+  onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
 };
 
 export function QuickFindFab({
@@ -32,6 +34,7 @@ export function QuickFindFab({
   containerClassName = "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex flex-col items-end gap-3 pointer-events-none sm:bottom-6 sm:right-6",
   getPreferredLocation,
   onRecorded,
+  onSignificantFind,
 }: QuickFindFabProps) {
   const navigate = useNavigate();
   const [isCapturing, setIsCapturing] = React.useState(false);
@@ -255,6 +258,21 @@ export function QuickFindFab({
               Done
             </button>
           </div>
+          {onSignificantFind && (
+            <button
+              type="button"
+              onClick={async () => {
+                const pendingId = lastQuickId;
+                setShowSuccess(false);
+                setLastQuickId(null);
+                if (pendingId) await db.finds.delete(pendingId);
+                onSignificantFind();
+              }}
+              className="w-full text-xs text-amber-300 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 rounded-xl py-2 text-center transition-all font-semibold"
+            >
+              Significant Find
+            </button>
+          )}
           <button
             onClick={async () => {
               if (!lastQuickId) return;

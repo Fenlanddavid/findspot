@@ -11,6 +11,7 @@ import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
 import { useTerrainScan, ScanContext } from '../hooks/useTerrainScan';
 import { useHistoricScan } from '../hooks/useHistoricScan';
 import { useTilePrewarm } from '../hooks/useTilePrewarm';
+import type { WorkflowState } from '../types/significantFind';
 
 import {
     Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
@@ -316,7 +317,7 @@ function getSignalSummary(breakdown: { terrain: number; hydro: number; historic:
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function FieldGuide({ projectId }: { projectId: string }) {
+export default function FieldGuide({ projectId, onSignificantFind }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void }) {
     // Engine state
     const [engineState, dispatch] = useReducer(engineReducer, initialEngineState);
     const {
@@ -405,6 +406,34 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
         () => db.finds.where('projectId').equals(projectId).toArray(),
         [projectId]
     ) ?? [];
+
+    // ─── Significant find auto-trigger ───────────────────────────────────────
+    const liveActiveSession = useLiveQuery(
+        () => db.sessions.where('projectId').equals(projectId).filter(s => !s.isFinished).sortBy('updatedAt').then(arr => arr[arr.length - 1]),
+        [projectId]
+    );
+    const [sfBannerDismissed, setSfBannerDismissed] = useState(false);
+
+    const showConcentrationBanner = useMemo(() => {
+        if (!onSignificantFind || sfBannerDismissed || !liveActiveSession) return false;
+        // Only check finds from the current session
+        const sessionFinds = projectFinds.filter(f =>
+            f.sessionId === liveActiveSession.id &&
+            f.lat != null && f.lon != null
+        );
+        if (sessionFinds.length < 6) return false;
+        // Check average pairwise distance (simple centroid approach)
+        const lats = sessionFinds.map(f => f.lat!);
+        const lons = sessionFinds.map(f => f.lon!);
+        const cLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+        const cLon = lons.reduce((a, b) => a + b, 0) / lons.length;
+        const avgDist = sessionFinds.reduce((sum, f) => {
+            const dlat = (f.lat! - cLat) * 111320;
+            const dlon = (f.lon! - cLon) * 111320 * Math.cos(cLat * Math.PI / 180);
+            return sum + Math.sqrt(dlat * dlat + dlon * dlon);
+        }, 0) / sessionFinds.length;
+        return avgDist <= 40;
+    }, [projectFinds, liveActiveSession, sfBannerDismissed, onSignificantFind]);
 
     const selectedUserFindMedia = useLiveQuery<Media | undefined>(
         () => selectedUserFind
@@ -1120,6 +1149,33 @@ export default function FieldGuide({ projectId }: { projectId: string }) {
             <div className="flex flex-1 overflow-hidden relative">
                 <div className="flex-1 relative bg-slate-900">
                     <div ref={mapContainerRef} className="absolute inset-0" />
+
+                    {/* Significant find concentration banner */}
+                    {showConcentrationBanner && (
+                        <div className="absolute top-3 left-3 right-3 z-[105] animate-in slide-in-from-top-2 fade-in duration-200 lg:left-auto lg:right-3 lg:w-80">
+                            <div className="bg-amber-900/95 backdrop-blur-md border border-amber-500/50 rounded-2xl p-3 shadow-2xl flex items-start gap-3">
+                                <span className="text-lg shrink-0">⚠️</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-amber-200">Concentrated find pattern</p>
+                                    <p className="text-[11px] text-amber-300/80 mt-0.5 leading-snug">Your finds this session are clustering tightly. Could this be an in situ deposit?</p>
+                                </div>
+                                <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                        onClick={() => { setSfBannerDismissed(true); onSignificantFind?.({ currentStep: "scatter_confirm", path: "map_scatter" }); }}
+                                        className="text-[11px] font-black text-white bg-amber-600 hover:bg-amber-500 px-2.5 py-1 rounded-lg transition-all"
+                                    >
+                                        Review
+                                    </button>
+                                    <button
+                                        onClick={() => setSfBannerDismissed(true)}
+                                        className="text-[10px] text-amber-400/60 hover:text-amber-300 text-center transition-all"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* My Fields Picker */}
                     {showFieldsPicker && (

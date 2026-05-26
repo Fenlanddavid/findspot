@@ -27,6 +27,7 @@ type RestoreCounts = {
   fields: number;
   sessions: number;
   finds: number;
+  significantFinds: number;
   media: number;
   tracks: number;
 };
@@ -61,22 +62,24 @@ function previewBackup(json: string): RestorePreview {
     fields: countBackupRows(parsed.fields),
     sessions: countBackupRows(parsed.sessions),
     finds: countBackupRows(parsed.finds),
+    significantFinds: countBackupRows(parsed.significantFinds),
     media: countBackupRows(parsed.media),
     tracks: countBackupRows(parsed.tracks),
   };
 }
 
 async function getCurrentDataCounts(): Promise<RestoreCounts> {
-  const [projects, permissions, fields, sessions, finds, media, tracks] = await Promise.all([
+  const [projects, permissions, fields, sessions, finds, significantFinds, media, tracks] = await Promise.all([
     db.projects.count(),
     db.permissions.count(),
     db.fields.count(),
     db.sessions.count(),
     db.finds.count(),
+    db.significantFinds.count(),
     db.media.count(),
     db.tracks.count(),
   ]);
-  return { projects, permissions, fields, sessions, finds, media, tracks };
+  return { projects, permissions, fields, sessions, finds, significantFinds, media, tracks };
 }
 
 const POPULAR_MODELS = [
@@ -394,6 +397,7 @@ export default function Settings() {
     ["Fields", restorePreview.fields],
     ["Sessions", restorePreview.sessions],
     ["Finds", restorePreview.finds],
+    ["Significant", restorePreview.significantFinds],
     ["Media", restorePreview.media],
     ["Tracks", restorePreview.tracks],
   ] : [];
@@ -404,6 +408,7 @@ export default function Settings() {
     ["Fields", currentDataCounts.fields],
     ["Sessions", currentDataCounts.sessions],
     ["Finds", currentDataCounts.finds],
+    ["Significant", currentDataCounts.significantFinds],
     ["Media", currentDataCounts.media],
     ["Tracks", currentDataCounts.tracks],
   ] : [
@@ -412,6 +417,7 @@ export default function Settings() {
     ["Fields", "Checking"],
     ["Sessions", "Checking"],
     ["Finds", "Checking"],
+    ["Significant", "Checking"],
     ["Media", "Checking"],
     ["Tracks", "Checking"],
   ];
@@ -482,7 +488,7 @@ export default function Settings() {
           <div className="min-w-0">
             <span><strong>Restore "{importPendingFile.name}"?</strong> This restore will replace current FindSpot data on this device.</span>
             <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/75">
-              Treat this like replacing an archive: finds, permissions, sessions, tracks and media currently on this device will be cleared before the backup is loaded.
+              Treat this like replacing an archive: finds, significant finds, permissions, sessions, tracks and media currently on this device will be cleared before the backup is loaded.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>

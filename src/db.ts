@@ -115,6 +115,71 @@ export type Session = {
   updatedAt: string;
 };
 
+export type SignificantFind = {
+  id: string;
+  projectId: string;
+  permissionId: string;
+  sessionId: string | null;
+  path: "stop_secure" | "map_scatter" | "notable_find";
+  status: "in_progress" | "awaiting_excavation" | "excavation_complete" | "coroner_notified" | "pas_recorded";
+  jurisdiction: "england_wales" | "scotland" | "northern_ireland" | "unknown";
+
+  lat: number | null;
+  lon: number | null;
+  gpsAccuracyM: number | null;
+  osGridRef: string;
+  w3w: string;
+
+  // Path 1 pre-excavation observations
+  preExcavationNotes: string;
+  soilObservations: string;
+  secureCoverNotes?: string;
+  groundSurfacePhotoCaptured: boolean;
+
+  // Path 2 scatter
+  scatterId: string | null;
+  scatterFindIds: string[];
+
+  // Path 3
+  linkedFindId: string | null;
+  treasureActResult: "may_be_reportable" | "probably_not" | "unknown" | null;
+
+  // Generated outputs
+  treasureActDraft: string;
+  landownerSummary: string;
+
+  // User-provided description / hoard type
+  findDescription?: string;
+  landownerNotified?: boolean;
+
+  // Post-excavation findings — updated after professional excavation
+  excavationFindings?: string;
+
+  // Observation and narrative fields
+  initialObservations?: string;   // What was visible before touching
+  firstPersonAccount?: string;    // First-person account of the discovery
+  depthCm?: number | null;
+  periodEstimate?: string;        // "What period do you think this might be"
+  orientationNotes?: string;      // Path 3: how was it oriented in the ground
+
+  // Path 2 (scatter) — co-recorder and recovery details
+  coRecorderName?: string;
+  coRecorderContact?: string;
+  allFindsRecovered?: "yes" | "partial" | "no";
+
+  // Paths 2 + 3 — follow-up fields
+  floContactDate?: string;
+  pasRecordNumber?: string;
+
+  // Path 3 (notable find) — post-recovery follow-up
+  currentLocation?: "with_finder" | "with_flo" | "at_museum" | "other";
+  preliminaryId?: string;         // FLO's preliminary identification
+  pasRecordUrl?: string;          // finds.org.uk URL once PAS-recorded
+
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Find = {
   id: string;
   projectId: string;
@@ -129,9 +194,11 @@ export type Find = {
   coinDenomination?: string;
   coinSpink?: string;
   pasId?: string;
-  
+
   isFavorite?: boolean;
   isPending?: boolean;
+  scatterId?: string;
+  isNotableFind?: boolean;
 
   // Specific Findspot Location
   lat: number | null;
@@ -272,6 +339,7 @@ export class FindSpotDB extends Dexie {
   settings!: Table<Setting, string>;
   importedPackages!: Table<ImportedPackage, string>;
   fieldGuideCache!: Table<FieldGuideScanCache, string>;
+  significantFinds!: Table<SignificantFind, string>;
 
   constructor() {
     super("findspot_uk");
@@ -442,6 +510,12 @@ export class FindSpotDB extends Dexie {
     // v25: remove the unused FieldGuide investigation status store.
     this.version(25).stores({
       fieldGuideInvestigations: null,
+    });
+
+    // v26: significant finds workflow — new table + scatterId index on finds.
+    this.version(26).stores({
+      significantFinds: "id, projectId, permissionId, sessionId, path, status, scatterId, createdAt",
+      finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, scatterId, createdAt",
     });
   }
 }

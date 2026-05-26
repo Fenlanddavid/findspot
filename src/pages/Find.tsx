@@ -8,6 +8,7 @@ import { captureGPS, toOSGridRef } from "../services/gps";
 import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { CoachTip, CoachTips } from "../components/CoachTips";
+import type { WorkflowState } from "../types/significantFind";
 
 const LocationPickerModal = React.lazy(() =>
   import("../components/LocationPickerModal").then((mod) => ({ default: mod.LocationPickerModal }))
@@ -155,6 +156,7 @@ export default function FindPage(props: {
   initialLon?: number | null;
   initialMode?: "quick" | "full" | null;
   manual?: boolean;
+  onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -804,6 +806,19 @@ export default function FindPage(props: {
 
   const noLocation = !locationName.trim();
   const isQuick = recordMode === "quick" && !props.quickId;
+  const openSignificantFindFromForm = () => {
+    props.onSignificantFind?.({
+      permissionId: currentPermissionId,
+      sessionId,
+      linkedFindId: savedId || dbDraftId || props.quickId || null,
+      lat: form.lat,
+      lon: form.lon,
+      gpsAccuracyM: form.acc,
+      osGridRef: form.osGridRef,
+      w3w: form.w3w.trim(),
+      findDescription: form.objectType.trim() || form.notes.trim(),
+    });
+  };
   const findCoachEnabled = !hasRecordedFindBefore && !props.quickId && !savedId;
   const findCoachTips: CoachTip[] = [
     {
@@ -964,6 +979,15 @@ export default function FindPage(props: {
           {props.permissionId ? "Add Find" : "Record Find"}
         </h2>
         <div className="flex gap-2 sm:gap-3 flex-wrap">
+          {props.onSignificantFind && (
+            <button
+              type="button"
+              onClick={openSignificantFindFromForm}
+              className="bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-4 py-2 rounded-xl font-bold shadow-sm transition-all text-sm"
+            >
+              Significant Find
+            </button>
+          )}
           <button
             onClick={() => navigate("/finds")}
             className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all text-sm"
@@ -1588,6 +1612,17 @@ export default function FindPage(props: {
             className="hidden"
           />
         </label>
+
+        {props.onSignificantFind && (
+          <button
+            type="button"
+            onClick={openSignificantFindFromForm}
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+          >
+            <span className="hidden sm:inline">Significant Find</span>
+            <span className="sm:hidden">Significant</span>
+          </button>
+        )}
 
         {gpsCapturing && !savedId && (
           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold absolute -top-6 left-0 right-0 text-center bg-amber-50 dark:bg-amber-900/30 py-1">

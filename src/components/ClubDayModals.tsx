@@ -550,7 +550,7 @@ export function ImportClubDayDataModal({
   const [error, setError] = useState<string | null>(null);
   const rallyDayReview = useLiveQuery(
     () => result?.permissionId ? loadRallyDayReview(result.permissionId) : Promise.resolve(null),
-    [result?.permissionId, result?.newFinds, result?.newSessions, result?.alreadyPresent]
+    [result?.permissionId, result?.newFinds, result?.newSignificantFinds, result?.newSessions, result?.alreadyPresent]
   );
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -612,10 +612,11 @@ export function ImportClubDayDataModal({
               <p className="font-black text-gray-900 dark:text-gray-100">Import complete</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">From: {result.recorderName}</p>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 { label: "New sessions", value: result.newSessions },
                 { label: "New finds", value: result.newFinds },
+                { label: "Significant", value: result.newSignificantFinds },
                 { label: "Already present", value: result.alreadyPresent },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 text-center">

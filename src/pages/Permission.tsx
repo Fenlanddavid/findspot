@@ -1499,7 +1499,7 @@ export default function PermissionPage(props: {
                                 )}
                             </div>
                             <div className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${isSharedPermission ? "bg-teal-600 text-white" : "bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200"}`}>
-                                {isSharedPermission ? "✓ Link ready" : "Setup needed"}
+                                {isSharedPermission ? "Join link ready" : "Setup needed"}
                             </div>
                         </div>
 
@@ -1534,7 +1534,7 @@ export default function PermissionPage(props: {
                                     <p className="text-xs font-medium leading-relaxed text-gray-600 dark:text-gray-300 m-0">
                                         {isSharedPermission
                                           ? "Import member data to build the finds summary, activity zones and field signal for the day."
-                                          : "Generate the join link first. Once members send exports back, the finds summary appears here."}
+                                          : "Generate the join link first. Once members send exports back, the finds summary appears here in the hub."}
                                     </p>
                                 </div>
                             </div>
