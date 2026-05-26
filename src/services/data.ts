@@ -197,6 +197,9 @@ function validateBackupData(data: any): BackupData {
     if (!projectIds.has(find.projectId)) {
       throw new Error(`Invalid format: significantFinds[${index}] references an unknown project`);
     }
+    if (!permissionIds.has(find.permissionId)) {
+      throw new Error(`Invalid format: significantFinds[${index}] references an unknown permission`);
+    }
     if (find.sessionId && !sessionIds.has(find.sessionId)) {
       throw new Error(`Invalid format: significantFinds[${index}] references an unknown session`);
     }

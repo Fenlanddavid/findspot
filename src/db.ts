@@ -6,6 +6,27 @@ export type GeoJSONPolygon = {
   coordinates: number[][][];
 };
 
+export type TreasureOutcome =
+  | "not_treasure_returned"
+  | "disclaimed_returned"
+  | "museum_acquiring"
+  | "donated_reward_waived"
+  | "reward_paid"
+  | "transferred_to_museum"
+  | "closed";
+
+export type ScatterOutcome =
+  | "pas_recorded"
+  | "research_complete"
+  | TreasureOutcome;
+
+export type NotableOutcome =
+  | "pas_recorded"
+  | "identified_not_recorded"
+  | "returned"
+  | "museum_interest"
+  | TreasureOutcome;
+
 export type Project = {
   id: string;
   name: string;
@@ -171,7 +192,23 @@ export type SignificantFind = {
   floContactDate?: string;
   pasRecordNumber?: string;
 
-  // Path 3 (notable find) — post-recovery follow-up
+  // Path 1 — treasure process closure
+  treasureReference?: string;
+  treasureOutcome?: TreasureOutcome;
+  coronerDecisionDate?: string;
+  museumName?: string;
+  valuationAmount?: string;
+  rewardStatus?: "not_applicable" | "pending" | "waived" | "paid";
+  rewardReceivedDate?: string;
+  rewardSplitNotes?: string;
+  finalDispositionNotes?: string;
+
+  // Paths 2 + 3 — final outcome closure
+  outcomeDate?: string;
+  scatterOutcome?: ScatterOutcome;
+  notableOutcome?: NotableOutcome;
+
+  // Post-recovery follow-up
   currentLocation?: "with_finder" | "with_flo" | "at_museum" | "other";
   preliminaryId?: string;         // FLO's preliminary identification
   pasRecordUrl?: string;          // finds.org.uk URL once PAS-recorded

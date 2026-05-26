@@ -263,10 +263,25 @@ export function QuickFindFab({
               type="button"
               onClick={async () => {
                 const pendingId = lastQuickId;
+                const pendingFind = pendingId ? await db.finds.get(pendingId) : undefined;
                 setShowSuccess(false);
                 setLastQuickId(null);
-                if (pendingId) await db.finds.delete(pendingId);
-                onSignificantFind();
+                if (pendingId) {
+                  await db.transaction("rw", db.finds, db.media, async () => {
+                    await db.media.where("findId").equals(pendingId).delete();
+                    await db.finds.delete(pendingId);
+                  });
+                }
+                onSignificantFind(pendingFind ? {
+                  permissionId: pendingFind.permissionId,
+                  sessionId: pendingFind.sessionId,
+                  lat: pendingFind.lat,
+                  lon: pendingFind.lon,
+                  gpsAccuracyM: pendingFind.gpsAccuracyM,
+                  osGridRef: pendingFind.osGridRef,
+                  w3w: pendingFind.w3w,
+                  findDescription: pendingFind.objectType === "Pending Quick Find" ? "" : pendingFind.objectType,
+                } : undefined);
               }}
               className="w-full text-xs text-amber-300 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 rounded-xl py-2 text-center transition-all font-semibold"
             >

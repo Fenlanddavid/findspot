@@ -751,10 +751,13 @@ export default function PermissionPage(props: {
     const sessionIds = sessions.map(s => s.id);
     const finds = await db.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
+    const significantFinds = await db.significantFinds.where("permissionId").equals(id).toArray();
+    const significantFindIds = significantFinds.map(f => f.id);
     const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
     const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
     const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
-    const mediaCount = findMediaCount + permissionMediaCount;
+    const mediaCount = findMediaCount + significantFindMediaCount + permissionMediaCount;
     const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
     if (!(await confirmAction({
@@ -762,6 +765,7 @@ export default function PermissionPage(props: {
       message: `Delete ${name.trim() || "this permission"}?\n\nThis will permanently delete:\n` +
       `- ${formatDeleteCount(sessions.length, "session")}\n` +
       `- ${formatDeleteCount(finds.length, "find")}\n` +
+      `- ${formatDeleteCount(significantFinds.length, "significant find")}\n` +
       `- ${formatDeleteCount(fieldsToDelete.length, "field")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
       `- ${formatDeleteCount(trackCount, "GPS track")}`,
@@ -771,10 +775,12 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
+        if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
+        await db.significantFinds.where("permissionId").equals(id).delete();
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
@@ -794,10 +800,13 @@ export default function PermissionPage(props: {
     const sessionIds = sessions.map(s => s.id);
     const finds = await db.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
+    const significantFinds = await db.significantFinds.where("permissionId").equals(id).toArray();
+    const significantFindIds = significantFinds.map(f => f.id);
     const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
     const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
     const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
-    const mediaCount = findMediaCount + permissionMediaCount;
+    const mediaCount = findMediaCount + significantFindMediaCount + permissionMediaCount;
     const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
     if (!(await confirmAction({
@@ -805,6 +814,7 @@ export default function PermissionPage(props: {
       message: `Remove ${name.trim() || "this club / rally permission"}?\n\nThis will permanently delete from this device:\n` +
       `- ${formatDeleteCount(sessions.length, "session")}\n` +
       `- ${formatDeleteCount(finds.length, "find")}\n` +
+      `- ${formatDeleteCount(significantFinds.length, "significant find")}\n` +
       `- ${formatDeleteCount(fieldsToDelete.length, "field card")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
       `- ${formatDeleteCount(trackCount, "GPS track")}\n\n` +
@@ -815,10 +825,12 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
+        if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
         await db.finds.where("permissionId").equals(id).delete();
+        await db.significantFinds.where("permissionId").equals(id).delete();
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();

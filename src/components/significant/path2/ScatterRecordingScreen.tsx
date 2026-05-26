@@ -29,6 +29,8 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
   const mapRef = React.useRef<maplibregl.Map | null>(null);
   const pointsRef = React.useRef<ScatterPoint[]>([]);
   const scatterIdRef = React.useRef<string>(workflowState.scatterId ?? uuid());
+  const [mapReady, setMapReady] = React.useState(false);
+  const [loadedScatterId, setLoadedScatterId] = React.useState<string | null>(null);
 
   const [isCapturing, setIsCapturing] = React.useState(false);
   const [captureError, setCaptureError] = React.useState<string | null>(null);
@@ -78,6 +80,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       return;
     }
     mapRef.current = map;
+    setMapReady(true);
     return () => { map.remove(); mapRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,6 +118,69 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       .addTo(map);
     point.marker = marker;
   }
+
+  function fitMapToPoints(points: ScatterPoint[]) {
+    const map = mapRef.current;
+    if (!map || points.length === 0) return;
+    if (points.length === 1) {
+      map.flyTo({ center: [points[0].lon, points[0].lat], zoom: 17, duration: 0 });
+      return;
+    }
+
+    const bounds = new maplibregl.LngLatBounds();
+    points.forEach(point => bounds.extend([point.lon, point.lat]));
+    map.fitBounds(bounds, { padding: 48, maxZoom: 18, duration: 0 });
+  }
+
+  function replaceScatterPoints(points: ScatterPoint[]) {
+    pointsRef.current.forEach(point => point.marker?.remove());
+    pointsRef.current = points.map(point => ({ ...point, marker: undefined }));
+    pointsRef.current.forEach((point, index) => addMarkerToMap(point, index));
+    setPointCount(pointsRef.current.length);
+    setActivePointIdx(prev =>
+      prev != null && prev < pointsRef.current.length
+        ? prev
+        : pointsRef.current.length > 0
+        ? pointsRef.current.length - 1
+        : null
+    );
+    fitMapToPoints(pointsRef.current);
+    checkConcentration(pointsRef.current);
+  }
+
+  React.useEffect(() => {
+    const scatterId = workflowState.scatterId ?? scatterIdRef.current;
+    if (!mapReady || loadedScatterId === scatterId) return;
+
+    let cancelled = false;
+    db.finds.where("scatterId").equals(scatterId).toArray()
+      .then(finds => {
+        if (cancelled) return;
+        const points = finds
+          .filter(f => f.lat != null && f.lon != null)
+          .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""))
+          .map((find, index): ScatterPoint => ({
+            findId: find.id,
+            lat: find.lat!,
+            lon: find.lon!,
+            label: String(index + 1),
+          }));
+
+        replaceScatterPoints(points);
+        if (finds.length > 0 || !workflowState.scatterId) {
+          updateState({
+            scatterId,
+            scatterFindIds: finds.map(f => f.id),
+          });
+        }
+        setLoadedScatterId(scatterId);
+      })
+      .catch(err => {
+        if (!cancelled) setCaptureError(err?.message || "Could not load existing scatter finds.");
+      });
+
+    return () => { cancelled = true; };
+  }, [mapReady, loadedScatterId, workflowState.scatterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function captureScatterPoint() {
     if (isCapturing) return;
@@ -168,7 +234,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       pointsRef.current = [...pointsRef.current, point];
       addMarkerToMap(point, index);
 
-      const newFindIds = [...workflowState.scatterFindIds, findId];
+      const newFindIds = pointsRef.current.map(p => p.findId);
       updateState({
         scatterFindIds: newFindIds,
         scatterId,

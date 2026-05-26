@@ -644,13 +644,18 @@ export default function SessionPage(props: {
     if (!isEdit) return;
     const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
     const findIds = sessionFinds.map(f => f.id);
-    const mediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFinds = await db.significantFinds.where("sessionId").equals(sessionId).toArray();
+    const significantFindIds = significantFinds.map(f => f.id);
+    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
+    const mediaCount = findMediaCount + significantFindMediaCount;
     const trackCount = await db.tracks.where("sessionId").equals(sessionId).count();
 
     if (!(await confirmAction({
       title: "Delete Session?",
       message: `Delete this session?\n\nThis will permanently delete:\n` +
       `- ${formatDeleteCount(sessionFinds.length, "find")}\n` +
+      `- ${formatDeleteCount(significantFinds.length, "significant find")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
       `- ${formatDeleteCount(trackCount, "GPS track")}`,
       confirmLabel: "Delete",
@@ -659,14 +664,18 @@ export default function SessionPage(props: {
     
     setSaving(true);
     try {
-      await db.transaction("rw", [db.sessions, db.finds, db.media, db.tracks], async () => {
+      await db.transaction("rw", [db.sessions, db.finds, db.significantFinds, db.media, db.tracks], async () => {
         // Delete all media for those finds
         if (findIds.length > 0) {
           await db.media.where("findId").anyOf(findIds).delete();
         }
+        if (significantFindIds.length > 0) {
+          await db.media.where("findId").anyOf(significantFindIds).delete();
+        }
         
         // Delete the finds
         await db.finds.where("sessionId").equals(sessionId).delete();
+        await db.significantFinds.where("sessionId").equals(sessionId).delete();
         
         // Delete all tracks for this session
         await db.tracks.where("sessionId").equals(sessionId).delete();

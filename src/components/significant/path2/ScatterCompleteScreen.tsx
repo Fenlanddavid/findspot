@@ -8,6 +8,7 @@ import { getFLOForCounty } from "../../../services/flo";
 import { getParishAndCounty } from "../../../services/pas";
 import { getSetting } from "../../../services/data";
 import { buildScatterEmail, buildMailtoLink } from "../../../utils/floEmail";
+import OrganiserInstructionCard from "../OrganiserInstructionCard";
 
 type Props = {
   workflowState: WorkflowState;
@@ -162,6 +163,8 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
           {count} find{count !== 1 ? "s" : ""} recorded{areaDesc ? ` across ${areaDesc}` : ""}
         </p>
       </div>
+
+      <OrganiserInstructionCard workflowState={workflowState} />
 
       {/* Record title */}
       <div className="flex flex-col gap-1.5">

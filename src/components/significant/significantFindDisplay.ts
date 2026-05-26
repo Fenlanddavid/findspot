@@ -50,7 +50,7 @@ const PATH1_STEPS: StatusStep[] = [
   { value: "awaiting_excavation", label: "Awaiting excavation" },
   { value: "excavation_complete", label: "Excavation complete" },
   { value: "coroner_notified", label: "PAS notified" },
-  { value: "pas_recorded", label: "PAS recorded" },
+  { value: "pas_recorded", label: "Treasure process" },
 ];
 
 const PATH2_STEPS: StatusStep[] = [

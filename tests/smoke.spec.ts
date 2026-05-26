@@ -218,19 +218,81 @@ test("deleting a permission removes its sessions and finds", async ({ page }) =>
   await page.getByRole("button", { name: "Save Find" }).click();
   await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
 
+  const [projectsBeforeDelete, sessionsBeforeDelete] = await Promise.all([
+    readIndexedDbStore(page, "projects"),
+    readIndexedDbStore(page, "sessions"),
+  ]);
+  const projectId = (projectsBeforeDelete as any[])[0]?.id;
+  const sessionId = (sessionsBeforeDelete as any[]).find((row) => row.permissionId === permissionId)?.id;
+  if (!projectId || !sessionId) throw new Error("Could not prepare significant find delete fixture");
+
+  await page.evaluate(({ projectId, permissionId, sessionId }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(["significantFinds", "media"], "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      const now = new Date().toISOString();
+      tx.objectStore("significantFinds").put({
+        id: "sig-delete-fixture",
+        projectId,
+        permissionId,
+        sessionId,
+        path: "stop_secure",
+        status: "in_progress",
+        jurisdiction: "england_wales",
+        lat: null,
+        lon: null,
+        gpsAccuracyM: null,
+        osGridRef: "",
+        w3w: "",
+        preExcavationNotes: "",
+        soilObservations: "",
+        groundSurfacePhotoCaptured: false,
+        scatterId: null,
+        scatterFindIds: [],
+        linkedFindId: null,
+        treasureActResult: null,
+        treasureActDraft: "",
+        landownerSummary: "",
+        createdAt: now,
+        updatedAt: now,
+      });
+      tx.objectStore("media").put({
+        id: "sig-delete-media-fixture",
+        projectId,
+        findId: "sig-delete-fixture",
+        type: "photo",
+        photoType: "other",
+        filename: "sig-delete-fixture.txt",
+        mime: "text/plain",
+        blob: new Blob(["fixture"], { type: "text/plain" }),
+        caption: "Delete fixture",
+        scalePresent: false,
+        createdAt: now,
+      });
+    };
+  }), { projectId, permissionId, sessionId });
+
   await page.goto(`./permission/${permissionId}`);
   await page.getByRole("button", { name: "Delete" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\/$/);
 
-  const [permissions, sessions, finds] = await Promise.all([
+  const [permissions, sessions, finds, significantFinds, media] = await Promise.all([
     readIndexedDbStore(page, "permissions"),
     readIndexedDbStore(page, "sessions"),
     readIndexedDbStore(page, "finds"),
+    readIndexedDbStore(page, "significantFinds"),
+    readIndexedDbStore(page, "media"),
   ]);
   expect((permissions as any[]).some((row) => row.id === permissionId)).toBe(false);
   expect((sessions as any[]).some((row) => row.permissionId === permissionId)).toBe(false);
   expect((finds as any[]).some((row) => row.permissionId === permissionId)).toBe(false);
+  expect((significantFinds as any[]).some((row) => row.permissionId === permissionId)).toBe(false);
+  expect((media as any[]).some((row) => row.findId === "sig-delete-fixture")).toBe(false);
 });
 
 test("settings can export and restore a backup", async ({ page }) => {

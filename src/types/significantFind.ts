@@ -39,6 +39,12 @@ export type WorkflowState = {
   projectId: string;
   permissionId: string | null;
   sessionId: string | null;
+  permissionName: string;
+  permissionType: "individual" | "rally" | null;
+  isClubDayMember: boolean;
+  organiserContactNumber: string;
+  organiserEmail: string;
+  significantFindInstructions: string;
 
   jurisdiction: Jurisdiction;
 
@@ -77,6 +83,12 @@ export function initialWorkflowState(projectId: string): WorkflowState {
     projectId,
     permissionId: null,
     sessionId: null,
+    permissionName: "",
+    permissionType: null,
+    isClubDayMember: false,
+    organiserContactNumber: "",
+    organiserEmail: "",
+    significantFindInstructions: "",
     jurisdiction: "unknown",
     lat: null,
     lon: null,

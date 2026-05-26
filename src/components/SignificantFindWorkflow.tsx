@@ -32,7 +32,7 @@ type Props = {
 };
 
 const PATH_LABELS: Record<NonNullable<WorkflowPath>, string> = {
-  stop_secure: "Secure Find",
+  stop_secure: "Stop & Secure",
   map_scatter: "Map Scatter",
   notable_find: "Notable Find",
 };
@@ -135,7 +135,7 @@ export default function SignificantFindWorkflow({ isOpen, workflowState, onClose
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 pb-8 max-w-xl mx-auto">
-          {currentStep === "branch" && <BranchScreen onSelect={handleSelectPath} />}
+          {currentStep === "branch" && <BranchScreen workflowState={workflowState} onSelect={handleSelectPath} />}
 
           {/* Path 1 — Secure Find */}
           {currentStep === "observe" && <ObserveScreen {...commonProps} />}

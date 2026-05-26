@@ -6,6 +6,7 @@ import { getFLOForCounty } from "../../../services/flo";
 import { getParishAndCounty } from "../../../services/pas";
 import { getSetting } from "../../../services/data";
 import { buildSecureFindEmail, buildMailtoLink } from "../../../utils/floEmail";
+import OrganiserInstructionCard from "../OrganiserInstructionCard";
 
 type Props = {
   workflowState: WorkflowState;
@@ -61,6 +62,8 @@ export default function WhatNextScreen({ workflowState, onClose }: Props) {
           Now tell the landowner, then get expert advice before anyone digs further.
         </p>
       </div>
+
+      <OrganiserInstructionCard workflowState={workflowState} />
 
       <div className="flex flex-col gap-3">
         <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl p-4">

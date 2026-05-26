@@ -10,6 +10,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { Find } from "../../../db";
 import { v4 as uuid } from "uuid";
 import { toOSGridRef } from "../../../services/gps";
+import OrganiserInstructionCard from "../OrganiserInstructionCard";
 
 type Props = {
   workflowState: WorkflowState;
@@ -114,6 +115,8 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
           Take this to your local FLO for identification and recording. They'll advise on anything else you need to do.
         </p>
       </div>
+
+      <OrganiserInstructionCard workflowState={workflowState} />
 
       <div className="flex flex-col gap-3">
         {/* FLO — matched if county known, with pre-filled email */}
