@@ -158,7 +158,7 @@ export default function Home(props: {
   );
 
   const pendingFinds = useMemo(() => finds?.filter(f => f.isPending), [finds]);
-  const recentFinds = useMemo(() => finds?.filter(f => !f.isPending), [finds]);
+  const recentFinds = useMemo(() => finds?.filter(f => !f.isPending && !f.scatterId && !f.isNotableFind), [finds]);
   const completedFindCount = recentFinds?.length ?? 0;
   const isFirstRun = !!permissions && realPermissions.length === 0 && completedFindCount === 0;
   const fieldGuideScanCount = (() => {

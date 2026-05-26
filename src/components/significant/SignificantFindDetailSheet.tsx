@@ -763,8 +763,17 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
       confirmLabel: "Delete",
       danger: true,
     }))) return;
-    await db.transaction("rw", db.significantFinds, db.media, async () => {
+    const record = await db.significantFinds.get(sfId);
+    const linkedFindIds = [
+      ...(record?.scatterFindIds ?? []),
+      ...(record?.linkedFindId ? [record.linkedFindId] : []),
+    ];
+    await db.transaction("rw", [db.significantFinds, db.finds, db.media], async () => {
       await db.media.where("findId").equals(sfId).delete();
+      if (linkedFindIds.length) {
+        await db.media.where("findId").anyOf(linkedFindIds).delete();
+        await db.finds.bulkDelete(linkedFindIds);
+      }
       await db.significantFinds.delete(sfId);
     });
     onClose();
