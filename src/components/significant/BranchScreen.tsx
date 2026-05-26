@@ -107,7 +107,7 @@ export default function BranchScreen({ workflowState, onSelect }: Props) {
               <div className="min-w-0">
                 <div className="font-black text-base text-gray-900 dark:text-gray-100">{title}</div>
                 <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 mt-0.5">{subtitle}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1.5 leading-relaxed">{hint}</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1.5 leading-relaxed">{hint}</div>
               </div>
               <div className="shrink-0 self-center text-gray-400 dark:text-gray-600 ml-auto">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

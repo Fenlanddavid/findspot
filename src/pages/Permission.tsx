@@ -923,6 +923,53 @@ export default function PermissionPage(props: {
     }
   }
 
+  async function handleRevertToNormalPermission() {
+    if (!id) return;
+    if (!(await confirmAction({
+      title: "Remove Club Day Sharing?",
+      message: "The share link and organiser settings will be removed. Your finds, sessions, photos, and tracks stay. Any imported member data will also be removed.",
+      confirmLabel: "Remove Sharing",
+    }))) return;
+
+    setSaving(true);
+    try {
+      const perm = await db.permissions.get(id);
+      const sharedId = perm?.sharedPermissionId;
+      const now = new Date().toISOString();
+
+      await db.transaction("rw", [db.permissions, db.importedPackages], async () => {
+        await db.permissions.update(id, {
+          isSharedPermission: false,
+          sharedPermissionId: undefined,
+          organiserContactNumber: undefined,
+          organiserEmail: undefined,
+          significantFindInstructions: undefined,
+          clubDayPublicNotes: undefined,
+          updatedAt: now,
+        } as Partial<Permission>);
+
+        if (sharedId) {
+          await db.importedPackages
+            .filter(p => p.sharedPermissionId === sharedId)
+            .delete();
+        }
+      });
+
+      setIsSharedPermission(false);
+      setSharedPermissionId(undefined);
+      setOrganiserContactNumber(undefined);
+      setOrganiserEmail(undefined);
+      setSignificantFindInstructions(undefined);
+      setClubDayPublicNotes(undefined);
+      setMilestoneMsg("Sharing removed");
+      setTimeout(() => setMilestoneMsg(null), 4000);
+      setSaving(false);
+    } catch (e: any) {
+      setError("Could not remove sharing: " + (e?.message ?? "Unknown error"));
+      setSaving(false);
+    }
+  }
+
   async function handleDeleteField(fieldId: string) {
     const field = fields?.find(f => f.id === fieldId) || await db.fields.get(fieldId);
     const [sessionCount, findCount] = await Promise.all([
@@ -1262,6 +1309,15 @@ export default function PermissionPage(props: {
                             className="text-xs sm:text-sm font-black text-teal-600 hover:text-white hover:bg-teal-600 px-3 py-1.5 rounded-lg border border-teal-200 dark:border-teal-800 transition-all flex-1 sm:flex-none"
                           >
                             Import Member Data
+                          </button>
+                        )}
+                        {isEdit && isSharedPermission && !isClubDayMember && !isRally && (
+                          <button
+                            onClick={handleRevertToNormalPermission}
+                            disabled={saving}
+                            className="text-xs sm:text-sm font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-3 py-1.5 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all disabled:opacity-50 flex-1 sm:flex-none"
+                          >
+                            Remove Sharing
                           </button>
                         )}
                         {!isClubDayMember && (
