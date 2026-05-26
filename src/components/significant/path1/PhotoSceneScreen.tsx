@@ -163,6 +163,7 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
           <input
             type="file"
             accept="image/*"
+            capture="environment"
             onChange={handlePhoto}
             className="hidden"
             disabled={saving}

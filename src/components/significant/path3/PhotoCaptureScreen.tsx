@@ -159,6 +159,7 @@ export default function PhotoCaptureScreen({ workflowState, updateState, onNext 
             <input
               type="file"
               accept="image/*"
+              capture="environment"
               onChange={e => handlePhoto(slot.id, e)}
               className="hidden"
             />

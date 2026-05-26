@@ -380,7 +380,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
             ) : (
               <label className="flex items-center gap-2 text-xs font-bold text-amber-600 dark:text-amber-400 cursor-pointer">
                 📸 Add photo
-                <input type="file" accept="image/*" onChange={e => handlePhoto(e, activeFind.findId)} className="hidden" />
+                <input type="file" accept="image/*" capture="environment" onChange={e => handlePhoto(e, activeFind.findId)} className="hidden" />
               </label>
             )}
           </div>
