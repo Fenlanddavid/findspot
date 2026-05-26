@@ -84,7 +84,9 @@ export default function FindsBox(props: { projectId: string }) {
   const finds = useLiveQuery(
     async () => {
       const rows = await db.finds.where("projectId").equals(props.projectId).toArray();
-      return rows.sort((a, b) => getFindDate(b).localeCompare(getFindDate(a)));
+      return rows
+        .filter(f => !f.scatterId && !f.isNotableFind)
+        .sort((a, b) => getFindDate(b).localeCompare(getFindDate(a)));
     },
     [props.projectId]
   );

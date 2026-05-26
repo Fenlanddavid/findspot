@@ -158,7 +158,7 @@ export default function PermissionPage(props: {
   // Fetch finds for this trip
   const finds = useLiveQuery(async () => {
     if (!id) return [];
-    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending).reverse().sortBy("createdAt");
+    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
   }, [id]);
 
   const pendingFinds = useLiveQuery(async () => {
@@ -168,7 +168,7 @@ export default function PermissionPage(props: {
 
   const standaloneFinds = useLiveQuery(async () => {
     if (!id) return [];
-    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.sessionId).reverse().sortBy("createdAt");
+    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.sessionId && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
   }, [id]);
 
   const sessions = useLiveQuery(async () => {

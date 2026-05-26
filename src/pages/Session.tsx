@@ -291,7 +291,7 @@ export default function SessionPage(props: {
 
   const finds = useLiveQuery(async () => {
     if (!sessionId) return [];
-    return db.finds.where("sessionId").equals(sessionId).reverse().sortBy("createdAt");
+    return db.finds.where("sessionId").equals(sessionId).filter(f => !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
   }, [sessionId]);
 
   const allMedia = useLiveQuery(async () => {
