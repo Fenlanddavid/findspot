@@ -16,6 +16,7 @@ import {
   PATH_LABELS,
   STATUS_COLORS,
 } from "./significantFindDisplay";
+import { useConfirmDialog } from "../ConfirmModal";
 
 function getPeriodColor(period: string): string {
   const p = (period ?? "").toLowerCase();
@@ -740,7 +741,7 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
     [sf?.linkedFindId]
   );
 
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -756,6 +757,12 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
   }
 
   async function doDelete() {
+    if (!(await confirmAction({
+      title: "Delete Record?",
+      message: "This will permanently delete this significant find record and all its photos. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+    }))) return;
     await db.transaction("rw", db.significantFinds, db.media, async () => {
       await db.media.where("findId").equals(sfId).delete();
       await db.significantFinds.delete(sfId);
@@ -1047,35 +1054,14 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
               Done
             </button>
 
-            {!confirmDelete ? (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="w-full py-3 text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
-              >
-                Delete record
-              </button>
-            ) : (
-              <div className="rounded-2xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 flex flex-col gap-3">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-300 text-center">Delete this significant find record permanently?</p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDelete(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-black uppercase tracking-wide text-gray-600 dark:text-gray-400"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={doDelete}
-                    className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black uppercase tracking-wide"
-                  >
-                    Yes, delete
-                  </button>
-                </div>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={doDelete}
+              className="w-full py-3 text-xs font-black uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
+            >
+              Delete record
+            </button>
+            {confirmDialog}
           </div>
         </div>
       </div>
