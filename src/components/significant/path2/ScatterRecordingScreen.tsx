@@ -29,6 +29,9 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
   const mapRef = React.useRef<maplibregl.Map | null>(null);
   const pointsRef = React.useRef<ScatterPoint[]>([]);
   const scatterIdRef = React.useRef<string>(workflowState.scatterId ?? uuid());
+  const mapLoadedRef = React.useRef(false);
+  const tileErrorCountRef = React.useRef(0);
+  const tileErrorResetRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mapReady, setMapReady] = React.useState(false);
   const [mapIssue, setMapIssue] = React.useState(false);
   const [loadedScatterId, setLoadedScatterId] = React.useState<string | null>(null);
@@ -82,11 +85,45 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       setMapIssue(true);
       return;
     }
-    map.on("error", () => setMapIssue(true));
-    map.on("load", () => setMapIssue(false));
+    const registerTileError = () => {
+      tileErrorCountRef.current += 1;
+      if (tileErrorResetRef.current) clearTimeout(tileErrorResetRef.current);
+      tileErrorResetRef.current = setTimeout(() => {
+        tileErrorCountRef.current = 0;
+      }, 6000);
+      if (tileErrorCountRef.current >= 4) setMapIssue(true);
+    };
+
+    map.on("error", (event) => {
+      const error = (event as any).error;
+      const status = Number(error?.status);
+      const message = String(error?.message ?? "");
+      const isTileOrNetworkError = Number.isFinite(status) || /tile|resource|fetch|network/i.test(message);
+      if (isTileOrNetworkError) {
+        registerTileError();
+        return;
+      }
+      setMapIssue(true);
+    });
+    map.on("load", () => {
+      mapLoadedRef.current = true;
+      tileErrorCountRef.current = 0;
+      setMapIssue(false);
+    });
+    map.on("sourcedata", (event) => {
+      if (event.sourceId === "osm" && event.isSourceLoaded && mapLoadedRef.current) {
+        tileErrorCountRef.current = 0;
+        setMapIssue(false);
+      }
+    });
     mapRef.current = map;
     setMapReady(true);
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      if (tileErrorResetRef.current) clearTimeout(tileErrorResetRef.current);
+      mapLoadedRef.current = false;
+      map.remove();
+      mapRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function setRenderedPoints(points: ScatterPoint[]) {

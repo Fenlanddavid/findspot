@@ -88,7 +88,7 @@ export default function SignificantFindWorkflow({ isOpen, workflowState, onClose
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      className="fixed inset-0 bg-white dark:bg-gray-950 z-[260] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300"
+      className="fixed inset-0 bg-white dark:bg-gray-950 z-[230] flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300"
     >
       {/* Header */}
       <div className="shrink-0 sticky top-0 z-50 bg-white/90 dark:bg-gray-950/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800">

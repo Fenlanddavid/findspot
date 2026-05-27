@@ -183,9 +183,17 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
         </button>
       )}
 
-      <details className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-        <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
-          Why this matters
+      <details className="group rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 [&::-webkit-details-marker]:hidden">
+          <span>Why this matters</span>
+          <svg
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-gray-400 transition-transform group-open:rotate-180"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+          </svg>
         </summary>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
           {currentSlot.why}
