@@ -158,6 +158,8 @@ export default function Settings() {
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
+  const [easterEggUnlocked, setEasterEggUnlocked] = useState(() => localStorage.getItem('fs_dev_egg') === '1');
+  const [versionTapCount, setVersionTapCount] = useState(0);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
@@ -963,12 +965,33 @@ export default function Settings() {
 
         <div className="mt-2 px-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300">Version 3.0</span>
-            {typeof installCount === 'number' && (
-              <div className="flex items-center gap-1 opacity-40">
-                <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
-                <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
-              </div>
+            <button
+              type="button"
+              className="text-[9px] font-black leading-none text-sky-700 dark:text-sky-300 select-none bg-transparent border-none p-0 cursor-default"
+              onClick={() => {
+                const next = versionTapCount + 1;
+                if (next >= 5) {
+                  const newState = !easterEggUnlocked;
+                  setEasterEggUnlocked(newState);
+                  if (newState) localStorage.setItem('fs_dev_egg', '1');
+                  else localStorage.removeItem('fs_dev_egg');
+                  setVersionTapCount(0);
+                } else {
+                  setVersionTapCount(next);
+                }
+              }}
+            >
+              Version 3.0
+            </button>
+            {easterEggUnlocked ? (
+              typeof installCount === 'number' && (
+                <div className="flex items-center gap-1 opacity-80">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
+                  <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
+                </div>
+              )
+            ) : (
+              <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 opacity-80">Trusted by 3,000+ detectorists</span>
             )}
           </div>
         </div>
