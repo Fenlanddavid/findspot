@@ -20,11 +20,41 @@ import {
   reportDocumentStyle,
 } from "./ReportChrome";
 
+type PdfBlock = { start: number; end: number };
+
 interface PASReportModalProps {
   isOpen: boolean;
   onClose: () => void;
   find: Find;
   photos: Media[];
+}
+
+function measurePdfBlocks(element: HTMLElement, scale: number): PdfBlock[] {
+  const containerTop = element.getBoundingClientRect().top;
+  const blocks: PdfBlock[] = [];
+
+  element.querySelectorAll("[data-pdf-block]").forEach(el => {
+    const rect = el.getBoundingClientRect();
+    const start = Math.round((rect.top - containerTop) * scale);
+    const end = Math.round((rect.bottom - containerTop) * scale);
+    if (start > 10 && end > start) blocks.push({ start, end });
+  });
+
+  return blocks;
+}
+
+function findPdfSliceEnd(sliceStart: number, pageCanvasH: number, canvasHeight: number, blocks: PdfBlock[]): number {
+  const naturalEnd = Math.min(sliceStart + pageCanvasH, canvasHeight);
+
+  for (const { start, end } of blocks) {
+    if (start > sliceStart && start < naturalEnd && end > naturalEnd) {
+      // Avoid generating a nearly blank page if a protected block begins
+      // right after the current page starts.
+      return start - sliceStart > 80 ? start : naturalEnd;
+    }
+  }
+
+  return naturalEnd;
 }
 
 const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, photos }) => {
@@ -87,20 +117,47 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
     const element = document.getElementById("pas-report-preview");
     if (!element) return null;
     
-    // Scale 3 for high-resolution photo rendering in the PDF
+    // Scale 3 for high-resolution photo rendering in the PDF.
+    const SCALE = 3;
+    const blocks = measurePdfBlocks(element, SCALE);
     const canvas = await html2canvas(element, { 
-        scale: 3,
+        scale: SCALE,
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff"
     });
     
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-    
-    pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const margin = 10;
+    const printW = pageW - margin * 2;
+    const pageCanvasH = Math.floor(((pageH - margin * 2) / printW) * canvas.width);
+
+    let srcYOffset = 0;
+    let pageCount = 0;
+    while (srcYOffset < canvas.height) {
+      if (pageCount > 0) pdf.addPage();
+
+      let sliceEnd = findPdfSliceEnd(srcYOffset, pageCanvasH, canvas.height, blocks);
+      if (sliceEnd <= srcYOffset) {
+        sliceEnd = Math.min(srcYOffset + pageCanvasH, canvas.height);
+      }
+      const sliceH = sliceEnd - srcYOffset;
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = sliceH;
+      const sliceCtx = sliceCanvas.getContext("2d");
+      if (!sliceCtx) throw new Error("Failed to get canvas context for PDF slice");
+
+      sliceCtx.drawImage(canvas, 0, -srcYOffset);
+      const sliceDisplayH = (sliceH / canvas.width) * printW;
+      pdf.addImage(sliceCanvas.toDataURL("image/jpeg", 0.95), "JPEG", margin, margin, printW, sliceDisplayH);
+
+      srcYOffset = sliceEnd;
+      pageCount++;
+    }
+
     const generatedAt = generatedAtRef.current;
     const reference = makeReportReference("PAS", find.id || find.findCode || "LOCAL", generatedAt);
     applyReportPdfMetadata(pdf, {
