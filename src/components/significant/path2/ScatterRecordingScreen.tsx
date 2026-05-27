@@ -30,6 +30,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
   const pointsRef = React.useRef<ScatterPoint[]>([]);
   const scatterIdRef = React.useRef<string>(workflowState.scatterId ?? uuid());
   const [mapReady, setMapReady] = React.useState(false);
+  const [mapIssue, setMapIssue] = React.useState(false);
   const [loadedScatterId, setLoadedScatterId] = React.useState<string | null>(null);
 
   const [isCapturing, setIsCapturing] = React.useState(false);
@@ -41,6 +42,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
   const [photoSavedForIdx, setPhotoSavedForIdx] = React.useState<number | null>(null);
   const [photoError, setPhotoError] = React.useState<string | null>(null);
   const [depthCm, setDepthCm] = React.useState("");
+  const [pointsSnapshot, setPointsSnapshot] = React.useState<ScatterPoint[]>([]);
 
   // Initialise scatterId on first render
   React.useEffect(() => {
@@ -77,12 +79,19 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       });
     } catch (e) {
       console.error("Scatter map init failed:", e);
+      setMapIssue(true);
       return;
     }
+    map.on("error", () => setMapIssue(true));
+    map.on("load", () => setMapIssue(false));
     mapRef.current = map;
     setMapReady(true);
     return () => { map.remove(); mapRef.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function setRenderedPoints(points: ScatterPoint[]) {
+    setPointsSnapshot(points.map(({ findId, lat, lon, label }) => ({ findId, lat, lon, label })));
+  }
 
   function checkConcentration(points: ScatterPoint[]) {
     if (points.length < 3) return;
@@ -136,6 +145,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
     pointsRef.current.forEach(point => point.marker?.remove());
     pointsRef.current = points.map(point => ({ ...point, marker: undefined }));
     pointsRef.current.forEach((point, index) => addMarkerToMap(point, index));
+    setRenderedPoints(pointsRef.current);
     setPointCount(pointsRef.current.length);
     setActivePointIdx(prev =>
       prev != null && prev < pointsRef.current.length
@@ -150,7 +160,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
 
   React.useEffect(() => {
     const scatterId = workflowState.scatterId ?? scatterIdRef.current;
-    if (!mapReady || loadedScatterId === scatterId) return;
+    if ((!mapReady && !mapIssue) || loadedScatterId === scatterId) return;
 
     let cancelled = false;
     db.finds.where("scatterId").equals(scatterId).toArray()
@@ -180,7 +190,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       });
 
     return () => { cancelled = true; };
-  }, [mapReady, loadedScatterId, workflowState.scatterId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mapReady, mapIssue, loadedScatterId, workflowState.scatterId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function captureScatterPoint() {
     if (isCapturing) return;
@@ -233,6 +243,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
       const point: ScatterPoint = { findId, lat: fix.lat, lon: fix.lon, label: String(index + 1) };
       pointsRef.current = [...pointsRef.current, point];
       addMarkerToMap(point, index);
+      setRenderedPoints(pointsRef.current);
 
       const newFindIds = pointsRef.current.map(p => p.findId);
       updateState({
@@ -295,7 +306,15 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
   return (
     <div className="flex flex-col gap-0 -mx-4 -mt-4">
       {/* Map */}
-      <div ref={mapContainerRef} className="w-full h-[45vh] relative" />
+      <div className="w-full h-[45vh] relative bg-gray-100 dark:bg-gray-900">
+        <div ref={mapContainerRef} className="w-full h-full" />
+        {mapIssue && (
+          <div className="absolute inset-x-4 bottom-4 rounded-xl border border-amber-300 bg-amber-50/95 p-3 text-xs text-amber-900 shadow-lg dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-100">
+            <p className="font-black uppercase tracking-widest">Map tiles unavailable</p>
+            <p className="mt-1 leading-relaxed">Keep adding GPS points. The numbered list below is saved and the map will fill in when tiles load.</p>
+          </div>
+        )}
+      </div>
 
       {/* Concentration alert */}
       {showConcentrationAlert && (
@@ -330,6 +349,29 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
             </button>
           )}
         </div>
+
+        {pointsSnapshot.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900">
+            <p className="px-1 pb-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400">Saved GPS points</p>
+            <div className="grid gap-1.5">
+              {pointsSnapshot.map((point, index) => (
+                <button
+                  key={point.findId}
+                  type="button"
+                  onClick={() => setActivePointIdx(index)}
+                  className={`flex items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs ${
+                    activePointIdx === index
+                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+                      : "bg-white text-gray-600 dark:bg-gray-800 dark:text-gray-300"
+                  }`}
+                >
+                  <span className="font-black">#{index + 1}</span>
+                  <span className="font-mono">{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Per-find quick fields */}
         <div className="flex gap-2">

@@ -80,6 +80,19 @@ export function QuickFindFab({
 
   const activeSession = activeSessionOverride === undefined ? liveActiveSession : activeSessionOverride;
 
+  function startSignificantFind() {
+    const preferredLocation = getPreferredLocation?.();
+    setFabError(null);
+    setShowSuccess(false);
+    onSignificantFind?.({
+      sessionId: activeSession?.id ?? null,
+      permissionId: activeSession?.permissionId,
+      lat: preferredLocation?.lat,
+      lon: preferredLocation?.lon,
+      gpsAccuracyM: preferredLocation?.gpsAccuracyM ?? null,
+    });
+  }
+
   async function quickFind() {
     if (isCapturing) return;
     setIsCapturing(true);
@@ -313,6 +326,15 @@ export function QuickFindFab({
             aria-label={`${pendingCount} pending finds`}
           >
             {pendingCount}
+          </button>
+        )}
+        {onSignificantFind && !showSuccess && (
+          <button
+            type="button"
+            onClick={startSignificantFind}
+            className="h-12 rounded-full border border-amber-300/70 bg-amber-50 px-4 text-xs font-black uppercase tracking-widest text-amber-800 shadow-lg shadow-amber-950/10 transition-all hover:border-amber-400 hover:bg-amber-100 active:scale-95 dark:border-amber-500/40 dark:bg-amber-950/80 dark:text-amber-200"
+          >
+            Significant
           </button>
         )}
         <button

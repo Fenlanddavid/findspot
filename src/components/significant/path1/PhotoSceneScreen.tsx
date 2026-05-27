@@ -119,7 +119,7 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
         <div className="text-4xl mb-2">📸</div>
         <h2 className="text-lg font-black text-gray-900 dark:text-gray-100 mb-1">
           {currentSlotIdx === 0
-            ? "This is the most important record you'll make today."
+            ? "Photograph before anything moves."
             : currentSlot.label}
         </h2>
         <p className="text-xs text-gray-400 mt-1">
@@ -130,22 +130,12 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
         </p>
       </div>
 
-      {/* Why this shot matters */}
+      {/* What to photograph */}
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1.5">
-          Why this shot matters
+          Take this shot now
         </p>
-        <p className="text-sm text-amber-900 dark:text-amber-200 leading-relaxed">
-          {currentSlot.why}
-        </p>
-      </div>
-
-      {/* What to photograph */}
-      <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4">
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">
-          What to photograph
-        </p>
-        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+        <p className="text-sm font-semibold text-amber-950 dark:text-amber-100 leading-relaxed">
           {currentSlot.instruction}
         </p>
       </div>
@@ -192,6 +182,15 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
           Skip all photos (not recommended)
         </button>
       )}
+
+      <details className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+        <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+          Why this matters
+        </summary>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+          {currentSlot.why}
+        </p>
+      </details>
 
       {/* Progress dots */}
       <div className="flex justify-center gap-2">

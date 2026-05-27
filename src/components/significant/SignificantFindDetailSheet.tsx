@@ -198,13 +198,30 @@ function StatusTracker({ path, status, onSet, landownerNotified, onToggleLandown
                   : isDone ? "border-emerald-500 bg-emerald-500 text-white"
                   : "border-gray-300 dark:border-gray-600"
                 }`}>
-                  {isDone ? "OK" : isCurrent ? ">" : ""}
+                  {isDone ? (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : isCurrent ? (
+                    <span className="h-2 w-2 rounded-full bg-white" />
+                  ) : null}
                 </div>
-                <span className={`text-sm font-semibold ${
-                  isCurrent ? "text-amber-800 dark:text-amber-300"
-                  : isDone ? "text-emerald-700 dark:text-emerald-400"
-                  : "text-gray-600 dark:text-gray-400"
-                }`}>{s.label}</span>
+                <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                  <span className={`min-w-0 text-sm font-semibold ${
+                    isCurrent ? "text-amber-800 dark:text-amber-300"
+                    : isDone ? "text-emerald-700 dark:text-emerald-400"
+                    : "text-gray-600 dark:text-gray-400"
+                  }`}>{s.label}</span>
+                  {(isCurrent || isDone) && (
+                    <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                      isCurrent
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    }`}>
+                      {isCurrent ? "Current" : "Done"}
+                    </span>
+                  )}
+                </div>
               </button>
               {idx === 0 && (
                 <button

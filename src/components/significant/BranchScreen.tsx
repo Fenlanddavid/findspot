@@ -16,6 +16,7 @@ const paths: {
   hint: string;
   borderClass: string;
   bgClass: string;
+  primary?: boolean;
 }[] = [
   {
     path: "stop_secure",
@@ -26,6 +27,7 @@ const paths: {
     hint: "Objects close together, possibly in original context, or you think there may be more below. Stop digging, protect the spot, then record it.",
     borderClass: "border-red-500/30 hover:border-red-500/60",
     bgClass: "hover:bg-red-500/5",
+    primary: true,
   },
   {
     path: "map_scatter",
@@ -33,7 +35,7 @@ const paths: {
     dotClass: "bg-amber-500/20 border border-amber-500/40",
     title: "Map Scatter",
     subtitle: "Objects spread across an area",
-    hint: "Finds are dispersed, usually 10 metres or more apart, and nothing appears to be in original context. Log each point before the pattern is lost.",
+    hint: "Spread 10m+ apart, with nothing apparently in original context. Log each point before the pattern is lost.",
     borderClass: "border-amber-500/30 hover:border-amber-500/60",
     bgClass: "hover:bg-amber-500/5",
   },
@@ -43,7 +45,7 @@ const paths: {
     dotClass: "bg-emerald-500/20 border border-emerald-500/40",
     title: "Notable Find",
     subtitle: "One exceptional single object",
-    hint: "A single object that is already recovered and deserves a fuller record: photos, exact context, and a clear follow-up trail.",
+    hint: "Already recovered single object needing fuller photos, exact context, and a clear follow-up trail.",
     borderClass: "border-emerald-500/30 hover:border-emerald-500/60",
     bgClass: "hover:bg-emerald-500/5",
   },
@@ -67,24 +69,24 @@ function formatPermission(state: WorkflowState) {
 
 export default function BranchScreen({ workflowState, onSelect }: Props) {
   return (
-    <div className="flex flex-col gap-6 max-w-xl mx-auto">
+    <div className="flex flex-col gap-4 max-w-xl mx-auto">
       <div className="text-center">
-        <p className="text-base font-black text-gray-900 dark:text-gray-100 mb-2 leading-tight">
-          Choose the safest record for what is in front of you.
+        <p className="text-lg font-black text-gray-900 dark:text-gray-100 mb-1.5 leading-tight">
+          What are you looking at?
         </p>
-        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-          If there is any chance material remains in place, use Stop &amp; Secure. You can always downgrade the record later.
+        <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed max-w-md mx-auto">
+          If anything may still be in place, choose Stop &amp; Secure. You can downgrade later.
         </p>
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Field context</p>
-        <div className="grid gap-2 text-xs text-gray-600 dark:text-gray-300">
-          <div className="flex items-start justify-between gap-3">
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5">Field context</p>
+        <div className="grid gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+          <div className="flex items-center justify-between gap-3">
             <span className="font-semibold text-gray-500 dark:text-gray-400">Permission</span>
             <span className="text-right font-bold text-gray-900 dark:text-gray-100">{formatPermission(workflowState)}</span>
           </div>
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <span className="font-semibold text-gray-500 dark:text-gray-400">Location</span>
             <span className="text-right font-mono text-gray-900 dark:text-gray-100">{formatLocation(workflowState)}</span>
           </div>
@@ -94,18 +96,18 @@ export default function BranchScreen({ workflowState, onSelect }: Props) {
       <OrganiserInstructionCard workflowState={workflowState} />
 
       <div className="flex flex-col gap-3">
-        {paths.map(({ path, dot, dotClass, title, subtitle, hint, borderClass, bgClass }) => (
+        {paths.map(({ path, dot, dotClass, title, subtitle, hint, borderClass, bgClass, primary }) => (
           <button
             key={path}
             onClick={() => onSelect(path)}
-            className={`text-left w-full rounded-2xl border p-4 transition-all duration-150 active:scale-[0.98] ${borderClass} ${bgClass} dark:border-opacity-60`}
+            className={`text-left w-full rounded-2xl border transition-all duration-150 active:scale-[0.98] ${primary ? "p-4 shadow-sm" : "p-3"} ${borderClass} ${bgClass} dark:border-opacity-60`}
           >
             <div className="flex items-start gap-3">
-              <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg ${dotClass}`}>
+              <div className={`shrink-0 rounded-full flex items-center justify-center text-lg ${primary ? "w-10 h-10" : "w-9 h-9"} ${dotClass}`}>
                 {dot}
               </div>
               <div className="min-w-0">
-                <div className="font-black text-base text-gray-900 dark:text-gray-100">{title}</div>
+                <div className={`${primary ? "text-base" : "text-sm"} font-black text-gray-900 dark:text-gray-100`}>{title}</div>
                 <div className="text-sm font-semibold text-gray-600 dark:text-gray-400 mt-0.5">{subtitle}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400 mt-1.5 leading-relaxed">{hint}</div>
               </div>
