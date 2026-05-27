@@ -43,6 +43,7 @@ export function QuickFindFab({
   const [lastPermName, setLastPermName] = React.useState<string | null>(null);
   const [noGpsWarning, setNoGpsWarning] = React.useState(false);
   const [fabError, setFabError] = React.useState<string | null>(null);
+  const [confirmSignificant, setConfirmSignificant] = React.useState(false);
   const [fabIntroduced, setFabIntroduced] = React.useState(() => {
     try {
       return !!localStorage.getItem("fs_fab_used") || !!localStorage.getItem("fs_onboarding_done");
@@ -79,19 +80,6 @@ export function QuickFindFab({
   );
 
   const activeSession = activeSessionOverride === undefined ? liveActiveSession : activeSessionOverride;
-
-  function startSignificantFind() {
-    const preferredLocation = getPreferredLocation?.();
-    setFabError(null);
-    setShowSuccess(false);
-    onSignificantFind?.({
-      sessionId: activeSession?.id ?? null,
-      permissionId: activeSession?.permissionId,
-      lat: preferredLocation?.lat,
-      lon: preferredLocation?.lon,
-      gpsAccuracyM: preferredLocation?.gpsAccuracyM ?? null,
-    });
-  }
 
   async function quickFind() {
     if (isCapturing) return;
@@ -185,6 +173,7 @@ export function QuickFindFab({
 
       setLastQuickId(id);
       setLastPermName(targetPerm.name || null);
+      setConfirmSignificant(false);
       setShowSuccess(true);
       onRecorded?.(id);
 
@@ -220,12 +209,37 @@ export function QuickFindFab({
         createdAt: now,
       });
       setShowSuccess(false);
+      setConfirmSignificant(false);
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
     } catch (err) {
       setFabError("Failed to save photo: " + err);
     } finally {
       setLastQuickId(null);
     }
+  }
+
+  async function openQuickAsSignificant() {
+    const pendingId = lastQuickId;
+    const pendingFind = pendingId ? await db.finds.get(pendingId) : undefined;
+    setShowSuccess(false);
+    setConfirmSignificant(false);
+    setLastQuickId(null);
+    if (pendingId) {
+      await db.transaction("rw", db.finds, db.media, async () => {
+        await db.media.where("findId").equals(pendingId).delete();
+        await db.finds.delete(pendingId);
+      });
+    }
+    onSignificantFind?.(pendingFind ? {
+      permissionId: pendingFind.permissionId,
+      sessionId: pendingFind.sessionId,
+      lat: pendingFind.lat,
+      lon: pendingFind.lon,
+      gpsAccuracyM: pendingFind.gpsAccuracyM,
+      osGridRef: pendingFind.osGridRef,
+      w3w: pendingFind.w3w,
+      findDescription: pendingFind.objectType === "Pending Quick Find" ? "" : pendingFind.objectType,
+    } : undefined);
   }
 
   return (
@@ -243,7 +257,7 @@ export function QuickFindFab({
               <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-[9px] font-black">✓</div>
               <span className="text-xs font-black uppercase tracking-widest text-emerald-400">Recorded</span>
             </div>
-            <button onClick={() => setShowSuccess(false)} className="opacity-40 hover:opacity-100 text-xs leading-none">✕</button>
+            <button onClick={() => { setShowSuccess(false); setConfirmSignificant(false); }} className="opacity-40 hover:opacity-100 text-xs leading-none">✕</button>
           </div>
           {lastPermName && (
             <div className="text-xs text-gray-300 truncate">→ {lastPermName}</div>
@@ -265,41 +279,44 @@ export function QuickFindFab({
               Edit →
             </button>
             <button
-              onClick={() => setShowSuccess(false)}
+              onClick={() => { setShowSuccess(false); setConfirmSignificant(false); }}
               className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
             >
               Done
             </button>
           </div>
           {onSignificantFind && (
-            <button
-              type="button"
-              onClick={async () => {
-                const pendingId = lastQuickId;
-                const pendingFind = pendingId ? await db.finds.get(pendingId) : undefined;
-                setShowSuccess(false);
-                setLastQuickId(null);
-                if (pendingId) {
-                  await db.transaction("rw", db.finds, db.media, async () => {
-                    await db.media.where("findId").equals(pendingId).delete();
-                    await db.finds.delete(pendingId);
-                  });
-                }
-                onSignificantFind(pendingFind ? {
-                  permissionId: pendingFind.permissionId,
-                  sessionId: pendingFind.sessionId,
-                  lat: pendingFind.lat,
-                  lon: pendingFind.lon,
-                  gpsAccuracyM: pendingFind.gpsAccuracyM,
-                  osGridRef: pendingFind.osGridRef,
-                  w3w: pendingFind.w3w,
-                  findDescription: pendingFind.objectType === "Pending Quick Find" ? "" : pendingFind.objectType,
-                } : undefined);
-              }}
-              className="w-full text-xs text-amber-300 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 rounded-xl py-2 text-center transition-all font-semibold"
-            >
-              Significant Find
-            </button>
+            confirmSignificant ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/30 p-2">
+                <p className="text-[11px] leading-snug text-amber-100">
+                  Use this for suspected Treasure, in-situ groups, scatters, or an exceptional find that needs a fuller record.
+                </p>
+                <div className="mt-2 flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={openQuickAsSignificant}
+                    className="flex-1 rounded-lg bg-amber-500 px-2 py-2 text-[10px] font-black uppercase tracking-widest text-gray-950"
+                  >
+                    Start
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmSignificant(false)}
+                    className="flex-1 rounded-lg bg-gray-800 px-2 py-2 text-[10px] font-black uppercase tracking-widest text-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmSignificant(true)}
+                className="w-full text-xs text-amber-300 hover:text-amber-200 border border-amber-500/30 hover:border-amber-500/60 rounded-xl py-2 text-center transition-all font-semibold"
+              >
+                Mark as Significant
+              </button>
+            )
           )}
           <button
             onClick={async () => {
@@ -310,6 +327,7 @@ export function QuickFindFab({
               });
               setLastQuickId(null);
               setShowSuccess(false);
+              setConfirmSignificant(false);
             }}
             className="text-xs text-red-300 hover:text-red-200 opacity-75 hover:opacity-100 text-center transition-all"
           >
@@ -326,15 +344,6 @@ export function QuickFindFab({
             aria-label={`${pendingCount} pending finds`}
           >
             {pendingCount}
-          </button>
-        )}
-        {onSignificantFind && !showSuccess && (
-          <button
-            type="button"
-            onClick={startSignificantFind}
-            className="h-12 rounded-full border border-amber-300/70 bg-amber-50 px-4 text-xs font-black uppercase tracking-widest text-amber-800 shadow-lg shadow-amber-950/10 transition-all hover:border-amber-400 hover:bg-amber-100 active:scale-95 dark:border-amber-500/40 dark:bg-amber-950/80 dark:text-amber-200"
-          >
-            Significant
           </button>
         )}
         <button

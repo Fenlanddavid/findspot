@@ -5,13 +5,9 @@ import type { WorkflowState } from "../types/significantFind";
 
 export default function GlobalActions({ projectId, onSignificantFind }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void }) {
   const location = useLocation();
-  const [homeFabVisible, setHomeFabVisible] = React.useState(() => location.pathname !== "/" || !!onSignificantFind || window.scrollY > 180);
+  const [homeFabVisible, setHomeFabVisible] = React.useState(() => location.pathname !== "/" || window.scrollY > 180);
 
   React.useEffect(() => {
-    if (location.pathname === "/" && onSignificantFind) {
-      setHomeFabVisible(true);
-      return;
-    }
     if (location.pathname !== "/") {
       setHomeFabVisible(true);
       return;
@@ -20,7 +16,7 @@ export default function GlobalActions({ projectId, onSignificantFind }: { projec
     update();
     window.addEventListener("scroll", update, { passive: true });
     return () => window.removeEventListener("scroll", update);
-  }, [location.pathname, onSignificantFind]);
+  }, [location.pathname]);
 
   const hideOn = ["/settings", "/finds-box", "/fieldguide"];
   if (hideOn.includes(location.pathname)) return null;
