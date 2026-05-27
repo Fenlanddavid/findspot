@@ -67,6 +67,18 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
   const [score, setScore] = useState({ score: 0, reasons: [] as string[] });
   const [generating, setGenerating] = useState(false);
   const generatedAtRef = useRef(new Date());
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const descriptionInitialized = useRef(false);
+
+  // Populate the contentEditable div once when the modal opens and description is ready.
+  // We don't sync on every description change to avoid resetting the cursor position.
+  useEffect(() => {
+    if (!isOpen) { descriptionInitialized.current = false; return; }
+    if (!descriptionInitialized.current && descriptionRef.current && description) {
+      descriptionRef.current.innerText = description;
+      descriptionInitialized.current = true;
+    }
+  }, [isOpen, description]);
 
   // Convert blobs to base64 data URLs — html2canvas cannot render blob: URLs
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -346,9 +358,13 @@ Recorded via FindSpot
                     <ReportSectionHeading caption="Editable draft description generated from the find record. Review before submitting.">
                       Archaeological Description
                     </ReportSectionHeading>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
+                    <div
+                      ref={descriptionRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={() => {
+                        if (descriptionRef.current) setDescription(descriptionRef.current.innerText);
+                      }}
                       style={{
                         width: "100%",
                         minHeight: 150,
@@ -358,11 +374,12 @@ Recorded via FindSpot
                         color: REPORT.ink,
                         padding: 12,
                         outline: "none",
-                        resize: "vertical",
-                        overflow: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
                         fontSize: 13,
                         lineHeight: 1.6,
                         fontFamily: "Georgia, serif",
+                        cursor: "text",
                       }}
                     />
                   </div>
