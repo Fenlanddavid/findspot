@@ -83,28 +83,28 @@ export function plural(count: number, singular: string, pluralLabel = `${singula
   return `${count} ${count === 1 ? singular : pluralLabel}`;
 }
 
-export function getNotableFindLabels(finds: Find[], max = 4): string[] {
-  const scoreFind = (find: Find) => {
-    const text = [
-      find.objectType,
-      find.material,
-      find.period,
-      find.coinType,
-      find.coinDenomination,
-      find.dateRange,
-    ].filter(Boolean).join(" ").toLowerCase();
-    let score = 0;
-    if (text.includes("gold")) score += 5;
-    if (text.includes("silver")) score += 4;
-    if (text.includes("coin") || text.includes("hammered") || text.includes("stater") || text.includes("denarius")) score += 3;
-    if (find.period && !/unknown|modern|post.?modern/i.test(find.period)) score += 2;
-    if (find.objectType && !/unknown|scrap|junk/i.test(find.objectType)) score += 1;
-    return score;
-  };
+export function getNotableFindScore(find: Find): number {
+  const text = [
+    find.objectType,
+    find.material,
+    find.period,
+    find.coinType,
+    find.coinDenomination,
+    find.dateRange,
+  ].filter(Boolean).join(" ").toLowerCase();
+  let score = 0;
+  if (text.includes("gold")) score += 5;
+  if (text.includes("silver")) score += 4;
+  if (text.includes("coin") || text.includes("hammered") || text.includes("stater") || text.includes("denarius")) score += 3;
+  if (find.period && !/unknown|modern|post.?modern/i.test(find.period)) score += 2;
+  if (find.objectType && !/unknown|scrap|junk/i.test(find.objectType)) score += 1;
+  return score;
+}
 
+export function getNotableFindLabels(finds: Find[], max = 4): string[] {
   const ranked = finds
     .filter(find => !find.isPending)
-    .map(find => ({ find, score: scoreFind(find) }))
+    .map(find => ({ find, score: getNotableFindScore(find) }))
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score || (a.find.createdAt || "").localeCompare(b.find.createdAt || ""));
 

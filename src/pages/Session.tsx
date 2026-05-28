@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { computeSessionOutcomeResult, SessionOutcomeResult } from "../utils/sessionOutcomeEngine";
 import { db, Permission, Session, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
@@ -17,7 +17,10 @@ import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
 import { useConfirmDialog } from "../components/ConfirmModal";
+import { LandownerUpdateCard } from "../components/LandownerUpdateCard";
+import { shareElementAsImage } from "../services/share";
 import { CoachTip, CoachTips } from "../components/CoachTips";
+import { getNotableFindScore } from "../components/ReportChrome";
 import type { WorkflowState } from "../types/significantFind";
 import { area as turfArea } from "@turf/turf";
 import maplibregl from "maplibre-gl";
@@ -40,6 +43,9 @@ function SessionSummary({
   onClose,
   onFieldReport,
   onLandownerReport,
+  onShareLandownerUpdate,
+  isSharingLandowner,
+  landownerShareError,
   onExportClubDay,
 }: {
   coverage: number,
@@ -55,6 +61,9 @@ function SessionSummary({
   onClose: () => void,
   onFieldReport: () => void,
   onLandownerReport: (forField: boolean) => void,
+  onShareLandownerUpdate: () => void,
+  isSharingLandowner: boolean,
+  landownerShareError: string | null,
   onExportClubDay: () => void,
 }) {
   // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
@@ -147,15 +156,29 @@ function SessionSummary({
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                             {pendingCount > 0
                                 ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. For the most complete report, finish those records first.`
-                                : "Generate a report to share with the landowner."}
+                                : "Share a quick update or generate a full report for the landowner."}
                         </p>
                     </div>
+                    {/* Quick WhatsApp-ready image — lighter touch, shown first */}
+                    <button
+                        onClick={onShareLandownerUpdate}
+                        disabled={isSharingLandowner}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        {isSharingLandowner ? 'Preparing…' : '📲 Quick Update (Image)'}
+                    </button>
+                    {landownerShareError && (
+                        <p className="text-xs font-semibold text-red-600 dark:text-red-400 leading-snug">
+                            {landownerShareError}
+                        </p>
+                    )}
+                    {/* Full PDF report buttons */}
                     <div className="flex gap-2">
                         <button
                             onClick={() => onLandownerReport(false)}
                             className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-700 dark:text-gray-300 font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
                         >
-                            Whole Permission
+                            Full Report
                         </button>
                         {fieldId && (
                             <button
@@ -270,6 +293,11 @@ export default function SessionPage(props: {
   const [showFieldReport, setShowFieldReport] = useState(false);
   const [showLandownerReport, setShowLandownerReport] = useState(false);
   const [landownerReportForField, setLandownerReportForField] = useState(false);
+  const [detectoristName, setDetectoristName] = useState("Detectorist");
+  const [highlightPhotoUrl, setHighlightPhotoUrl] = useState<string | null>(null);
+  const landownerCardRef = useRef<HTMLDivElement>(null);
+  const [isSharingLandowner, setIsSharingLandowner] = useState(false);
+  const [landownerShareError, setLandownerShareError] = useState<string | null>(null);
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
   const isActiveSessionMode = isEdit && !isEditing && !isFinished;
 
@@ -288,6 +316,11 @@ export default function SessionPage(props: {
     if (!fieldId) return null;
     return db.fields.get(fieldId);
   }, [fieldId]);
+
+  const session = useLiveQuery(async () => {
+    if (!sessionId) return null;
+    return db.sessions.get(sessionId);
+  }, [sessionId]);
 
   const finds = useLiveQuery(async () => {
     if (!sessionId) return [];
@@ -327,6 +360,69 @@ export default function SessionPage(props: {
     setCoverageResult(result);
     setCoverageError(result === null);
   }, [showCoverage, selectedField, permission, tracks]);
+
+  // Load the landowner-facing detectorist name for the update card.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getSetting<string>("detectorist", ""),
+      getSetting<string>("recorderName", ""),
+    ]).then(([detectorist, recorderName]) => {
+      if (cancelled) return;
+      setDetectoristName(
+        detectorist?.trim() ||
+        permission?.collector?.trim() ||
+        recorderName?.trim() ||
+        "Detectorist"
+      );
+    });
+    return () => { cancelled = true; };
+  }, [permission?.collector]);
+
+  // Resolve highlight photo: pick top-scored find's first media blob
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    let cancelled = false;
+    setHighlightPhotoUrl(null);
+
+    async function resolvePhoto() {
+      const completed = (finds ?? []).filter(f => !f.isPending);
+      const top = [...completed].sort((a, b) => getNotableFindScore(b) - getNotableFindScore(a))[0];
+      if (!top) return;
+
+      const media = await db.media.where("findId").equals(top.id).first();
+      if (cancelled) return;
+      if (!media?.blob) return;
+      objectUrl = URL.createObjectURL(media.blob);
+      setHighlightPhotoUrl(objectUrl);
+    }
+
+    resolvePhoto();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [finds]);
+
+  async function handleShareLandownerUpdate() {
+    if (!landownerCardRef.current || isSharingLandowner) return;
+    setIsSharingLandowner(true);
+    setLandownerShareError(null);
+    try {
+      await shareElementAsImage(
+        landownerCardRef.current,
+        `findspot-update-${session?.date?.slice(0, 10) ?? date.slice(0, 10)}`,
+        "Session Update",
+        `${(finds ?? []).filter(f => !f.isPending).length} finds recorded at ${permission?.name ?? "your land"} — recorded using FindSpot.`,
+        { scale: 2, width: 540, height: 720, backgroundColor: "#f8f6f0" },
+      );
+    } catch (err) {
+      console.error("Landowner share failed", err);
+      setLandownerShareError("Could not create the quick update image. Try the full report instead.");
+    } finally {
+      setIsSharingLandowner(false);
+    }
+  }
 
   const findThumbMedia = useMemo(() => {
     const info = new Map<string, Media>();
@@ -743,7 +839,7 @@ export default function SessionPage(props: {
         updatedAt: now,
       };
 
-      const session: Session = {
+      const newSessionRecord: Session = {
         id: sessionId,
         projectId: props.projectId,
         permissionId: resolvedPermissionId,
@@ -756,7 +852,7 @@ export default function SessionPage(props: {
         await db.sessions.update(sessionId, sessionFields);
         setIsEditing(false);
       } else {
-        await db.sessions.add(session);
+        await db.sessions.add(newSessionRecord);
         setIsEditing(false);
         let isFirstSession = !hasStartedSessionBefore;
         try {
@@ -882,6 +978,7 @@ export default function SessionPage(props: {
         totalTime: durationStr,
         outcomeResult,
     });
+    setLandownerShareError(null);
     
     if (sessionId) {
         try {
@@ -1659,6 +1756,20 @@ export default function SessionPage(props: {
             </div>
         </div>
       </div>
+      {/* Off-screen landowner update card — always mounted so html2canvas can read it synchronously */}
+      {session && (
+        <div style={{ position: "fixed", left: -9999, top: 0, width: 540, pointerEvents: "none", zIndex: -1 }}>
+          <LandownerUpdateCard
+            ref={landownerCardRef}
+            session={session}
+            permission={permission}
+            field={selectedField ?? null}
+            finds={finds ?? []}
+            detectoristName={detectoristName}
+            highlightPhotoUrl={highlightPhotoUrl}
+          />
+        </div>
+      )}
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
         <SessionSummary
@@ -1679,6 +1790,9 @@ export default function SessionPage(props: {
             setShowSummary(false);
             setShowLandownerReport(true);
           }}
+          onShareLandownerUpdate={handleShareLandownerUpdate}
+          isSharingLandowner={isSharingLandowner}
+          landownerShareError={landownerShareError}
           onExportClubDay={() => { setShowSummary(false); setShowExportClubDay(true); }}
         />
       )}
