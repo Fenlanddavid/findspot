@@ -38,7 +38,6 @@ function SessionSummary({
   permissionId,
   sharedPermissionId,
   isClubDayMember,
-  fieldId,
   outcomeResult,
   onClose,
   onFieldReport,
@@ -56,7 +55,6 @@ function SessionSummary({
   permissionId: string | null,
   sharedPermissionId: string | undefined,
   isClubDayMember: boolean,
-  fieldId: string | null,
   outcomeResult: SessionOutcomeResult | null,
   onClose: () => void,
   onFieldReport: () => void,
@@ -151,44 +149,25 @@ function SessionSummary({
               )}
               {permissionId && !isClubDayMember && (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
-                    <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Landowner Report</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                            {pendingCount > 0
-                                ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. For the most complete report, finish those records first.`
-                                : "Share a quick update or generate a full report for the landowner."}
-                        </p>
-                    </div>
-                    {/* Quick WhatsApp-ready image — lighter touch, shown first */}
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Landowner Report</p>
                     <button
                         onClick={onShareLandownerUpdate}
                         disabled={isSharingLandowner}
                         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        {isSharingLandowner ? 'Preparing…' : '📲 Quick Update (Image)'}
+                        {isSharingLandowner ? 'Preparing…' : 'Share with Landowner'}
                     </button>
                     {landownerShareError && (
                         <p className="text-xs font-semibold text-red-600 dark:text-red-400 leading-snug">
                             {landownerShareError}
                         </p>
                     )}
-                    {/* Full PDF report buttons */}
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => onLandownerReport(false)}
-                            className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-700 dark:text-gray-300 font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
-                        >
-                            Full Report
-                        </button>
-                        {fieldId && (
-                            <button
-                                onClick={() => onLandownerReport(true)}
-                                className="flex-1 bg-gray-100 dark:bg-gray-800 hover:bg-emerald-600 hover:text-white text-gray-700 dark:text-gray-300 font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
-                            >
-                                This Field
-                            </button>
-                        )}
-                    </div>
+                    <button
+                        onClick={() => onLandownerReport(false)}
+                        className="w-full border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                    >
+                        Full Report (PDF)
+                    </button>
                 </div>
               )}
 
@@ -390,7 +369,11 @@ export default function SessionPage(props: {
       const top = [...completed].sort((a, b) => getNotableFindScore(b) - getNotableFindScore(a))[0];
       if (!top) return;
 
-      const media = await db.media.where("findId").equals(top.id).first();
+      const media = await db.media
+        .where("findId")
+        .equals(top.id)
+        .filter(m => m.type === "photo" && !!m.blob)
+        .first();
       if (cancelled) return;
       if (!media?.blob) return;
       objectUrl = URL.createObjectURL(media.blob);
@@ -1781,7 +1764,6 @@ export default function SessionPage(props: {
           permissionId={permission?.id ?? null}
           sharedPermissionId={permission?.sharedPermissionId}
           isClubDayMember={!!permission?.isClubDayMember}
-          fieldId={fieldId}
           outcomeResult={summaryData.outcomeResult}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
           onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}

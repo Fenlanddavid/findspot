@@ -29,6 +29,12 @@ function formatDuration(session: Session): string | null {
   return null;
 }
 
+function truncateLabel(value: string, maxLength: number): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
   ({ session, permission, field, finds, detectoristName, highlightPhotoUrl }, ref) => {
     const completedFinds = finds.filter(f => !f.isPending);
@@ -36,6 +42,7 @@ export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
     const notableLabels  = getNotableFindLabels(completedFinds, 3);
     const duration       = formatDuration(session);
     const dateText       = formatReportDate(session.date, "long");
+    const displayDetectoristName = truncateLabel(detectoristName || "Detectorist", 30);
 
     const locationName = field?.name
       ? `${field.name}${permission?.name ? ` · ${permission.name}` : ""}`
@@ -90,8 +97,15 @@ export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
               </div>
             </div>
           </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: REPORT.muted, fontWeight: 700 }}>{detectoristName}</div>
+          <div style={{ textAlign: "right", minWidth: 0 }}>
+            <div style={{
+              maxWidth: 220,
+              fontSize: 11,
+              lineHeight: "16px",
+              color: REPORT.muted,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}>{displayDetectoristName}</div>
           </div>
         </div>
 
@@ -110,10 +124,16 @@ export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
         }}>
           {highlightPhotoUrl ? (
             <>
-              <img
-                src={highlightPhotoUrl}
-                alt=""
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: `url("${highlightPhotoUrl}")`,
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat",
+                  backgroundSize: "cover",
+                }}
               />
               <div style={{
                 position: "absolute",
@@ -157,6 +177,7 @@ export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
               lineHeight: 1.2,
               marginBottom: 4,
               letterSpacing: "-0.01em",
+              overflowWrap: "anywhere",
             }}>
               {locationName}
             </div>
@@ -231,7 +252,7 @@ export const LandownerUpdateCard = forwardRef<HTMLDivElement, Props>(
                       background: REPORT.accent,
                       flexShrink: 0,
                     }} />
-                    {label}
+                    <span style={{ minWidth: 0, lineHeight: 1.3, overflowWrap: "anywhere" }}>{label}</span>
                   </div>
                 ))}
               </div>
