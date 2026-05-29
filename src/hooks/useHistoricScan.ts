@@ -23,6 +23,7 @@ import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
+import { fetchRomanRoads } from '../services/romanRoadService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -292,6 +293,18 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             let routes = opts.routes;
             if (!opts.routes.length && routeRaw?.elements?.length) {
                 routes = parseOverpassRoutes(routeRaw.elements);
+            }
+
+            // 6b. Itiner-e Roman roads — only fetch if not already present from terrain scan
+            const hasRomanRoads = routes.some(r => r.source === 'itinere');
+            if (!hasRomanRoads) {
+                try {
+                    const romanRoads = await fetchRomanRoads(west, south, east, north);
+                    if (romanRoads.length > 0) {
+                        routes = [...routes, ...romanRoads];
+                        onLog(`> ROUTES: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
+                    }
+                } catch { /* Itiner-e asset unavailable */ }
             }
 
             // ── Drift guard (uses shared utility) ────────────────────────────

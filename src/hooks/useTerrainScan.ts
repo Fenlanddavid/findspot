@@ -23,6 +23,7 @@ import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
+import { fetchRomanRoads } from '../services/romanRoadService';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -342,6 +343,15 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             } catch {
                 onLog('> Routes: service unavailable, continuing without.', 'terrain', 'warn');
             }
+
+            // Itiner-e Roman roads — independent of OSM timeout; loads from static GeoJSON asset
+            try {
+                const romanRoads = await fetchRomanRoads(qWest, qSouth, qEast, qNorth);
+                if (romanRoads.length > 0) {
+                    routes = [...routes, ...romanRoads];
+                    onLog(`> Routes: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'terrain');
+                }
+            } catch { /* Itiner-e asset unavailable */ }
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
                 setIsScanning(false);

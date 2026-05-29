@@ -606,8 +606,7 @@ export function useFieldGuideMap({
                 callbacksRef.current.onCrossingsLog(`CROSSINGS: ${crossingFeatures.length} route intersection${crossingFeatures.length !== 1 ? 's' : ''} detected — high-value targets.`);
             }
         };
-        if (map.loaded()) doUpdate();
-        else map.once('load', doUpdate);
+        doUpdate();
     }, [historicRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Landscape context layer ─────────────────────────────────────────────────
