@@ -581,6 +581,10 @@ export function useFieldGuideMap({
             const seen = new Set<string>();
             for (let i = 0; i < historicRoutes.length; i++) {
                 for (let j = i + 1; j < historicRoutes.length; j++) {
+                    // Skip adjacent segments of the same Itiner-e road — shared endpoints
+                    // are segment joins, not genuine route crossings.
+                    if (historicRoutes[i].source === 'itinere' && historicRoutes[j].source === 'itinere' &&
+                        historicRoutes[i].name && historicRoutes[i].name === historicRoutes[j].name) continue;
                     try {
                         const a = turf.lineString(historicRoutes[i].geometry);
                         const b = turf.lineString(historicRoutes[j].geometry);

@@ -282,7 +282,7 @@ export function parseOverpassRoutes(elements: OverpassElement[]): import('../pag
     // relations rather than individually tagged ways.
     const romanRelationWayIds = new Set<number>();
     elements
-        .filter(el => el.type === 'relation' && (el.tags?.historic === 'roman_road' || el.tags?.route === 'historic'))
+        .filter(el => el.type === 'relation' && el.tags?.historic === 'roman_road')
         .forEach(rel => {
             rel.members
                 ?.filter(m => m.type === 'way')
