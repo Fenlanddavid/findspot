@@ -83,6 +83,16 @@ function makeAnnotationLabelElement(index: number) {
     return el;
 }
 
+function routeLabel(type: unknown, nameValue: unknown, fallback?: string) {
+    const base = type === 'roman_road' ? 'Roman Road' : 'Historic Trackway';
+    const name = typeof nameValue === 'string' ? nameValue.trim() : '';
+    return name && name.toLowerCase() !== 'null' ? `${base} - ${name}` : fallback || base;
+}
+
+function romanRoadLabel(props: Record<string, unknown> | undefined) {
+    return routeLabel('roman_road', props?.name, 'Roman Road');
+}
+
 // Callbacks are stored in a ref so map event handlers never go stale
 // without needing to be in the map-init effect's dependency array.
 type MapCallbacks = {
@@ -362,12 +372,16 @@ export function useFieldGuideMap({
             map.on('dragstart', () => callbacksRef.current.onDragStart());
             map.on('move',      () => callbacksRef.current.onZoomChange(map.getZoom()));
 
-            map.on('click', 'historic-routes-roman',    () => { if (!annotationModeRef.current) showLabel('Roman Road'); });
+            map.on('click', 'historic-routes-roman',    (e) => { if (!annotationModeRef.current) showLabel(romanRoadLabel(e.features?.[0]?.properties as Record<string, unknown> | undefined)); });
             map.on('click', 'historic-routes-trackway', () => { if (!annotationModeRef.current) showLabel('Historic Trackway'); });
             map.on('click', 'corridors-fill', (e) => {
                 if (annotationModeRef.current) return;
-                const type = e.features?.[0]?.properties?.type;
-                showLabel(type === 'roman_road' ? 'Roman Road Corridor' : 'Historic Trackway Corridor');
+                const props = e.features?.[0]?.properties as Record<string, unknown> | undefined;
+                showLabel(routeLabel(
+                    props?.type,
+                    props?.name,
+                    props?.type === 'roman_road' ? 'Roman Road Corridor' : 'Historic Trackway Corridor',
+                ));
             });
             map.on('click', 'landscape-context-fill', (e) => {
                 if (annotationModeRef.current) return;
@@ -377,8 +391,8 @@ export function useFieldGuideMap({
             map.on('click', 'crossings-circle', (e) => {
                 if (annotationModeRef.current) return;
                 const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
-                const a = p?.typeA === 'roman_road' ? 'Roman Road' : 'Trackway';
-                const b = p?.typeB === 'roman_road' ? 'Roman Road' : 'Trackway';
+                const a = routeLabel(p?.typeA, p?.nameA, p?.typeA === 'roman_road' ? 'Roman Road' : 'Trackway');
+                const b = routeLabel(p?.typeB, p?.nameB, p?.typeB === 'roman_road' ? 'Roman Road' : 'Trackway');
                 showLabel(`Route Crossing: ${a} × ${b}`);
             });
             map.on('click', 'monuments-fill', (e) => {
@@ -552,7 +566,7 @@ export function useFieldGuideMap({
                     features: historicRoutes.map(r => ({
                         type: 'Feature' as const,
                         geometry: { type: 'LineString' as const, coordinates: r.geometry },
-                        properties: { type: r.type, id: r.id },
+                        properties: { type: r.type, id: r.id, ...(r.name ? { name: r.name } : {}) },
                     })),
                 });
             }
@@ -571,7 +585,7 @@ export function useFieldGuideMap({
                     const bufferKm = r.type === 'roman_road' ? 0.3 : 0.15;
                     const color    = r.type === 'roman_road' ? '#3b82f6' : '#93c5fd';
                     const buffered = turf.buffer(line, bufferKm, { units: 'kilometers' });
-                    if (buffered) { buffered.properties = { routeId: r.id, type: r.type, color }; corridorFeatures.push(buffered as GeoJSON.Feature); }
+                    if (buffered) { buffered.properties = { routeId: r.id, type: r.type, name: r.name, color }; corridorFeatures.push(buffered as GeoJSON.Feature); }
                 } catch { /* skip malformed geometry */ }
             }
             const corridorSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
@@ -597,6 +611,7 @@ export function useFieldGuideMap({
                                 ...pt,
                                 properties: {
                                     typeA: historicRoutes[i].type, typeB: historicRoutes[j].type,
+                                    nameA: historicRoutes[i].name, nameB: historicRoutes[j].name,
                                     label: `${historicRoutes[i].type === 'roman_road' ? 'Roman road' : 'Trackway'} × ${historicRoutes[j].type === 'roman_road' ? 'Roman road' : 'Trackway'}`,
                                 },
                             });
@@ -630,7 +645,14 @@ export function useFieldGuideMap({
                     if (buffered) {
                         buffered.properties = {
                             kind: 'route_context',
-                            label: r.type === 'roman_road' ? 'Historic route corridor' : 'Historic movement corridor',
+                            label: routeLabel(
+                                r.type,
+                                r.name,
+                                r.type === 'roman_road' ? 'Historic route corridor' : 'Historic movement corridor',
+                            ),
+                            routeId: r.id,
+                            type: r.type,
+                            name: r.name,
                             color: '#60a5fa',
                         };
                         features.push(buffered as GeoJSON.Feature);

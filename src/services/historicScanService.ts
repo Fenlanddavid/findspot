@@ -3,9 +3,11 @@
 // ─── Typed API response shapes ────────────────────────────────────────────────
 
 export interface OverpassTag {
+    [key: string]: string | undefined;
     name?: string;
     historic?: string;
     route?: string;
+    origin?: string;
     heritage?: string;
     place?: string;
     natural?: string;
@@ -99,6 +101,25 @@ const OVERPASS_TOTAL_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_TOTAL_TIMEOUT_MS = 24000;
 const GENERAL_FETCH_TIMEOUT_MS = 7000;
+const KNOWN_ROMAN_ROUTE_NAMES = [
+    'akeman street',
+    'cade\'s road',
+    'dere street',
+    'devil\'s highway',
+    'ermine street',
+    'fen causeway',
+    'fosse way',
+    'icknield street',
+    'peddars way',
+    'port way',
+    'ryknild street',
+    'stane street',
+    'stanegate',
+    'watling street',
+];
+const KNOWN_ROMAN_ROUTE_NAME_REGEX = KNOWN_ROMAN_ROUTE_NAMES
+    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
 
 type OverpassFetchOptions = {
     endpointTimeoutMs?: number;
@@ -268,7 +289,7 @@ export async function fetchHistoricRoutes(
     // Include relation queries so Roman roads stored as OSM route relations
     // (e.g. Fen Causeway, Stane Street) are captured alongside tagged ways.
     // (._;>;) recurses the relation set down to its member ways with geometry.
-    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng});relation["historic"="roman_road"](around:2000,${lat},${lng});relation["route"="historic"](around:2000,${lat},${lng}););(._;>;);out geom;`;
+    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng});relation["historic"="roman_road"](around:2000,${lat},${lng});relation["route"="historic"](around:2000,${lat},${lng});relation["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng}););(._;>;);out geom;`;
     return overpassFetch(query, signal);
 }
 
@@ -277,16 +298,27 @@ export async function fetchHistoricRoutes(
  * Used by both terrain and historic scan to avoid duplicated parsing logic.
  */
 export function parseOverpassRoutes(elements: OverpassElement[]): import('../pages/fieldGuideTypes').HistoricRoute[] {
-    // Build a set of way IDs that are members of roman_road relations.
+    const hasRomanRouteTags = (tags?: OverpassTag) =>
+        tags?.historic === 'roman_road' ||
+        tags?.roman_road === 'yes' ||
+        tags?.origin?.toLowerCase() === 'roman' ||
+        tags?.period?.toLowerCase() === 'roman' ||
+        tags?.['historic:civilization']?.toLowerCase() === 'ancient_roman' ||
+        !!(tags?.name && (
+            tags.name.toLowerCase().includes('roman road') ||
+            KNOWN_ROMAN_ROUTE_NAMES.some(name => tags.name?.toLowerCase().includes(name))
+        ));
+
+    // Build a map of way IDs that are members of Roman route relations.
     // This catches roads like the Fen Causeway that are stored as OSM route
     // relations rather than individually tagged ways.
-    const romanRelationWayIds = new Set<number>();
+    const romanRelationWayNames = new Map<number, string | undefined>();
     elements
-        .filter(el => el.type === 'relation' && el.tags?.historic === 'roman_road')
+        .filter(el => el.type === 'relation' && hasRomanRouteTags(el.tags))
         .forEach(rel => {
             rel.members
                 ?.filter(m => m.type === 'way')
-                .forEach(m => romanRelationWayIds.add(m.ref));
+                .forEach(m => romanRelationWayNames.set(m.ref, rel.tags?.name?.trim() || undefined));
         });
 
     return elements
@@ -295,13 +327,15 @@ export function parseOverpassRoutes(elements: OverpassElement[]): import('../pag
             const geom: [number, number][] = (el.geometry || []).map(g => [g.lon, g.lat]);
             const lons = geom.map(g => g[0]);
             const lats = geom.map(g => g[1]);
-            const isRoman = el.tags?.historic === 'roman_road' || el.tags?.roman_road === 'yes' ||
-                !!(el.tags?.name && el.tags.name.toLowerCase().includes('roman road')) ||
-                romanRelationWayIds.has(el.id);
+            const hasRomanRelation = romanRelationWayNames.has(el.id);
+            const relationName = romanRelationWayNames.get(el.id);
+            const routeName = hasRomanRelation ? relationName || el.tags?.name?.trim() : el.tags?.name?.trim();
+            const isRoman = hasRomanRouteTags(el.tags) || hasRomanRelation;
             return {
                 id:              `route-${el.id}`,
                 type:            isRoman ? 'roman_road' as const : el.tags?.holloway === 'yes' ? 'holloway' as const : 'historic_trackway' as const,
                 source:          'osm' as const,
+                name:            routeName,
                 confidenceClass: 'B' as const,
                 certaintyScore:  70,
                 geometry:        geom,
@@ -319,7 +353,7 @@ export async function fetchScanRoutes(
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng});relation["historic"="roman_road"](around:1000,${lat},${lng});relation["route"="historic"](around:1000,${lat},${lng}););(._;>;);out geom;`;
+    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road|${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng});relation["historic"="roman_road"](around:1000,${lat},${lng});relation["route"="historic"](around:1000,${lat},${lng});relation["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:1000,${lat},${lng}););(._;>;);out geom;`;
     return overpassFetch(query, signal);
 }
 
