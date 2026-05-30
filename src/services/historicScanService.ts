@@ -121,7 +121,7 @@ const KNOWN_ROMAN_ROUTE_NAME_REGEX = KNOWN_ROMAN_ROUTE_NAMES
     .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
 
-type OverpassFetchOptions = {
+export type OverpassFetchOptions = {
     endpointTimeoutMs?: number;
     totalTimeoutMs?: number;
 };
@@ -216,6 +216,26 @@ export async function fetchEtymologySignals(
 }
 
 /**
+ * Combined OSM context query for the standalone Historic button.
+ * This replaces separate place-name and heritage Overpass requests in the UI
+ * path, cutting one public API round-trip while preserving the same parsers.
+ */
+export async function fetchHistoricContextFeatures(
+    lat: number,
+    lng: number,
+    signal?: AbortSignal,
+    options: OverpassFetchOptions = {},
+): Promise<OverpassResponse | null> {
+    const placeRadius = 4000;
+    const heritageRadius = 2000;
+    const query = `[out:json][timeout:18];(node["place"](around:${placeRadius},${lat},${lng});way["place"](around:${placeRadius},${lat},${lng});rel["place"](around:${placeRadius},${lat},${lng});node["natural"](around:${placeRadius},${lat},${lng});way["natural"](around:${placeRadius},${lat},${lng});node["historic"](around:${placeRadius},${lat},${lng});way["historic"](around:${placeRadius},${lat},${lng});node["landuse"="farmyard"](around:${placeRadius},${lat},${lng});way["landuse"="farmyard"](around:${placeRadius},${lat},${lng});node["heritage"](around:${heritageRadius},${lat},${lng});way["heritage"](around:${heritageRadius},${lat},${lng});rel["heritage"](around:${heritageRadius},${lat},${lng}););out center;`;
+    return overpassFetch(query, signal, {
+        endpointTimeoutMs: options.endpointTimeoutMs ?? 6000,
+        totalTimeoutMs:    options.totalTimeoutMs    ?? 8000,
+    });
+}
+
+/**
  * Overpass query for heritage / archaeological features within 2km of a point.
  */
 export async function fetchHeritageFeatures(
@@ -284,13 +304,14 @@ export async function fetchAIMData(
 export async function fetchHistoricRoutes(
     lat: number,
     lng: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: OverpassFetchOptions = {},
 ): Promise<OverpassResponse | null> {
     // Include relation queries so Roman roads stored as OSM route relations
     // (e.g. Fen Causeway, Stane Street) are captured alongside tagged ways.
     // (._;>;) recurses the relation set down to its member ways with geometry.
     const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng});relation["historic"="roman_road"](around:2000,${lat},${lng});relation["route"="historic"](around:2000,${lat},${lng});relation["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng}););(._;>;);out geom;`;
-    return overpassFetch(query, signal);
+    return overpassFetch(query, signal, options);
 }
 
 /**

@@ -11,9 +11,10 @@ import { useRef, useState, useCallback, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 
 import { Cluster, Hotspot, HistoricFind, PlaceSignal, HistoricRoute, ETYMOLOGY_SIGNALS } from '../pages/fieldGuideTypes';
+import { db } from '../db';
 import {
-    NHLEResponse, AIMResponse, OverpassElement,
-    fetchLocationLabel, fetchEtymologySignals, fetchHeritageFeatures,
+    NHLEResponse, AIMResponse, NominatimResponse, OverpassElement, OverpassResponse,
+    fetchLocationLabel, fetchHistoricContextFeatures,
     fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
     parseOverpassRoutes,
 } from '../services/historicScanService';
@@ -50,6 +51,47 @@ export interface HistoricScanResult {
 interface UseHistoricScanOptions {
     onLog:          (msg: string, source?: LogSource, level?: LogLevel) => void;
     onStatusChange: (status: string) => void;
+}
+
+interface HistoricLookupCache {
+    geoData:     NominatimResponse | null;
+    contextData: OverpassResponse  | null;
+    nhleData:    NHLEResponse      | null;
+    aimData:     AIMResponse       | null;
+    routeRaw:    OverpassResponse  | null;
+}
+
+const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.05.30a';
+const HISTORIC_CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
+
+function coordKey(value: number): string {
+    return value.toFixed(3);
+}
+
+function getHistoricCacheKey(
+    center: { lat: number; lng: number },
+    bounds: { west: number; south: number; east: number; north: number },
+): string {
+    return [
+        'historic',
+        HISTORIC_CACHE_VERSION,
+        coordKey(center.lat),
+        coordKey(center.lng),
+        coordKey(bounds.west),
+        coordKey(bounds.south),
+        coordKey(bounds.east),
+        coordKey(bounds.north),
+    ].join(':');
+}
+
+function isHeritageElement(el: OverpassElement): boolean {
+    return !!(
+        el.tags?.historic ||
+        el.tags?.heritage ||
+        el.tags?.archaeological_site ||
+        el.tags?.standing_remains ||
+        el.tags?.site_type
+    );
 }
 
 function getHistoricQueryBounds(
@@ -121,29 +163,61 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         const south = Number(Math.max(center.lat - maxDelta, Math.min(queryBounds.south, center.lat - latBuffer)).toFixed(6));
         const east  = Number(Math.min(center.lng + maxDelta, Math.max(queryBounds.east,  center.lng + lonBuffer)).toFixed(6));
         const north = Number(Math.min(center.lat + maxDelta, Math.max(queryBounds.north, center.lat + latBuffer)).toFixed(6));
+        const lookupBounds = { west, south, east, north };
+        const historicCacheKey = getHistoricCacheKey({ lat: center.lat, lng: center.lng }, lookupBounds);
 
         onLog(`> LANDSCAPE CONTEXT SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 'historic');
         onLog('> STAGE: Reading location, heritage records, monuments and routes...', 'historic');
 
         try {
-            // Always fetch: location label, etymology signals, OSM heritage features
+            let cachedLookup: HistoricLookupCache | null = null;
+            try {
+                const cached = await db.fieldGuideCache.get(historicCacheKey);
+                const lookup = cached?.historicLookup as HistoricLookupCache | undefined;
+                if (
+                    cached &&
+                    lookup &&
+                    cached.engineVersion === HISTORIC_CACHE_VERSION &&
+                    (Date.now() - cached.createdAt) < HISTORIC_CACHE_TTL_MS
+                ) {
+                    cachedLookup = lookup;
+                    const ageMin = Math.max(1, Math.round((Date.now() - cached.createdAt) / 60000));
+                    onLog(`> Historic cache hit — source records reused (${ageMin}m old).`, 'historic');
+                }
+            } catch { /* cache read failure is non-fatal */ }
+
+            // Always fetch: location label and combined OSM context
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
             onStatusChange('Reading historic records...');
             const hasTerrainRouteAttempt = !!opts.nhleData || !!opts.aimData;
-            const [geoData, etymData, osmData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
-                fetchLocationLabel(center.lat, center.lng, signal),
-                fetchEtymologySignals(center.lat, center.lng, signal),
-                fetchHeritageFeatures(center.lat, center.lng, signal),
+            const [geoData, contextData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
+                cachedLookup?.geoData
+                    ? Promise.resolve(cachedLookup.geoData)
+                    : fetchLocationLabel(center.lat, center.lng, signal),
+                cachedLookup?.contextData
+                    ? Promise.resolve(cachedLookup.contextData)
+                    : fetchHistoricContextFeatures(center.lat, center.lng, signal),
                 opts.nhleData
                     ? Promise.resolve(null)
+                    : cachedLookup?.nhleData
+                        ? Promise.resolve(cachedLookup.nhleData)
                     : fetchScheduledMonuments(west, south, east, north, signal),
                 opts.aimData
                     ? Promise.resolve(null)
+                    : cachedLookup?.aimData
+                        ? Promise.resolve(cachedLookup.aimData)
                     : fetchAIMData(west, south, east, north, signal),
                 opts.routes.length === 0 && !hasTerrainRouteAttempt
-                    ? fetchHistoricRoutes(center.lat, center.lng, signal)
+                    ? cachedLookup?.routeRaw
+                        ? Promise.resolve(cachedLookup.routeRaw)
+                        : fetchHistoricRoutes(center.lat, center.lng, signal, {
+                            endpointTimeoutMs: 3500,
+                            totalTimeoutMs:    5000,
+                        })
                     : Promise.resolve(null),
             ]);
+            const etymData = contextData;
+            const osmData  = contextData;
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
                 setIsScanning(false);
@@ -199,15 +273,17 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // 3. OSM heritage features
             let pasFinds: HistoricFind[] = [];
             if (osmData?.elements) {
-                pasFinds = osmData.elements.map((el: OverpassElement) => {
+                pasFinds = osmData.elements.filter(isHeritageElement).map((el: OverpassElement) => {
                     const lat = el.lat || el.center?.lat;
                     const lon = el.lon || el.center?.lon;
                     if (!lat || !lon) return null;
                     const type         = el.tags?.historic || el.tags?.archaeological_site || el.tags?.heritage || el.tags?.standing_remains || el.tags?.site_type || 'Heritage Site';
                     const name         = el.tags?.name;
                     const dist         = getDistanceKm(center.lat, center.lng, lat, lon);
-                    const inViewport   = lat >= south && lat <= north && lon >= west && lon <= east;
-                    if (!inViewport && dist > 2) return null;
+                    // The combined OSM context query fetches historic/name data out
+                    // to 4km for etymology. Keep listed heritage features at the
+                    // original 2km radius so broad context records do not leak in.
+                    if (dist > 2) return null;
                     const descriptiveType = name ? `${name} (${type})` : type;
                     return {
                         id:          `OSM-${el.id}`,
@@ -286,6 +362,27 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             if (aimRaw && aimRaw.features?.length > 0) {
                 onLog(`> AIM: ${aimRaw.features.length} aerial monument${aimRaw.features.length !== 1 ? 's' : ''} mapped.`, 'historic');
             }
+
+            try {
+                const expiredCutoff = Date.now() - HISTORIC_CACHE_TTL_MS;
+                await db.fieldGuideCache
+                    .filter(row => row.id.startsWith('historic:') && row.createdAt < expiredCutoff)
+                    .delete();
+                await db.fieldGuideCache.put({
+                    id: historicCacheKey,
+                    createdAt: Date.now(),
+                    rawClusters: [],
+                    sourceAvailability: {},
+                    engineVersion: HISTORIC_CACHE_VERSION,
+                    historicLookup: {
+                        geoData,
+                        contextData,
+                        nhleData,
+                        aimData,
+                        routeRaw: routeRaw ?? null,
+                    } satisfies HistoricLookupCache,
+                });
+            } catch { /* cache write failure is non-fatal */ }
 
             onStatusChange('Comparing route context...');
 

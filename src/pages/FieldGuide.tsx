@@ -81,6 +81,16 @@ const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
     'General Activity Zone':            'Supporting Activity Zone',
 };
 
+const HISTORIC_LAYER_OPTIONS = [
+    { key: 'context',   label: 'Recorded Heritage' },
+    { key: 'routes',    label: 'Roman Roads & Trackways' },
+    { key: 'corridors', label: 'Movement Corridors' },
+    { key: 'crossings', label: 'Crossing Points' },
+    { key: 'monuments', label: 'Scheduled Monuments' },
+    { key: 'aim',       label: 'Aerial Archaeology' },
+    { key: 'userFinds', label: 'Your Finds' },
+] as const;
+
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
 
 type ScanPhase    = 'idle' | 'terrain' | 'historic' | 'complete';
@@ -1504,9 +1514,40 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             {/* Scrollable content — inspector (when selected) or list */}
                             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
                                 {!selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
-                                    <div className="px-1 text-center text-[9px] font-medium leading-snug text-slate-400">
-                                        {FIELDGUIDE_SHORT_NOTICE}
-                                    </div>
+                                    historicScanComplete ? (
+                                        <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div aria-hidden="true" />
+                                                <button
+                                                    onClick={() => setIntelLayersOpen(v => !v)}
+                                                    className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                                >
+                                                    Layers
+                                                </button>
+                                            </div>
+                                            {intelLayersOpen && (
+                                                <div className="rounded-xl border border-white/10 bg-slate-950/85 p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.24)] animate-in fade-in slide-in-from-top-1 duration-150">
+                                                    {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => {
+                                                        const active = historicLayerVisibility[key];
+                                                        return (
+                                                            <button
+                                                                key={key}
+                                                                onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))}
+                                                                className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'}`}
+                                                            >
+                                                                <span className="text-[10px] font-black uppercase tracking-widest leading-tight">{label}</span>
+                                                                <span className={`h-2 w-2 rounded-full shrink-0 ${active ? 'bg-blue-300 shadow-[0_0_8px_rgba(147,197,253,0.8)]' : 'bg-slate-700'}`} />
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="px-1 text-center text-[9px] font-medium leading-snug text-slate-400">
+                                            {FIELDGUIDE_SHORT_NOTICE}
+                                        </div>
+                                    )
                                 )}
                                 {/* Your Find — in panel (mobile) */}
                                 {selectedUserFind && (() => {
@@ -1823,23 +1864,35 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                             )}
                                             {(hasData || potentialScore) && (
                                                 <div className="border-t border-white/8 pt-3">
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button
-                                                            onClick={() => setIntelDetailsOpen(v => !v)}
-                                                            className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
-                                                        >
-                                                            Details
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setIntelLayersOpen(v => !v)}
-                                                            className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
-                                                        >
-                                                            Layers
-                                                        </button>
-                                                    </div>
-                                                    {intelLayersOpen && (
+                                                    {historicScanComplete ? (
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <button
+                                                                onClick={() => setIntelDetailsOpen(v => !v)}
+                                                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                                            >
+                                                                Details
+                                                            </button>
+                                                            <div aria-hidden="true" />
+                                                        </div>
+                                                    ) : (
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <button
+                                                                onClick={() => setIntelDetailsOpen(v => !v)}
+                                                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                                            >
+                                                                Details
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setIntelLayersOpen(v => !v)}
+                                                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                                            >
+                                                                Layers
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    {intelLayersOpen && !historicScanComplete && (
                                                         <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
-                                                            {[{ key: 'context', label: 'Context' }, { key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }, { key: 'userFinds', label: 'Finds' }].map(({ key, label }) => (
+                                                            {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
                                                                 <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                                                                     {label}
                                                                 </button>
@@ -2638,7 +2691,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
                                             {intelLayersOpen && (
                                                 <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
-                                                    {[{ key: 'context', label: 'Context' }, { key: 'routes', label: 'Routes' }, { key: 'corridors', label: 'Corridors' }, { key: 'crossings', label: 'Crossings' }, { key: 'monuments', label: 'Monuments' }, { key: 'aim', label: 'AIM' }, { key: 'userFinds', label: 'Your Finds' }].map(({ key, label }) => (
+                                                    {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
                                                         <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                                                             {label}
                                                         </button>

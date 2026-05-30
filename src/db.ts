@@ -363,6 +363,7 @@ export type FieldGuideScanCache = {
   modernWays?: any[];
   modernWaysFetchedAt?: number;
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
+  historicLookup?: any;   // standalone Historic button source cache
 };
 
 export class FindSpotDB extends Dexie {
