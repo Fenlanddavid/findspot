@@ -349,6 +349,24 @@ export type ImportedPackage = {
   recorderName?: string;
 };
 
+// ─── Saved Points ─────────────────────────────────────────────────────────────
+// User-bookmarked map positions in FieldGuide, scoped to a project.
+
+export type SavedPoint = {
+  id:        string;
+  projectId: string;
+  label:     string;
+  lat:       number;
+  lon:       number;
+  zoom:      number;
+  note:      string;
+  scanSnapshot?: {
+    hotspotCount:    number;
+    topHotspotTitle: string;
+  };
+  createdAt: string;
+};
+
 // ─── FieldGuide scan cache ────────────────────────────────────────────────────
 // Caches raw cluster data from the tile workers so that identical viewports
 // skip the expensive pixel processing on revisit. TTL: 24 hours.
@@ -378,6 +396,7 @@ export class FindSpotDB extends Dexie {
   importedPackages!: Table<ImportedPackage, string>;
   fieldGuideCache!: Table<FieldGuideScanCache, string>;
   significantFinds!: Table<SignificantFind, string>;
+  savedPoints!: Table<SavedPoint, string>;
 
   constructor() {
     super("findspot_uk");
@@ -554,6 +573,11 @@ export class FindSpotDB extends Dexie {
     this.version(26).stores({
       significantFinds: "id, projectId, permissionId, sessionId, path, status, scatterId, createdAt",
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, scatterId, createdAt",
+    });
+
+    // v27: saved map points — bookmarked positions in FieldGuide, scoped to project.
+    this.version(27).stores({
+      savedPoints: "id, projectId, createdAt",
     });
   }
 }

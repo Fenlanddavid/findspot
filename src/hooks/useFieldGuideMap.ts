@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
-import { Find } from '../db';
+import { Find, SavedPoint, db } from '../db';
 import { DevAnnotation } from '../utils/devAnnotation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,6 +109,7 @@ type MapCallbacks = {
     onMonumentClick: (name: string | null) => void;
     onUserFindClick: (id: string) => void;
     onAnnotationDrop: (lat: number, lng: number) => void;
+    onSavedPointClick: () => void;
 };
 
 export type UseFieldGuideMapOptions = {
@@ -129,6 +130,8 @@ export type UseFieldGuideMapOptions = {
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
+    savedPoints: SavedPoint[];
+    showSavedPoints: boolean;
     // Initial fly-to coordinates
     initLat?: number;
     initLng?: number;
@@ -144,6 +147,7 @@ export type UseFieldGuideMapOptions = {
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
+    savedPoints, showSavedPoints,
     initLat, initLng, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
     const mapContainerRef    = useRef<HTMLDivElement>(null);
@@ -153,6 +157,7 @@ export function useFieldGuideMap({
     const annotationModeRef  = useRef(false);
     const fieldLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
     const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
+    const savedPointMarkersRef = useRef<maplibregl.Marker[]>([]);
 
     // Keep callbacks and annotation mode ref current on every render
     useEffect(() => { callbacksRef.current = callbacks; });
@@ -426,6 +431,8 @@ export function useFieldGuideMap({
             fieldLabelMarkersRef.current = [];
             devAnnotationMarkersRef.current.forEach(marker => marker.remove());
             devAnnotationMarkersRef.current = [];
+            savedPointMarkersRef.current.forEach(marker => marker.remove());
+            savedPointMarkersRef.current = [];
             if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -831,6 +838,111 @@ export function useFieldGuideMap({
         else map.once('load', doUpdate);
         return () => { canceled = true; };
     }, [devAnnotations]);
+
+    // ── Saved point markers ───────────────────────────────────────────────────
+    useEffect(() => {
+        savedPointMarkersRef.current.forEach(m => m.remove());
+        savedPointMarkersRef.current = [];
+        const map = mapRef.current;
+        if (!map || !showSavedPoints || savedPoints.length === 0) return;
+
+        const doAdd = () => {
+            savedPointMarkersRef.current.forEach(m => m.remove());
+            savedPointMarkersRef.current = [];
+            for (const sp of savedPoints) {
+                // Marker element — bookmark icon, all static SVG (no user data)
+                const el = document.createElement('div');
+                el.style.cursor = 'pointer';
+                el.style.lineHeight = '0';
+                el.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#10b981" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+
+                // Relative date (computed from ISO string — not user input)
+                const diff = Date.now() - new Date(sp.createdAt).getTime();
+                const days = Math.floor(diff / 86400000);
+                const dateStr = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? `${days} days ago` : new Date(sp.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
+                // Build popup with DOM nodes — never inject user data via innerHTML
+                const popupEl = document.createElement('div');
+                popupEl.style.cssText = 'background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+
+                const labelEl = document.createElement('p');
+                labelEl.style.cssText = 'font-size:13px;font-weight:900;color:#fff;margin:0 0 2px;line-height:1.2;';
+                labelEl.textContent = sp.label;
+                popupEl.appendChild(labelEl);
+
+                const dateEl = document.createElement('p');
+                dateEl.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.4);margin:0;';
+                dateEl.textContent = dateStr;
+                popupEl.appendChild(dateEl);
+
+                if (sp.scanSnapshot) {
+                    const snapEl = document.createElement('p');
+                    snapEl.style.cssText = 'font-size:9px;color:rgba(52,211,153,0.7);margin:2px 0 0;';
+                    snapEl.textContent = `${sp.scanSnapshot.hotspotCount} hotspot${sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · ${sp.scanSnapshot.topHotspotTitle}`;
+                    popupEl.appendChild(snapEl);
+                }
+
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
+
+                const flyBtn = document.createElement('button');
+                flyBtn.style.cssText = 'flex:1;padding:5px 8px;border-radius:8px;background:#059669;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;border:none;cursor:pointer;';
+                flyBtn.textContent = 'Fly here';
+                flyBtn.addEventListener('click', () => {
+                    map.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom });
+                });
+
+                // Two-tap confirm — consistent with the sheet list delete behaviour
+                let deleteConfirmPending = false;
+                let deleteConfirmTimer: ReturnType<typeof setTimeout> | null = null;
+                const deleteBtn = document.createElement('button');
+                deleteBtn.style.cssText = 'padding:5px 8px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);font-size:9px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;';
+                deleteBtn.title = 'Delete';
+                deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+                deleteBtn.addEventListener('click', async () => {
+                    if (deleteConfirmPending) {
+                        if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
+                        await db.savedPoints.delete(sp.id);
+                    } else {
+                        deleteConfirmPending = true;
+                        deleteBtn.style.background = 'rgba(239,68,68,0.15)';
+                        deleteBtn.style.color = '#f87171';
+                        deleteBtn.style.borderColor = 'rgba(239,68,68,0.4)';
+                        deleteBtn.title = 'Tap again to confirm';
+                        deleteConfirmTimer = setTimeout(() => {
+                            deleteConfirmPending = false;
+                            deleteBtn.style.background = 'rgba(255,255,255,0.06)';
+                            deleteBtn.style.color = 'rgba(255,255,255,0.35)';
+                            deleteBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+                            deleteBtn.title = 'Delete';
+                        }, 3000);
+                    }
+                });
+
+                btnRow.appendChild(flyBtn);
+                btnRow.appendChild(deleteBtn);
+                popupEl.appendChild(btnRow);
+
+                const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 })
+                    .setDOMContent(popupEl);
+
+                const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+                    .setLngLat([sp.lon, sp.lat])
+                    .setPopup(popup)
+                    .addTo(map);
+
+                el.addEventListener('click', () => {
+                    map.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom });
+                    callbacksRef.current.onSavedPointClick();
+                });
+
+                savedPointMarkersRef.current.push(marker);
+            }
+        };
+
+        if (map.loaded()) doAdd();
+        else map.once('load', doAdd);
+    }, [savedPoints, showSavedPoints]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 

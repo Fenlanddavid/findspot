@@ -4,7 +4,7 @@ import * as turf from '@turf/turf';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Find, Media } from '../db';
+import { db, Find, Media, SavedPoint } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
 import { CoachTip, CoachTips } from '../components/CoachTips';
 import { useFieldGuideMap } from '../hooks/useFieldGuideMap';
@@ -49,6 +49,20 @@ function getPotentialTierShort(score: number): string {
     if (score > 60) return 'STRG';
     if (score > 35) return 'MOD';
     return 'LOW';
+}
+
+function formatRelativeDate(isoStr: string): string {
+    const diff = Date.now() - new Date(isoStr).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    const weeks = Math.floor(days / 7);
+    if (weeks === 1) return '1 week ago';
+    if (weeks < 5) return `${weeks} weeks ago`;
+    const months = Math.floor(days / 30);
+    if (months === 1) return '1 month ago';
+    return `${months} months ago`;
 }
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
@@ -380,6 +394,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [focusMode,              setFocusMode]              = useState(false);
     const [mobileSheetMode,        setMobileSheetMode]        = useState<'hotspots' | 'targets'>('hotspots');
     const [selectedTraceId,        setSelectedTraceId]        = useState<string | null>(null);
+    const [showSavedPoints,        setShowSavedPoints]        = useState(false);
+    const [savingPoint,            setSavingPoint]            = useState(false);
+    const [savedPointLabel,        setSavedPointLabel]        = useState('');
+    const [pendingDeleteId,        setPendingDeleteId]        = useState<string | null>(null);
     const traceCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const sheetDragStartY = useRef<number | null>(null);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
@@ -391,6 +409,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [placeSignals,    setPlaceSignals]    = useState<PlaceSignal[]>([]);
 
     // Terrain scan centre — for drift guard in historic phase
+    const savedPointJustClickedRef = useRef(false);
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
     const terrainScanBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
 
@@ -416,6 +435,11 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         () => db.finds.where('projectId').equals(projectId).toArray(),
         [projectId]
     ) ?? [];
+
+    const savedPoints = useLiveQuery(
+        () => db.savedPoints.where('projectId').equals(projectId ?? '').sortBy('createdAt'),
+        [projectId]
+    ) ?? [] as SavedPoint[];
 
     // ─── Significant find auto-trigger ───────────────────────────────────────
     const liveActiveSession = useLiveQuery(
@@ -650,6 +674,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         ],
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
         userFinds: projectFinds,
+        savedPoints, showSavedPoints,
         initLat, initLng,
         annotationMode, devAnnotations,
         callbacks: {
@@ -678,7 +703,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                     traceCardRefs.current.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 });
             },
-            onDeselect:      ()    => { setShowSuggestion(false); clearMapItemSelections(); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
+            onDeselect:      ()    => { if (savedPointJustClickedRef.current) return; setShowSuggestion(false); clearMapItemSelections(); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onDragStart:     ()    => { setShowSuggestion(false); setShowFieldsPicker(false); setFieldPickerStep('top'); persistSheetExpanded(false); },
             onZoomChange:    (z)   => setZoomWarning(z > SCAN_CONFIG.ZOOM_WARNING),
             onSetClickLabel: (l)   => setMapClickLabel(l),
@@ -687,6 +712,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             onCrossingsLog:  (msg) => addLog(msg, 'historic'),
             onMonumentClick: (name) => { clearMapItemSelections('monument'); setSelectedMonument(name === null ? undefined : (name || null)); if (name !== null) persistSheetExpanded(true); },
             onUserFindClick:    (id)       => { clearMapItemSelections('userFind'); setSelectedUserFind(projectFinds.find(f => f.id === id) ?? null); persistSheetExpanded(true); },
+            onSavedPointClick:  ()         => { savedPointJustClickedRef.current = true; setTimeout(() => { savedPointJustClickedRef.current = false; }, 150); setShowSavedPoints(true); persistSheetExpanded(true); },
             onAnnotationDrop:   (lat, lon) => {
                 setPendingAnnotation({ lat, lon });
                 setAnnotationForm({ annotationType: 'missed_hotspot', broadPeriod: 'Unknown', landscapeType: 'unknown', confidence: 'low', reviewerNote: '' });
@@ -695,6 +721,24 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     });
 
     useTilePrewarm(mapRef);
+
+    const buildSuggestedLabel = (): string => {
+        if (selectedHotspotId) {
+            const h = hotspots.find(h => h.id === selectedHotspotId);
+            if (h) return `${HOTSPOT_TITLES[h.classification]} · Hotspot ${h.number}`;
+        }
+        if (historicMode && historicRoutes.length > 0) {
+            const named = historicRoutes.find(r => r.name && r.name.toLowerCase() !== 'null');
+            return `Historic · ${named?.name ?? 'Route area'}`;
+        }
+        if (historicLayerToggles.lidar && hasScanned && sortedHotspots.length > 0) {
+            return `LiDAR · ${getPotentialTier(sortedHotspots[0].score)}`;
+        }
+        if (hasScanned && sortedHotspots.length > 0) {
+            return `${getPotentialTier(sortedHotspots[0].score)} area`;
+        }
+        return 'Saved point';
+    };
 
     const focusTarget = useCallback((f: Cluster) => {
         clearMapItemSelections('target');
@@ -1160,6 +1204,58 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                 <div className="flex-1 relative bg-slate-900">
                     <div ref={mapContainerRef} className="absolute inset-0" />
 
+                    {/* Save Point Modal */}
+                    {savingPoint && (
+                        <div className="absolute inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-end">
+                            <div className="w-full bg-slate-900 border-t border-white/10 rounded-t-2xl p-4 space-y-3">
+                                <p className="text-xs font-black text-white/40 uppercase tracking-widest">Save this map point</p>
+                                <input
+                                    autoFocus
+                                    value={savedPointLabel}
+                                    onChange={e => setSavedPointLabel(e.target.value)}
+                                    placeholder="Name this point..."
+                                    maxLength={60}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-emerald-400/50"
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setSavingPoint(false); setSavedPointLabel(''); }}
+                                        className="flex-1 py-2.5 rounded-xl border border-white/10 text-xs font-black text-white/40 uppercase tracking-widest"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={async () => {
+                                            const map = mapRef.current;
+                                            if (!map || !projectId) return;
+                                            const { lat, lng } = map.getCenter();
+                                            const snap = sortedHotspots.length > 0 ? {
+                                                hotspotCount:    sortedHotspots.length,
+                                                topHotspotTitle: HOTSPOT_TITLES[sortedHotspots[0].classification],
+                                            } : undefined;
+                                            await db.savedPoints.add({
+                                                id:           crypto.randomUUID(),
+                                                projectId,
+                                                label:        savedPointLabel.trim() || 'Saved point',
+                                                lat,
+                                                lon:          lng,
+                                                zoom:         map.getZoom(),
+                                                note:         '',
+                                                scanSnapshot: snap,
+                                                createdAt:    new Date().toISOString(),
+                                            });
+                                            setSavingPoint(false);
+                                            setSavedPointLabel('');
+                                        }}
+                                        className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-white text-xs font-black uppercase tracking-widest"
+                                    >
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Significant find concentration banner */}
                     {showConcentrationBanner && (
                         <div className="absolute top-3 left-3 right-3 z-[105] animate-in slide-in-from-top-2 fade-in duration-200 lg:left-auto lg:right-3 lg:w-80">
@@ -1310,7 +1406,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             <button
                                 onClick={() => setShowLayerPicker(v => !v)}
                                 aria-label="Map layers"
-                                className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
+                                className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
                             >
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                     <polygon points="12 2 2 7 12 12 22 7 12 2"/>
@@ -1345,6 +1441,25 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                     <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${historicLayerVisibility.userFinds ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                         My Finds
+                                    </button>
+                                    <div className="border-t border-white/8 mt-1.5 pt-1.5" />
+                                    <button
+                                        onClick={() => { setShowSavedPoints(v => { if (!v) persistSheetExpanded(true); return !v; }); setShowLayerPicker(false); }}
+                                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${showSavedPoints ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                                        Saved Points{savedPoints.length > 0 ? ` (${savedPoints.length})` : ''}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setSavedPointLabel(buildSuggestedLabel());
+                                            setSavingPoint(true);
+                                            setShowLayerPicker(false);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white/50 hover:text-white hover:bg-white/5 transition-all"
+                                    >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                        Save This Point
                                     </button>
                                 </div>
                             )}
@@ -1438,14 +1553,14 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <p className="text-[15px] font-black text-white leading-tight truncate">
-                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? getProtectedTargetCopy(selectedTarget).label : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review') : 'Ready to Scan'}
+                                                {analyzing || isTerrainScanning || loadingPAS ? (scanStatus || 'Reading landscape signals') : selectedUserFind ? 'Your Find' : selectedPASFind ? 'Heritage Feature' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? getProtectedTargetCopy(selectedTarget).label : 'Target Details') : selectedMonument !== undefined ? 'Scheduled Monument' : showSavedPoints ? 'Saved Points' : historicMode ? 'Historic Review' : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review') : 'Ready to Scan'}
                                             </p>
                                             {selectedMonument === undefined && !analyzing && !isTerrainScanning && !loadingPAS && ((historicMode && historicScanComplete) || (!historicMode && hasScanned && mobileSheetMode === 'hotspots' && terrainScanComplete)) && (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0" />
                                             )}
                                         </div>
                                         <p className={`text-[10px] font-bold leading-tight truncate ${!analyzing && !isTerrainScanning && !loadingPAS && !selectedUserFind && !selectedPASFind && !(selectedId && !selectedHotspotId) && selectedMonument === undefined && (historicMode || (hasScanned && !(sortedHotspots.length === 0 && displayTargets.length === 0))) ? 'text-amber-400' : 'text-white/35'}`}>
-                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
+                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : showSavedPoints ? (savedPoints.length > 0 ? `${savedPoints.length} point${savedPoints.length !== 1 ? 's' : ''} saved` : 'No saved points yet') : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
@@ -1513,7 +1628,50 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
                             {/* Scrollable content — inspector (when selected) or list */}
                             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
-                                {!selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
+                                {/* Saved points list */}
+                                {showSavedPoints && !selectedId && !selectedHotspotId && !selectedUserFind && !selectedPASFind && selectedMonument === undefined && (
+                                    <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                                        {savedPoints.length === 0 ? (
+                                            <div className="flex flex-col items-center gap-2 py-8 text-center">
+                                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/15"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                                                <p className="text-[11px] text-white/30">No saved points yet.<br/>Use the layers menu to save a map position.</p>
+                                            </div>
+                                        ) : savedPoints.map(sp => (
+                                            <div key={sp.id} className="rounded-xl bg-white/[0.03] border border-white/8 px-3 py-2.5 flex items-center gap-3">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="#10b981" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-black text-white truncate leading-tight">{sp.label}</p>
+                                                    <p className="text-[9px] text-white/35 mt-0.5">{formatRelativeDate(sp.createdAt)}</p>
+                                                    {sp.scanSnapshot && (
+                                                        <p className="text-[9px] text-emerald-400/70 mt-0.5">{sp.scanSnapshot.hotspotCount} hotspot{sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · {sp.scanSnapshot.topHotspotTitle}</p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={() => { mapRef.current?.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom }); setShowSavedPoints(false); }}
+                                                    className="text-[9px] font-black text-emerald-300 uppercase tracking-widest shrink-0 px-2 py-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                                                >
+                                                    Fly to
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (pendingDeleteId === sp.id) {
+                                                            await db.savedPoints.delete(sp.id);
+                                                            setPendingDeleteId(null);
+                                                        } else {
+                                                            setPendingDeleteId(sp.id);
+                                                            setTimeout(() => setPendingDeleteId(prev => prev === sp.id ? null : prev), 3000);
+                                                        }
+                                                    }}
+                                                    className={`shrink-0 p-1.5 rounded-lg transition-colors ${pendingDeleteId === sp.id ? 'text-red-400 bg-red-500/15 scale-110' : 'text-white/25 hover:text-red-400'}`}
+                                                    title={pendingDeleteId === sp.id ? 'Tap again to confirm delete' : 'Delete'}
+                                                >
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {!showSavedPoints && !selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
                                     historicScanComplete ? (
                                         <div className="space-y-2" onClick={e => e.stopPropagation()}>
                                             <div className="grid grid-cols-2 gap-2">
