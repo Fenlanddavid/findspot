@@ -2207,6 +2207,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                                             <p className="text-xs text-white/80 leading-relaxed">{interp.summary}</p>
                                                             <p className="text-xs text-white/80 leading-relaxed">{interp.reasoning}</p>
                                                             <p className="text-xs text-white/80 leading-relaxed">{interp.strategy}</p>
+                                                            {interp.soilNote && (
+                                                                <p className="text-xs text-sky-300/70 leading-relaxed italic border-t border-white/8 pt-2">{interp.soilNote}</p>
+                                                            )}
                                                             <div className="space-y-1.5 pt-2 border-t border-white/10">
                                                                 {breakdown.map(({ label, val, cap }) => (
                                                                     <div key={label} className="flex items-center gap-2">
@@ -2488,6 +2491,12 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                                         <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
                                                         <p className="text-xs text-white/85 leading-relaxed">{interp.strategy}</p>
                                                     </div>
+                                                    {interp.soilNote && (
+                                                        <div className="border-t border-white/8 pt-3">
+                                                            <p className="text-[9px] font-black text-sky-400/60 uppercase tracking-[0.15em] mb-1.5">Soil mechanics note</p>
+                                                            <p className="text-xs text-sky-300/70 leading-relaxed italic">{interp.soilNote}</p>
+                                                        </div>
+                                                    )}
                                                     <div className="border-t border-white/10 pt-3">
                                                         <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
                                                         <div className="space-y-1.5">

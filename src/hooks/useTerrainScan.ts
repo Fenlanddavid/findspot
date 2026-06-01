@@ -162,6 +162,17 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             qWest, qSouth, qEast, qNorth, center.lat, MONUMENT_BOUNDARY_BUFFER_M + 5,
         );
 
+        // ── Fire route + ways fetches before cache check ──────────────────────
+        // Both requests are fired here so they run in parallel with the DB cache
+        // lookup and NHLE/AIM fetches. On a cache hit the routes fetch will have
+        // had several seconds to resolve before the Promise.race timeout is tested,
+        // matching the behaviour of a fresh scan (where tile processing gives routes
+        // the same head-start). On a cache miss, the fresh scan path reuses these
+        // same promises — no duplicate requests are made.
+        const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
+        const modernWaysPromise = fetchModernWaysForBoundsResult(scanWest, scanSouth, scanEast, scanNorth, signal)
+            .catch(() => ({ ways: [], available: false }));
+
         // ── Cache check ───────────────────────────────────────────────────────
         // If the same viewport was scanned within the last 24 hours, skip the
         // expensive tile processing and return the cached raw clusters.
@@ -217,7 +228,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 let routes: HistoricRoute[] = [];
                 try {
                     onStatusChange('Reading route context...');
-                    const routeRaw = await Promise.race([fetchScanRoutes(center.lat, center.lng, signal), new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
+                    // routePromise was fired before the cache check — it has had
+                    // time to resolve during the DB lookup and NHLE/AIM fetches.
+                    const routeRaw = await Promise.race([routePromise, new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
                     if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
                 } catch { /* routes unavailable */ }
                 onStatusChange('Building hotspot model...');
@@ -271,16 +284,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             // Cache miss or error — proceed with full scan
         }
 
-        // ── Fire all network requests in parallel ─────────────────────────────
-        // Wayback IDs are resolved once here so satellite workers receive them
-        // directly — avoids each worker independently fetching the catalog.
+        // ── Fire remaining parallel requests for fresh scan ───────────────────
+        // routePromise and modernWaysPromise were already fired before the cache
+        // check — reuse them here. Fire remaining requests now.
         const waybackPromise = resolveWaybackIds();
 
-        const nhlePromise       = fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal);
-        const aimPromise        = fetchAIMData(qWest, qSouth, qEast, qNorth, signal);
-        const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
-        const modernWaysPromise = fetchModernWaysForBoundsResult(scanWest, scanSouth, scanEast, scanNorth, signal)
-            .catch(() => ({ ways: [], available: false }));
+        const nhlePromise = fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal);
+        const aimPromise  = fetchAIMData(qWest, qSouth, qEast, qNorth, signal);
 
         onStatusChange('Reading terrain...');
 

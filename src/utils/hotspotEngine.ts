@@ -5,7 +5,7 @@
 //
 // generateHotspots is the combined entry point kept for call-site compatibility.
 
-import { Cluster, Hotspot, HotspotClassification, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Cluster, Hotspot, HotspotClassification, SoilMechanics, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from './fieldGuideAnalysis';
 import { computeLandscapeReading } from './landscapeReadingEngine';
 
@@ -375,6 +375,77 @@ function classifyHotspot(ctx: ClassifyContext): {
         classification: 'General Activity Zone',
         reason:         'Multiple independent signals detected',
     };
+}
+
+// ─── Soil mechanics class derivation ─────────────────────────────────────────
+// Derives a single interpretationClass for a hotspot from signals already
+// computed during scoring. Called per-hotspot after classification is known.
+// Crossing points, junctions, and barrows are excluded — their identity is
+// already fully characterised and soil mechanics would add noise, not insight.
+//
+// Note: 'colluvial_accumulation' and the corresponding 'hilltop_source_zone'
+// upgrade are assigned by analyzeHotspotRelationships, which can compare pairs
+// of hotspots. This function only assigns classes that can be derived from a
+// single hotspot's own signals.
+
+function deriveSoilMechanicsClass(params: {
+    isRaised:             boolean;
+    hasHydrology:         boolean;
+    hasSlope:             boolean;
+    context:              number;
+    disturbanceIsHigh:    boolean;
+    highDisturbanceCount: number;
+    isHighConfidenceCrossing: boolean;
+    classification:       HotspotClassification;
+}): SoilMechanics | undefined {
+    const { isRaised, hasHydrology, hasSlope, context, disturbanceIsHigh,
+            highDisturbanceCount, isHighConfidenceCrossing, classification } = params;
+
+    // Skip hotspots where another identity already dominates interpretation.
+    if (isHighConfidenceCrossing ||
+        classification === 'Crossing Point Candidate'   ||
+        classification === 'Junction / Convergence Zone' ||
+        classification === 'Burial / Barrow Candidate') return undefined;
+
+    // 1. Disturbed plough slope — slope + high disturbance.
+    //    Repeated ploughing on a gradient moves material downslope season by season.
+    if (hasSlope && !isRaised && highDisturbanceCount > 0) {
+        return {
+            interpretationClass: 'disturbed_plough_slope',
+            userNote: 'Sloping disturbed ground — artefacts may have shifted downslope. Check nearby lower ground for accumulation.',
+        };
+    }
+
+    // 2. Wet margin preservation — low wet ground favours burial survival,
+    //    but signals may be offset from the actual original deposition point.
+    if (hasHydrology && !isRaised &&
+        (classification === 'Lowland Activity Zone' || classification === 'Wetland Margin Activity Zone')) {
+        return {
+            interpretationClass: 'wet_margin_preservation',
+            userNote: 'Low wet ground favours preservation — finds may survive well but could be buried deeper than on drier slopes.',
+        };
+    }
+
+    // 3. Stable plateau — raised, no slope transport risk, low disturbance.
+    //    Artefacts are more likely to remain close to their original deposition point.
+    if (isRaised && !hasSlope && !hasHydrology && !disturbanceIsHigh) {
+        return {
+            interpretationClass: 'stable_plateau',
+            userNote: 'Raised stable ground — artefacts here are more likely to be where they were originally deposited.',
+        };
+    }
+
+    // 4. Hilltop source zone — raised with slope below; material may have moved.
+    //    Context cap of 14 avoids tagging strong settlement candidates where the
+    //    raised signal is already well-explained by archaeological context.
+    if (isRaised && hasSlope && context < 14) {
+        return {
+            interpretationClass: 'hilltop_source_zone',
+            userNote: 'Raised ground with slope below — this may be the activity source area. Check adjacent lower ground too.',
+        };
+    }
+
+    return undefined;
 }
 
 // ─── Stage 1: terrain-based scoring ──────────────────────────────────────────
@@ -826,6 +897,18 @@ export function buildTerrainHotspots(
             explanation.push('Feature near scan edge — wider scan may improve confidence');
         }
 
+        // ── Steep-slope confidence suppressor ─────────────────────────────────
+        // A hotspot centred mid-slope (not on raised ground, no hydrology context,
+        // no AIM corroboration) with weak landscape context is more likely to
+        // reflect colluvially moved material than in-situ activity. Downgrade one
+        // tier. Does not affect raised terrace edges or water-margin slopes, which
+        // are archaeologically meaningful in their own right.
+        if (hasSlope && !isRaised && !hasHydrology && context < 6 && !hasAimEnrichment) {
+            if      (confidence === 'Strongest Signal')  confidence = 'Strong Signal';
+            else if (confidence === 'Strong Signal')     confidence = 'Developing Signal';
+            else if (confidence === 'Developing Signal') confidence = 'Weak Signal';
+        }
+
         // ── Legacy type field (kept for call-site compatibility) ──────────────
         let type: Hotspot['type'] = 'General Activity Zone';
         if (hasHydrology && isRaised) type = 'Raised Dry Area (Likely)';
@@ -857,6 +940,18 @@ export function buildTerrainHotspots(
             signalClassCount,
             hasCircularFeature, hasLinearPattern, hasSettlementContext, disturbanceIsHigh,
             hasMultiSeasonSat, hasAimEnrichment,
+        });
+
+        // ── Soil mechanics class (per-hotspot) ───────────────────────────────
+        // Derived from signals already computed above — no new data needed.
+        // 'colluvial_accumulation' requires comparing two hotspots so it is
+        // assigned later in analyzeHotspotRelationships, not here.
+        const soilMechanics = deriveSoilMechanicsClass({
+            isRaised, hasHydrology, hasSlope, context,
+            disturbanceIsHigh,
+            highDisturbanceCount,
+            isHighConfidenceCrossing,
+            classification,
         });
 
         // ── Suggested focus ───────────────────────────────────────────────────
@@ -923,6 +1018,7 @@ export function buildTerrainHotspots(
             isOnCorridor: members.some(m => m.isOnCorridor),
             linkedCount: (() => { const ids = new Set<string>(); members.forEach(m => (m.linkedClusterIds ?? []).forEach(id => ids.add(id))); return ids.size; })(),
             disturbanceRisk:      hotspotDisturbanceRisk === 'Low' ? undefined : hotspotDisturbanceRisk,
+            soilMechanics:        soilMechanics ?? undefined,
             metrics:              { anomaly, context, convergence, behaviour, penalty, signalCount, signalClassCount },
         });
     }
@@ -1032,6 +1128,7 @@ export function enhanceHotspotsWithHistoric(
 function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
     if (hotspots.length < 2) return hotspots;
 
+    // ── System detection ──────────────────────────────────────────────────────
     // For each hotspot, find which others are within 600m
     const neighborMap = new Map<string, string[]>();
     for (const h of hotspots) {
@@ -1060,17 +1157,67 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
         if (cluster.size >= 3) systems.push(cluster);
     }
 
-    if (systems.length === 0) return hotspots;
-
     // Build a lookup: hotspot id → which system it belongs to
     const idToSystem = new Map<string, Set<string>>();
     for (const sys of systems) {
         for (const id of sys) idToSystem.set(id, sys);
     }
 
+    // ── Colluvial pair detection ──────────────────────────────────────────────
+    // Pairs a raised-type hotspot (likely activity source) with a nearby
+    // lowland or wetland hotspot (likely accumulation or preservation zone).
+    // Distance window: 40–200m covers realistic slope-wash transport without
+    // merging pairs that would already have clustered into a single hotspot.
+    // Each lowland hotspot is only tagged once (closest raised partner wins).
+    // Colluvial annotations override per-hotspot soilMechanics because spatial
+    // relationships between hotspots are more diagnostic than single-hotspot heuristics.
+
+    const COLLUVIAL_MIN_M = 40;
+    const COLLUVIAL_MAX_M = 200;
+
+    const isRaisedType = (h: Hotspot): boolean =>
+        ['Raised Activity Area', 'Settlement Edge Candidate', 'Terrain Structure Candidate',
+         'Multi-Period Occupation Zone'].includes(h.classification) ||
+        h.explanation.some(e => e.includes('Raised dry') || e.includes('Island effect'));
+
+    const isLowlandType = (h: Hotspot): boolean =>
+        ['Lowland Activity Zone', 'Wetland Margin Activity Zone'].includes(h.classification) ||
+        (!isRaisedType(h) && h.explanation.some(e => e.includes('Hydrology') || e.includes('wet zone')));
+
+    const colluvialAnnotations = new Map<string, SoilMechanics>();
+
+    for (const a of hotspots) {
+        if (!isRaisedType(a)) continue;
+        for (const b of hotspots) {
+            if (a.id === b.id || !isLowlandType(b)) continue;
+            if (colluvialAnnotations.has(b.id)) continue; // only tag each accumulation zone once
+            const distM = getDistanceKm(a.center[1], a.center[0], b.center[1], b.center[0]) * 1000;
+            if (distM < COLLUVIAL_MIN_M || distM > COLLUVIAL_MAX_M) continue;
+
+            // Tag B as the likely accumulation / preservation zone
+            colluvialAnnotations.set(b.id, {
+                interpretationClass: 'colluvial_accumulation',
+                userNote: 'Finds may have moved downslope into this area. Check the higher ground above this target as well.',
+            });
+            // Tag A as the likely source zone (only if no more specific class already set)
+            if (!colluvialAnnotations.has(a.id)) {
+                colluvialAnnotations.set(a.id, {
+                    interpretationClass: 'hilltop_source_zone',
+                    userNote: 'This may be the original activity area. Lower ground nearby may hold accumulated finds.',
+                });
+            }
+        }
+    }
+
+    // ── Apply all annotations ─────────────────────────────────────────────────
     return hotspots.map(h => {
+        // Colluvial annotation overrides per-hotspot soilMechanics — inter-hotspot
+        // relationships are more diagnostic than single-hotspot heuristics.
+        const colluvial = colluvialAnnotations.get(h.id);
+        let result = colluvial ? { ...h, soilMechanics: colluvial } : h;
+
         const system = idToSystem.get(h.id);
-        if (!system) return h;
+        if (!system) return result;
 
         const systemHotspots = hotspots.filter(o => system.has(o.id));
         const classifications = systemHotspots.map(o => o.classification);
@@ -1082,7 +1229,7 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
         const uniqueTypes  = new Set(classifications).size;
 
         // Only annotate when the cluster shows meaningful diversity
-        if (uniqueTypes < 2) return h;
+        if (uniqueTypes < 2) return result;
 
         // Identify the core site (highest score in the system)
         const systemSorted = [...systemHotspots].sort((a, b) => b.score - a.score);
@@ -1105,15 +1252,15 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
         }
 
         // Keep 'Roman corridor influence' secondary tags — don't overwrite Roman context
-        const keepExisting  = h.secondaryTag?.includes('Roman') || h.secondaryTag?.includes('Historically');
-        const newSecondaryTag = keepExisting ? h.secondaryTag : systemTag;
+        const keepExisting    = result.secondaryTag?.includes('Roman') || result.secondaryTag?.includes('Historically');
+        const newSecondaryTag = keepExisting ? result.secondaryTag : systemTag;
 
         // Append system note to explanation if not already present (capped at 5)
-        const newExplanation = h.explanation.includes(systemNote)
-            ? h.explanation
-            : prioritiseExplanations([...h.explanation, systemNote], 5);
+        const newExplanation = result.explanation.includes(systemNote)
+            ? result.explanation
+            : prioritiseExplanations([...result.explanation, systemNote], 5);
 
-        return { ...h, secondaryTag: newSecondaryTag, explanation: newExplanation };
+        return { ...result, secondaryTag: newSecondaryTag, explanation: newExplanation };
     });
 }
 

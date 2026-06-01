@@ -12,6 +12,7 @@ export interface Interpretation {
     summary:   string;
     reasoning: string;
     strategy:  string;
+    soilNote?: string;  // soil mechanics user note when applicable
 }
 
 // ─── Hotspot signal strength (display only — mirrors targetInterpreter) ────────
@@ -379,5 +380,5 @@ export function buildInterpretation(h: Hotspot): Interpretation {
     const reasoning = buildReasoning(h, tier, seed);
     const strategy  = buildStrategy(h, tier, seed);
 
-    return { summary, reasoning, strategy };
+    return { summary, reasoning, strategy, soilNote: h.soilMechanics?.userNote };
 }

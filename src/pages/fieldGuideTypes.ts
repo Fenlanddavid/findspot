@@ -152,6 +152,24 @@ export type HotspotClassification =
     | 'Multi-Signal Activity Zone'
     | 'General Activity Zone';
 
+// ─── Soil Mechanics ───────────────────────────────────────────────────────────
+// Derived per-hotspot and inter-hotspot annotation describing how artefacts may
+// have moved, accumulated, or been preserved due to landform position.
+// Modifier-only — never creates standalone targets. Populated by the engine
+// and relationship pass; consumed by the interpretation layer.
+
+export type SoilMechanicsClass =
+    | 'colluvial_accumulation'   // downslope from a raised source zone — receives moved material
+    | 'wet_margin_preservation'  // low wet ground — good preservation, finds may be deeper
+    | 'hilltop_source_zone'      // raised with slope below — original activity; check downslope too
+    | 'stable_plateau'           // raised, flat, undisturbed — artefacts likely in-situ
+    | 'disturbed_plough_slope';  // sloping + disturbed — artefacts may have shifted downslope
+
+export interface SoilMechanics {
+    interpretationClass: SoilMechanicsClass;
+    userNote:            string;
+}
+
 export interface Hotspot {
     id: string;
     number: number;
@@ -172,6 +190,7 @@ export interface Hotspot {
     isOnCorridor?: boolean;
     linkedCount?: number;
     disturbanceRisk?: 'Low' | 'Medium' | 'High';
+    soilMechanics?: SoilMechanics;
     metrics: {
         anomaly:          number;
         context:          number;
