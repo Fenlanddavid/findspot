@@ -676,7 +676,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         userFinds: projectFinds,
         savedPoints, showSavedPoints,
         initLat, initLng,
-        annotationMode, devAnnotations,
+        devMode, annotationMode, devAnnotations,
         callbacks: {
             onFeatureClick:  (id)  => {
                 clearMapItemSelections('target');

@@ -9,6 +9,7 @@ import { DevAnnotation } from '../utils/devAnnotation';
 
 interface LayerState {
     historicMode: boolean;
+    devMode:      boolean;
     visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean };
 }
 
@@ -26,8 +27,8 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'landscape-context-outline',       visibleWhen: s => s.historicMode && s.visibility.context },
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
-    { id: 'cluster-links-casing',            visibleWhen: s => !s.historicMode },
-    { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode },
+    { id: 'cluster-links-casing',            visibleWhen: s => !s.historicMode && s.devMode },
+    { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode && s.devMode },
     { id: 'trace-targets-circle',            visibleWhen: s => !s.historicMode },
     { id: 'trace-targets-selected',          visibleWhen: s => !s.historicMode },
     { id: 'targets-halo',                    visibleWhen: s => !s.historicMode },
@@ -136,6 +137,7 @@ export type UseFieldGuideMapOptions = {
     initLat?: number;
     initLng?: number;
     // Dev annotation support
+    devMode:        boolean;
     annotationMode: boolean;
     devAnnotations: DevAnnotation[];
     // Event handler callbacks
@@ -148,7 +150,7 @@ export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
     savedPoints, showSavedPoints,
-    initLat, initLng, annotationMode, devAnnotations, callbacks,
+    initLat, initLng, devMode, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
     const mapContainerRef    = useRef<HTMLDivElement>(null);
     const mapRef             = useRef<maplibregl.Map | null>(null);
@@ -693,11 +695,11 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        const layerState: LayerState = { historicMode, visibility: historicLayerVisibility };
+        const layerState: LayerState = { historicMode, devMode, visibility: historicLayerVisibility };
         LAYER_VISIBILITY_CONFIG.forEach(({ id, visibleWhen }) => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibleWhen(layerState) ? 'visible' : 'none');
         });
-    }, [historicMode, historicLayerVisibility]);
+    }, [historicMode, devMode, historicLayerVisibility]);
 
     // ── Overlay raster toggles ────────────────────────────────────────────────
     useEffect(() => {

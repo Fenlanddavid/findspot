@@ -233,6 +233,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     const routeRaw = await Promise.race([routePromise, new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
                     if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
                 } catch { /* routes unavailable */ }
+                // Itiner-e Roman roads — static asset, always available; must be
+                // included here as it is in the fresh scan path, otherwise cached
+                // scans miss Roman road context and produce no corridor link lines.
+                try {
+                    const romanRoads = await fetchRomanRoads(qWest, qSouth, qEast, qNorth);
+                    if (romanRoads.length > 0) routes = [...routes, ...romanRoads];
+                } catch { /* asset unavailable */ }
                 onStatusChange('Building hotspot model...');
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
