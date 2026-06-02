@@ -51,6 +51,7 @@ export interface TerrainScanResult {
     heritageCount:      number;
     sourceAvailability: Record<string, boolean>;
     fromCache:          boolean;
+    noSignal:           boolean;
     scanStartCenter:    { lat: number; lng: number };
     scanStartBounds:     { west: number; south: number; east: number; north: number };
 }
@@ -284,7 +285,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
-                    sourceAvailability: cached.sourceAvailability, fromCache: true, scanStartCenter, scanStartBounds,
+                    sourceAvailability: cached.sourceAvailability, fromCache: true, noSignal: false, scanStartCenter, scanStartBounds,
                 };
             }
         } catch {
@@ -390,6 +391,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 satellite_summer: summerResult.tilesLoaded > 0,
             };
 
+            // If every tile source failed to load, the device has no signal.
+            // Don't cache this result — it will resolve correctly once connectivity returns.
+            const noSignal = Object.values(sourceAvailability).every(v => !v);
+
             const merged      = findConsensus(rawCombined);
             const aimEnriched = applyAIMEnrichment(merged, aimData);
 
@@ -441,15 +446,17 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 const fallbackHidden = applyRouteUnavailableFallback(contextualized);
                 onLog(`> Route suppression: modern road data unavailable; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
             }
-            try {
-                const expiredCutoff = Date.now() - CACHE_TTL_MS;
-                await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
-                await db.fieldGuideCache.put({
-                    id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
-                    sourceAvailability, engineVersion: ENGINE_VERSION,
-                    ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
-                });
-            } catch { /* cache failure is non-fatal */ }
+            if (!noSignal) {
+                try {
+                    const expiredCutoff = Date.now() - CACHE_TTL_MS;
+                    await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
+                    await db.fieldGuideCache.put({
+                        id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
+                        sourceAvailability, engineVersion: ENGINE_VERSION,
+                        ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
+                    });
+                } catch { /* cache failure is non-fatal */ }
+            }
 
             onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
@@ -461,7 +468,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             return {
                 terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                 nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability,
-                fromCache: false, scanStartCenter, scanStartBounds,
+                fromCache: false, noSignal, scanStartCenter, scanStartBounds,
             };
 
         } catch (e) {

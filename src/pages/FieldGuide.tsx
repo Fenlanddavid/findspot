@@ -402,6 +402,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const sheetDragStartY = useRef<number | null>(null);
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
+    const [scanNoSignal,           setScanNoSignal]           = useState(false);
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
     const [selectedPASFind, setSelectedPASFind] = useState<HistoricFind | null>(null);
@@ -785,6 +786,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         terrainScanBoundsRef.current = null;
         setSourceAvailability(null);
         setScanFromCache(false);
+        setScanNoSignal(false);
         setRawClusters([]);
         setSelectedTraceId(null);
         setAnnotationMode(false);
@@ -869,6 +871,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         setSourceAvailability(result.sourceAvailability ?? null);
         setScanFromCache(result.fromCache);
+        setScanNoSignal(result.noSignal ?? false);
         setRawClusters(result.rawClusters ?? []);
 
         dispatch({
@@ -1560,7 +1563,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                             )}
                                         </div>
                                         <p className={`text-[10px] font-bold leading-tight truncate ${!analyzing && !isTerrainScanning && !loadingPAS && !selectedUserFind && !selectedPASFind && !(selectedId && !selectedHotspotId) && selectedMonument === undefined && (historicMode || (hasScanned && !(sortedHotspots.length === 0 && displayTargets.length === 0))) ? 'text-amber-400' : 'text-white/35'}`}>
-                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : showSavedPoints ? (savedPoints.length > 0 ? `${savedPoints.length} point${savedPoints.length !== 1 ? 's' : ''} saved` : 'No saved points yet') : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? 'Quiet spot - tap for scan notes' : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
+                                            {analyzing || isTerrainScanning || loadingPAS ? 'Reading scan data' : selectedUserFind ? 'Tap × to dismiss' : selectedPASFind ? 'Heritage record' : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis') : selectedMonument !== undefined ? 'Legal protection applies' : showSavedPoints ? (savedPoints.length > 0 ? `${savedPoints.length} point${savedPoints.length !== 1 ? 's' : ''} saved` : 'No saved points yet') : historicMode ? 'Tap panel for historic details' : hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 ? (scanNoSignal ? 'No signal — tap for details' : 'Quiet spot - tap for scan notes') : hasScanned ? (mobileSheetMode === 'targets' ? 'Tap panel for investigation targets' : 'Tap panel to review hotspots') : 'Move the map, then run a scan'}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
@@ -2344,8 +2347,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                 )}
                                 {selectedMonument === undefined && !historicMode && !selectedHotspotId && hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 && (
                                     <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 text-center">
-                                        <p className="text-xs font-black text-white/70 leading-tight">Quiet scan area</p>
-                                        <p className="text-[10px] font-bold text-white/35 leading-snug mt-1">No strong hotspots or investigation targets stood out here. Try widening the view, checking the historic layers, or scanning a neighbouring field.</p>
+                                        <p className="text-xs font-black text-white/70 leading-tight">{scanNoSignal ? 'No signal' : 'Quiet scan area'}</p>
+                                        <p className="text-[10px] font-bold text-white/35 leading-snug mt-1">{scanNoSignal ? 'Tile data could not be fetched — check your connection and scan again.' : 'No strong hotspots or investigation targets stood out here. Try widening the view, checking the historic layers, or scanning a neighbouring field.'}</p>
                                     </div>
                                 )}
                                 {selectedMonument === undefined && !selectedHotspotId && mobileSheetMode === 'targets' && hasScanned && displayTargets.length === 0 && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
