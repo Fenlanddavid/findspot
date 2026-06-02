@@ -105,6 +105,44 @@ const HISTORIC_LAYER_OPTIONS = [
     { key: 'userFinds', label: 'Your Finds' },
 ] as const;
 
+type RasterOverlayKey = 'lidar' | 'os1880' | 'os1930';
+type RasterOverlayOpacity = Record<RasterOverlayKey, number>;
+
+const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
+    lidar:  1,
+    os1880: 1,
+    os1930: 1,
+};
+
+const RASTER_OVERLAY_LABELS: Record<RasterOverlayKey, string> = {
+    lidar:  'LiDAR',
+    os1880: 'OS 1895',
+    os1930: 'OS 1900',
+};
+
+const RASTER_OVERLAY_STORAGE_KEY = 'fs_fg_overlay_opacity';
+
+function clampOpacity(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.min(1, value))
+        : fallback;
+}
+
+function readRasterOverlayOpacity(): RasterOverlayOpacity {
+    try {
+        const raw = localStorage.getItem(RASTER_OVERLAY_STORAGE_KEY);
+        if (!raw) return DEFAULT_RASTER_OVERLAY_OPACITY;
+        const parsed = JSON.parse(raw) as Partial<RasterOverlayOpacity>;
+        return {
+            lidar:  clampOpacity(parsed.lidar, DEFAULT_RASTER_OVERLAY_OPACITY.lidar),
+            os1880: clampOpacity(parsed.os1880, DEFAULT_RASTER_OVERLAY_OPACITY.os1880),
+            os1930: clampOpacity(parsed.os1930, DEFAULT_RASTER_OVERLAY_OPACITY.os1930),
+        };
+    } catch {
+        return DEFAULT_RASTER_OVERLAY_OPACITY;
+    }
+}
+
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
 
 type ScanPhase    = 'idle' | 'terrain' | 'historic' | 'complete';
@@ -372,6 +410,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicScanCompleted,  setHistoricScanCompleted]  = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
+    const [historicLayerOpacity,   setHistoricLayerOpacity]   = useState<RasterOverlayOpacity>(readRasterOverlayOpacity);
+    const [activeOpacityLayer,     setActiveOpacityLayer]     = useState<RasterOverlayKey | null>(null);
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: false });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
@@ -538,6 +578,29 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         if (keep !== 'trace') setSelectedTraceId(null);
     }, []);
 
+    const handleRasterOverlayPress = useCallback((key: RasterOverlayKey) => {
+        const enabled = historicLayerToggles[key];
+        const otherOldMapKey: RasterOverlayKey | null = key === 'os1880' ? 'os1930' : key === 'os1930' ? 'os1880' : null;
+        if (enabled) {
+            setHistoricLayerToggles(prev => ({ ...prev, [key]: false }));
+            if (activeOpacityLayer === key) setActiveOpacityLayer(null);
+            setShowLayerPicker(false);
+            return;
+        }
+        setHistoricLayerToggles(prev => ({
+            ...prev,
+            [key]: true,
+            ...(otherOldMapKey ? { [otherOldMapKey]: false } : {}),
+        }));
+        setHistoricLayerOpacity(prev => ({ ...prev, [key]: 1 }));
+        setActiveOpacityLayer(key);
+        setShowLayerPicker(false);
+    }, [activeOpacityLayer, historicLayerToggles]);
+
+    const updateRasterOverlayOpacity = useCallback((key: RasterOverlayKey, value: number) => {
+        setHistoricLayerOpacity(prev => ({ ...prev, [key]: clampOpacity(value, prev[key]) }));
+    }, []);
+
     const persistSheetExpanded = useCallback((expanded: boolean) => {
         setSheetExpanded(expanded);
         try { localStorage.setItem('fs_fg_sheet', expanded ? '1' : '0'); } catch {}
@@ -652,6 +715,14 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }, [systemLog]);
 
+    useEffect(() => {
+        try { localStorage.setItem(RASTER_OVERLAY_STORAGE_KEY, JSON.stringify(historicLayerOpacity)); } catch {}
+    }, [historicLayerOpacity]);
+
+    useEffect(() => {
+        if (activeOpacityLayer && !historicLayerToggles[activeOpacityLayer]) setActiveOpacityLayer(null);
+    }, [activeOpacityLayer, historicLayerToggles]);
+
     // ─── Scan hooks ───────────────────────────────────────────────────────────
 
     const { runTerrainScan, cancelTerrain, isTerrainScanning } = useTerrainScan({
@@ -673,7 +744,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             // Fall back to the permission's own boundary when no fields have been drawn
             ...permissions.filter(p => p.boundary && !fields.some(f => f.permissionId === p.id)).map(p => ({ id: p.id, name: p.name, permissionId: p.id, boundary: p.boundary! })),
         ],
-        isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles,
+        isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity,
         userFinds: projectFinds,
         savedPoints, showSavedPoints,
         initLat, initLng,
@@ -778,6 +849,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setHistoricMode(false);
         setHistoricScanCompleted(false);
         setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
+        setActiveOpacityLayer(null);
         setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: prev.userFinds }));
         setMapClickLabel(null);
         setSelectedMonument(undefined);
@@ -1136,6 +1208,14 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const terrainScanComplete = hasScanned && !analyzing && !isTerrainScanning;
     const historicScanComplete = historicMode && historicScanCompleted && !loadingPAS;
     const selectedTarget = selectedId ? detectedFeatures.find(f => f.id === selectedId) ?? null : null;
+    const activeOverlayOpacityLayer = activeOpacityLayer && historicLayerToggles[activeOpacityLayer] ? activeOpacityLayer : null;
+    const rasterOverlayButtonClass = (key: RasterOverlayKey, selectedClass: string) => {
+        const enabled = historicLayerToggles[key];
+        const selected = activeOverlayOpacityLayer === key;
+        if (selected) return `w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 border ${selectedClass}`;
+        if (enabled) return 'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 bg-white/[0.08] border border-white/15 text-white/85';
+        return 'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 text-white/50 hover:text-white hover:bg-white/5 border border-transparent';
+    };
 
     const helperTips: CoachTip[] = [
         {
@@ -1178,7 +1258,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             onClick={() => {
                                 if (analyzing) return;
                                 if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
+                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
                             }}
                             disabled={analyzing}
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
@@ -1428,15 +1508,15 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                         Satellite
                                     </button>
                                     <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
-                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, lidar: !p.lidar }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.lidar ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                    <button onClick={() => handleRasterOverlayPress('lidar')} className={rasterOverlayButtonClass('lidar', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
                                         LiDAR
                                     </button>
-                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, os1880: !p.os1880 }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.os1880 ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                    <button onClick={() => handleRasterOverlayPress('os1880')} className={rasterOverlayButtonClass('os1880', 'bg-amber-500/20 border-amber-500/40 text-amber-300')}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                                         OS 1895
                                     </button>
-                                    <button onClick={() => setHistoricLayerToggles(p => ({ ...p, os1930: !p.os1930 }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${historicLayerToggles.os1930 ? 'bg-orange-500/20 border border-orange-500/40 text-orange-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                                    <button onClick={() => handleRasterOverlayPress('os1930')} className={rasterOverlayButtonClass('os1930', 'bg-orange-500/20 border-orange-500/40 text-orange-300')}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                                         OS 1900
                                     </button>
@@ -1468,6 +1548,22 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             )}
                         </div>
                     </div>
+                    {activeOverlayOpacityLayer && !showLayerPicker && (
+                        <div className="absolute right-3 top-28 bottom-[158px] z-[58] w-11 rounded-2xl border border-emerald-500/35 bg-slate-900/92 px-1.5 py-2 shadow-2xl backdrop-blur-xl flex flex-col items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-150">
+                            <span className="text-[8px] font-black text-emerald-300 leading-none">{Math.round(historicLayerOpacity[activeOverlayOpacityLayer] * 100)}%</span>
+                            <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                value={Math.round(historicLayerOpacity[activeOverlayOpacityLayer] * 100)}
+                                onChange={e => updateRasterOverlayOpacity(activeOverlayOpacityLayer, Number(e.target.value) / 100)}
+                                aria-label={`${RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]} opacity`}
+                                className="min-h-0 flex-1 w-8 accent-emerald-400"
+                                style={{ writingMode: 'vertical-rl', direction: 'rtl' }}
+                            />
+                            <span className="text-[7px] font-black text-white/45 uppercase tracking-widest leading-tight text-center">{RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]}</span>
+                        </div>
+                    )}
                     {/* Desktop map controls — hidden; mobile controls now show on all screens */}
                     <div className="absolute top-4 right-4 z-[59] hidden flex-col gap-2">
                         <button
@@ -1603,7 +1699,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                                         onClick={() => {
                                             if (analyzing) return;
                                             if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                            else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); }
+                                            else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
                                         }}
                                         disabled={analyzing}
                                         className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_12px_rgba(59,130,246,0.24)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}

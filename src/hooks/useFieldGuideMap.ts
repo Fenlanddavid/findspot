@@ -131,6 +131,7 @@ export type UseFieldGuideMapOptions = {
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
+    historicLayerOpacity: { lidar: number; os1930: number; os1880: number };
     savedPoints: SavedPoint[];
     showSavedPoints: boolean;
     // Initial fly-to coordinates
@@ -148,7 +149,7 @@ export type UseFieldGuideMapOptions = {
 
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
-    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, userFinds,
+    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
     savedPoints, showSavedPoints,
     initLat, initLng, devMode, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
@@ -705,10 +706,19 @@ export function useFieldGuideMap({
     useEffect(() => {
         const map = mapRef.current;
         if (!map) return;
-        if (map.getLayer('overlay-lidar'))  map.setLayoutProperty('overlay-lidar',  'visibility', historicLayerToggles.lidar  ? 'visible' : 'none');
-        if (map.getLayer('overlay-os1930')) map.setLayoutProperty('overlay-os1930', 'visibility', historicLayerToggles.os1930 ? 'visible' : 'none');
-        if (map.getLayer('overlay-os1880')) map.setLayoutProperty('overlay-os1880', 'visibility', historicLayerToggles.os1880 ? 'visible' : 'none');
-    }, [historicLayerToggles]);
+        if (map.getLayer('overlay-lidar')) {
+            map.setLayoutProperty('overlay-lidar', 'visibility', historicLayerToggles.lidar ? 'visible' : 'none');
+            map.setPaintProperty('overlay-lidar', 'raster-opacity', historicLayerOpacity.lidar);
+        }
+        if (map.getLayer('overlay-os1930')) {
+            map.setLayoutProperty('overlay-os1930', 'visibility', historicLayerToggles.os1930 ? 'visible' : 'none');
+            map.setPaintProperty('overlay-os1930', 'raster-opacity', historicLayerOpacity.os1930);
+        }
+        if (map.getLayer('overlay-os1880')) {
+            map.setLayoutProperty('overlay-os1880', 'visibility', historicLayerToggles.os1880 ? 'visible' : 'none');
+            map.setPaintProperty('overlay-os1880', 'raster-opacity', historicLayerOpacity.os1880);
+        }
+    }, [historicLayerToggles, historicLayerOpacity]);
 
     // ── Field boundaries data ─────────────────────────────────────────────────
     useEffect(() => {
