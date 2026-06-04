@@ -4,7 +4,10 @@ export type GPSFix = {
   accuracyM: number | null;
 };
 
-export async function captureGPS(): Promise<GPSFix> {
+export async function captureGPS(options?: {
+  onProgress?: (accuracyM: number) => void;
+  acceptRef?: { accept: (() => void) | null };
+}): Promise<GPSFix> {
   return new Promise((resolve, reject) => {
     if (!("geolocation" in navigator)) {
       reject(new Error("No geolocation available on this device/browser."));
@@ -21,6 +24,14 @@ export async function captureGPS(): Promise<GPSFix> {
       else reject(new Error("GPS timeout: Could not get a stable lock."));
     }, 10000); // 10s max wait for precision
 
+    if (options?.acceptRef) {
+      options.acceptRef.accept = () => {
+        clearTimeout(timeoutId);
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        if (bestFix) resolve(bestFix);
+      };
+    }
+
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const fix = {
@@ -31,6 +42,7 @@ export async function captureGPS(): Promise<GPSFix> {
 
         if (!bestFix || (fix.accuracyM !== null && (bestFix.accuracyM === null || fix.accuracyM < bestFix.accuracyM))) {
           bestFix = fix;
+          if (fix.accuracyM !== null) options?.onProgress?.(fix.accuracyM);
         }
 
         // If we hit our target precision (under 10m), finish early

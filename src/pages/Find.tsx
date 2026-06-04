@@ -263,6 +263,11 @@ export default function FindPage(props: {
 
   // #5 — GPS capturing state
   const [gpsCapturing, setGpsCapturing] = useState(false);
+  const [liveAccuracy, setLiveAccuracy] = useState<number | null>(null);
+  const [gpsElapsed, setGpsElapsed] = useState(0);
+  const gpsAcceptRef = useRef<{ accept: (() => void) | null }>({ accept: null });
+  const gpsStartRef = useRef<number | null>(null);
+  const gpsElapsedInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
   const [hasRecordedFindBefore, setHasRecordedFindBefore] = useState(() => {
     try { return localStorage.getItem(FIRST_FIND_KEY) === "1"; } catch { return false; }
@@ -413,14 +418,27 @@ export default function FindPage(props: {
   async function doGPS() {
     setError(null);
     setGpsCapturing(true);
+    setLiveAccuracy(null);
+    setGpsElapsed(0);
+    gpsAcceptRef.current.accept = null;
+    gpsStartRef.current = Date.now();
+    gpsElapsedInterval.current = setInterval(() => {
+      if (gpsStartRef.current !== null) setGpsElapsed(Date.now() - gpsStartRef.current);
+    }, 500);
     try {
-      const fix = await captureGPS();
+      const fix = await captureGPS({ onProgress: setLiveAccuracy, acceptRef: gpsAcceptRef.current });
       const grid = toOSGridRef(fix.lat, fix.lon);
       setForm(prev => ({ ...prev, lat: fix.lat, lon: fix.lon, acc: fix.accuracyM, osGridRef: grid || prev.osGridRef }));
     } catch (e: any) {
       setError(e?.message ?? "GPS failed");
     } finally {
+      if (gpsElapsedInterval.current !== null) clearInterval(gpsElapsedInterval.current);
+      gpsElapsedInterval.current = null;
+      gpsStartRef.current = null;
+      gpsAcceptRef.current.accept = null;
       setGpsCapturing(false);
+      setLiveAccuracy(null);
+      setGpsElapsed(0);
     }
   }
 
@@ -770,14 +788,21 @@ export default function FindPage(props: {
 
   // #5 — GPS status line derived from current accuracy
   const gpsStatus = useMemo(() => {
-    if (gpsCapturing) return { label: "Acquiring GPS…", color: "text-gray-500 dark:text-gray-400" };
+    if (gpsCapturing) {
+      if (liveAccuracy !== null) {
+        if (liveAccuracy <= 10) return { label: `Acquiring… ±${Math.round(liveAccuracy)}m`, color: "text-emerald-600 dark:text-emerald-400" };
+        if (liveAccuracy <= 30) return { label: `Acquiring… ±${Math.round(liveAccuracy)}m`, color: "text-amber-600 dark:text-amber-400" };
+        return { label: `Acquiring… ±${Math.round(liveAccuracy)}m`, color: "text-red-500 dark:text-red-400" };
+      }
+      return { label: "Acquiring GPS…", color: "text-gray-500 dark:text-gray-400" };
+    }
     if (form.lat == null || form.lon == null) return null;
     const acc = form.acc;
     if (acc === null) return { label: "Location set", color: "text-emerald-600 dark:text-emerald-400" };
     if (acc <= 10) return { label: `GPS Good: ${Math.round(acc)}m`, color: "text-emerald-600 dark:text-emerald-400" };
     if (acc <= 30) return { label: `GPS Fair: ${Math.round(acc)}m`, color: "text-amber-600 dark:text-amber-400" };
     return { label: `GPS Poor: ${Math.round(acc)}m`, color: "text-red-600 dark:text-red-400" };
-  }, [gpsCapturing, form.lat, form.lon, form.acc]);
+  }, [gpsCapturing, liveAccuracy, form.lat, form.lon, form.acc]);
 
   const saveBarContext = currentField
     ? `Field: ${currentField.name}`
@@ -879,6 +904,16 @@ export default function FindPage(props: {
           >
             {gpsCapturing ? "Acquiring..." : form.lat != null ? "Update Spot" : "Capture Spot"}
           </button>
+          {/* #5 — accept early once ≥5s elapsed and a live fix exists */}
+          {gpsCapturing && gpsElapsed >= 5000 && liveAccuracy !== null && (
+            <button
+              type="button"
+              onClick={() => gpsAcceptRef.current.accept?.()}
+              className="bg-white dark:bg-gray-800 border border-emerald-400 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+            >
+              Accept this fix
+            </button>
+          )}
         </div>
       </div>
 
