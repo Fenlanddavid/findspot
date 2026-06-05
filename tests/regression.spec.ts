@@ -64,6 +64,91 @@ async function readIndexedDbStore(page: Page, storeName: string) {
   }), storeName);
 }
 
+async function mockFieldGuideHistoricScan(page: Page) {
+  const overpassResponse = {
+    elements: [
+      {
+        id: 9001,
+        type: "node",
+        lat: 53.3812,
+        lon: -1.4702,
+        tags: {
+          historic: "archaeological_site",
+          name: "Regression Barrow",
+          period: "Bronze Age",
+        },
+      },
+      {
+        id: 9002,
+        type: "way",
+        tags: {
+          historic: "roman_road",
+          name: "Regression Roman Road",
+        },
+        geometry: [
+          { lat: 53.3798, lon: -1.472 },
+          { lat: 53.3824, lon: -1.468 },
+        ],
+      },
+    ],
+  };
+
+  await page.route("https://a.tile.openstreetmap.org/**", route => route.abort());
+  await page.route("https://services.arcgisonline.com/**", route => route.abort());
+  await page.route("https://environment.data.gov.uk/**", route => route.abort());
+  await page.route("https://mapseries-tilesets.s3.amazonaws.com/**", route => route.abort());
+  await page.route("https://findspot-counter.trials-uk.workers.dev/**", route => route.fulfill({ status: 204 }));
+  await page.route("**/roman-roads-gb.geojson", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ type: "FeatureCollection", features: [] }),
+  }));
+  await page.route("https://nominatim.openstreetmap.org/reverse**", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      address: {
+        parish: "Regression Parish",
+        county: "Regressionshire",
+      },
+    }),
+  }));
+  for (const host of [
+    "https://overpass-api.de/**",
+    "https://overpass.kumi.systems/**",
+    "https://overpass.osm.ch/**",
+  ]) {
+    await page.route(host, route => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(overpassResponse),
+    }));
+  }
+  await page.route("https://services-eu1.arcgis.com/**/National_Heritage_List_for_England_NHLE_v02_VIEW/**", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [-1.4703, 53.3813],
+        },
+        properties: {
+          Name: "Regression Scheduled Barrow",
+          ListEntry: "1000001",
+        },
+      }],
+    }),
+  }));
+  await page.route("https://services-eu1.arcgis.com/**/HE_AIM_data/**", route => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ type: "FeatureCollection", features: [] }),
+  }));
+}
+
 async function putIndexedDbRows(page: Page, storeName: string, rows: object[]) {
   await page.evaluate(({ name, rows }) => new Promise<void>((resolve, reject) => {
     const request = indexedDB.open("findspot_uk");
@@ -542,6 +627,37 @@ test("field report summary stays inside the card on narrow Android viewports", a
   expect(layout.keyValueWidth).toBeGreaterThan(70);
   expect(layout.keyValueRight).toBeLessThanOrEqual(layout.summaryRight + 0.5);
   expect(layout.offenders).toEqual([]);
+});
+
+test("completed historic mobile sheet keeps context details and layer controls", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockFieldGuideHistoricScan(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_done", "1");
+    localStorage.setItem("fs_fg_helpers_seen", "1");
+    localStorage.setItem("fs_fg_sheet", "1");
+  });
+
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
+  await expect(page.getByText("Ready to Scan")).toBeVisible();
+
+  await page.getByRole("button", { name: "GPS" }).click();
+  await expect(page.getByRole("button", { name: "GPS" })).toBeEnabled();
+  await page.waitForTimeout(1500);
+  await page.getByRole("button", { name: "Historic", exact: true }).click();
+
+  await expect(page.getByText("Landscape Context", { exact: true })).toBeVisible({ timeout: 10_000 });
+
+  const layersButton = page.getByRole("button", { name: "Layers", exact: true });
+  await expect(layersButton).toBeVisible();
+
+  const detailsButton = page.getByRole("button", { name: "Details", exact: true });
+  await detailsButton.scrollIntoViewIfNeeded();
+  await expect(detailsButton).toBeVisible();
+  await detailsButton.click();
+  await expect(page.getByText("Historic Findings")).toBeVisible();
+  await expect(page.getByText("Regression Barrow (archaeological_site)")).toBeVisible();
 });
 
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {

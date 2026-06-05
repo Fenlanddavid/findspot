@@ -74,7 +74,7 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
 
   await page.getByRole("button", { name: "Back to Session" }).click();
-  await expect(page.getByText("Smoke Test Buckle")).toBeVisible();
+  await expect(page.getByRole("button").filter({ hasText: "Smoke Test Buckle" })).toBeVisible();
 });
 
 test("organiser rally setup continues to share link generation", async ({ page }) => {
