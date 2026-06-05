@@ -1040,5 +1040,15 @@
     "county": "UK Wide",
     "facebookUrl": "https://www.facebook.com/groups/700108382326989/",
     "verificationStatus": "community"
+  },
+  {
+    "id": "club-126",
+    "name": "Dales & Matlock Detecting Club",
+    "description": "Mixed experience face to face meeting club.",
+    "town": "Matlock",
+    "county": "Derbyshire",
+    "postcode": "S45",
+    "facebookUrl": "https://www.facebook.com/groups/1885345828894203",
+    "verificationStatus": "community"
   }
 ]
