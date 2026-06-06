@@ -58,6 +58,7 @@ export function HistoricLayerManager() {
         scanConfidence,
         pasFinds,
         historicRoutes,
+        sortedHotspots,
         placeSignals,
         projectFinds,
         mapRef,
@@ -77,6 +78,19 @@ export function HistoricLayerManager() {
     const bd = potentialScore?.breakdown ?? null;
     const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.signals } : null);
     const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.signals } : null);
+    const dedupedRoutes = [...historicRoutes.reduce((map, r) => {
+        const key = `${r.type}:${r.name ?? ''}`;
+        const existing = map.get(key);
+        if (!existing || r.confidenceClass < existing.confidenceClass) map.set(key, r);
+        return map;
+    }, new Map<string, typeof historicRoutes[number]>()).values()];
+    const routeLines = [...new Set([
+        ...historicRoutes.filter(r => r.type === 'roman_road').map(r => `Roman road${r.name ? ` ${r.name}` : ''} runs through this scan area.`),
+        ...historicRoutes.filter(r => r.type !== 'roman_road').map(r => {
+            const label = r.type === 'holloway' ? 'Holloway' : 'Historic trackway';
+            return `${label}${r.name ? ` ${r.name}` : ''} detected in this scan area.`;
+        }),
+    ])];
     const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
     const mc = mapRef.current?.getCenter();
     const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
@@ -88,12 +102,18 @@ export function HistoricLayerManager() {
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
                 <p className="text-[11px] font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
             </div>
-            {sigLines.length > 0 && (
+            {(routeLines.length > 0 || sigLines.length > 0) && (
                 <div className="border-t border-white/8 pt-3">
                     <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-2">Why this stands out</p>
                     <div className="space-y-2">
+                        {routeLines.map((line, i) => (
+                            <div key={`r-${i}`} className="flex items-start gap-2">
+                                <div className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(251,191,36,0.7)]" />
+                                <p className="text-xs font-bold text-white/85 leading-tight">{line}</p>
+                            </div>
+                        ))}
                         {sigLines.map((line, i) => (
-                            <div key={i} className="flex items-start gap-2">
+                            <div key={`s-${i}`} className="flex items-start gap-2">
                                 <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.7)]" />
                                 <p className="text-xs font-bold text-white/85 leading-tight">{line}</p>
                             </div>
@@ -110,6 +130,9 @@ export function HistoricLayerManager() {
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{historicRoutes.length}</span>
                         <span className="text-[7px] font-black text-white/45 uppercase tracking-widest">Routes</span>
+                        {historicRoutes.some(r => r.type === 'roman_road') && (
+                            <span className="block text-[7px] font-black text-amber-400/70 uppercase tracking-widest mt-0.5">inc. Roman</span>
+                        )}
                     </div>
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{placeSignals.length}</span>
@@ -185,11 +208,27 @@ export function HistoricLayerManager() {
                     )}
                     {intelDetailsOpen && (
                         <div className="mt-4 space-y-4 animate-in fade-in duration-200">
-                            {pasFinds.length > 0 && (
+                            {(() => {
+                                const romanRoadCount = historicRoutes.filter(r => r.type === 'roman_road').length;
+                                const augmentedFinds = [
+                                    ...pasFinds,
+                                    ...Array.from({ length: romanRoadCount }, (_, i) => ({
+                                        id: `route-roman-${i}`,
+                                        broadperiod: 'Roman',
+                                        objectType: 'Roman Road',
+                                        lat: 0, lon: 0,
+                                        internalId: '',
+                                        county: '',
+                                        workflow: 'PAS' as const,
+                                        isApprox: false,
+                                        osmType: 'way' as const,
+                                    })),
+                                ];
+                                return augmentedFinds.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Period Profile</p>
+                                    <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Period Signals</p>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
+                                        {Object.entries(augmentedFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
                                             <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl flex justify-between items-center">
                                                 <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
                                                 <span className="text-sm font-black text-blue-400">{count}</span>
@@ -197,7 +236,8 @@ export function HistoricLayerManager() {
                                         ))}
                                     </div>
                                 </div>
-                            )}
+                                );
+                            })()}
                             {nearbyProjectFinds.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
@@ -228,6 +268,41 @@ export function HistoricLayerManager() {
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                            {sortedHotspots.some(h => h.isHighConfidenceCrossing) && (
+                                <div className="bg-blue-500/10 border border-blue-500/25 p-3 rounded-xl space-y-1">
+                                    <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Possible crossing point in scan area</p>
+                                    <p className="text-[10px] font-bold text-slate-300 leading-tight">A route and water signal overlap here. Historic crossing points concentrate activity from multiple periods — they are high-value targets.</p>
+                                </div>
+                            )}
+                            {historicRoutes.length > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-[8px] font-black text-amber-400/60 uppercase tracking-widest">Movement Corridors & Roads</p>
+                                    <div className="space-y-2">
+                                        {dedupedRoutes.map((r, i) => {
+                                            const isRoman = r.type === 'roman_road';
+                                            const isHolloway = r.type === 'holloway';
+                                            const typeLabel = isRoman ? 'Roman Road' : isHolloway ? 'Holloway' : 'Historic Trackway';
+                                            const confidenceLabel = r.confidenceClass === 'A' ? 'High confidence' : r.confidenceClass === 'B' ? 'Moderate confidence' : 'Possible alignment';
+                                            const sourceName = r.source === 'itinere' ? 'Itiner-e dataset' : 'OpenStreetMap';
+                                            return (
+                                                <div key={i} className="bg-amber-500/5 border border-amber-500/15 p-3 rounded-xl">
+                                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                                        <p className="text-xs font-black text-white uppercase truncate">{r.name ?? typeLabel}</p>
+                                                        <span className="text-[8px] font-black text-amber-400/70 uppercase tracking-widest shrink-0">{typeLabel}</span>
+                                                    </div>
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">{confidenceLabel} · {sourceName}</p>
+                                                    {isRoman && (
+                                                        <p className="text-[10px] font-bold text-amber-300/70 leading-tight mt-1.5">Focus detection along the road edge, not on the road surface — coin scatter concentrates in the zone of activity beside the road.</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {historicRoutes.some(r => r.type === 'roman_road') && (
+                                        <p className="text-[9px] font-bold text-amber-400/60 leading-tight px-1">Roman roads are the strongest single predictor of coin scatter in England.</p>
+                                    )}
                                 </div>
                             )}
                             {placeSignals.length > 0 && (
