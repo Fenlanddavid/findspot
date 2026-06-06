@@ -670,7 +670,7 @@ export function FieldGuideMap() {
             )}
 
             {activeDesktopGeologyTitle && (
-                <div className="hidden lg:block absolute bottom-6 left-6 w-80 z-[120] animate-in slide-in-from-bottom-3 fade-in duration-150">
+                <div className="hidden lg:block absolute top-1/2 left-6 w-80 -translate-y-1/2 z-[120] animate-in fade-in zoom-in-95 duration-150">
                     <div className="relative">
                         <button
                             type="button"

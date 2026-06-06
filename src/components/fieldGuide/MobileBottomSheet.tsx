@@ -708,7 +708,7 @@ export function MobileBottomSheet() {
             </div>
         </div>
         {activeMobileGeologyTitle && (
-            <div className="absolute bottom-3 left-3 right-3 z-[95] animate-in slide-in-from-bottom-3 fade-in duration-150">
+            <div className="absolute bottom-[calc(0.75rem+32.5vh)] left-3 right-3 z-[95] translate-y-1/2 animate-in fade-in zoom-in-95 duration-150">
                 <div className="relative rounded-2xl border border-emerald-400/25 bg-black/95 shadow-2xl backdrop-blur-xl">
                     <div className="mx-auto mt-2 h-1 w-8 rounded-full bg-white/20" />
                     <button
