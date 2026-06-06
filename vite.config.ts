@@ -39,6 +39,14 @@ export default defineConfig({
         // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
         // so the app works fully offline after installation.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        // External API calls must bypass the service worker entirely.
+        // These are read-only data fetches that must always go to the network.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/findspot-bgs-proxy\.trials-uk\.workers\.dev\//,
+            handler: 'NetworkOnly',
+          },
+        ],
       },
       devOptions: {
         // Enable the virtual PWA module in dev mode so useRegisterSW

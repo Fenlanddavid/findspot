@@ -13,6 +13,7 @@ import { ScanControlPanel } from './ScanControlPanel';
 import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
+import { GeologyContextCard } from './GeologyContextCard';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -152,7 +153,10 @@ export function MobileBottomSheet() {
         setIntelLayersOpen,
         historicLayerVisibility,
         setHistoricLayerVisibility,
+        geologyContext,
+        geologyContextLoading,
     } = useFieldGuideContext();
+    const [expandedGeologyId, setExpandedGeologyId] = React.useState<string | null>(null);
 
     if (!(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId))) {
         return null;
@@ -193,8 +197,41 @@ export function MobileBottomSheet() {
             ? (fields.find(f => f.id === (showFields as string).slice(6))?.name?.split(' ')[0] ?? 'My Fields')
             : (realPermissions.find(p => p.id === showFields)?.name?.split(' ')[0] ?? 'My Fields')
         : 'My Fields';
+    const scrollExpandedSectionIntoView = (id: string) => {
+        window.setTimeout(() => {
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 0);
+    };
+    const toggleGeologyDetails = (key: string) => {
+        setExpandedGeologyId(expandedGeologyId === key ? null : key);
+    };
+    const toggleHotspotDetails = (id: string) => {
+        const opening = expandedInterpretationId !== id;
+        setExpandedInterpretationId(opening ? id : null);
+        if (opening) scrollExpandedSectionIntoView(`mobile-hotspot-details-${id}`);
+    };
+    const toggleTargetDetails = (id: string) => {
+        const opening = expandedTargetId !== id;
+        setExpandedTargetId(opening ? id : null);
+        if (opening) scrollExpandedSectionIntoView(`mobile-target-details-${id}`);
+    };
+    const neutralMobileGeologyAvailable =
+        !historicMode &&
+        !selectedUserFind &&
+        !selectedPASFind &&
+        selectedMonument === undefined &&
+        !showSavedPoints &&
+        !selectedId &&
+        !selectedHotspotId &&
+        (hasScanned || geologyContext || geologyContextLoading);
+    const activeMobileGeologyTitle =
+        neutralMobileGeologyAvailable && expandedGeologyId === 'scan' ? 'Scan Geology'
+        : selectedHotspotId && expandedGeologyId === `hotspot:${selectedHotspotId}` ? 'Hotspot Geology'
+        : selectedId && expandedGeologyId === `target:${selectedId}` ? 'Target Geology'
+        : null;
 
     return (
+        <>
         <div
             className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
         >
@@ -361,11 +398,12 @@ export function MobileBottomSheet() {
                             <button onClick={() => setSelectedPASFind(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
-                        </div>
-                        <p className="text-[11px] font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
-                        <a
-                            href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
-                            target="_blank" rel="noreferrer"
+                            </div>
+                            <p className="text-[11px] font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
+                            <GeologyContextCard context={geologyContext} loading={geologyContextLoading} />
+                            <a
+                                href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
+                                target="_blank" rel="noreferrer"
                             className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.98]"
                         >
                             View on OpenStreetMap
@@ -390,27 +428,36 @@ export function MobileBottomSheet() {
                                     <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">{protectedCopy.label}</p>
                                     {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
                                 </div>
-                                <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                            </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`target:${f.id}`); }}
+                                            className={`text-[8px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                        >
+                                            Geology
+                                        </button>
+                                        <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
                             <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
                                 <p className="text-xs font-bold text-stone-200/85 leading-snug">{protectedCopy.body}</p>
                                 <p className="text-[11px] font-bold text-stone-300/60 leading-snug">{protectedCopy.detail}</p>
                             </div>
-                            {f.aimInfo && (
-                                <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
-                                    <p className="text-[9px] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
-                                    <p className="text-[10px] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
-                                </div>
-                            )}
-                        </div>
-                        );
-                    }
+                                {f.aimInfo && (
+                                    <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
+                                        <p className="text-[9px] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
+                                        <p className="text-[10px] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                    </div>
+                                )}
+                            </div>
+                            );
+                        }
                     return (
                         <div key={f.id} className="space-y-3">
-                            <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
                                     {isPrimaryTarget && (
                                         <button
                                             type="button"
@@ -424,22 +471,31 @@ export function MobileBottomSheet() {
                                     <h3 className="text-sm font-black text-white tracking-tight leading-tight mt-0.5">{f.type}</h3>
                                     <p className={`text-xs font-black mt-0.5 ${strengthColour[tInterp.signalStrength]}`}>{tInterp.signalStrength}</p>
                                 </div>
-                                <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                            </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`target:${f.id}`); }}
+                                            className={`text-[8px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                        >
+                                            Geology
+                                        </button>
+                                        <button onClick={() => setSelectedId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
                             <p className="text-xs font-black text-white/85 leading-snug">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                             <p className="text-[11px] font-bold text-white/50 leading-snug">{tInterp.hook}</p>
-                            {(() => {
-                                const ctx = targetFindContext.get(f.id);
-                                if (!ctx) return null;
-                                return ctx.status === 'within'
-                                    ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                    : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
-                            })()}
-                            {f.isHighConfidenceCrossing && (
-                                <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse">
-                                    <p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
+                                    {(() => {
+                                        const ctx = targetFindContext.get(f.id);
+                                    if (!ctx) return null;
+                                        return ctx.status === 'within'
+                                            ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                            : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                    })()}
+                                {f.isHighConfidenceCrossing && (
+                                    <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse">
+                                        <p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
                                 </div>
                             )}
                             {f.explanationLines && f.explanationLines.length > 0 && (
@@ -483,16 +539,16 @@ export function MobileBottomSheet() {
                                     <p className="text-[10px] font-bold text-white/80 leading-tight">This signal lies close to a mapped modern track or road edge. Treat with additional caution.</p>
                                 </div>
                             )}
-                            <div className="border-t border-white/8 pt-2">
-                                <span
-                                    onClick={() => setExpandedTargetId(expandedTargetId === f.id ? null : f.id)}
-                                    className="text-xs font-black text-amber-400 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1"
-                                >
-                                    {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
-                                </span>
-                                {expandedTargetId === f.id && (
-                                    <div className="mt-3 space-y-3 animate-in fade-in duration-200">
-                                        <div>
+                                <div className="border-t border-white/8 pt-2">
+                                    <span
+                                        onClick={() => toggleTargetDetails(f.id)}
+                                        className="text-xs font-black text-amber-400 hover:text-amber-300 transition-colors cursor-pointer flex items-center gap-1"
+                                    >
+                                        {expandedTargetId === f.id ? '▲ Hide reasoning' : '▼ See full reasoning'}
+                                    </span>
+                                    {expandedTargetId === f.id && (
+                                        <div id={`mobile-target-details-${f.id}`} className="mt-3 space-y-3 animate-in fade-in duration-200">
+                                            <div>
                                             <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1">Summary</p>
                                             <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.summary}</p>
                                         </div>
@@ -505,11 +561,21 @@ export function MobileBottomSheet() {
                                             <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.howToApproach}</p>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        </div>
+                                    )}
+                                </div>
+                                </div>
                     );
                 })}
+
+                    {neutralMobileGeologyAvailable && (
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleGeologyDetails('scan'); }}
+                            className={`w-full rounded-xl border px-3 py-2.5 text-[9px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === 'scan' ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300' : 'bg-white/[0.04] border-sky-400/20 text-sky-300'}`}
+                        >
+                            Geology
+                        </button>
+                    )}
 
                 {/* Scheduled Monument click card */}
                 {selectedMonument !== undefined && !selectedUserFind && !selectedPASFind && !selectedId && (
@@ -548,10 +614,19 @@ export function MobileBottomSheet() {
                                         {isPrimaryHotspot && <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest">Priority</span>}
                                     </div>
                                 </div>
-                                <button onClick={() => setSelectedHotspotId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                            </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`hotspot:${h.id}`); }}
+                                            className={`text-[8px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `hotspot:${h.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                        >
+                                            Geology
+                                        </button>
+                                        <button onClick={() => setSelectedHotspotId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
                             <div className="space-y-2">
                                 <div>
                                     <p className="text-[7px] font-black text-white/30 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
@@ -569,14 +644,14 @@ export function MobileBottomSheet() {
                                     {(h.linkedCount ?? 0) > 0 && <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                 </div>
                             )}
-                            {(() => {
-                                const ctx = hotspotFindContext.get(h.id);
-                                if (!ctx) return null;
-                                return ctx.status === 'within'
-                                    ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                    : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
-                            })()}
-                            {h.isHighConfidenceCrossing && <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse"><p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p></div>}
+                                    {(() => {
+                                        const ctx = hotspotFindContext.get(h.id);
+                                    if (!ctx) return null;
+                                        return ctx.status === 'within'
+                                            ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                            : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                    })()}
+                                    {h.isHighConfidenceCrossing && <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse"><p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p></div>}
                             {h.disturbanceRisk === 'High' && <div className="bg-red-500/15 p-2 rounded-xl border border-red-400/30"><p className="text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p></div>}
                             <div className="border-t border-white/8 pt-3">
                                 <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-2">Evidence</p>
@@ -595,16 +670,16 @@ export function MobileBottomSheet() {
                                     <p className="text-xs font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                 </div>
                             )}
-                            <div className="pt-2 border-t border-white/8">
-                                <span onClick={() => setExpandedInterpretationId(expandedInterpretationId === h.id ? null : h.id)} className="text-xs font-black text-amber-400 hover:text-amber-300 cursor-pointer flex items-center gap-1">
-                                    {expandedInterpretationId === h.id ? '▲ Hide breakdown' : '▼ Full evidence breakdown'}
-                                </span>
+                                <div className="pt-2 border-t border-white/8">
+                                    <span onClick={() => toggleHotspotDetails(h.id)} className="text-xs font-black text-amber-400 hover:text-amber-300 cursor-pointer flex items-center gap-1">
+                                        {expandedInterpretationId === h.id ? '▲ Hide breakdown' : '▼ Full evidence breakdown'}
+                                    </span>
                                 {expandedInterpretationId === h.id && (() => {
                                     const interp = buildInterpretation(h);
                                     const breakdown = [{ label: 'Anomaly', val: h.metrics.anomaly, cap: 30 }, { label: 'Context', val: h.metrics.context, cap: 25 }, { label: 'Convergence', val: h.metrics.convergence, cap: 20 }, { label: 'Behaviour', val: h.metrics.behaviour, cap: 15 }];
-                                    return (
-                                        <div className="mt-3 space-y-3 animate-in fade-in duration-200">
-                                            <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                        return (
+                                            <div id={`mobile-hotspot-details-${h.id}`} className="mt-3 space-y-3 animate-in fade-in duration-200">
+                                                <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
                                             <p className="text-xs text-white/80 leading-relaxed">{interp.summary}</p>
                                             <p className="text-xs text-white/80 leading-relaxed">{interp.reasoning}</p>
                                             <p className="text-xs text-white/80 leading-relaxed">{interp.strategy}</p>
@@ -623,14 +698,37 @@ export function MobileBottomSheet() {
                                             </div>
                                         </div>
                                     );
-                                })()}
-                            </div>
-                            <p className="text-center text-[7px] text-white/40 italic">Highlights historic activity — not guaranteed finds.</p>
+                                    })()}
+                                </div>
+                                    <p className="text-center text-[7px] text-white/40 italic">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                     );
                 })()}
 
             </div>
         </div>
+        {activeMobileGeologyTitle && (
+            <div className="absolute bottom-3 left-3 right-3 z-[95] animate-in slide-in-from-bottom-3 fade-in duration-150">
+                <div className="relative rounded-2xl border border-emerald-400/25 bg-black/95 shadow-2xl backdrop-blur-xl">
+                    <div className="mx-auto mt-2 h-1 w-8 rounded-full bg-white/20" />
+                    <button
+                        type="button"
+                        aria-label="Close geology context"
+                        onClick={() => setExpandedGeologyId(null)}
+                        className="absolute right-3 top-3 z-10 bg-white/[0.04] hover:bg-white/[0.08] text-white/45 hover:text-white rounded-full p-1.5 transition-colors border border-white/10"
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                    <GeologyContextCard
+                        title={activeMobileGeologyTitle}
+                        context={geologyContext}
+                        loading={geologyContextLoading}
+                        showUnavailable
+                        className="border-0 bg-transparent pt-3 pr-10"
+                    />
+                </div>
+            </div>
+        )}
+        </>
     );
 }

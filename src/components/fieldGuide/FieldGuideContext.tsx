@@ -1,6 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import type maplibregl from 'maplibre-gl';
 import type { RefObject } from 'react';
+import type { GeologyContext } from '../../engines/geologyContext';
 import type { CoachTip } from '../CoachTips';
 import type {
     Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
@@ -247,6 +248,10 @@ export interface FieldGuideContextValue {
     rawClusters: Cluster[];
     userGpsPos: [number, number] | null;
     setUserGpsPos: React.Dispatch<React.SetStateAction<[number, number] | null>>;
+
+    // Geology context
+    geologyContext: GeologyContext | null;
+    geologyContextLoading: boolean;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────

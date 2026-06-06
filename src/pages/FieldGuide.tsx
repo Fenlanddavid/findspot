@@ -32,6 +32,9 @@ import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, 
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
 import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
+import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyContext';
+import type { GeologyContext } from '../engines/geologyContext';
+import { getSetting } from '../services/data';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -463,6 +466,12 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const modernWaysRef    = useRef<import('./fieldGuideTypes').ModernWay[]>([]);
     const [rawClusters,    setRawClusters]    = useState<Cluster[]>([]);
 
+    // Geology context (Phase 1: display only, no scoring changes)
+    const [geologyContext,        setGeologyContext]        = useState<GeologyContext | null>(null);
+    const [geologyContextLoading, setGeologyContextLoading] = useState(false);
+    const geologyEnabledRef = useRef<boolean | null>(null);
+    const geologyRequestSeqRef = useRef(0);
+
     // User location marker (shown after GPS button press, persists for session)
     const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
     const [userGpsPos, setUserGpsPos] = useState<[number, number] | null>(null);
@@ -705,6 +714,16 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         if (!isNaN(initLat) && !isNaN(initLng)) setSearchParams({}, { replace: true });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Load geology enabled setting and run initial DB maintenance
+    useEffect(() => {
+        getSetting('fs_geology_enabled', true).then(v => {
+            geologyEnabledRef.current = v !== false;
+        }).catch(() => {
+            geologyEnabledRef.current = false;
+        });
+        sweepStaleGeologyCache();
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
     // ─── Logging ─────────────────────────────────────────────────────────────
 
     const addLog = useCallback((msg: string, source?: LogSource, level?: LogLevel) => {
@@ -867,6 +886,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setAnnotationMode(false);
         setDevAnnotations([]);
         setPendingAnnotation(null);
+        geologyRequestSeqRef.current++;
+        setGeologyContext(null);
+        setGeologyContextLoading(false);
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
 
@@ -914,6 +936,43 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
         }
     }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ─── Geology context phase (Phase 1: display only, non-blocking) ─────────
+
+    const runGeologyContextPhase = useCallback(async (center: { lat: number; lng: number }) => {
+        if (geologyEnabledRef.current !== true) {
+            if (geologyEnabledRef.current === false) {
+                addLog('Geology context disabled in settings.', 'system');
+            }
+            return;
+        }
+        const requestSeq = ++geologyRequestSeqRef.current;
+        setGeologyContextLoading(true);
+        setGeologyContext(null);
+        try {
+            const ctx = await runGeologyContext(
+                { lat: center.lat, lon: center.lng },
+                {
+                    onAudit: (entry) => {
+                        if (entry.action === 'timeout') {
+                            addLog('BGS geology lookup timed out. Scan unaffected.', 'system', 'warn');
+                        } else if (entry.action === 'cors_fail') {
+                            addLog('BGS geology unavailable via proxy. Scan unaffected.', 'system', 'warn');
+                        }
+                    },
+                },
+            );
+            if (geologyRequestSeqRef.current === requestSeq) {
+                setGeologyContext(ctx);
+            }
+        } catch {
+            // Non-blocking — geology failure never interrupts the scan
+        } finally {
+            if (geologyRequestSeqRef.current === requestSeq) {
+                setGeologyContextLoading(false);
+            }
+        }
+    }, [addLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Main terrain scan ────────────────────────────────────────────────────
 
@@ -974,6 +1033,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         terrainScanCenterRef.current = scanCenter;
         terrainScanBoundsRef.current = result.scanStartBounds;
 
+        // Fire geology context lookup concurrently — non-blocking, updates state when ready
+        runGeologyContextPhase(scanCenter);
+
         // Auto-trigger historic phase — passes ScanContext to skip NHLE/AIM re-fetch
         const context: ScanContext = {
             terrainClusters: result.terrainClusters,
@@ -991,6 +1053,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const loadStandaloneHistoric = useCallback(async () => {
         if (!mapRef.current || isHistoricScanning) return;
         setHistoricScanCompleted(false);
+        // clearScan() (called before entering historicMode) resets geologyContext,
+        // so re-trigger geology for the current map centre.
+        const center = mapRef.current.getCenter();
+        runGeologyContextPhase({ lat: center.lat, lng: center.lng });
         // Standalone: re-fetch NHLE/AIM, reuse any routes already loaded
         await runHistoricPhase({
             terrainClusters,
@@ -1001,7 +1067,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             scanCenter: terrainScanCenterRef.current,
         });
         setIntelDetailsOpen(false);
-    }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase]);
+    }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase, runGeologyContextPhase]);
 
     // ─── Auto-trigger effects ─────────────────────────────────────────────────
 
@@ -1296,6 +1362,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         findMe, searchLocation, loadStandaloneHistoric,
         handleLabExport, handleAnnotationConfirm, buildSuggestedLabel,
         rawClusters, userGpsPos, setUserGpsPos,
+        geologyContext, geologyContextLoading,
     };
 
     // ─── Render ───────────────────────────────────────────────────────────────

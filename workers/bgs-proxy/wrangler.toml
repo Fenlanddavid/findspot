@@ -1,0 +1,13 @@
+name            = "findspot-bgs-proxy"
+main            = "index.js"
+compatibility_date = "2024-09-23"
+
+# No KV, Durable Objects or secrets needed.
+# All configuration is inline in index.js.
+#
+# Deploy:
+#   cd workers/bgs-proxy
+#   wrangler deploy
+#
+# After GetCapabilities discovery, add confirmed layer names to ALLOWED_LAYERS
+# in index.js and redeploy.

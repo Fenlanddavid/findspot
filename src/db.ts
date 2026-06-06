@@ -349,6 +349,21 @@ export type ImportedPackage = {
   recorderName?: string;
 };
 
+// ─── Geology context cache ────────────────────────────────────────────────────
+// Caches BGS geology context results per tile, keyed by compound geohash string.
+// TTL: 90 days. Invalidated when classifierVersion or sourceVersion changes.
+// context is typed as any to avoid coupling db.ts to the engine layer.
+// See: src/engines/geologyContext/geologyContextTypes.ts
+
+export type GeologyContextRecord = {
+    tileKey:           string;   // Primary key — geology:{geohash6}:classifier:{v}:source:{sv}
+    centroid:          { lat: number; lon: number };
+    context:           any;      // GeologyContext
+    fetchedAt:         number;   // Unix ms — used for 90-day TTL sweep
+    classifierVersion: number;
+    sourceVersion:     string;
+};
+
 // ─── Saved Points ─────────────────────────────────────────────────────────────
 // User-bookmarked map positions in FieldGuide, scoped to a project.
 
@@ -397,6 +412,7 @@ export class FindSpotDB extends Dexie {
   fieldGuideCache!: Table<FieldGuideScanCache, string>;
   significantFinds!: Table<SignificantFind, string>;
   savedPoints!: Table<SavedPoint, string>;
+  geologyContext!: Table<GeologyContextRecord, string>;
 
   constructor() {
     super("findspot_uk");
@@ -578,6 +594,14 @@ export class FindSpotDB extends Dexie {
     // v27: saved map points — bookmarked positions in FieldGuide, scoped to project.
     this.version(27).stores({
       savedPoints: "id, projectId, createdAt",
+    });
+
+    // v28: BGS geology context cache — stores landscape classification per tile.
+    // Existing user data (finds, permissions, sessions) is untouched.
+    // Missing geology records regenerate automatically on next scan.
+    // fetchedAt is indexed to support the 90-day TTL sweep in sweepStaleGeologyCache().
+    this.version(28).stores({
+      geologyContext: "tileKey, fetchedAt",
     });
   }
 }

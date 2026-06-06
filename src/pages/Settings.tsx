@@ -160,6 +160,7 @@ export default function Settings() {
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [easterEggUnlocked, setEasterEggUnlocked] = useState(() => localStorage.getItem('fs_dev_egg') === '1');
   const [versionTapCount, setVersionTapCount] = useState(0);
+  const [geologyEnabled, setGeologyEnabled] = useState(true);
 
   useEffect(() => {
     isStoragePersistent().then(setPersistent);
@@ -188,6 +189,7 @@ export default function Settings() {
       else setDetectors(["Minelab Equinox 800", "Nokta Legend"]);
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
+    getSetting("fs_geology_enabled", true).then(v => setGeologyEnabled(v !== false));
 
   }, []);
 
@@ -901,6 +903,42 @@ export default function Settings() {
           <p className="text-sm text-emerald-700 dark:text-emerald-400 leading-relaxed">
             FindSpot is built to be <strong>local-first</strong>. Saved finds, permissions, landowner details, photos and backups stay on this device unless you export or share them. Online maps, address search and landscape scanning may request map/search data for the area you are viewing. Discover only sends details you type into its submit forms.
           </p>
+        </section>
+
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <h2 className="text-xl font-bold mb-1">External Data Sources</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            FieldGuide can request geology data from public map services to improve landscape interpretation. These requests send only the selected map tile location — no finds, permissions or sessions leave your device.
+          </p>
+
+          <div className="flex justify-between items-start py-3 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex-1 pr-4">
+              <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">BGS Geology Context</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+                Use online BGS geology context where available. Geology context uses a read-only proxy to request public BGS map data for the selected scan tile. Finds, permissions and sessions are never sent.
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const next = !geologyEnabled;
+                setGeologyEnabled(next);
+                await setSetting("fs_geology_enabled", next);
+              }}
+              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm border transition-colors ${
+                geologyEnabled
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-400'
+                  : 'bg-gray-100 border-gray-200 text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-500'
+              }`}
+            >
+              {geologyEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+            <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+              Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.
+            </p>
+          </div>
         </section>
 
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
