@@ -170,7 +170,8 @@ function isNonNegativeInt(value) {
 
 /**
  * Validates a WMS 1.3.0 EPSG:4326 BBOX string: "minLat,minLon,maxLat,maxLon"
- * Accepts only UK-relevant extents to reduce misuse surface.
+ * Clamped to a rough UK bounding box (lat 49.8–60.9, lon -8.2–1.8) to reduce
+ * misuse surface — the proxy is only useful for UK BGS data.
  */
 function isValidBbox(value) {
   const parts = String(value).split(",").map(Number);
@@ -179,8 +180,8 @@ function isValidBbox(value) {
   const [minLat, minLon, maxLat, maxLon] = parts;
 
   return (
-    minLat >= -90  && maxLat <= 90  &&
-    minLon >= -180 && maxLon <= 180 &&
+    minLat >= 49.8 && maxLat <= 60.9 &&
+    minLon >= -8.2 && maxLon <= 1.8  &&
     minLat < maxLat &&
     minLon < maxLon
   );

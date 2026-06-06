@@ -58,6 +58,10 @@ export function classifyGeology(raw: RawGeologyData): ClassificationResult {
             contains(superfLith, 'TIDAL FLAT', 'ESTUARINE') ||
             contains(superfName, 'TIDAL', 'ESTUARINE');
 
+        // KNOWN SIMPLIFICATION (Phase 1): tidal/estuarine deposits collapse to peat_fen
+        // rather than a distinct 'foreshore' class. A foreshore detectorist will see
+        // peat/fen preservation advice rather than foreshore context. Phase 2 should
+        // introduce a dedicated class if foreshore detection becomes a use case.
         const landscapeClass: GeologyLandscapeClass = isTidalOrEstuarine
             ? 'peat_fen'
             : contains(superfLith, 'PEAT') || contains(superfName, 'PEAT', 'FEN')
@@ -106,8 +110,12 @@ export function classifyGeology(raw: RawGeologyData): ClassificationResult {
     }
 
     // ── Sand and gravel (non-terrace) ──
+    // Note: SANDSTONE is intentionally excluded from bedrockLith — lithified sandstone
+    // bedrock doesn't behave like loose surface sand/gravel and the artefact-migration
+    // explanation is misleading for consolidated rock (e.g. Devonian Old Red Sandstone).
+    // Without a matching superficial deposit it falls through to mixed_uncertain.
     if (
-        contains(bedrockLith, 'SANDSTONE', 'SAND', 'GRAVEL', 'QUARTZITE') ||
+        contains(bedrockLith, 'SAND', 'GRAVEL', 'QUARTZITE') ||
         contains(superfLith, 'SAND', 'GRAVEL', 'BLOWN SAND') ||
         contains(superfName, 'SAND', 'GRAVEL', 'BLOWN SAND')
     ) {

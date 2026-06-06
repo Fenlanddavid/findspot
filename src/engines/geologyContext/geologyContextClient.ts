@@ -169,7 +169,11 @@ async function fetchLayer(
     if (!text.trim()) return null;
 
     try {
-        return extractXmlAttributes(text);
+        const attrs = extractXmlAttributes(text);
+        // BGS returns valid empty GML when no feature exists at a coordinate.
+        // An empty attribute map means no data — treat as null so the caller's
+        // !bedrockAttrs && !superficialAttrs guard correctly triggers empty_response.
+        return Object.keys(attrs).length > 0 ? attrs : null;
     } catch {
         return null;
     }

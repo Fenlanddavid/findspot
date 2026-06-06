@@ -1,6 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Cluster, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
+import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier";
+import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
+import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
+import type { GeologyContext } from "../src/engines/geologyContext/geologyContextTypes";
 
 function routeRegressionCluster(id: string, center: [number, number]): Cluster {
   return {
@@ -825,4 +829,134 @@ test("Club Day organiser merge normalises member data and deduplicates a later r
   expect((media as any[]).filter((row) => row.id === "member-media")).toHaveLength(1);
   expect((importedPackages as any[]).filter((row) => row.sharedPermissionId === "merge-shared-rally" && row.recorderId === "member-recorder")).toHaveLength(1);
   await expect.poll(() => getMediaBlobText(page, "member-media")).toBe("club-photo-proof");
+});
+
+// ── Geology engine unit tests ─────────────────────────────────────────────────
+// Pure function tests — no browser page required.
+
+test("classifyGeology: chalk bedrock → chalk_downland", () => {
+  const result = classifyGeology({ bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" });
+  expect(result.landscapeClass).toBe("chalk_downland");
+  expect(result.confidence).toBe("high");
+});
+
+test("classifyGeology: peat superficial → peat_fen", () => {
+  const result = classifyGeology({ superficialLithology: "PEAT", superficialName: "FENLAND PEAT" });
+  expect(result.landscapeClass).toBe("peat_fen");
+  expect(result.confidence).toBe("high");
+});
+
+test("classifyGeology: alluvium superficial → alluvial_floodplain", () => {
+  const result = classifyGeology({ superficialLithology: "ALLUVIUM", superficialName: "ALLUVIAL DEPOSIT" });
+  expect(result.landscapeClass).toBe("alluvial_floodplain");
+  expect(result.confidence).toBe("high");
+});
+
+test("classifyGeology: river terrace gravel → river_gravel_terrace", () => {
+  const result = classifyGeology({ superficialLithology: "SAND AND GRAVEL", superficialName: "RIVER TERRACE DEPOSITS (UNDIFFERENTIATED)" });
+  expect(result.landscapeClass).toBe("river_gravel_terrace");
+  expect(result.confidence).toBe("high");
+});
+
+test("classifyGeology: clay bedrock → heavy_clay", () => {
+  const result = classifyGeology({ bedrockLithology: "MUDSTONE", bedrockName: "OXFORD CLAY FORMATION" });
+  expect(result.landscapeClass).toBe("heavy_clay");
+  expect(result.confidence).toBe("high");
+});
+
+test("classifyGeology: loose sand superficial → sand_gravel", () => {
+  const result = classifyGeology({ superficialLithology: "BLOWN SAND", superficialName: "SAND DUNES" });
+  expect(result.landscapeClass).toBe("sand_gravel");
+  expect(result.confidence).toBe("medium");
+});
+
+test("classifyGeology: SANDSTONE bedrock alone does NOT map to sand_gravel", () => {
+  // Regression: consolidated sandstone bedrock should not get loose-deposit migration advice.
+  const result = classifyGeology({ bedrockLithology: "SANDSTONE", bedrockName: "OLD RED SANDSTONE" });
+  expect(result.landscapeClass).toBe("mixed_uncertain");
+});
+
+test("classifyGeology: no data → unknown", () => {
+  const result = classifyGeology({});
+  expect(result.landscapeClass).toBe("unknown");
+  expect(result.confidence).toBe("low");
+});
+
+test("classifyGeology: artificial ground appends caution regardless of class", () => {
+  const result = classifyGeology({
+    bedrockLithology: "CHALK",
+    artificialGround: { present: true, type: "made_ground" },
+  });
+  expect(result.landscapeClass).toBe("chalk_downland");
+  expect(result.explanation.some(e => e.includes("artificial ground"))).toBe(true);
+});
+
+test("buildGeologyDisplay: chalk_downland produces correct labels and no cautions", () => {
+  const ctx: GeologyContext = {
+    tileKey: "geology:gcpvj2:classifier:v1:source:bgs625k-v2",
+    centroid: { lat: 51.0, lon: -1.5 },
+    source: { bedrock: "BGS_625K" },
+    raw: { bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" },
+    landscapeClass: "chalk_downland",
+    confidence: "high",
+    modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
+    explanation: ["Chalk bedrock mapped."],
+    fetchedAt: Date.now(),
+    classifierVersion: 1,
+    sourceVersion: "bgs625k-v2",
+  };
+  const display = buildGeologyDisplay(ctx);
+  expect(display.landscapeLabel).toBe("Chalk Downland");
+  expect(display.confidenceLabel).toBe("High confidence");
+  expect(display.cautions).toHaveLength(0);
+  expect(display.phaseNote).toContain("future update");
+});
+
+test("buildGeologyDisplay: artificial ground adds caution string", () => {
+  const ctx: GeologyContext = {
+    tileKey: "geology:gcpvj2:classifier:v1:source:bgs625k-v2",
+    centroid: { lat: 51.5, lon: -0.1 },
+    source: {},
+    raw: { artificialGround: { present: true, type: "made_ground" } },
+    landscapeClass: "mixed_uncertain",
+    confidence: "low",
+    modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
+    explanation: [],
+    fetchedAt: Date.now(),
+    classifierVersion: 1,
+    sourceVersion: "bgs625k-v2",
+  };
+  const display = buildGeologyDisplay(ctx);
+  expect(display.cautions).toHaveLength(1);
+  expect(display.cautions[0]).toContain("made ground");
+});
+
+test("fetchBgsGeology: returns timedOut=true when request exceeds timeout", async () => {
+  // Override global fetch with a never-resolving stub and a short timeout override.
+  const origFetch = globalThis.fetch;
+  const origSetTimeout = globalThis.setTimeout;
+  // Immediately fire the abort timeout (timeout = 0ms effectively)
+  let abortFn: (() => void) | undefined;
+  globalThis.fetch = (_url: unknown, init?: RequestInit) => {
+    // Capture the abort signal and stall forever
+    return new Promise<Response>((_resolve, _reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        globalThis.fetch = origFetch;
+        globalThis.setTimeout = origSetTimeout;
+      });
+    });
+  };
+  // Replace setTimeout to fire immediately (simulates instant timeout)
+  (globalThis as any).setTimeout = (fn: () => void, _delay: number) => {
+    fn();
+    return 0;
+  };
+  (globalThis as any).clearTimeout = () => {};
+
+  const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
+  expect(result.timedOut).toBe(true);
+  expect(result.data).toBeNull();
+
+  globalThis.fetch = origFetch;
+  globalThis.setTimeout = origSetTimeout;
 });

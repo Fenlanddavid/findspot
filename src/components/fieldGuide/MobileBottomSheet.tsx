@@ -226,6 +226,7 @@ export function MobileBottomSheet() {
         (hasScanned || geologyContext || geologyContextLoading);
     const activeMobileGeologyTitle =
         neutralMobileGeologyAvailable && expandedGeologyId === 'scan' ? 'Scan Geology'
+        : historicMode && expandedGeologyId === 'historic' ? 'Historic Geology'
         : selectedHotspotId && expandedGeologyId === `hotspot:${selectedHotspotId}` ? 'Hotspot Geology'
         : selectedId && expandedGeologyId === `target:${selectedId}` ? 'Target Geology'
         : null;
@@ -281,7 +282,17 @@ export function MobileBottomSheet() {
                     historicScanComplete ? (
                         <div className="space-y-2" onClick={e => e.stopPropagation()}>
                             <div className="grid grid-cols-2 gap-2">
-                                <div aria-hidden="true" />
+                                {historicMode ? (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleGeologyDetails('historic'); }}
+                                        className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === 'historic' ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-200' : 'bg-white/[0.04] border-sky-400/20 text-sky-300'}`}
+                                    >
+                                        Geology
+                                    </button>
+                                ) : (
+                                    <div aria-hidden="true" />
+                                )}
                                 <button
                                     onClick={() => setIntelLayersOpen(v => !v)}
                                     className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
@@ -400,7 +411,6 @@ export function MobileBottomSheet() {
                             </button>
                             </div>
                             <p className="text-[11px] font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
-                            <GeologyContextCard context={geologyContext} loading={geologyContextLoading} />
                             <a
                                 href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
                                 target="_blank" rel="noreferrer"

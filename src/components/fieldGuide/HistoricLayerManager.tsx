@@ -3,7 +3,6 @@ import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
-import { GeologyContextCard } from './GeologyContextCard';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -69,8 +68,6 @@ export function HistoricLayerManager() {
         clearMapItemSelections,
         setSelectedPASFind,
         setIsIntelOpen,
-        geologyContext,
-        geologyContextLoading,
     } = useFieldGuideContext();
 
     // Only show when in historic mode and nothing else is selected
@@ -105,7 +102,6 @@ export function HistoricLayerManager() {
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
                 <p className="text-[11px] font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
             </div>
-            <GeologyContextCard context={geologyContext} loading={geologyContextLoading} />
             {(routeLines.length > 0 || sigLines.length > 0) && (
                 <div className="border-t border-white/8 pt-3">
                     <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-2">Why this stands out</p>
