@@ -34,6 +34,7 @@ import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnal
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyContext';
 import type { GeologyContext } from '../engines/geologyContext';
+import { applyGeologyModifiers } from '../utils/hotspotEngine';
 import { getSetting } from '../services/data';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
@@ -152,7 +153,7 @@ function readRasterOverlayOpacity(): RasterOverlayOpacity {
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
 
 type ScanPhase    = 'idle' | 'terrain' | 'historic' | 'complete';
-type HotspotVersion = 'terrain' | 'enhanced' | null;
+type HotspotVersion = 'terrain' | 'enhanced' | 'geology-enhanced' | null;
 
 interface EngineState {
     analyzing:        boolean;
@@ -172,6 +173,7 @@ type EngineAction =
     | { type: 'SCAN_SUCCESS'; features: Cluster[]; hotspots: Hotspot[]; monumentPoints: [number, number][]; routes: HistoricRoute[]; heritageCount: number }
     | { type: 'SCAN_FAIL' }
     | { type: 'HISTORIC_ENHANCE'; hotspots: Hotspot[] }
+    | { type: 'GEOLOGY_ENHANCE'; hotspots: Hotspot[] }
     | { type: 'SET_HERITAGE_COUNT'; count: number; monumentPoints: [number, number][]; routes?: HistoricRoute[] }
     | { type: 'CLEAR_SCAN' };
 
@@ -203,6 +205,8 @@ function engineReducer(state: EngineState, action: EngineAction): EngineState {
             return { ...state, analyzing: false, scanPhase: 'idle' };
         case 'HISTORIC_ENHANCE':
             return { ...state, scanPhase: 'complete', hotspotVersion: 'enhanced', hotspots: action.hotspots };
+        case 'GEOLOGY_ENHANCE':
+            return { ...state, hotspotVersion: 'geology-enhanced', hotspots: action.hotspots };
         case 'SET_HERITAGE_COUNT':
             return {
                 ...state,
@@ -471,6 +475,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [geologyContextLoading, setGeologyContextLoading] = useState(false);
     const geologyEnabledRef = useRef<boolean | null>(null);
     const geologyRequestSeqRef = useRef(0);
+    const geologyAppliedRef = useRef<string | null>(null); // tileKey of last applied geology
 
     // User location marker (shown after GPS button press, persists for session)
     const userLocationMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -937,7 +942,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         }
     }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ─── Geology context phase (Phase 1: display only, non-blocking) ─────────
+    // ─── Geology context phase (non-blocking) ────────────────────────────────
 
     const runGeologyContextPhase = useCallback(async (center: { lat: number; lng: number }) => {
         if (geologyEnabledRef.current !== true) {
@@ -973,6 +978,30 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             }
         }
     }, [addLog]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ─── Apply geology modifiers to hotspots (Phase 2) ───────────────────────
+    // Fires when geology context becomes available AND historic enhancement is done.
+    // Guards against re-application using the tileKey of the last applied context.
+    // GEOLOGY_RULE: applyGeologyModifiers enforces the primary-signal gate internally.
+
+    useEffect(() => {
+        if (!geologyContext) {
+            geologyAppliedRef.current = null;
+            return;
+        }
+        // Wait until historic enhancement is complete — geology is the last stage.
+        if (hotspotVersion !== 'enhanced') return;
+        // Guard against re-application for the same tile in the same scan session.
+        if (geologyAppliedRef.current === geologyContext.tileKey) return;
+        if (!hotspots.length) return;
+
+        geologyAppliedRef.current = geologyContext.tileKey;
+        const { hotspots: enhanced, appliedCount, netScore } = applyGeologyModifiers(hotspots, geologyContext);
+        if (appliedCount > 0) {
+            addLog(`Geology modifiers applied (${geologyContext.landscapeClass}, net ${netScore > 0 ? '+' : ''}${netScore}) to ${appliedCount} hotspot${appliedCount !== 1 ? 's' : ''}.`, 'system');
+            dispatch({ type: 'GEOLOGY_ENHANCE', hotspots: enhanced });
+        }
+    }, [geologyContext, hotspots, hotspotVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Main terrain scan ────────────────────────────────────────────────────
 

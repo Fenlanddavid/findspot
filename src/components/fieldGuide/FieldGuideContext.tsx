@@ -72,7 +72,7 @@ export interface FieldGuideContextValue {
     // Engine state
     analyzing: boolean;
     scanPhase: 'idle' | 'terrain' | 'historic' | 'complete';
-    hotspotVersion: 'terrain' | 'enhanced' | null;
+    hotspotVersion: 'terrain' | 'enhanced' | 'geology-enhanced' | null;
     terrainClusters: Cluster[];
     detectedFeatures: Cluster[];
     hotspots: Hotspot[];

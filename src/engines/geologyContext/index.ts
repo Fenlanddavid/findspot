@@ -12,7 +12,7 @@ export { sweepStaleGeologyCache } from './geologyCache';
 
 import { fetchBgsGeology } from './geologyContextClient';
 import { classifyGeology } from './geologyClassifier';
-import { computeGeologyModifiers } from './geologyModifiers';
+import { computeGeologyModifiers, netGeologyScore } from './geologyModifiers';
 import { buildTileKey, getCachedGeologyContext, cacheGeologyContext } from './geologyCache';
 import {
     GEOLOGY_CLASSIFIER_VERSION,
@@ -103,10 +103,11 @@ export async function runGeologyContext(
     await cacheGeologyContext(context);
 
     // ── 7. Audit ──
+    const net = netGeologyScore(modifiers);
     audit({
-        action:      'not_applied',
-        reason:      `Phase 1 — geology context recorded (${landscapeClass}, ${confidence} confidence). Scoring modifiers deferred to Phase 2.`,
-        scoreEffect: 0,
+        action:      'applied',
+        reason:      `Geology modifier computed: ${landscapeClass}, ${confidence} confidence. Net modifier: ${net > 0 ? '+' : ''}${net}. Applied to hotspots when primary signals are present.`,
+        scoreEffect: net,
     });
 
     return context;

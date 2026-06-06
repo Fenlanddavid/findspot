@@ -22,6 +22,10 @@ function contains(haystack: string, ...needles: string[]): boolean {
     return needles.some(n => haystack.includes(n.toUpperCase()));
 }
 
+function containsLooseSandOrGravelLithology(haystack: string): boolean {
+    return /\b(SAND|GRAVEL)\b/.test(haystack);
+}
+
 // ─── Classification rules ─────────────────────────────────────────────────────
 // Each rule tests raw BGS lithology/name strings.
 // Rules are ordered from most specific to least specific.
@@ -49,22 +53,24 @@ export function classifyGeology(raw: RawGeologyData): ClassificationResult {
         explanation.push('Mapped mass movement present — artefacts may have moved downslope.');
     }
 
+    // ── Foreshore / estuarine (must be checked before peat_fen — more specific) ──
+    if (
+        contains(superfLith, 'TIDAL FLAT', 'ESTUARINE', 'INTERTIDAL') ||
+        contains(superfName, 'TIDAL', 'ESTUARINE', 'FORESHORE', 'INTERTIDAL', 'SALTMARSH')
+    ) {
+        explanation.push(
+            'Tidal or estuarine deposits mapped — foreshore context. Artefact survival is variable; check local erosion patterns.'
+        );
+        return { landscapeClass: 'foreshore', confidence: 'high', explanation };
+    }
+
     // ── Peat / fen / alluvium (superficial takes priority) ──
     if (
-        contains(superfLith, 'PEAT', 'ALLUVIUM', 'ALLUVIAL', 'LACUSTRINE', 'TIDAL FLAT', 'ESTUARINE', 'MARSH') ||
-        contains(superfName, 'PEAT', 'ALLUVIUM', 'ALLUVIAL', 'LACUSTRINE', 'TIDAL FLAT', 'ESTUARINE', 'FENLAND')
+        contains(superfLith, 'PEAT', 'ALLUVIUM', 'ALLUVIAL', 'LACUSTRINE', 'MARSH') ||
+        contains(superfName, 'PEAT', 'ALLUVIUM', 'ALLUVIAL', 'LACUSTRINE', 'FENLAND')
     ) {
-        const isTidalOrEstuarine =
-            contains(superfLith, 'TIDAL FLAT', 'ESTUARINE') ||
-            contains(superfName, 'TIDAL', 'ESTUARINE');
-
-        // KNOWN SIMPLIFICATION (Phase 1): tidal/estuarine deposits collapse to peat_fen
-        // rather than a distinct 'foreshore' class. A foreshore detectorist will see
-        // peat/fen preservation advice rather than foreshore context. Phase 2 should
-        // introduce a dedicated class if foreshore detection becomes a use case.
-        const landscapeClass: GeologyLandscapeClass = isTidalOrEstuarine
-            ? 'peat_fen'
-            : contains(superfLith, 'PEAT') || contains(superfName, 'PEAT', 'FEN')
+        const landscapeClass: GeologyLandscapeClass =
+            contains(superfLith, 'PEAT') || contains(superfName, 'PEAT', 'FEN')
                 ? 'peat_fen'
                 : 'alluvial_floodplain';
 
@@ -115,7 +121,7 @@ export function classifyGeology(raw: RawGeologyData): ClassificationResult {
     // explanation is misleading for consolidated rock (e.g. Devonian Old Red Sandstone).
     // Without a matching superficial deposit it falls through to mixed_uncertain.
     if (
-        contains(bedrockLith, 'SAND', 'GRAVEL', 'QUARTZITE') ||
+        containsLooseSandOrGravelLithology(bedrockLith) ||
         contains(superfLith, 'SAND', 'GRAVEL', 'BLOWN SAND') ||
         contains(superfName, 'SAND', 'GRAVEL', 'BLOWN SAND')
     ) {

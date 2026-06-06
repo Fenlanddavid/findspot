@@ -28,6 +28,10 @@ const LANDSCAPE_LABELS: Record<GeologyLandscapeClass, { label: string; detail: s
         label: 'Sand and Gravel',
         detail: 'Permeable sandy or gravelly ground. Artefacts can spread or shift — check upslope source areas when interpreting scatter patterns.',
     },
+    foreshore: {
+        label: 'Foreshore / Estuarine',
+        detail: 'Tidal or estuarine deposits. Artefact survival is highly variable — erosion can expose finds but also disperse them. Check local erosion patterns and consult tide tables for safe access windows.',
+    },
     mixed_uncertain: {
         label: 'Mixed Geology',
         detail: 'Geology data was returned but the landscape classification is uncertain for this tile. Signals interpreted without geology weighting.',
@@ -107,7 +111,6 @@ export function buildGeologyDisplay(context: GeologyContext): GeologyDisplayData
         bedrockLabel:    formatRawName(context.raw.bedrockName || context.raw.bedrockLithology),
         superficialLabel: formatRawName(context.raw.superficialName || context.raw.superficialLithology),
         cautions:        buildCautions(context),
-        // Phase 1: no score changes applied.
-        phaseNote:       'FieldGuide has used mapped geology for context. Scoring adjustments will be introduced in a future update.',
+        phaseNote:       'FieldGuide has applied mapped geology to landscape interpretation. Scoring adjustments are active for this scan area.',
     };
 }

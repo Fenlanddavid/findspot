@@ -7,7 +7,7 @@
 // ─── Version constants ────────────────────────────────────────────────────────
 // Bump GEOLOGY_CLASSIFIER_VERSION when classification logic changes (invalidates cache).
 // Bump GEOLOGY_SOURCE_VERSION when the BGS service or layer names change.
-export const GEOLOGY_CLASSIFIER_VERSION = 1;
+export const GEOLOGY_CLASSIFIER_VERSION = 2;
 export const GEOLOGY_SOURCE_VERSION = 'bgs625k-v2';
 
 export const GEOLOGY_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
@@ -23,6 +23,7 @@ export type GeologyLandscapeClass =
     | 'chalk_downland'
     | 'heavy_clay'
     | 'sand_gravel'
+    | 'foreshore'
     | 'mixed_uncertain'
     | 'unknown';
 
@@ -65,8 +66,8 @@ export type GeologyContext = {
     landscapeClass: GeologyLandscapeClass;
     confidence: GeologyConfidence;
 
-    // Phase 1: all zeros — scoring modifiers deferred to Phase 2.
-    // Phase 2 will populate these with bounded adjustments (+12 max / -15 min).
+    // Phase 2: bounded scoring adjustments (+12 max / -15 min).
+    // Application is gated so geology cannot create hotspots or targets by itself.
     modifiers: {
         hydrology: number;
         terrain: number;

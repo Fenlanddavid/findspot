@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { Cluster, ModernWay } from "../src/pages/fieldGuideTypes";
+import type { Cluster, Hotspot, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
+import { applyGeologyModifiers } from "../src/utils/hotspotEngine";
 import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier";
 import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
 import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
@@ -25,6 +26,28 @@ function routeRegressionCluster(id: string, center: [number, number]): Cluster {
     sources: ["terrain"],
     bearing: 0,
     metrics: { circularity: 0.1, density: 0.7, ratio: 7, area: 120 },
+  };
+}
+
+function regressionHotspot(
+  id: string,
+  score: number,
+  metrics: Hotspot["metrics"],
+  confidence: Hotspot["confidence"] = "Developing Signal",
+): Hotspot {
+  return {
+    id,
+    number: 0,
+    score,
+    confidence,
+    type: "General Activity Zone",
+    classification: "General Activity Zone",
+    classificationReason: "Regression hotspot",
+    explanation: ["Regression signal"],
+    center: [0, 0],
+    bounds: [[0, 0], [0, 0]],
+    memberIds: [id],
+    metrics,
   };
 }
 
@@ -893,7 +916,7 @@ test("classifyGeology: artificial ground appends caution regardless of class", (
 
 test("buildGeologyDisplay: chalk_downland produces correct labels and no cautions", () => {
   const ctx: GeologyContext = {
-    tileKey: "geology:gcpvj2:classifier:v1:source:bgs625k-v2",
+    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
     centroid: { lat: 51.0, lon: -1.5 },
     source: { bedrock: "BGS_625K" },
     raw: { bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" },
@@ -902,19 +925,19 @@ test("buildGeologyDisplay: chalk_downland produces correct labels and no caution
     modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
     explanation: ["Chalk bedrock mapped."],
     fetchedAt: Date.now(),
-    classifierVersion: 1,
+    classifierVersion: 2,
     sourceVersion: "bgs625k-v2",
   };
   const display = buildGeologyDisplay(ctx);
   expect(display.landscapeLabel).toBe("Chalk Downland");
   expect(display.confidenceLabel).toBe("High confidence");
   expect(display.cautions).toHaveLength(0);
-  expect(display.phaseNote).toContain("future update");
+  expect(display.phaseNote).toContain("Scoring adjustments are active");
 });
 
 test("buildGeologyDisplay: artificial ground adds caution string", () => {
   const ctx: GeologyContext = {
-    tileKey: "geology:gcpvj2:classifier:v1:source:bgs625k-v2",
+    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
     centroid: { lat: 51.5, lon: -0.1 },
     source: {},
     raw: { artificialGround: { present: true, type: "made_ground" } },
@@ -923,7 +946,7 @@ test("buildGeologyDisplay: artificial ground adds caution string", () => {
     modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
     explanation: [],
     fetchedAt: Date.now(),
-    classifierVersion: 1,
+    classifierVersion: 2,
     sourceVersion: "bgs625k-v2",
   };
   const display = buildGeologyDisplay(ctx);
@@ -935,15 +958,13 @@ test("fetchBgsGeology: returns timedOut=true when request exceeds timeout", asyn
   // Override global fetch with a never-resolving stub and a short timeout override.
   const origFetch = globalThis.fetch;
   const origSetTimeout = globalThis.setTimeout;
+  const origClearTimeout = globalThis.clearTimeout;
   // Immediately fire the abort timeout (timeout = 0ms effectively)
-  let abortFn: (() => void) | undefined;
   globalThis.fetch = (_url: unknown, init?: RequestInit) => {
-    // Capture the abort signal and stall forever
-    return new Promise<Response>((_resolve, _reject) => {
-      init?.signal?.addEventListener("abort", () => {
-        globalThis.fetch = origFetch;
-        globalThis.setTimeout = origSetTimeout;
-      });
+    return new Promise<Response>((_resolve, reject) => {
+      const abort = () => reject(new DOMException("Aborted", "AbortError"));
+      if (init?.signal?.aborted) abort();
+      else init?.signal?.addEventListener("abort", abort);
     });
   };
   // Replace setTimeout to fire immediately (simulates instant timeout)
@@ -953,10 +974,84 @@ test("fetchBgsGeology: returns timedOut=true when request exceeds timeout", asyn
   };
   (globalThis as any).clearTimeout = () => {};
 
-  const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
-  expect(result.timedOut).toBe(true);
-  expect(result.data).toBeNull();
+  try {
+    const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
+    expect(result.timedOut).toBe(true);
+    expect(result.data).toBeNull();
+  } finally {
+    globalThis.fetch = origFetch;
+    globalThis.setTimeout = origSetTimeout;
+    globalThis.clearTimeout = origClearTimeout;
+  }
+});
 
-  globalThis.fetch = origFetch;
-  globalThis.setTimeout = origSetTimeout;
+test("classifyGeology: tidal flat → foreshore (not peat_fen)", () => {
+  const result = classifyGeology({
+    superficialLithology: "TIDAL FLAT",
+    superficialName: "ESTUARINE DEPOSITS",
+  });
+  expect(result.landscapeClass).toBe("foreshore");
+  expect(result.confidence).toBe("high");
+});
+
+test("applyGeologyModifiers: gates on primary signals and refreshes score ordering", () => {
+  const boosted = regressionHotspot("boosted", 54, {
+    anomaly: 12,
+    context: 7,
+    convergence: 0,
+    behaviour: 6,
+    penalty: 0,
+    signalCount: 2,
+    signalClassCount: 2,
+  });
+  const suppressed = regressionHotspot("suppressed", 58, {
+    anomaly: 0,
+    context: 0,
+    convergence: 8,
+    behaviour: 8,
+    penalty: 0,
+    signalCount: 1,
+    signalClassCount: 1,
+  });
+  const ctx: GeologyContext = {
+    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
+    centroid: { lat: 51.0, lon: -1.5 },
+    source: { bedrock: "BGS_625K" },
+    raw: { bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" },
+    landscapeClass: "chalk_downland",
+    confidence: "high",
+    modifiers: { hydrology: 3, terrain: 2, route: 2, preservation: 0, soilMechanics: 0, spectral: 0, movementRisk: 0 },
+    explanation: ["Chalk bedrock mapped."],
+    fetchedAt: Date.now(),
+    classifierVersion: 2,
+    sourceVersion: "bgs625k-v2",
+  };
+
+  const result = applyGeologyModifiers([suppressed, boosted], ctx);
+
+  expect(result.appliedCount).toBe(1);
+  expect(result.suppressedCount).toBe(1);
+  expect(result.hotspots[0].id).toBe("boosted");
+  expect(result.hotspots[0].number).toBe(1);
+  expect(result.hotspots[0].score).toBe(61);
+  expect(result.hotspots[0].confidence).toBe("Strong Signal");
+  expect(result.hotspots[1].id).toBe("suppressed");
+  expect(result.hotspots[1].score).toBe(58);
+});
+
+test("fetchBgsGeology: empty GML feature collection returns data=null", async () => {
+  const origFetch = globalThis.fetch;
+  const EMPTY_GML = '<?xml version="1.0" encoding="UTF-8"?><FeatureCollection xmlns:gml="http://www.opengis.net/gml"/>';
+  globalThis.fetch = async () => new Response(EMPTY_GML, {
+    status: 200,
+    headers: { "Content-Type": "application/vnd.ogc.gml" },
+  });
+  try {
+    const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
+    expect(result.data).toBeNull();
+    expect(result.timedOut).toBe(false);
+    expect(result.corsError).toBe(false);
+  } finally {
+    globalThis.fetch = origFetch;
+  }
 });

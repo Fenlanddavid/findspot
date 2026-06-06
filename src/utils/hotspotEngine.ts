@@ -8,6 +8,8 @@
 import { Cluster, Hotspot, HotspotClassification, SoilMechanics, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from './fieldGuideAnalysis';
 import { computeLandscapeReading } from './landscapeReadingEngine';
+import type { GeologyContext } from '../engines/geologyContext/geologyContextTypes';
+import { netGeologyScore } from '../engines/geologyContext/geologyModifiers';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,
@@ -991,6 +993,17 @@ export function buildTerrainHotspots(
         // place-name signals alone cannot create a hotspot.
         if (!hasPrimaryEvidence) continue;
 
+        // GEOLOGY_RULE assertion (dev-only)
+        // Geology must never be the sole source of a hotspot. If geology is ever
+        // added to the sources set, this fires immediately in development so the
+        // violation is caught before it reaches production.
+        if (import.meta.env.DEV) {
+            const nonGeologySources = [...sources].filter(s => (s as string) !== 'geology');
+            if (nonGeologySources.length === 0) {
+                console.error('[GEOLOGY_RULE] Hotspot emitted with geology as sole source.', { sources: [...sources], center: c.center });
+            }
+        }
+
         let minLon = members[0].center[0], maxLon = members[0].center[0];
         let minLat = members[0].center[1], maxLat = members[0].center[1];
         members.forEach(m => {
@@ -1262,6 +1275,63 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
 
         return { ...result, secondaryTag: newSecondaryTag, explanation: newExplanation };
     });
+}
+
+// ─── Geology modifier application ────────────────────────────────────────────
+// Applied after both terrain and historic enhancement are complete.
+// GEOLOGY_RULE: modifiers only apply when a primary non-geology signal is present.
+// Combined effect is clamped to [-15, +12] per the Phase 2 cap.
+
+export type GeologyApplyResult = {
+    hotspots:    Hotspot[];
+    appliedCount: number;
+    suppressedCount: number;
+    netScore:    number;
+};
+
+export function applyGeologyModifiers(
+    hotspots:       Hotspot[],
+    geologyContext: GeologyContext,
+): GeologyApplyResult {
+    const net = netGeologyScore(geologyContext.modifiers);
+    const clampedNet = Math.max(-15, Math.min(12, net));
+
+    if (clampedNet === 0) {
+        return { hotspots, appliedCount: 0, suppressedCount: 0, netScore: 0 };
+    }
+
+    let appliedCount   = 0;
+    let suppressedCount = 0;
+
+    const updated = hotspots.map(h => {
+        // Primary signal gate: at least one terrain or historic signal must be present.
+        // Prevents geology from being the sole reason a weak cluster scores high.
+        const hasPrimarySignal = h.metrics.anomaly > 0 || h.metrics.context > 0;
+        if (!hasPrimarySignal) {
+            suppressedCount++;
+            return h;
+        }
+        appliedCount++;
+        const score = Math.min(98, Math.max(0, h.score + clampedNet));
+        const confidence = evaluateHotspotConfidence({
+            score,
+            signalCount: h.metrics.signalCount,
+            behaviour:   h.metrics.behaviour,
+            context:     h.metrics.context,
+            convergence: h.metrics.convergence,
+        });
+        return {
+            ...h,
+            score,
+            confidence,
+        };
+    });
+
+    const sorted = updated
+        .sort((a, b) => b.score - a.score)
+        .map((h, i) => ({ ...h, number: i + 1 }));
+
+    return { hotspots: sorted, appliedCount, suppressedCount, netScore: clampedNet };
 }
 
 // ─── Combined entry point ─────────────────────────────────────────────────────

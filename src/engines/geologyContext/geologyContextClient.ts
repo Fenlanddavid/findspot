@@ -193,7 +193,7 @@ export async function fetchBgsGeology(
     centroid: { lat: number; lon: number },
 ): Promise<FetchGeologyResult> {
     const controller = new AbortController();
-    const timeoutId  = window.setTimeout(
+    const timeoutId  = globalThis.setTimeout(
         () => controller.abort(),
         GEOLOGY_REQUEST_TIMEOUT_MS,
     );
@@ -219,7 +219,7 @@ export async function fetchBgsGeology(
         }
         return { data: null, timedOut, corsError };
     } finally {
-        window.clearTimeout(timeoutId);
+        globalThis.clearTimeout(timeoutId);
     }
 
     if (!bedrockAttrs && !superficialAttrs) {
