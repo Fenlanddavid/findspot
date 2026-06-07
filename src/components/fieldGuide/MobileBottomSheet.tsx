@@ -203,7 +203,9 @@ export function MobileBottomSheet() {
         }, 0);
     };
     const toggleGeologyDetails = (key: string) => {
-        setExpandedGeologyId(expandedGeologyId === key ? null : key);
+        const opening = expandedGeologyId !== key;
+        setExpandedGeologyId(opening ? key : null);
+        if (opening) persistSheetExpanded(false);
     };
     const toggleHotspotDetails = (id: string) => {
         const opening = expandedInterpretationId !== id;
