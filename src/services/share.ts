@@ -55,10 +55,79 @@ export async function downloadShareCard(element: HTMLElement, filename: string, 
 }
 
 function triggerDownload(blob: Blob, filename: string) {
+  triggerDownloadFile(blob, `${filename}.png`);
+}
+
+function triggerDownloadFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${filename}.png`;
+  a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function extensionForBlob(blob: Blob): string {
+  switch (blob.type) {
+    case 'image/jpeg':
+    case 'image/jpg':
+      return 'jpg';
+    case 'image/png':
+      return 'png';
+    case 'image/webp':
+      return 'webp';
+    case 'image/heic':
+      return 'heic';
+    case 'image/heif':
+      return 'heif';
+    default:
+      return 'jpg';
+  }
+}
+
+export function ensureFilenameExtension(filename: string, blob: Blob): string {
+  return /\.[a-z0-9]{2,5}$/i.test(filename) ? filename : `${filename}.${extensionForBlob(blob)}`;
+}
+
+export function makeFindPhotoFilename(findId: string, photoNumber: number, blob: Blob): string {
+  const safeFindId = (findId || 'find').replace(/[^a-z0-9-]+/gi, '-').replace(/^-+|-+$/g, '') || 'find';
+  return `findspot-${safeFindId}-photo-${photoNumber}.${extensionForBlob(blob)}`;
+}
+
+/**
+ * Shares an original blob via the native share sheet where supported.
+ * Falls back to a browser download using the supplied filename.
+ */
+export async function shareOrDownloadBlob(
+  blob: Blob,
+  filename: string,
+  shareTitle = 'FindSpot file',
+): Promise<void> {
+  const resolvedFilename = ensureFilenameExtension(filename, blob);
+  const file = new File([blob], resolvedFilename, { type: blob.type || 'application/octet-stream' });
+
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: shareTitle, files: [file] });
+    return;
+  }
+
+  triggerDownloadFile(blob, resolvedFilename);
+}
+
+export async function shareOrDownloadBlobs(
+  files: Array<{ blob: Blob; filename: string }>,
+  shareTitle = 'FindSpot files',
+): Promise<void> {
+  const shareFiles = files.map(({ blob, filename }) => (
+    new File([blob], ensureFilenameExtension(filename, blob), { type: blob.type || 'application/octet-stream' })
+  ));
+
+  if (shareFiles.length > 0 && navigator.share && navigator.canShare && navigator.canShare({ files: shareFiles })) {
+    await navigator.share({ title: shareTitle, files: shareFiles });
+    return;
+  }
+
+  for (const { blob, filename } of files) {
+    triggerDownloadFile(blob, ensureFilenameExtension(filename, blob));
+  }
 }

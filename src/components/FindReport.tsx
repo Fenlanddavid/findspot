@@ -12,6 +12,7 @@ import {
   reportBodyStyle,
   reportDocumentStyle,
 } from "./ReportChrome";
+import { toOSGridRef } from "../services/gps";
 
 export function FindReport(props: {
   find: Find;
@@ -30,6 +31,7 @@ export function FindReport(props: {
   const conductedBy = detectoristName || permission?.collector || "Detectorist";
   const insuranceText = ncmdNumber ? `${insuranceProvider || "Membership"} No. ${ncmdNumber}${ncmdExpiry ? `, expires ${formatReportDate(ncmdExpiry, "short")}` : ""}` : null;
   const dateFound = formatReportDate(session?.date || find.createdAt, "long") || "Not recorded";
+  const gridRef = find.lat != null && find.lon != null ? toOSGridRef(find.lat, find.lon) || find.osGridRef : find.osGridRef;
 
   const objectRows = [
     { label: "Find code", value: find.findCode || "Not recorded" },
@@ -48,7 +50,7 @@ export function FindReport(props: {
   const locationRows = [
     { label: "Permission", value: permission?.name || "Not recorded" },
     { label: "Date found", value: dateFound },
-    { label: "OS grid ref", value: find.osGridRef || "Not recorded" },
+    { label: "OS grid ref", value: gridRef || "Not recorded" },
     { label: "What3Words", value: find.w3w ? `///${find.w3w.replace("///", "")}` : "Not recorded" },
     { label: "Coordinates", value: find.lat != null && find.lon != null ? `${find.lat.toFixed(6)}, ${find.lon.toFixed(6)}` : "Not recorded" },
     { label: "GPS accuracy", value: find.gpsAccuracyM ? `+/- ${Math.round(find.gpsAccuracyM)}m` : "Not recorded" },

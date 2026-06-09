@@ -6,6 +6,7 @@ import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier
 import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
 import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
 import type { GeologyContext } from "../src/engines/geologyContext/geologyContextTypes";
+import { toOSGridRef } from "../src/services/gps";
 
 function routeRegressionCluster(id: string, center: [number, number]): Cluster {
   return {
@@ -386,6 +387,19 @@ test("monument buffer targets still run through modern route suppression", () =>
   expect(monumentInterior.monumentBufferM).toBeUndefined();
   expect(monumentInterior.isRouteArtefactRisk).toBeUndefined();
   expect(monumentInterior.routeAssessment?.relationship).toBe("not_route_related");
+});
+
+test("toOSGridRef returns 10-figure National Grid References by default", () => {
+  expect(toOSGridRef(52.6575703055556, 1.7179215833333)).toBe("TG 51538 13138");
+  expect(toOSGridRef(55.9486, -3.1999)).toBe("NT 25163 73490");
+  expect(toOSGridRef(56.79685, -5.003508)).toBe("NN 16677 71281");
+  expect(toOSGridRef(51.4778, -0.0016)).toBe("TQ 38876 77320");
+});
+
+test("toOSGridRef supports lower precision formatting when requested", () => {
+  expect(toOSGridRef(51.4778, -0.0016, 8)).toBe("TQ 3887 7732");
+  expect(toOSGridRef(51.4778, -0.0016, 6)).toBe("TQ 388 773");
+  expect(toOSGridRef(48.8566, 2.3522)).toBe("");
 });
 
 test("backup restore replaces current data and preserves linked records, settings and media blobs", async ({ page }) => {

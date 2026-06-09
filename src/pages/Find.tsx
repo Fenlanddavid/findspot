@@ -956,7 +956,7 @@ export default function FindPage(props: {
           <input
             value={form.osGridRef}
             onChange={(e) => update({ osGridRef: e.target.value })}
-            placeholder="e.g. TL 1234 5678"
+            placeholder="e.g. TL 12345 56789"
             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
           />
         </label>

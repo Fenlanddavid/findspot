@@ -62,11 +62,73 @@ export async function captureGPS(options?: {
   });
 }
 
-/**
- * Converts Latitude/Longitude to UK OS Grid Reference.
- * Simple approximation good for ~5m accuracy.
- */
-export function toOSGridRef(lat: number, lon: number): string {
+type GridFigures = 6 | 8 | 10;
+
+type Cartesian = {
+  x: number;
+  y: number;
+  z: number;
+};
+
+const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+
+const WGS84 = { a: 6378137.0, b: 6356752.3141 };
+const AIRY1830 = { a: 6377563.396, b: 6356256.909 };
+
+function toCartesian(lat: number, lon: number, height: number, ellipsoid: typeof WGS84): Cartesian {
+  const phi = lat * DEG_TO_RAD;
+  const lambda = lon * DEG_TO_RAD;
+  const sinPhi = Math.sin(phi);
+  const cosPhi = Math.cos(phi);
+  const e2 = 1 - (ellipsoid.b * ellipsoid.b) / (ellipsoid.a * ellipsoid.a);
+  const nu = ellipsoid.a / Math.sqrt(1 - e2 * sinPhi * sinPhi);
+
+  return {
+    x: (nu + height) * cosPhi * Math.cos(lambda),
+    y: (nu + height) * cosPhi * Math.sin(lambda),
+    z: ((1 - e2) * nu + height) * sinPhi,
+  };
+}
+
+function applyWgs84ToOsgb36Transform(point: Cartesian): Cartesian {
+  const tx = -446.448;
+  const ty = 125.157;
+  const tz = -542.06;
+  const rx = -0.1502 / 3600 * DEG_TO_RAD;
+  const ry = -0.2470 / 3600 * DEG_TO_RAD;
+  const rz = -0.8421 / 3600 * DEG_TO_RAD;
+  const s = 20.4894e-6;
+
+  return {
+    x: tx + (1 + s) * point.x - rz * point.y + ry * point.z,
+    y: ty + rz * point.x + (1 + s) * point.y - rx * point.z,
+    z: tz - ry * point.x + rx * point.y + (1 + s) * point.z,
+  };
+}
+
+function cartesianToLatLon(point: Cartesian, ellipsoid: typeof AIRY1830): { lat: number; lon: number } {
+  const e2 = 1 - (ellipsoid.b * ellipsoid.b) / (ellipsoid.a * ellipsoid.a);
+  const p = Math.sqrt(point.x * point.x + point.y * point.y);
+  const lon = Math.atan2(point.y, point.x);
+
+  let lat = Math.atan2(point.z, p * (1 - e2));
+  let previous: number;
+  do {
+    previous = lat;
+    const nu = ellipsoid.a / Math.sqrt(1 - e2 * Math.sin(lat) * Math.sin(lat));
+    lat = Math.atan2(point.z + e2 * nu * Math.sin(lat), p);
+  } while (Math.abs(lat - previous) > 1e-12);
+
+  return { lat: lat * RAD_TO_DEG, lon: lon * RAD_TO_DEG };
+}
+
+function wgs84ToOsgb36(lat: number, lon: number): { lat: number; lon: number } {
+  const cartesian = toCartesian(lat, lon, 0, WGS84);
+  return cartesianToLatLon(applyWgs84ToOsgb36Transform(cartesian), AIRY1830);
+}
+
+function osgb36LatLonToEastNorth(lat: number, lon: number): { easting: number; northing: number } {
   const deg2rad = Math.PI / 180;
   const radLat = lat * deg2rad;
   const radLon = lon * deg2rad;
@@ -106,34 +168,38 @@ export function toOSGridRef(lat: number, lon: number): string {
   const N = I + II * deltaLon * deltaLon + III * Math.pow(deltaLon, 4) + IIIA * Math.pow(deltaLon, 6);
   const E = E0 + IV * deltaLon + V * Math.pow(deltaLon, 3) + VI * Math.pow(deltaLon, 5);
 
-  // Convert to Grid Letters
-  if (E < 0 || E > 700000 || N < 0 || N > 1300000) return "";
+  return { easting: E, northing: N };
+}
 
-  const gridLetters = [
-    ['SV', 'SW', 'SX', 'SY', 'SZ', 'TV', 'TW'],
-    ['SQ', 'SR', 'SS', 'ST', 'SU', 'TQ', 'TR'],
-    ['SL', 'SM', 'SN', 'SO', 'SP', 'TL', 'TM'],
-    ['SF', 'SG', 'SH', 'SJ', 'SK', 'TF', 'TG'],
-    ['SA', 'SB', 'SC', 'SD', 'SE', 'TA', 'TB'],
-    ['NV', 'NW', 'NX', 'NY', 'NZ', 'OV', 'OW'],
-    ['NQ', 'NR', 'NS', 'NT', 'NU', 'OQ', 'OR'],
-    ['NL', 'NM', 'NN', 'NO', 'NP', 'OL', 'OM'],
-    ['NF', 'NG', 'NH', 'NJ', 'NK', 'OF', 'OG'],
-    ['NA', 'NB', 'NC', 'ND', 'NE', 'OA', 'OB'],
-    ['HV', 'HW', 'HX', 'HY', 'HZ', 'JV', 'JW'],
-    ['HQ', 'HR', 'HS', 'HT', 'HU', 'JQ', 'JR'],
-    ['HL', 'HM', 'HN', 'HO', 'HP', 'JL', 'JM'],
-  ];
+function gridLettersFor(easting: number, northing: number): string {
+  const e100k = Math.floor(easting / 100000);
+  const n100k = Math.floor(northing / 100000);
 
-  const eIndex = Math.floor(E / 100000);
-  const nIndex = Math.floor(N / 100000);
+  let l1 = (19 - n100k) - ((19 - n100k) % 5) + Math.floor((e100k + 10) / 5);
+  let l2 = ((19 - n100k) * 5 % 25) + (e100k % 5);
 
-  if (nIndex < 0 || nIndex >= gridLetters.length || eIndex < 0 || eIndex >= gridLetters[0].length) return "";
+  if (l1 > 7) l1 += 1;
+  if (l2 > 7) l2 += 1;
 
-  const square = gridLetters[nIndex][eIndex];
-  
-  const eRemainder = Math.floor((E % 100000) / 10).toString().padStart(4, '0');
-  const nRemainder = Math.floor((N % 100000) / 10).toString().padStart(4, '0');
+  return String.fromCharCode(l1 + 65, l2 + 65);
+}
 
-  return `${square} ${eRemainder} ${nRemainder}`;
+/**
+ * Converts WGS84 latitude/longitude to a UK National Grid Reference.
+ * Defaults to 10 figures: two letters plus 5 easting and 5 northing digits.
+ */
+export function toOSGridRef(lat: number, lon: number, figures: GridFigures = 10): string {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return "";
+
+  const osgb36 = wgs84ToOsgb36(lat, lon);
+  const { easting, northing } = osgb36LatLonToEastNorth(osgb36.lat, osgb36.lon);
+
+  if (easting < 0 || easting > 700000 || northing < 0 || northing > 1300000) return "";
+
+  const digits = figures / 2;
+  const divisor = Math.pow(10, 5 - digits);
+  const e = Math.floor((easting % 100000) / divisor).toString().padStart(digits, "0");
+  const n = Math.floor((northing % 100000) / divisor).toString().padStart(digits, "0");
+
+  return `${gridLettersFor(easting, northing)} ${e} ${n}`;
 }

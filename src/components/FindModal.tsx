@@ -10,7 +10,7 @@ import { ScaledImage } from "./ScaledImage";
 import { getSetting } from "../services/data";
 import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
-import { shareElementAsImage, downloadShareCard } from "../services/share";
+import { makeFindPhotoFilename, shareElementAsImage, downloadShareCard, shareOrDownloadBlob } from "../services/share";
 import PASReportModal from "./PASReportModal";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
@@ -91,6 +91,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   // find===undefined means still loading; find===explicitly missing means DB returned nothing
   if (find === undefined && !draft) return <Modal onClose={props.onClose} title="Loading…"><div className="py-6 text-center opacity-50 text-sm">Loading...</div></Modal>;
   if (!draft) return <Modal onClose={props.onClose} title="Find not found"><div className="py-6 text-center opacity-50 text-sm">This find no longer exists.</div></Modal>;
+
+  const displayGridRef = draft.lat != null && draft.lon != null ? toOSGridRef(draft.lat, draft.lon) || draft.osGridRef : draft.osGridRef;
 
   async function doGPS() {
     if (!draft) return;
@@ -187,6 +189,20 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     setBusy(false);
   }
 
+  async function exportPhotoForPAS(item: { media: Media }, photoIndex: number) {
+    if (!draft) return;
+    setBusy(true);
+    setShareError(null);
+    try {
+      const filename = makeFindPhotoFilename(draft.findCode || draft.id, photoIndex + 1, item.media.blob);
+      await shareOrDownloadBlob(item.media.blob, filename, "FindSpot photo for PAS record");
+    } catch (e: any) {
+      if (e?.name !== "AbortError") setShareError(e?.message || "Failed to export photo");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleFavorite() {
     if (!draft) return;
     const newStatus = !draft.isFavorite;
@@ -279,7 +295,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               {/* Photos */}
               {imageUrls.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {imageUrls.map((x) => (
+                  {imageUrls.map((x, photoIndex) => (
                     <div
                       key={x.id}
                       className="relative rounded-2xl overflow-hidden aspect-square shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.22)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.5)] hover:-translate-y-[2px] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.6)] transition-all duration-[160ms] cursor-pointer group"
@@ -300,6 +316,22 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                           </span>
                         </div>
                       )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          exportPhotoForPAS(x, photoIndex);
+                        }}
+                        disabled={busy}
+                        title="Download for PAS record"
+                        className="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-full border border-white/40 bg-black/55 text-white shadow-lg backdrop-blur-sm transition-all hover:bg-emerald-600 disabled:opacity-50"
+                      >
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 3v12" />
+                          <path d="m7 10 5 5 5-5" />
+                          <path d="M5 21h14" />
+                        </svg>
+                      </button>
                       <div className="absolute inset-0 flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-[160ms]">
                         <span className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md">
                           {x.media.pxPerMm ? 'Rescale' : 'Set Scale'}
@@ -393,7 +425,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     </button>
                   )}
                 </div>
-                <DetailItem label="OS Grid Ref" value={draft.osGridRef} mono />
+                <DetailItem label="OS Grid Ref" value={displayGridRef} mono />
                 <DetailItem label="What3Words" value={draft.w3w} />
                 {draft.lat != null && draft.lon != null && (
                   <div className="col-span-2">

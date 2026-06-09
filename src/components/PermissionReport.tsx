@@ -16,6 +16,7 @@ import {
   reportBodyStyle,
   reportDocumentStyle,
 } from "./ReportChrome";
+import { toOSGridRef } from "../services/gps";
 
 export function PermissionReport(props: {
   permission: Permission;
@@ -178,6 +179,7 @@ export function PermissionReport(props: {
 
 function FindDetail({ find, media }: { find: Find; media: Media[] }) {
   const dimensions = [find.widthMm && `${find.widthMm}mm W`, find.heightMm && `${find.heightMm}mm H`, find.depthMm && `${find.depthMm}mm D`].filter(Boolean).join(", ");
+  const gridRef = find.lat != null && find.lon != null ? toOSGridRef(find.lat, find.lon) || find.osGridRef : find.osGridRef;
 
   return (
     <div style={{ border: `1px solid ${REPORT.line}`, borderRadius: 9, background: "#fff", padding: 11, display: "grid", gridTemplateColumns: media.length > 0 ? "1fr 150px" : "1fr", gap: 12, alignItems: "start" }}>
@@ -190,7 +192,7 @@ function FindDetail({ find, media }: { find: Find; media: Media[] }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "4px 12px", fontSize: 10.5, color: REPORT.muted, lineHeight: 1.45 }}>
           <Detail label="Period" value={find.period} />
           <Detail label="Material" value={find.material} />
-          <Detail label="Grid ref" value={find.osGridRef} />
+          <Detail label="Grid ref" value={gridRef} />
           <Detail label="Weight" value={find.weightG ? `${find.weightG}g` : ""} />
           <Detail label="Dimensions" value={dimensions} />
           <Detail label="Completeness" value={find.completeness} />

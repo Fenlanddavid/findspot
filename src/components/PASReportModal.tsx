@@ -19,6 +19,8 @@ import {
   reportBodyStyle,
   reportDocumentStyle,
 } from "./ReportChrome";
+import { toOSGridRef } from "../services/gps";
+import { makeFindPhotoFilename, shareOrDownloadBlob, shareOrDownloadBlobs } from "../services/share";
 
 type PdfBlock = { start: number; end: number };
 
@@ -66,6 +68,7 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
   const [dailyCount, setDailyCount] = useState(1);
   const [score, setScore] = useState({ score: 0, reasons: [] as string[] });
   const [generating, setGenerating] = useState(false);
+  const [photoExportError, setPhotoExportError] = useState<string | null>(null);
   const generatedAtRef = useRef(new Date());
   const descriptionRef = useRef<HTMLDivElement>(null);
   const descriptionInitialized = useRef(false);
@@ -124,6 +127,35 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
       }
     }
   }, [isOpen, find, photos]);
+
+  const getReportGridRef = () => (
+    find.lat != null && find.lon != null ? toOSGridRef(find.lat, find.lon) || find.osGridRef : find.osGridRef
+  );
+
+  const getPhotoFilename = (photo: Media, index: number) => (
+    makeFindPhotoFilename(find.findCode || find.id, index + 1, photo.blob)
+  );
+
+  async function exportPhoto(photo: Media, index: number) {
+    setPhotoExportError(null);
+    try {
+      await shareOrDownloadBlob(photo.blob, getPhotoFilename(photo, index), "FindSpot photo for PAS record");
+    } catch (e: any) {
+      if (e?.name !== "AbortError") setPhotoExportError(e?.message || "Failed to export photo");
+    }
+  }
+
+  async function exportAllPhotos() {
+    setPhotoExportError(null);
+    try {
+      await shareOrDownloadBlobs(
+        photos.map((photo, index) => ({ blob: photo.blob, filename: getPhotoFilename(photo, index) })),
+        "FindSpot photos for PAS record",
+      );
+    } catch (e: any) {
+      if (e?.name !== "AbortError") setPhotoExportError(e?.message || "Failed to export photos");
+    }
+  }
 
   const getPDFBlob = async (): Promise<Blob | null> => {
     const element = document.getElementById("pas-report-preview");
@@ -214,7 +246,7 @@ Object: ${find.objectType}
 Period: ${find.period}
 Material: ${find.material}
 Weight: ${find.weightG}g
-NGR: ${find.osGridRef}
+NGR: ${getReportGridRef()}
 Parish: ${location.parish}
 County: ${location.county}
 
@@ -248,6 +280,7 @@ Recorded via FindSpot
   const reportReference = makeReportReference("PAS", find.id || find.findCode || "LOCAL", generatedAt);
   const recordId = `${userInitials}-${new Date(find.createdAt).toISOString().split("T")[0].replace(/-/g, "")}-${dailyCount}`;
   const hasGps = find.lat != null && find.lon != null;
+  const gridRef = getReportGridRef();
   const hasDimensions = !!(find.widthMm || find.heightMm || find.depthMm);
   const targetFlo = flo ? `${flo.name} (${flo.email})` : "Not resolved";
 
@@ -300,6 +333,46 @@ Recorded via FindSpot
             )}
         </div>
 
+        {photos.length > 0 && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-xl p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase tracking-widest">Download for PAS record</h3>
+                <p className="text-xs text-emerald-900/70 dark:text-emerald-100/70 mt-1">Export original photo files separately from the PDF.</p>
+              </div>
+              {photos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={exportAllPhotos}
+                  className="shrink-0 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-3 py-2 text-xs font-black uppercase tracking-wide"
+                >
+                  Export all photos
+                </button>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {photos.map((photo, index) => (
+                <button
+                  key={photo.id}
+                  type="button"
+                  onClick={() => exportPhoto(photo, index)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-white dark:bg-gray-900 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200 hover:border-emerald-500"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v12" />
+                    <path d="m7 10 5 5 5-5" />
+                    <path d="M5 21h14" />
+                  </svg>
+                  Photo {index + 1}
+                </button>
+              ))}
+            </div>
+            {photoExportError && (
+              <p className="mt-3 text-xs font-semibold text-red-700 dark:text-red-300">{photoExportError}</p>
+            )}
+          </div>
+        )}
+
         {/* Report Preview Card */}
         <div className="overflow-x-auto">
             <div id="pas-report-preview" style={{ ...reportDocumentStyle, minWidth: 680 }}>
@@ -322,7 +395,7 @@ Recorded via FindSpot
                       { label: "Period", value: find.period || "Not recorded" },
                       { label: "Material", value: find.material || "Not recorded" },
                       { label: "Weight", value: find.weightG ? `${find.weightG}g` : "Not recorded" },
-                      { label: "Grid reference", value: find.osGridRef || "Not recorded" },
+                      { label: "Grid reference", value: gridRef || "Not recorded" },
                       { label: "Parish / county", value: `${location.parish || "Not resolved"} / ${location.county || "Not resolved"}` },
                       { label: "Target FLO", value: targetFlo },
                     ]}
