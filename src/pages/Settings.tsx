@@ -935,9 +935,11 @@ export default function Settings() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-            <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
-              Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.
-            </p>
+            <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+              <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
+              <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
+              <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>
+            </div>
           </div>
         </section>
 
