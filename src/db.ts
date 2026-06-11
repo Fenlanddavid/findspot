@@ -364,6 +364,25 @@ export type GeologyContextRecord = {
     sourceVersion:     string;
 };
 
+// ─── Find–hotspot feedback signal ────────────────────────────────────────────
+// Lightweight history record written whenever the feedback service detects that
+// user finds fall inside or near a FieldGuide hotspot. One record per permission
+// and geohash6 cell. Used by future on-device compounding to calibrate
+// persistence scoring. Does not store engine internals — only observable user
+// find data.
+
+export type FindHotspotSignal = {
+    signalKey:                  string;              // Primary key — `${permissionId}:${geohash6}`
+    geohash6:                   string;              // Geohash precision 6 of hotspot center
+    permissionId:               string;              // Which land permission this covers
+    lastFindAt:                 string;              // ISO datetime of most recent matched find
+    findCount:                  number;              // Total logged finds in/near a hotspot at this geohash
+    periodCounts:               Record<string, number>; // e.g. { "Roman": 3, "Medieval": 1 }
+    lastHotspotClassification:  string;              // Classification of the matched hotspot
+    lastHotspotScore:           number;              // Score of matched hotspot at time of recording
+    updatedAt:                  number;              // Unix ms — for TTL sweep
+};
+
 // ─── Saved Points ─────────────────────────────────────────────────────────────
 // User-bookmarked map positions in FieldGuide, scoped to a project.
 
@@ -413,6 +432,7 @@ export class FindSpotDB extends Dexie {
   significantFinds!: Table<SignificantFind, string>;
   savedPoints!: Table<SavedPoint, string>;
   geologyContext!: Table<GeologyContextRecord, string>;
+  findHotspotSignals!: Table<FindHotspotSignal, string>;
 
   constructor() {
     super("findspot_uk");
@@ -602,6 +622,15 @@ export class FindSpotDB extends Dexie {
     // fetchedAt is indexed to support the 90-day TTL sweep in sweepStaleGeologyCache().
     this.version(28).stores({
       geologyContext: "tileKey, fetchedAt",
+    });
+
+    // v29: find–hotspot feedback signal table.
+    // Records a lightweight history entry per permission/geohash6 cell when the
+    // user has logged finds that fall inside or near a FieldGuide hotspot. Used by
+    // future on-device compounding to calibrate persistence scoring. No upgrade()
+    // handler needed — new empty table; existing user data is untouched.
+    this.version(29).stores({
+      findHotspotSignals: "signalKey, permissionId, geohash6, updatedAt",
     });
   }
 }

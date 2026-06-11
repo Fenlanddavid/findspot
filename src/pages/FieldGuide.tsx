@@ -36,6 +36,7 @@ import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyCon
 import type { GeologyContext } from '../engines/geologyContext';
 import { applyGeologyModifiers } from '../utils/hotspotEngine';
 import { getSetting } from '../services/data';
+import { recordFindHotspotSignals } from '../services/findHotspotService';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -939,8 +940,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             setSelectedHotspotId(null);   // dismiss the terrain-phase selection; user chooses from enhanced list
             setShowSuggestion(false);
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
+            // Non-blocking feedback signal — does not affect scan result
+            recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(() => {});
         }
-    }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore, projectFinds]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Geology context phase (non-blocking) ────────────────────────────────
 

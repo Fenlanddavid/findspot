@@ -14,6 +14,7 @@ import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
+import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -131,7 +132,6 @@ export function MobileBottomSheet() {
         expandedTargetId,
         setExpandedTargetId,
         hotspots,
-        hotspotFindContext,
         targetFindContext,
         primaryTargetId,
         focusTarget,
@@ -389,6 +389,23 @@ export function MobileBottomSheet() {
                                 )}
                                 {selectedUserFind.weightG != null && <span className="text-[10px] text-white/40">{selectedUserFind.weightG} g</span>}
                             </div>
+                            {(() => {
+                                const annotation = hotspots.length > 0
+                                    ? buildFindHotspotAnnotation(selectedUserFind, hotspots)
+                                    : null;
+                                if (!annotation) return null;
+                                return (
+                                    <div className="flex items-start gap-2 rounded-xl bg-teal-500/6 border border-teal-500/15 px-2.5 py-2 mt-1">
+                                        <span className="text-teal-400 text-[9px] shrink-0 mt-0.5">◆</span>
+                                        <div className="min-w-0">
+                                            <p className="text-[8px] font-black text-teal-300/80 uppercase tracking-widest mb-0.5">
+                                                FieldGuide{annotation.status === 'within' ? ' · Inside zone' : ' · Nearby'}
+                                            </p>
+                                            <p className="text-[9px] font-bold text-white/65 leading-snug">{annotation.note}</p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                             {selectedUserFind.notes?.trim() && (
                                 <p className="text-[11px] text-white/40 italic leading-snug line-clamp-3">{selectedUserFind.notes.trim()}</p>
                             )}
@@ -656,13 +673,6 @@ export function MobileBottomSheet() {
                                     {(h.linkedCount ?? 0) > 0 && <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                 </div>
                             )}
-                                    {(() => {
-                                        const ctx = hotspotFindContext.get(h.id);
-                                    if (!ctx) return null;
-                                        return ctx.status === 'within'
-                                            ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                            : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
-                                    })()}
                                     {h.isHighConfidenceCrossing && <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse"><p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p></div>}
                             {h.disturbanceRisk === 'High' && <div className="bg-red-500/15 p-2 rounded-xl border border-red-400/30"><p className="text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p></div>}
                             <div className="border-t border-white/8 pt-3">
@@ -676,6 +686,24 @@ export function MobileBottomSheet() {
                                     ))}
                                 </div>
                             </div>
+                            {(() => {
+                                const feedback = buildHotspotFindFeedback(h, projectFinds);
+                                if (!feedback) return null;
+                                const isValidates = feedback.status === 'validates';
+                                return (
+                                    <div className={`mt-2 rounded-xl border px-3 py-2.5 space-y-1 ${isValidates ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-sky-500/6 border-sky-500/15'}`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[7px] font-black uppercase tracking-widest shrink-0 ${isValidates ? 'text-emerald-400' : 'text-sky-400'}`}>
+                                                Your finds
+                                            </span>
+                                            <span className={`text-[9px] font-black ${isValidates ? 'text-emerald-200' : 'text-sky-200'}`}>
+                                                {feedback.label}
+                                            </span>
+                                        </div>
+                                        <p className="text-[9px] font-bold text-white/65 leading-snug">{feedback.note}</p>
+                                    </div>
+                                );
+                            })()}
                             {h.suggestedFocus && (
                                 <div className="pt-2 border-t border-emerald-500/15">
                                     <p className="text-[8px] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Field focus</p>
