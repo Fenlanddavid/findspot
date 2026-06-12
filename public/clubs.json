@@ -1050,5 +1050,15 @@
     "postcode": "S45",
     "facebookUrl": "https://www.facebook.com/groups/1885345828894203",
     "verificationStatus": "community"
+  },
+  {
+    "id": "club-127",
+    "name": "Aces Of Spades",
+    "description": "Local metal detecting club that run weekly digs every Saturday.",
+    "town": "Shrewsbury",
+    "county": "Shropshire",
+    "postcode": "SY1",
+    "facebookUrl": "https://facebook.com/events/s/pimhill-lea-hall-43-acres/2508364209629754/",
+    "verificationStatus": "community"
   }
 ]
