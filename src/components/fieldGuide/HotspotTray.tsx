@@ -6,6 +6,7 @@ import type { HotspotSignalStrength } from '../../utils/hotspotInterpreter';
 import type { Hotspot, Cluster } from '../../pages/fieldGuideTypes';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES } from './FieldGuideContext';
+import { computeTargetLandscapeNarrative } from '../../utils/landscapeIntelligenceEngine';
 
 function getPotentialTier(score: number): string {
     if (score > 80) return 'High Potential';
@@ -94,12 +95,12 @@ function LandscapeBulletGroup({ title, bullets }: { title: string; bullets: stri
 
     return (
         <div>
-            <p className="text-[7px] font-black text-sky-400/60 uppercase tracking-[0.2em] mb-1">{title}</p>
-            <div className="space-y-0.5">
+            <p className="text-[9px] font-black text-sky-400/65 uppercase tracking-[0.16em] mb-1.5">{title}</p>
+            <div className="space-y-1">
                 {bullets.map((bullet, i) => (
-                    <div key={`${title}-${i}`} className="flex items-start gap-1.5">
-                        <span className="text-sky-400/50 text-[8px] mt-px shrink-0">•</span>
-                        <p className="text-[9px] font-bold text-sky-100/65 leading-snug">{bullet}</p>
+                    <div key={`${title}-${i}`} className="flex items-start gap-2">
+                        <span className="text-sky-400/55 text-[10px] mt-px shrink-0">•</span>
+                        <p className="text-[11px] font-bold text-sky-100/72 leading-snug">{bullet}</p>
                     </div>
                 ))}
             </div>
@@ -108,10 +109,10 @@ function LandscapeBulletGroup({ title, bullets }: { title: string; bullets: stri
 }
 
 function LandscapeIntelligenceSummary() {
-    const { landscapeSummary, sortedHotspots, hasScanned } = useFieldGuideContext();
-    const [collapsed, setCollapsed] = React.useState(false);
+    const { landscapeSummary, sortedHotspots, displayTargets, hasScanned } = useFieldGuideContext();
+    const [collapsed, setCollapsed] = React.useState(true);
 
-    if (!hasScanned || !landscapeSummary || !sortedHotspots.length || !landscapeSummary.fieldNarrative) return null;
+    if (!hasScanned || !landscapeSummary || (!sortedHotspots.length && !displayTargets.length) || !landscapeSummary.fieldNarrative) return null;
 
     const { fieldNarrative, movementSummary, occupationSummary, environmentSummary, wetlandSummary } = landscapeSummary;
     const hasBullets = movementSummary.length > 0 || occupationSummary.length > 0 || environmentSummary.length > 0 || wetlandSummary.length > 0;
@@ -125,7 +126,7 @@ function LandscapeIntelligenceSummary() {
                 className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left"
             >
                 <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[7px] font-black text-sky-400/70 uppercase tracking-[0.22em] shrink-0">Landscape Intelligence</span>
+                    <span className="text-[9px] font-black text-sky-400/75 uppercase tracking-[0.18em] shrink-0">Landscape Intelligence</span>
                 </div>
                 <svg
                     width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -140,7 +141,7 @@ function LandscapeIntelligenceSummary() {
             {!collapsed && (
                 <div className="px-3 pb-3 space-y-3">
                     {/* Field narrative */}
-                    <p className="text-[10px] font-bold text-sky-100/80 leading-relaxed">{fieldNarrative}</p>
+                    <p className="text-xs font-bold text-sky-100/85 leading-relaxed">{fieldNarrative}</p>
 
                     {/* Bullet groups */}
                     {hasBullets && (
@@ -191,8 +192,8 @@ export function HotspotTray() {
 
     return (
         <>
-            {/* Landscape Intelligence Summary — above hotspot list */}
-            {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
+            {/* Landscape Intelligence Summary — above hotspot or target list */}
+            {!historicMode && (mobileSheetMode === 'hotspots' || mobileSheetMode === 'targets') && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
                 <LandscapeIntelligenceSummary />
             )}
 
@@ -242,6 +243,7 @@ export function HotspotTray() {
                         {displayTargets.map(f => {
                             const tI = buildTargetInterpretation(f);
                             const isPrimary = f.id === primaryTargetId;
+                            const landscapeCue = f.isProtected ? null : computeTargetLandscapeNarrative(f);
                             return (
                                 <button
                                     key={f.id}
@@ -255,6 +257,11 @@ export function HotspotTray() {
                                                 {f.isProtected ? getProtectedTargetCopy(f).label : getTargetVerdict(tI.signalStrength, isPrimary)}
                                             </p>
                                             {!f.isProtected && <p className={`text-[10px] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
+                                            {landscapeCue && (
+                                                <p className={`text-[11px] font-bold leading-snug mt-2 line-clamp-2 ${isPrimary ? 'text-sky-100/78' : 'text-sky-100/62'}`}>
+                                                    {landscapeCue}
+                                                </p>
+                                            )}
                                         </div>
                                         {isPrimary && !f.isProtected
                                             ? <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>

@@ -105,7 +105,7 @@ function LandscapeInterpretationPanel({
                 onClick={onToggle}
                 className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
             >
-                <span className="text-[7px] font-black text-sky-400/70 uppercase tracking-[0.22em]">Landscape Interpretation</span>
+                <span className="text-[9px] font-black text-sky-400/75 uppercase tracking-[0.16em]">Landscape Interpretation</span>
                 <svg
                     width="10"
                     height="10"
@@ -124,13 +124,13 @@ function LandscapeInterpretationPanel({
                     {chips.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                             {chips.map(chip => (
-                                <span key={chip} className="text-[8px] font-bold text-sky-200/70 bg-sky-400/10 border border-sky-400/20 px-1.5 py-0.5 rounded">
+                                <span key={chip} className="text-[9px] font-bold text-sky-200/75 bg-sky-400/10 border border-sky-400/20 px-1.5 py-0.5 rounded">
                                     {chip}
                                 </span>
                             ))}
                         </div>
                     )}
-                    <p className="text-[10px] font-bold text-sky-100/75 leading-relaxed">{narrative}</p>
+                    <p className="text-[11px] font-bold text-sky-100/82 leading-relaxed">{narrative}</p>
                 </div>
             )}
         </div>
