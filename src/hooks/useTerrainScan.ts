@@ -133,7 +133,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.05.20b';
+        const ENGINE_VERSION = 'FG-2026.06.13a';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -339,6 +339,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const springHits        = springResult.clusters;
             const summerHits        = summerResult.clusters;
 
+            onLog(
+                `> Terrain relief: ${terrainHits.length} local signal${terrainHits.length !== 1 ? 's' : ''}, ${terrainGlobalHits.length} broad signal${terrainGlobalHits.length !== 1 ? 's' : ''} detected.`,
+                'terrain',
+            );
+
             const monumentPoints: [number, number][] = (nhleData.features || []).flatMap(f => {
                 if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
                 if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
@@ -421,6 +426,14 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const contextualized = analyzeContext(suppressed, routes)
                 .sort((a, b) => b.findPotential - a.findPotential)
                 .map((c, i) => ({ ...c, number: i + 1 }));
+
+            const palaeoCount = contextualized.filter(c => c.type.includes('Palaeochannel')).length;
+            if (palaeoCount > 0) {
+                onLog(
+                    `> Hydrology: ${palaeoCount} palaeochannel signal${palaeoCount !== 1 ? 's' : ''} detected — ancient watercourse trace.`,
+                    'terrain',
+                );
+            }
 
             // Assess route relationships for all clusters — attaches routeAssessment,
             // sets isRouteArtefactRisk on confirmed artefacts. Runs after AIM/NHLE

@@ -170,6 +170,18 @@ const pools: Record<HotspotClassification, { summaries: string[]; strategies: st
             'start where linear signals are strongest, then follow them outward.',
         ],
     },
+    'Palaeochannel Activity Zone': {
+        summaries: [
+            'a former watercourse where activity concentrated along its silted margins.',
+            'an ancient channel — the silted deposit often seals and preserves finds unusually well.',
+            'a palaeochannel where settlement and crossing activity historically clustered.',
+        ],
+        strategies: [
+            'focus on both edges of the former channel — the margins rather than the channel floor.',
+            'look for slight changes in ground colour or vegetation following the channel line.',
+            'work along the channel edges; finds often concentrate where people crossed or camped.',
+        ],
+    },
     'Wetland Margin Activity Zone': {
         summaries: [
             'activity focused around lower, wetter ground.',

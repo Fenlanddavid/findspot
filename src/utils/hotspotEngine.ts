@@ -55,6 +55,8 @@ function evaluateHotspotConfidence(params: {
 const EXPLANATION_PRIORITY: [string, number][] = [
     ['Near Roman',                        90],
     ['Likely Roman',                      90],
+    ['Likely Roman palaeochannel crossing', 82],
+    ['Palaeochannel',                     78],
     ['Hydrology + terrain depression',    80],
     ['Multi-season cropmark agreement',   75],
     ['LiDAR + Hydrology',                 70],
@@ -214,6 +216,7 @@ interface ClassifyContext {
     // B: Multi-period classification
     hasMultiSeasonSat:      boolean;
     hasAimEnrichment:       boolean;
+    hasPalaeoChannel:       boolean;
 }
 
 function classifyHotspot(ctx: ClassifyContext): {
@@ -289,6 +292,17 @@ function classifyHotspot(ctx: ClassifyContext): {
         return {
             classification: 'Organised Field System Candidate',
             reason:         'Repeated linear signals suggest an organised field or boundary system',
+        };
+    }
+
+    // 5b. Palaeochannel Activity Zone — confirmed ancient watercourse without a
+    //     strong route-junction identity. Weak route proximity can still be part
+    //     of the watercourse story, so only convergence >= 6 suppresses this.
+    if (ctx.hasPalaeoChannel && ctx.convergence < 6) {
+        return {
+            classification: 'Palaeochannel Activity Zone',
+            reason:         'Former watercourse — potential activity focus at channel edge or silted deposit zone',
+            secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
         };
     }
 
@@ -526,10 +540,13 @@ export function buildTerrainHotspots(
         const hasHydrology          = sources.has('hydrology');
         const hasMultiSeasonSat     = sources.has('satellite_summer') && sources.has('satellite_spring');
         const hasAimEnrichment      = members.some(m => m.aimInfo !== undefined);
+        const hasPalaeoChannel      = members.some(m => m.type.includes('Palaeochannel') && m.polarity === 'Sunken');
         // Primary evidence: at least one hard physical or archaeological signal.
         // Context-only hotspots (route proximity, place-names, raised ground alone)
         // are excluded by this gate — they cannot create a hotspot by themselves.
-        const hasPrimaryEvidence    = hasLidar || hasMultiSeasonSat || hasAimEnrichment;
+        // A confirmed palaeochannel from the hydrology worker is observable
+        // physical evidence, but it is scored conservatively below LiDAR.
+        const hasPrimaryEvidence    = hasLidar || hasMultiSeasonSat || hasAimEnrichment || hasPalaeoChannel;
 
         // ── Signal weighting roles (how each signal contributes) ──────────────
         // Satellite is either the primary terrain signal (no LiDAR) or a
@@ -577,6 +594,14 @@ export function buildTerrainHotspots(
                 behaviour += 5 + (hasLidar ? 3 : 0);
                 explanation.push('Historic river crossing / Ford potential');
             }
+        }
+
+        // ── Palaeochannel: treat as primary evidence contribution ─────────────
+        // A confirmed ancient watercourse is observable physical evidence.
+        // Capped at +8 anomaly — supports but does not dominate a hotspot.
+        if (hasPalaeoChannel) {
+            anomaly += 8;
+            explanation.push('Palaeochannel — ancient watercourse signal');
         }
 
         // ── Hydrology + terrain depression agreement (Refinement 3) ──────────
@@ -681,6 +706,17 @@ export function buildTerrainHotspots(
         if (hasHydrology) {
             if (hasRomanProximity)     { convergence += 7; routeReasons.push('Likely Roman water crossing'); isHighConfidenceCrossing = true; }
             else if (hasHistProximity) { convergence += 5; routeReasons.push('Historic crossing point'); isHighConfidenceCrossing = true; }
+        }
+
+        // Palaeochannel crossing — same logic, slightly discounted because the
+        // channel is inferred rather than directly observed as active water.
+        // Only fires when a live-water crossing has not already been identified.
+        if (hasPalaeoChannel && !isHighConfidenceCrossing) {
+            if (hasRomanProximity) {
+                convergence += 6; routeReasons.push('Likely Roman palaeochannel crossing'); isHighConfidenceCrossing = true;
+            } else if (hasHistProximity) {
+                convergence += 4; routeReasons.push('Palaeochannel crossing point'); isHighConfidenceCrossing = true;
+            }
         }
 
         // Raised access beside route → convergence (terrain + route = convergence event)
@@ -941,7 +977,7 @@ export function buildTerrainHotspots(
             signalCount: sources.size,
             signalClassCount,
             hasCircularFeature, hasLinearPattern, hasSettlementContext, disturbanceIsHigh,
-            hasMultiSeasonSat, hasAimEnrichment,
+            hasMultiSeasonSat, hasAimEnrichment, hasPalaeoChannel,
         });
 
         // ── Soil mechanics class (per-hotspot) ───────────────────────────────
@@ -966,6 +1002,8 @@ export function buildTerrainHotspots(
         const hasRouteAlignment = members.some(m => m.routeAlignment !== undefined);
         if (isHighConfidenceCrossing) {
             suggestedFocus = 'Check crossing point';
+        } else if (hasPalaeoChannel && classification === 'Palaeochannel Activity Zone') {
+            suggestedFocus = 'Focus on both edges of the former channel — activity concentrates at the margins';
         } else if (classification === 'Junction / Convergence Zone') {
             suggestedFocus = 'Focus where the routes meet';
         } else if (classification === 'Multi-Period Occupation Zone') {

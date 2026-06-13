@@ -70,6 +70,7 @@ const CLASSIFICATION_PERIODS: Partial<Record<string, string[] | null>> = {
     'Settlement Edge Candidate':        ['Roman', 'Medieval', 'Anglo-Saxon', 'Iron Age'],
     'Route-Side Activity Zone':         ['Roman', 'Medieval'],
     'Junction / Convergence Zone':      ['Roman', 'Medieval'],
+    'Palaeochannel Activity Zone':      ['Bronze Age', 'Iron Age', 'Roman', 'Medieval'],
     'Wetland Margin Activity Zone':     ['Bronze Age', 'Iron Age', 'Roman'],
     'Multi-Period Occupation Zone':     null,
 };

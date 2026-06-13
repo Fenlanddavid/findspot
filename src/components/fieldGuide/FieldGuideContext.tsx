@@ -32,6 +32,7 @@ export const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
     'Settlement Edge Candidate':        'Settlement Edge',
     'Burial / Barrow Candidate':        'Burial / Barrow',
     'Organised Field System Candidate': 'Field System',
+    'Palaeochannel Activity Zone':      'Former Watercourse',
     'Wetland Margin Activity Zone':     'Wetland Margin',
     'Route-Side Activity Zone':         'Movement Corridor',
     'Multi-Period Occupation Zone':     'Multi-Period Site',

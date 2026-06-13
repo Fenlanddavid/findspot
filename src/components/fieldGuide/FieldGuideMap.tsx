@@ -55,6 +55,7 @@ function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength):
         'Settlement Edge Candidate':        'Raised settlement-edge ground with supporting context',
         'Burial / Barrow Candidate':        'Compact raised form consistent with funerary landscape use',
         'Organised Field System Candidate': 'Structured linear pattern suggests managed land division',
+        'Palaeochannel Activity Zone':      'Former watercourse — activity concentrates at the channel margins',
         'Wetland Margin Activity Zone':     'Activity concentrates along a wetland or former water edge',
         'Route-Side Activity Zone':         'Landscape signals follow a historic movement corridor',
         'Multi-Period Occupation Zone':     'Physical earthwork and spectral signals indicate layered use across time',

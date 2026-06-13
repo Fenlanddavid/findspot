@@ -23,7 +23,7 @@ export interface WorkerParams {
 }
 
 export interface WorkerResult {
-    clusters: Cluster[];
+    clusters:    Cluster[];
     tilesLoaded: number;
 }
 

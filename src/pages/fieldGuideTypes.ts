@@ -140,6 +140,7 @@ export type HotspotClassification =
     | 'Settlement Edge Candidate'
     | 'Burial / Barrow Candidate'
     | 'Organised Field System Candidate'
+    | 'Palaeochannel Activity Zone'
     | 'Wetland Margin Activity Zone'
     | 'Route-Side Activity Zone'
     | 'Multi-Period Occupation Zone'
