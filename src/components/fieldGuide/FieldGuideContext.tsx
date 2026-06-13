@@ -5,7 +5,7 @@ import type { GeologyContext } from '../../engines/geologyContext';
 import type { CoachTip } from '../CoachTips';
 import type {
     Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
-    HotspotClassification,
+    HotspotClassification, LandscapeIntelligence, LandscapeSummary,
 } from '../../pages/fieldGuideTypes';
 import type { Find, SavedPoint, Permission, Field, Media } from '../../db';
 import type { LogEntry } from '../../utils/scanLogger';
@@ -253,6 +253,10 @@ export interface FieldGuideContextValue {
     // Geology context
     geologyContext: GeologyContext | null;
     geologyContextLoading: boolean;
+
+    // Landscape Intelligence
+    landscapeIntelligenceMap: Map<string, LandscapeIntelligence>;
+    landscapeSummary: LandscapeSummary | null;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────

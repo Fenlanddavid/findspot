@@ -171,6 +171,71 @@ export interface SoilMechanics {
     userNote:            string;
 }
 
+// ─── Landscape Intelligence ───────────────────────────────────────────────────
+// Synthesis and classification layer operating on existing FieldGuide outputs.
+// Consumes already-scored hotspots and cluster signals — no new analysis,
+// no new datasets, no additional scan stages.
+
+export type CrossingType =
+    | 'Likely Crossing Point'
+    | 'Crossing Corridor'
+    | 'Route-Water Convergence'
+    | 'Movement Bottleneck';
+
+export type LandformType =
+    | 'Ridge End'
+    | 'Raised Spur'
+    | 'Dry Island'
+    | 'Gravel Island'
+    | 'Promontory'
+    | 'Fen Edge Rise'
+    | 'Knoll';
+
+export type OccupationPotential =
+    | 'Possible Activity Focus'
+    | 'Occupation Potential Area'
+    | 'Strong Occupation Potential'
+    | 'Sustained Landscape Use Candidate';
+
+export type TransitionType =
+    | 'Wet-Dry Boundary'
+    | 'Floodplain Edge'
+    | 'Terrace Margin'
+    | 'Fen Edge'
+    | 'Geological Boundary'
+    | 'Environmental Transition Zone';
+
+export type VisibilityContext =
+    | 'High Visibility Ground'
+    | 'Valley Overlook'
+    | 'Route Oversight Position'
+    | 'Strategic Position'
+    | 'Open Prospect';
+
+export type WetlandContext =
+    | 'Wetland Margin'
+    | 'Fen Edge Activity Zone'
+    | 'Island-Wetland Interface'
+    | 'Causeway Landscape';
+
+export interface LandscapeIntelligence {
+    crossingType:        CrossingType | null;
+    landformType:        LandformType | null;
+    occupationPotential: OccupationPotential | null;
+    transitionType:      TransitionType | null;
+    visibilityContext:   VisibilityContext | null;
+    wetlandContext:      WetlandContext | null;
+    narrative:           string;
+}
+
+export interface LandscapeSummary {
+    fieldNarrative:     string;
+    movementSummary:    string[];
+    occupationSummary:  string[];
+    environmentSummary: string[];
+    wetlandSummary:     string[];
+}
+
 export interface Hotspot {
     id: string;
     number: number;
@@ -192,6 +257,7 @@ export interface Hotspot {
     linkedCount?: number;
     disturbanceRisk?: 'Low' | 'Medium' | 'High';
     soilMechanics?: SoilMechanics;
+    landscapeIntelligence?: LandscapeIntelligence;
     metrics: {
         anomaly:          number;
         context:          number;

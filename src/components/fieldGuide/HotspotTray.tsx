@@ -85,6 +85,78 @@ function getProtectedTargetCopy(f: Cluster): { label: string; body: string; deta
     };
 }
 
+// ─── Landscape Intelligence Summary ──────────────────────────────────────────
+// Blue card shown above hotspot list after every scan. Default expanded.
+// Sections appear only when signals exist; bullet count scales with signal count.
+
+function LandscapeBulletGroup({ title, bullets }: { title: string; bullets: string[] }) {
+    if (!bullets.length) return null;
+
+    return (
+        <div>
+            <p className="text-[7px] font-black text-sky-400/60 uppercase tracking-[0.2em] mb-1">{title}</p>
+            <div className="space-y-0.5">
+                {bullets.map((bullet, i) => (
+                    <div key={`${title}-${i}`} className="flex items-start gap-1.5">
+                        <span className="text-sky-400/50 text-[8px] mt-px shrink-0">•</span>
+                        <p className="text-[9px] font-bold text-sky-100/65 leading-snug">{bullet}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function LandscapeIntelligenceSummary() {
+    const { landscapeSummary, sortedHotspots, hasScanned } = useFieldGuideContext();
+    const [collapsed, setCollapsed] = React.useState(false);
+
+    if (!hasScanned || !landscapeSummary || !sortedHotspots.length || !landscapeSummary.fieldNarrative) return null;
+
+    const { fieldNarrative, movementSummary, occupationSummary, environmentSummary, wetlandSummary } = landscapeSummary;
+    const hasBullets = movementSummary.length > 0 || occupationSummary.length > 0 || environmentSummary.length > 0 || wetlandSummary.length > 0;
+
+    return (
+        <div className="rounded-xl border border-sky-400/20 bg-sky-500/[0.06] overflow-hidden">
+            {/* Header */}
+            <button
+                type="button"
+                onClick={() => setCollapsed(v => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left"
+            >
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[7px] font-black text-sky-400/70 uppercase tracking-[0.22em] shrink-0">Landscape Intelligence</span>
+                </div>
+                <svg
+                    width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="3" strokeLinecap="round"
+                    className={`text-sky-400/50 shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+                >
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+
+            {/* Body */}
+            {!collapsed && (
+                <div className="px-3 pb-3 space-y-3">
+                    {/* Field narrative */}
+                    <p className="text-[10px] font-bold text-sky-100/80 leading-relaxed">{fieldNarrative}</p>
+
+                    {/* Bullet groups */}
+                    {hasBullets && (
+                        <div className="space-y-2 pt-1 border-t border-sky-400/10">
+                            <LandscapeBulletGroup title="Movement & Access" bullets={movementSummary} />
+                            <LandscapeBulletGroup title="Landform & Occupation" bullets={occupationSummary} />
+                            <LandscapeBulletGroup title="Environmental Context" bullets={environmentSummary} />
+                            <LandscapeBulletGroup title="Wetland Context" bullets={wetlandSummary} />
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function HotspotTray() {
     const {
         showSavedPoints,
@@ -119,6 +191,11 @@ export function HotspotTray() {
 
     return (
         <>
+            {/* Landscape Intelligence Summary — above hotspot list */}
+            {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
+                <LandscapeIntelligenceSummary />
+            )}
+
             {/* Hotspot list */}
             {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
                 <div>

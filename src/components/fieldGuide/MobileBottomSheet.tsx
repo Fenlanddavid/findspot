@@ -4,7 +4,7 @@ import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, 
 import { buildTargetInterpretation, getTargetVerdict } from '../../utils/targetInterpreter';
 import type { TargetSignalStrength } from '../../utils/targetInterpreter';
 import type { HotspotSignalStrength } from '../../utils/hotspotInterpreter';
-import type { Cluster, Hotspot, HotspotClassification } from '../../pages/fieldGuideTypes';
+import type { Cluster, Hotspot, HotspotClassification, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 import { ScaledImage } from '../ScaledImage';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
@@ -15,6 +15,7 @@ import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
+import { computeTargetLandscapeNarrative } from '../../utils/landscapeIntelligenceEngine';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -84,6 +85,68 @@ function getProtectedTargetCopy(f: Cluster): { label: string; body: string; deta
         body: 'This area is protected as a Scheduled Monument.',
         detail: 'Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.',
     };
+}
+
+function LandscapeInterpretationPanel({
+    isOpen,
+    onToggle,
+    narrative,
+    chips = [],
+}: {
+    isOpen: boolean;
+    onToggle: () => void;
+    narrative: string;
+    chips?: string[];
+}) {
+    return (
+        <div className="rounded-xl border border-sky-400/20 bg-sky-500/[0.06] overflow-hidden">
+            <button
+                type="button"
+                onClick={onToggle}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+            >
+                <span className="text-[7px] font-black text-sky-400/70 uppercase tracking-[0.22em]">Landscape Interpretation</span>
+                <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    className={`text-sky-400/50 shrink-0 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`}
+                >
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+            {isOpen && (
+                <div className={`px-3 pb-3 animate-in fade-in duration-150 ${chips.length ? 'space-y-2' : ''}`}>
+                    {chips.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                            {chips.map(chip => (
+                                <span key={chip} className="text-[8px] font-bold text-sky-200/70 bg-sky-400/10 border border-sky-400/20 px-1.5 py-0.5 rounded">
+                                    {chip}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    <p className="text-[10px] font-bold text-sky-100/75 leading-relaxed">{narrative}</p>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function getLandscapeChips(li: LandscapeIntelligence): string[] {
+    const chips = [
+        li.landformType,
+        li.crossingType,
+        li.transitionType,
+        li.wetlandContext,
+        li.visibilityContext,
+        li.occupationPotential,
+    ];
+    return chips.flatMap(chip => chip ? [chip] : []);
 }
 
 export function MobileBottomSheet() {
@@ -156,8 +219,11 @@ export function MobileBottomSheet() {
         setHistoricLayerVisibility,
         geologyContext,
         geologyContextLoading,
+        landscapeIntelligenceMap,
     } = useFieldGuideContext();
-    const [expandedGeologyId, setExpandedGeologyId] = React.useState<string | null>(null);
+    const [expandedGeologyId,       setExpandedGeologyId]       = React.useState<string | null>(null);
+    const [expandedLandscapeHotspot, setExpandedLandscapeHotspot] = React.useState<string | null>(null);
+    const [expandedLandscapeTarget,  setExpandedLandscapeTarget]  = React.useState<string | null>(null);
 
     if (!(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId))) {
         return null;
@@ -516,6 +582,21 @@ export function MobileBottomSheet() {
                                 </div>
                             <p className="text-xs font-black text-white/85 leading-snug">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                             <p className="text-[11px] font-bold text-white/50 leading-snug">{tInterp.hook}</p>
+
+                            {/* Landscape Interpretation — below verdict, above evidence */}
+                            {(() => {
+                                const narrative = computeTargetLandscapeNarrative(f);
+                                if (!narrative) return null;
+                                const isOpen = expandedLandscapeTarget === f.id;
+                                return (
+                                    <LandscapeInterpretationPanel
+                                        isOpen={isOpen}
+                                        onToggle={() => setExpandedLandscapeTarget(isOpen ? null : f.id)}
+                                        narrative={narrative}
+                                    />
+                                );
+                            })()}
+
                                     {(() => {
                                         const ctx = targetFindContext.get(f.id);
                                     if (!ctx) return null;
@@ -674,6 +755,22 @@ export function MobileBottomSheet() {
                                     {(h.linkedCount ?? 0) > 0 && <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                 </div>
                             )}
+
+                            {/* Landscape Interpretation — between signal explanation and evidence */}
+                            {(() => {
+                                const li = landscapeIntelligenceMap.get(h.id);
+                                if (!li || !li.narrative) return null;
+                                const isOpen = expandedLandscapeHotspot === h.id;
+                                return (
+                                    <LandscapeInterpretationPanel
+                                        isOpen={isOpen}
+                                        onToggle={() => setExpandedLandscapeHotspot(isOpen ? null : h.id)}
+                                        narrative={li.narrative}
+                                        chips={getLandscapeChips(li)}
+                                    />
+                                );
+                            })()}
+
                                     {h.isHighConfidenceCrossing && <div className="bg-blue-600/30 p-2 rounded-xl border border-blue-400/70 animate-pulse"><p className="text-[10px] font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p></div>}
                             {h.disturbanceRisk === 'High' && <div className="bg-red-500/15 p-2 rounded-xl border border-red-400/30"><p className="text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p></div>}
                             <div className="border-t border-white/8 pt-3">

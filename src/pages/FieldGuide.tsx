@@ -35,6 +35,8 @@ import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyContext';
 import type { GeologyContext } from '../engines/geologyContext';
 import { applyGeologyModifiers } from '../utils/hotspotEngine';
+import { computeHotspotLandscapeIntelligence, computeLandscapeSummary } from '../utils/landscapeIntelligenceEngine';
+import type { LandscapeIntelligence, LandscapeSummary } from './fieldGuideTypes';
 import { getSetting } from '../services/data';
 import { recordFindHotspotSignals } from '../services/findHotspotService';
 
@@ -569,6 +571,26 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         const fallback = sorted.filter(h => h.classification === 'General Activity Zone' && h.score >= 25);
         return [...strong, ...fallback];
     }, [hotspots]);
+
+    // Landscape Intelligence: synthesis layer operating on the current scored hotspots.
+    // Pure classification - no new datasets, no new scan stages, <100ms per hotspot.
+    const { landscapeIntelligenceMap, landscapeSummary } = useMemo(() => {
+        const intelligenceMap = new Map<string, LandscapeIntelligence>();
+        if (!hotspots.length) {
+            return { landscapeIntelligenceMap: intelligenceMap, landscapeSummary: null as LandscapeSummary | null };
+        }
+        const memberLookup = new Map<string, Cluster>(
+            terrainClusters.map(c => [c.id, c]),
+        );
+        for (const h of hotspots) {
+            const members = h.memberIds.map(id => memberLookup.get(id)).filter((c): c is Cluster => Boolean(c));
+            intelligenceMap.set(h.id, computeHotspotLandscapeIntelligence(h, members));
+        }
+        return {
+            landscapeIntelligenceMap: intelligenceMap,
+            landscapeSummary: computeLandscapeSummary(sortedHotspots.length ? sortedHotspots : hotspots, intelligenceMap),
+        };
+    }, [hotspots, sortedHotspots, terrainClusters]);
 
     // Source usability: three-state model distinguishing data-present vs signal-useful.
     // Satellite is only usable when both seasons loaded (enables multi-season agreement).
@@ -1397,6 +1419,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         handleLabExport, handleAnnotationConfirm, buildSuggestedLabel,
         rawClusters, userGpsPos, setUserGpsPos,
         geologyContext, geologyContextLoading,
+        landscapeIntelligenceMap, landscapeSummary,
     };
 
     // ─── Render ───────────────────────────────────────────────────────────────
