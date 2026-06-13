@@ -87,7 +87,7 @@ function getProtectedTargetCopy(f: Cluster): { label: string; body: string; deta
 }
 
 // ─── Landscape Intelligence Summary ──────────────────────────────────────────
-// Blue card shown above hotspot list after every scan. Default expanded.
+// Blue card shown above scan result lists. Default collapsed.
 // Sections appear only when signals exist; bullet count scales with signal count.
 
 function LandscapeBulletGroup({ title, bullets }: { title: string; bullets: string[] }) {
@@ -108,7 +108,7 @@ function LandscapeBulletGroup({ title, bullets }: { title: string; bullets: stri
     );
 }
 
-function LandscapeIntelligenceSummary() {
+export function LandscapeIntelligenceSummary() {
     const { landscapeSummary, sortedHotspots, displayTargets, hasScanned } = useFieldGuideContext();
     const [collapsed, setCollapsed] = React.useState(true);
 

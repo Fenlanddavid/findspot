@@ -11,7 +11,7 @@ import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES, HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { ScanControlPanel } from './ScanControlPanel';
 import { SavedPointsPanel } from './SavedPointsPanel';
-import { HotspotTray } from './HotspotTray';
+import { HotspotTray, LandscapeIntelligenceSummary } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
@@ -582,6 +582,8 @@ export function MobileBottomSheet() {
                                 </div>
                             <p className="text-xs font-black text-white/85 leading-snug">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                             <p className="text-[11px] font-bold text-white/50 leading-snug">{tInterp.hook}</p>
+
+                            <LandscapeIntelligenceSummary />
 
                             {/* Landscape Interpretation — below verdict, above evidence */}
                             {(() => {
