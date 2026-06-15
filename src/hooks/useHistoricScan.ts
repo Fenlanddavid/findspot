@@ -59,9 +59,10 @@ interface HistoricLookupCache {
     nhleData:    NHLEResponse      | null;
     aimData:     AIMResponse       | null;
     routeRaw:    OverpassResponse  | null;
+    romanRoads:  HistoricRoute[]   | null;
 }
 
-const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.05.30a';
+const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.06.15a';
 const HISTORIC_CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
 
 function coordKey(value: number): string {
@@ -268,9 +269,58 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 if (placeSignals.length > 0) onLog(`> ETYMOLOGY: ${placeSignals.length} place-name signal${placeSignals.length !== 1 ? 's' : ''} detected.`, 'historic');
             }
 
+            // 2b. Etymology signals from Nominatim address fields
+            // These describe exactly where the user is — more reliable than Overpass
+            // for the immediate locale. Deduplicated against the Overpass pass above.
+            if (geoData?.address) {
+                const addressNames = [
+                    geoData.address.hamlet,
+                    geoData.address.village,
+                    geoData.address.suburb,
+                    geoData.address.town,
+                    geoData.address.parish,
+                    geoData.address.county,
+                    geoData.address.state_district,
+                ].filter((n): n is string => !!n);
+
+                for (const name of addressNames) {
+                    for (const sig of ETYMOLOGY_SIGNALS) {
+                        if (!name.toLowerCase().includes(sig.pattern.toLowerCase())) continue;
+                        const alreadyFound = placeSignals.some(
+                            s => s.name === name && s.meaning === sig.meaning
+                        );
+                        if (alreadyFound) continue;
+                        placeSignals.push({
+                            name,
+                            meaning:    sig.meaning,
+                            distance:   0,
+                            period:     sig.period,
+                            confidence: sig.confidence,
+                            type:       'Place Name',
+                        });
+                    }
+                }
+                placeSignals.sort((a, b) => b.confidence - a.confidence);
+            }
+
             onStatusChange('Checking recorded archaeology...');
 
             // 3. OSM heritage features
+            const OSM_TYPE_PERIOD: Record<string, string> = {
+                roman_road: 'Roman', villa: 'Roman', amphitheatre: 'Roman', fort: 'Roman',
+                aqueduct: 'Roman', temple: 'Roman', bathhouse: 'Roman', milestone: 'Roman',
+                castle: 'Medieval', monastery: 'Medieval', abbey: 'Medieval', church: 'Medieval',
+                moat: 'Medieval', manor: 'Medieval', village: 'Medieval',
+                standing_stone: 'Prehistoric', stone_circle: 'Prehistoric', cairn: 'Prehistoric',
+                barrow: 'Prehistoric', tumulus: 'Prehistoric', hill_fort: 'Iron Age',
+                minster: 'Anglo-Saxon',
+            };
+            const inferOsmPeriod = (el: OverpassElement): string => {
+                if (el.tags?.period) return el.tags.period;
+                const type = el.tags?.historic || el.tags?.archaeological_site || '';
+                return OSM_TYPE_PERIOD[type.toLowerCase()] ?? 'Unknown';
+            };
+
             let pasFinds: HistoricFind[] = [];
             if (osmData?.elements) {
                 pasFinds = osmData.elements.filter(isHeritageElement).map((el: OverpassElement) => {
@@ -289,7 +339,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         id:          `OSM-${el.id}`,
                         internalId:  String(el.id),
                         objectType:  String(descriptiveType).charAt(0).toUpperCase() + String(descriptiveType).slice(1),
-                        broadperiod: el.tags?.period || 'Unknown',
+                        broadperiod: inferOsmPeriod(el),
                         county:      'Local Area',
                         workflow:    'PAS' as const,
                         lat, lon,
@@ -297,7 +347,6 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         osmType:    el.type,
                     };
                 }).filter(Boolean) as HistoricFind[];
-                onLog(`> HERITAGE: ${pasFinds.length} OSM feature${pasFinds.length !== 1 ? 's' : ''} found within 2km.`, 'historic');
             }
 
             onStatusChange('Checking protected archaeology...');
@@ -355,6 +404,20 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             );
             pasFinds = [...dedupedNhle, ...pasFinds];
 
+            // Log after merge so the count reflects all sources
+            const osmCount  = pasFinds.filter(f => f.id.startsWith('OSM-')).length;
+            const nhleCount = pasFinds.filter(f => f.id.startsWith('NHLE-')).length;
+            if (osmCount > 0 || nhleCount > 0) {
+                const parts = [
+                    osmCount  > 0 ? `${osmCount} OSM feature${osmCount !== 1 ? 's' : ''}` : '',
+                    nhleCount > 0 ? `${nhleCount} scheduled monument${nhleCount !== 1 ? 's' : ''}` : '',
+                ].filter(Boolean).join(', ');
+                onLog(`> HERITAGE: ${parts} integrated.`, 'historic');
+            }
+
+            // heritageCount = total heritage features across all sources
+            heritageCount = pasFinds.length;
+
             onStatusChange('Reading aerial monument data...');
 
             // 5. AIM (fresh fetch or pass-through from terrain scan)
@@ -363,6 +426,32 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 onLog(`> AIM: ${aimRaw.features.length} aerial monument${aimRaw.features.length !== 1 ? 's' : ''} mapped.`, 'historic');
             }
 
+            onStatusChange('Comparing route context...');
+
+            // 6. Routes (fresh fetch or pass-through from terrain scan)
+            let routes = opts.routes;
+            if (!opts.routes.length && routeRaw?.elements?.length) {
+                routes = parseOverpassRoutes(routeRaw.elements);
+            }
+
+            // 6b. Itiner-e Roman roads — serve from cache when available
+            let freshRomanRoads: HistoricRoute[] = [];
+            const hasRomanRoads = routes.some(r => r.source === 'itinere');
+            if (!hasRomanRoads) {
+                if (cachedLookup?.romanRoads?.length) {
+                    routes = [...routes, ...cachedLookup.romanRoads];
+                } else {
+                    try {
+                        freshRomanRoads = await fetchRomanRoads(west, south, east, north);
+                        if (freshRomanRoads.length > 0) {
+                            routes = [...routes, ...freshRomanRoads];
+                            onLog(`> ROUTES: ${freshRomanRoads.length} Roman road alignment${freshRomanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
+                        }
+                    } catch { /* Itiner-e asset unavailable */ }
+                }
+            }
+
+            // Cache write — after Roman roads so they can be included
             try {
                 const expiredCutoff = Date.now() - HISTORIC_CACHE_TTL_MS;
                 await db.fieldGuideCache
@@ -379,30 +468,11 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         contextData,
                         nhleData,
                         aimData,
-                        routeRaw: routeRaw ?? null,
+                        routeRaw:   routeRaw ?? null,
+                        romanRoads: freshRomanRoads.length > 0 ? freshRomanRoads : null,
                     } satisfies HistoricLookupCache,
                 });
             } catch { /* cache write failure is non-fatal */ }
-
-            onStatusChange('Comparing route context...');
-
-            // 6. Routes (fresh fetch or pass-through from terrain scan)
-            let routes = opts.routes;
-            if (!opts.routes.length && routeRaw?.elements?.length) {
-                routes = parseOverpassRoutes(routeRaw.elements);
-            }
-
-            // 6b. Itiner-e Roman roads — only fetch if not already present from terrain scan
-            const hasRomanRoads = routes.some(r => r.source === 'itinere');
-            if (!hasRomanRoads) {
-                try {
-                    const romanRoads = await fetchRomanRoads(west, south, east, north);
-                    if (romanRoads.length > 0) {
-                        routes = [...routes, ...romanRoads];
-                        onLog(`> ROUTES: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
-                    }
-                } catch { /* Itiner-e asset unavailable */ }
-            }
 
             // ── Drift guard (uses shared utility) ────────────────────────────
             const driftM  = getDriftMetres(opts.scanCenter, { lat: center.lat, lng: center.lng });
@@ -417,10 +487,33 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 // Stage 1: re-run terrain scoring with historic routes + monument suppression
                 const terrainHotspots = buildTerrainHotspots(getHotspotInput(opts.terrainClusters), routes, monumentPoints);
 
-                // Stage 2: additive historic enrichment (finds, monuments, place signals)
+                // Stage 2: additive historic enrichment (finds, monuments, place signals, AIM proximity)
                 onStatusChange('Comparing landscape signals...');
+                const aimFeatures = (aimData?.features ?? []).flatMap(f => {
+                    const geom = f.geometry;
+                    if (!geom) return [];
+                    let center: [number, number];
+                    if (geom.type === 'Point') {
+                        center = geom.coordinates as [number, number];
+                    } else if (geom.type === 'Polygon') {
+                        const ring = (geom.coordinates as number[][][])[0];
+                        if (!ring?.length) return [];
+                        center = [
+                            ring.reduce((s, p) => s + p[0], 0) / ring.length,
+                            ring.reduce((s, p) => s + p[1], 0) / ring.length,
+                        ];
+                    } else if (geom.type === 'MultiPolygon') {
+                        const ring = (geom.coordinates as number[][][][])[0][0];
+                        if (!ring?.length) return [];
+                        center = [
+                            ring.reduce((s, p) => s + p[0], 0) / ring.length,
+                            ring.reduce((s, p) => s + p[1], 0) / ring.length,
+                        ];
+                    } else return [];
+                    return [{ center, type: f.properties?.MONUMENT_TYPE ?? 'Cropmark', period: f.properties?.PERIOD ?? '' }];
+                });
                 enhancedHotspots = enhanceHotspotsWithHistoric(
-                    terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod,
+                    terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod, aimFeatures,
                 );
 
                 const sourceCount = pasFinds.length + placeSignals.length + monumentPoints.length;

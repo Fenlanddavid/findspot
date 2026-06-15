@@ -1104,6 +1104,7 @@ export function enhanceHotspotsWithHistoric(
     monumentPoints: [number, number][],
     placeSignals:   PlaceSignal[],
     targetPeriod:   string = 'All',
+    aimFeatures:    { center: [number, number]; type: string; period: string }[] = [],
 ): Hotspot[] {
     const enhanced = hotspots.map(h => {
         let boost = 0;
@@ -1131,6 +1132,28 @@ export function enhanceHotspotsWithHistoric(
         if (nearbyMonuments.length > 0) {
             boost += 5;
             notes.push('Near recorded scheduled monument');
+        }
+
+        // AIM cropmark polygons within 200m
+        // Only fires when Stage 1 did not already enrich this hotspot via direct
+        // cluster overlap — checked via explanation strings since members are not
+        // available in Stage 2.
+        const alreadyAimEnriched = h.explanation.some(e =>
+            /cropmark|aerial.*monument|AIM/i.test(e)
+        );
+        if (!alreadyAimEnriched && aimFeatures.length > 0) {
+            const nearbyAIM = aimFeatures.filter(f =>
+                getDistanceKm(h.center[1], h.center[0], f.center[1], f.center[0]) < 0.2
+            );
+            if (nearbyAIM.length > 0) {
+                boost += Math.min(6, nearbyAIM.length * 3);
+                const topType   = nearbyAIM[0].type;
+                const topPeriod = nearbyAIM[0].period;
+                notes.push(
+                    `AIM cropmark within 200m — ${topType}` +
+                    (topPeriod ? ` (${topPeriod})` : '')
+                );
+            }
         }
 
         // High-confidence place-name signals (area-level proxy — distance from scan centre)

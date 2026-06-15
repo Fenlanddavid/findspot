@@ -77,9 +77,11 @@ export interface AIMResponse {
 }
 
 export interface NominatimAddress {
-    parish?: string;
+    hamlet?: string;
     village?: string;
+    suburb?: string;
     town?: string;
+    parish?: string;
     county?: string;
     state_district?: string;
 }
