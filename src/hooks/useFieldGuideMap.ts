@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
+import maplibregl, { addProtocol } from 'maplibre-gl';
+import { cogProtocol } from '@geomatico/maplibre-cog-protocol';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
 import { Find, SavedPoint, db } from '../db';
@@ -130,8 +131,8 @@ export type UseFieldGuideMapOptions = {
     showFields: false | 'all' | string;
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
     userFinds: Find[];
-    historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
-    historicLayerOpacity: { lidar: number; os1930: number; os1880: number };
+    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
+    historicLayerOpacity: { lidar: number; 'lidar-wales': number; os1930: number; os1880: number };
     savedPoints: SavedPoint[];
     showSavedPoints: boolean;
     // Initial fly-to coordinates
@@ -144,6 +145,18 @@ export type UseFieldGuideMapOptions = {
     // Event handler callbacks
     callbacks: MapCallbacks;
 };
+
+// ─── Wales LiDAR COG ─────────────────────────────────────────────────────────
+// Replace this URL with your hosted reprojected COG (EPSG:3857) after completing
+// Parts 0-2 of the Wales LiDAR brief (reproject + upload to R2 with range support).
+const WALES_LIDAR_COG_URL = 'https://findspot-wales-lidar.trials-uk.workers.dev/wales_hillshade_3857.tif';
+
+let cogProtocolRegistered = false;
+function ensureCogProtocolRegistered() {
+    if (cogProtocolRegistered) return;
+    addProtocol('cog', cogProtocol);
+    cogProtocolRegistered = true;
+}
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -176,6 +189,8 @@ export function useFieldGuideMap({
             clickLabelTimer.current = setTimeout(() => callbacksRef.current.onSetClickLabel(null), 3000);
         };
 
+        ensureCogProtocolRegistered();
+
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: {
@@ -183,14 +198,16 @@ export function useFieldGuideMap({
                 sources: {
                     'osm':          { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' },
                     'satellite':    { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' },
-                    'overlay-lidar':  { type: 'raster', tiles: ['https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=Lidar_Composite_Hillshade_DTM_1m&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'], tileSize: 256, attribution: 'Environment Agency (OGL)' },
+                    'overlay-lidar':       { type: 'raster', tiles: ['https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=Lidar_Composite_Hillshade_DTM_1m&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'], tileSize: 256, attribution: 'Environment Agency (OGL)' },
+                    'overlay-lidar-wales': { type: 'raster', url: `cog://${WALES_LIDAR_COG_URL}`, tileSize: 256, minzoom: 10, attribution: '© Crown copyright (OGL) — Welsh Government / NRW, DataMapWales' },
                     'overlay-os1930': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/os/6inchsecond/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 16, attribution: '&copy; National Library of Scotland' },
                     'overlay-os1880': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 15, attribution: '&copy; National Library of Scotland' },
                 },
                 layers: [
                     { id: 'osm',      type: 'raster', source: 'osm',      minzoom: 0, maxzoom: 19 },
                     { id: 'satellite',type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: 'none' } },
-                    { id: 'overlay-lidar',  type: 'raster', source: 'overlay-lidar',  layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.3, 'raster-brightness-max': 0.9, 'raster-fade-duration': 0 } },
+                    { id: 'overlay-lidar',       type: 'raster', source: 'overlay-lidar',       layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.3, 'raster-brightness-max': 0.9, 'raster-fade-duration': 0 } },
+                    { id: 'overlay-lidar-wales', type: 'raster', source: 'overlay-lidar-wales', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.6, 'raster-brightness-max': 0.9, 'raster-saturation': -1, 'raster-fade-duration': 0 } },
                     { id: 'overlay-os1880', type: 'raster', source: 'overlay-os1880', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } },
                     { id: 'overlay-os1930', type: 'raster', source: 'overlay-os1930', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } },
                 ],
@@ -709,6 +726,10 @@ export function useFieldGuideMap({
         if (map.getLayer('overlay-lidar')) {
             map.setLayoutProperty('overlay-lidar', 'visibility', historicLayerToggles.lidar ? 'visible' : 'none');
             map.setPaintProperty('overlay-lidar', 'raster-opacity', historicLayerOpacity.lidar);
+        }
+        if (map.getLayer('overlay-lidar-wales')) {
+            map.setLayoutProperty('overlay-lidar-wales', 'visibility', historicLayerToggles['lidar-wales'] ? 'visible' : 'none');
+            map.setPaintProperty('overlay-lidar-wales', 'raster-opacity', historicLayerOpacity['lidar-wales']);
         }
         if (map.getLayer('overlay-os1930')) {
             map.setLayoutProperty('overlay-os1930', 'visibility', historicLayerToggles.os1930 ? 'visible' : 'none');

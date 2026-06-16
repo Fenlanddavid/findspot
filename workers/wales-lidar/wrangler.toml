@@ -1,0 +1,20 @@
+name               = "findspot-wales-lidar"
+main               = "index.js"
+compatibility_date = "2024-09-23"
+
+[[r2_buckets]]
+binding    = "WALES_LIDAR_BUCKET"
+bucket_name = "findspot-wales-lidar"
+
+# Deploy:
+#   cd workers/wales-lidar
+#   wrangler deploy
+#
+# Upload the COG after reprojection (Part 1) completes:
+#   wrangler r2 object put findspot-wales-lidar/wales_hillshade_3857.tif \
+#     --file /home/david/wales_hillshade_3857.tif \
+#     --content-type image/tiff
+#
+# Verify range requests work:
+#   curl -r 0-1023 https://findspot-wales-lidar.trials-uk.workers.dev/wales_hillshade_3857.tif -D - -o /dev/null
+#   Expect: HTTP/2 206, Content-Length: 1024, Content-Range header present

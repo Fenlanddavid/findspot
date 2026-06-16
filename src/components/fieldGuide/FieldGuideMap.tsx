@@ -23,10 +23,11 @@ import { GeologyContextCard } from './GeologyContextCard';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
-const RASTER_OVERLAY_LABELS: Record<'lidar' | 'os1880' | 'os1930', string> = {
-    lidar:  'LiDAR',
-    os1880: 'OS 1895',
-    os1930: 'OS 1900',
+const RASTER_OVERLAY_LABELS: Record<'lidar' | 'lidar-wales' | 'os1880' | 'os1930', string> = {
+    lidar:          'LiDAR',
+    'lidar-wales':  'LiDAR Wales',
+    os1880:         'OS 1895',
+    os1930:         'OS 1900',
 };
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
@@ -507,14 +508,14 @@ export function FieldGuideMap() {
                     <button
                         onClick={() => setShowLayerPicker(v => !v)}
                         aria-label="Map layers"
-                        className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930 || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
+                        className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930 || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
                     >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
                             <polyline points="2 17 12 22 22 17"/>
                             <polyline points="2 12 12 17 22 12"/>
                         </svg>
-                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles.os1880 || historicLayerToggles.os1930) && (
+                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930) && (
                             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         )}
                     </button>
@@ -529,6 +530,10 @@ export function FieldGuideMap() {
                             <button onClick={() => handleRasterOverlayPress('lidar')} className={rasterOverlayButtonClass('lidar', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
                                 LiDAR
+                            </button>
+                            <button onClick={() => handleRasterOverlayPress('lidar-wales')} className={rasterOverlayButtonClass('lidar-wales', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                LiDAR Wales
                             </button>
                             <button onClick={() => handleRasterOverlayPress('os1880')} className={rasterOverlayButtonClass('os1880', 'bg-amber-500/20 border-amber-500/40 text-amber-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>

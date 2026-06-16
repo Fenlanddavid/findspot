@@ -116,19 +116,21 @@ const HISTORIC_LAYER_OPTIONS = [
     { key: 'userFinds', label: 'Your Finds' },
 ] as const;
 
-type RasterOverlayKey = 'lidar' | 'os1880' | 'os1930';
+type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
 type RasterOverlayOpacity = Record<RasterOverlayKey, number>;
 
 const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
-    lidar:  1,
-    os1880: 1,
-    os1930: 1,
+    lidar:          1,
+    'lidar-wales':  1,
+    os1880:         1,
+    os1930:         1,
 };
 
 const RASTER_OVERLAY_LABELS: Record<RasterOverlayKey, string> = {
-    lidar:  'LiDAR',
-    os1880: 'OS 1895',
-    os1930: 'OS 1900',
+    lidar:          'LiDAR',
+    'lidar-wales':  'LiDAR Wales',
+    os1880:         'OS 1895',
+    os1930:         'OS 1900',
 };
 
 const RASTER_OVERLAY_STORAGE_KEY = 'fs_fg_overlay_opacity';
@@ -145,9 +147,10 @@ function readRasterOverlayOpacity(): RasterOverlayOpacity {
         if (!raw) return DEFAULT_RASTER_OVERLAY_OPACITY;
         const parsed = JSON.parse(raw) as Partial<RasterOverlayOpacity>;
         return {
-            lidar:  clampOpacity(parsed.lidar, DEFAULT_RASTER_OVERLAY_OPACITY.lidar),
-            os1880: clampOpacity(parsed.os1880, DEFAULT_RASTER_OVERLAY_OPACITY.os1880),
-            os1930: clampOpacity(parsed.os1930, DEFAULT_RASTER_OVERLAY_OPACITY.os1930),
+            lidar:         clampOpacity(parsed.lidar,  DEFAULT_RASTER_OVERLAY_OPACITY.lidar),
+            'lidar-wales': clampOpacity(parsed['lidar-wales'], DEFAULT_RASTER_OVERLAY_OPACITY['lidar-wales']),
+            os1880:        clampOpacity(parsed.os1880, DEFAULT_RASTER_OVERLAY_OPACITY.os1880),
+            os1930:        clampOpacity(parsed.os1930, DEFAULT_RASTER_OVERLAY_OPACITY.os1930),
         };
     } catch {
         return DEFAULT_RASTER_OVERLAY_OPACITY;
@@ -424,7 +427,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [selectedMonument,       setSelectedMonument]       = useState<string | null | undefined>(undefined); // undefined = not clicked, null = no name, string = named
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicScanCompleted,  setHistoricScanCompleted]  = useState(false);
-    const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, os1930: false, os1880: false });
+    const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
     const [historicLayerOpacity,   setHistoricLayerOpacity]   = useState<RasterOverlayOpacity>(readRasterOverlayOpacity);
     const [activeOpacityLayer,     setActiveOpacityLayer]     = useState<RasterOverlayKey | null>(null);
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: false });
@@ -900,7 +903,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setScanConfidence(null);
         setHistoricMode(false);
         setHistoricScanCompleted(false);
-        setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false });
+        setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
         setActiveOpacityLayer(null);
         setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: prev.userFinds }));
         setMapClickLabel(null);
@@ -1435,7 +1438,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             onClick={() => {
                                 if (analyzing) return;
                                 if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
+                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
                             }}
                             disabled={analyzing}
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}

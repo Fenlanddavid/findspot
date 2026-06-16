@@ -14,7 +14,7 @@ import type { WorkflowState } from '../../types/significantFind';
 
 // ─── Re-exported types used by child components ───────────────────────────────
 
-export type RasterOverlayKey = 'lidar' | 'os1880' | 'os1930';
+export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
 
 export const HISTORIC_LAYER_OPTIONS = [
     { key: 'context',   label: 'Recorded Heritage' },
@@ -122,8 +122,8 @@ export interface FieldGuideContextValue {
     historicMode: boolean;
     setHistoricMode: React.Dispatch<React.SetStateAction<boolean>>;
     historicScanCompleted: boolean;
-    historicLayerToggles: { lidar: boolean; os1930: boolean; os1880: boolean };
-    setHistoricLayerToggles: React.Dispatch<React.SetStateAction<{ lidar: boolean; os1930: boolean; os1880: boolean }>>;
+    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
+    setHistoricLayerToggles: React.Dispatch<React.SetStateAction<{ lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean }>>;
     historicLayerOpacity: Record<RasterOverlayKey, number>;
     activeOpacityLayer: RasterOverlayKey | null;
     setActiveOpacityLayer: React.Dispatch<React.SetStateAction<RasterOverlayKey | null>>;
