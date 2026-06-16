@@ -938,6 +938,7 @@ export default function Settings() {
             <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
               <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
               <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
+              <p>Wales LiDAR data © Crown copyright, Natural Resources Wales / Welsh Government. Licensed under the Open Government Licence v3.0. Source: DataMapWales (datamap.gov.wales).</p>
               <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>
             </div>
           </div>
