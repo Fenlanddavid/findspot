@@ -1,0 +1,115 @@
+// ─── Confidence Model ─────────────────────────────────────────────────────────
+// Derives a ConfidenceTier and UncertaintyLevel from process scores,
+// hotspot metrics, and interpretation margins.
+//
+// IMPORTANT: All weights are UNVALIDATED provisional values.
+
+import type {
+    PrimaryProcessScore,
+    SecondaryInterpretationScore,
+    ConfidenceTier,
+    UncertaintyLevel,
+    SecondaryInterpretationId,
+} from '../../../types/landscapeInterpretation';
+import { CONFIDENCE_CEILINGS } from './secondaryInterpretationEngine';
+
+// UNVALIDATED convergence threshold — tune after real-data pass
+export const PROCESS_CONVERGENCE_THRESHOLD = 50;
+
+// ─── Main function ────────────────────────────────────────────────────────────
+
+export interface ConfidenceResult {
+    tier: ConfidenceTier;
+    uncertainty: UncertaintyLevel;
+}
+
+export function computeConfidence(
+    processScores: PrimaryProcessScore[],
+    interpretationScores: SecondaryInterpretationScore[],
+    primaryInterpretationId: SecondaryInterpretationId | null,
+    hotspotMetrics: {
+        anomaly: number; context: number; convergence: number;
+        behaviour: number; penalty: number; signalCount: number; signalClassCount: number;
+    } | null,
+    recordSparsity: boolean,
+    evidenceBalance?: {
+        supportingPercent: number;
+        contradictingPercent: number;
+        missingCount: number;
+    },
+): ConfidenceResult {
+    // ── Process convergence ───────────────────────────────────────────────────
+    const processesAboveThreshold = processScores.filter(
+        p => p.finalScore > PROCESS_CONVERGENCE_THRESHOLD
+    ).length;
+    const processConvergence = (processesAboveThreshold / 6) * 100;
+
+    // ── Hotspot convergence normalisation ─────────────────────────────────────
+    // Hotspot.metrics.convergence — assumed 0–100 based on fieldGuideTypes.ts structure.
+    // If value is ≤ 1, treat as 0–1 scale and multiply by 100.
+    let hotspotConvergenceNormalised = 0;
+    if (hotspotMetrics !== null) {
+        const raw = hotspotMetrics.convergence;
+        hotspotConvergenceNormalised = raw <= 1 ? raw * 100 : raw;
+    }
+
+    // ── Final confidence score ────────────────────────────────────────────────
+    let finalConfidenceScore: number;
+    if (hotspotMetrics !== null) {
+        // UNVALIDATED weights: process convergence 70%, hotspot 30%
+        finalConfidenceScore = processConvergence * 0.7 + hotspotConvergenceNormalised * 0.3;
+    } else {
+        finalConfidenceScore = processConvergence;
+    }
+
+    // Contradictory and missing evidence reduce confidence directly. This is
+    // separate from behavioural scores so negative evidence can say "less
+    // certain" rather than simply hiding the interpretation.
+    if (evidenceBalance) {
+        const supportBonus = Math.max(0, evidenceBalance.supportingPercent - 50) * 0.12;
+        const contradictionPenalty = evidenceBalance.contradictingPercent * 0.42;
+        const missingPenalty = Math.min(14, evidenceBalance.missingCount * 5);
+        finalConfidenceScore = Math.max(
+            0,
+            Math.min(100, finalConfidenceScore + supportBonus - contradictionPenalty - missingPenalty),
+        );
+    }
+
+    // ── Bucket to tier ────────────────────────────────────────────────────────
+    let tier: ConfidenceTier;
+    if (finalConfidenceScore >= 75) tier = 'very_high';
+    else if (finalConfidenceScore >= 55) tier = 'high';
+    else if (finalConfidenceScore >= 35) tier = 'moderate';
+    else tier = 'lower';
+
+    // ── Apply CONFIDENCE_CEILING for primary interpretation ───────────────────
+    if (primaryInterpretationId) {
+        const ceiling = CONFIDENCE_CEILINGS[primaryInterpretationId];
+        const tierOrder: ConfidenceTier[] = ['very_high', 'high', 'moderate', 'lower'];
+        const tierIdx    = tierOrder.indexOf(tier);
+        const ceilingIdx = tierOrder.indexOf(ceiling);
+        if (ceilingIdx > tierIdx) {
+            // Ceiling is worse than current tier — cap it
+            tier = tierOrder[ceilingIdx];
+        }
+    }
+
+    // ── Uncertainty from score margin ─────────────────────────────────────────
+    const sorted = [...interpretationScores].sort((a, b) => b.derivedScore - a.derivedScore);
+    const topScore    = sorted[0]?.derivedScore ?? 0;
+    const secondScore = sorted[1]?.derivedScore ?? 0;
+    const margin = topScore - secondScore;
+
+    let uncertainty: UncertaintyLevel;
+    if (margin < 15)       uncertainty = 'high';
+    else if (margin <= 35) uncertainty = 'moderate';
+    else                   uncertainty = 'low';
+
+    // Bump uncertainty one tier if record sparsity is true
+    if (recordSparsity) {
+        if (uncertainty === 'low')      uncertainty = 'moderate';
+        else if (uncertainty === 'moderate') uncertainty = 'high';
+    }
+
+    return { tier, uncertainty };
+}

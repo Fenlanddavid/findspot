@@ -1,8 +1,36 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
+import { LandscapeInterpretationBlock } from '../fieldguide/LandscapeInterpretationBlock';
+import { db } from '../../db';
+import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
+import type { Cluster, Hotspot } from '../../pages/fieldGuideTypes';
+
+const ALIE_ENGINE_VERSION = 'ALIE-2026.06.17h';
+
+// ─── Geohash encoder (precision 6) ───────────────────────────────────────────
+// Self-contained — avoids coupling to engine layer.
+const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
+function geohashEncode(lat: number, lon: number, precision = 6): string {
+    let hash = '', minLat = -90, maxLat = 90, minLon = -180, maxLon = 180;
+    let isEven = true, bits = 0, hashValue = 0;
+    while (hash.length < precision) {
+        if (isEven) {
+            const mid = (minLon + maxLon) / 2;
+            if (lon >= mid) { hashValue = (hashValue << 1) | 1; minLon = mid; }
+            else            { hashValue = hashValue << 1;        maxLon = mid; }
+        } else {
+            const mid = (minLat + maxLat) / 2;
+            if (lat >= mid) { hashValue = (hashValue << 1) | 1; minLat = mid; }
+            else            { hashValue = hashValue << 1;        maxLat = mid; }
+        }
+        isEven = !isEven; bits++;
+        if (bits === 5) { hash += BASE32[hashValue]; bits = 0; hashValue = 0; }
+    }
+    return hash;
+}
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -37,6 +65,45 @@ function getSignalSummary(breakdown: { terrain: number; hydro: number; historic:
     return lines;
 }
 
+function averageAspect(clusters: Cluster[]): number {
+    const aspects = clusters
+        .map(c => c.aspect)
+        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    if (!aspects.length) return 180;
+
+    const vector = aspects.reduce((acc, degrees) => {
+        const radians = degrees * Math.PI / 180;
+        return {
+            x: acc.x + Math.cos(radians),
+            y: acc.y + Math.sin(radians),
+        };
+    }, { x: 0, y: 0 });
+
+    const degrees = Math.atan2(vector.y, vector.x) * 180 / Math.PI;
+    return Math.round((degrees + 360) % 360);
+}
+
+function deriveTerrainProxy(
+    clusters: Cluster[],
+    primaryHotspot: Hotspot | null,
+): Pick<LandscapeInterpretationWorkerInput, 'elevationM' | 'slopePercent' | 'aspectDegrees'> {
+    const memberIds = new Set(primaryHotspot?.memberIds ?? []);
+    const relevant = memberIds.size
+        ? clusters.filter(c => memberIds.has(c.id))
+        : clusters;
+
+    const hasSlopeSignal = relevant.some(c => c.sources.includes('slope') || c.relativeElevation === 'Slope');
+    const hasRaisedSignal = relevant.some(c => c.relativeElevation === 'Ridge' || c.polarity === 'Raised');
+    const hasHollowSignal = relevant.some(c => c.relativeElevation === 'Hollow' || c.polarity === 'Sunken');
+
+    return {
+        // Proxy values: the terrain scan exposes relative landform cues, not DEM metres.
+        elevationM: hasRaisedSignal ? 18 : hasHollowSignal ? -2 : hasSlopeSignal ? 6 : 0,
+        slopePercent: hasSlopeSignal ? 6 : hasRaisedSignal ? 3 : 0,
+        aspectDegrees: averageAspect(relevant),
+    };
+}
+
 export function HistoricLayerManager() {
     const {
         showSavedPoints,
@@ -59,6 +126,7 @@ export function HistoricLayerManager() {
         pasFinds,
         historicRoutes,
         sortedHotspots,
+        terrainClusters,
         placeSignals,
         projectFinds,
         mapRef,
@@ -68,7 +136,15 @@ export function HistoricLayerManager() {
         clearMapItemSelections,
         setSelectedPASFind,
         setIsIntelOpen,
+        nhleDataRef,
+        aimDataRef,
+        geologyContext,
     } = useFieldGuideContext();
+
+    // ── ALIE state ────────────────────────────────────────────────────────────
+    const [landscapeInterpretation, setLandscapeInterpretation] = useState<LandscapeInterpretation | null>(null);
+    const [alieLoading, setAlieLoading] = useState(false);
+    const workerRef = useRef<Worker | null>(null);
 
     // Only show when in historic mode and nothing else is selected
     if (showSavedPoints || selectedUserFind || selectedPASFind || (selectedId && !selectedHotspotId) || selectedMonument !== undefined || !historicMode) {
@@ -97,14 +173,31 @@ export function HistoricLayerManager() {
 
     return (
         <div className="space-y-3">
+            <AlieSection
+                historicScanComplete={historicScanComplete}
+                loadingPAS={loadingPAS}
+                nhleDataRef={nhleDataRef}
+                aimDataRef={aimDataRef}
+                historicRoutes={historicRoutes}
+                geologyContext={geologyContext}
+                sortedHotspots={sortedHotspots}
+                terrainClusters={terrainClusters}
+                potentialScoreBreakdown={potentialScore?.breakdown ?? null}
+                mapRef={mapRef}
+                workerRef={workerRef}
+                landscapeInterpretation={landscapeInterpretation}
+                setLandscapeInterpretation={setLandscapeInterpretation}
+                alieLoading={alieLoading}
+                setAlieLoading={setAlieLoading}
+            />
             <div>
-                <p className="text-[8px] font-black text-blue-300 uppercase tracking-[0.2em] mb-1">Landscape Context</p>
+                <p className="text-[8px] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
                 <p className="text-[11px] font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
             </div>
             {(routeLines.length > 0 || sigLines.length > 0) && (
                 <div className="border-t border-white/8 pt-3">
-                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-2">Why this stands out</p>
+                    <p className="text-[8px] font-black text-white/62 uppercase tracking-widest mb-2">Why this stands out</p>
                     <div className="space-y-2">
                         {routeLines.map((line, i) => (
                             <div key={`r-${i}`} className="flex items-start gap-2">
@@ -125,18 +218,18 @@ export function HistoricLayerManager() {
                 <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{pasFinds.length}</span>
-                        <span className="text-[7px] font-black text-white/45 uppercase tracking-widest">Sites</span>
+                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Sites</span>
                     </div>
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{historicRoutes.length}</span>
-                        <span className="text-[7px] font-black text-white/45 uppercase tracking-widest">Routes</span>
+                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Routes</span>
                         {historicRoutes.some(r => r.type === 'roman_road') && (
                             <span className="block text-[7px] font-black text-amber-400/70 uppercase tracking-widest mt-0.5">inc. Roman</span>
                         )}
                     </div>
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{placeSignals.length}</span>
-                        <span className="text-[7px] font-black text-white/45 uppercase tracking-widest">Names</span>
+                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Names</span>
                     </div>
                 </div>
             )}
@@ -145,7 +238,7 @@ export function HistoricLayerManager() {
             )}
             {sourceAvailability && (
                 <div className="border-t border-white/8 pt-3">
-                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-2">Scan Source Coverage</p>
+                    <p className="text-[8px] font-black text-white/62 uppercase tracking-widest mb-2">Scan Source Coverage</p>
                     <div className="grid grid-cols-3 gap-1.5">
                         {[
                             { key: 'terrain', label: 'LiDAR' },
@@ -167,7 +260,7 @@ export function HistoricLayerManager() {
                 </div>
             )}
             {!loadingPAS && !hasData && (
-                <p className="text-center text-[10px] font-bold text-white/25 uppercase tracking-widest italic py-4">No historic context found here</p>
+                <p className="text-center text-[10px] font-bold text-white/55 uppercase tracking-widest italic py-4">No historic context found here</p>
             )}
             {(hasData || potentialScore) && (
                 <div className="border-t border-white/8 pt-3">
@@ -330,5 +423,194 @@ export function HistoricLayerManager() {
                 {FIELDGUIDE_SHORT_NOTICE}
             </div>
         </div>
+    );
+}
+
+// ─── ALIE Section (inner component, avoids hook-in-conditional issue) ─────────
+
+interface AlieSectionProps {
+    historicScanComplete: boolean;
+    loadingPAS: boolean;
+    nhleDataRef: React.RefObject<{ features: any[] } | null>;
+    aimDataRef: React.RefObject<{ features: any[] } | null>;
+    historicRoutes: import('../../pages/fieldGuideTypes').HistoricRoute[];
+    geologyContext: import('../../engines/geologyContext').GeologyContext | null;
+    sortedHotspots: import('../../pages/fieldGuideTypes').Hotspot[];
+    terrainClusters: import('../../pages/fieldGuideTypes').Cluster[];
+    potentialScoreBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null;
+    mapRef: React.RefObject<import('maplibre-gl').Map | null>;
+    workerRef: React.MutableRefObject<Worker | null>;
+    landscapeInterpretation: LandscapeInterpretation | null;
+    setLandscapeInterpretation: React.Dispatch<React.SetStateAction<LandscapeInterpretation | null>>;
+    alieLoading: boolean;
+    setAlieLoading: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function AlieSection({
+    historicScanComplete,
+    loadingPAS,
+    nhleDataRef,
+    aimDataRef,
+    historicRoutes,
+    geologyContext,
+    sortedHotspots,
+    terrainClusters,
+    potentialScoreBreakdown,
+    mapRef,
+    workerRef,
+    landscapeInterpretation,
+    setLandscapeInterpretation,
+    alieLoading,
+    setAlieLoading,
+}: AlieSectionProps) {
+    // ── On scan complete: load cached result then fire worker ─────────────────
+    useEffect(() => {
+        if (!historicScanComplete || loadingPAS) return;
+
+        const center = mapRef.current?.getCenter();
+        if (!center) return;
+
+        const geohash6 = geohashEncode(center.lat, center.lng, 6);
+        const nhleFeatures = nhleDataRef.current?.features ?? [];
+        const aimFeatures  = aimDataRef.current?.features ?? [];
+
+        const primaryHotspot = sortedHotspots[0] ?? null;
+        const hotspotMetrics = primaryHotspot?.metrics ?? null;
+        const hotspotContext = {
+            hasCrossingHotspot: sortedHotspots.some(h =>
+                h.isHighConfidenceCrossing ||
+                h.classification === 'Crossing Point Candidate'
+            ),
+            hasMovementHotspot: sortedHotspots.some(h =>
+                h.isOnCorridor ||
+                h.classification === 'Route-Side Activity Zone' ||
+                h.classification === 'Route-Influenced Area' ||
+                h.classification === 'Crossing Point Candidate'
+            ),
+            hasRouteConvergenceHotspot: sortedHotspots.some(h =>
+                h.classification === 'Junction / Convergence Zone' ||
+                h.classification === 'Crossing Point Candidate' ||
+                (h.linkedCount ?? 0) > 0
+            ),
+        };
+        const terrainProxy = deriveTerrainProxy(terrainClusters, primaryHotspot);
+        const geologyTileKey = geologyContext?.tileKey ?? 'nogeology';
+        const inputSignature = [
+            ALIE_ENGINE_VERSION,
+            geologyTileKey,
+            nhleFeatures.length,
+            aimFeatures.length,
+            historicRoutes.length,
+            primaryHotspot?.id ?? 'nohotspot',
+            hotspotContext.hasCrossingHotspot ? 'crossing' : 'nocrossing',
+            hotspotContext.hasMovementHotspot ? 'movement' : 'nomovement',
+            hotspotContext.hasRouteConvergenceHotspot ? 'converge' : 'noconverge',
+            terrainProxy.elevationM,
+            terrainProxy.slopePercent,
+            terrainProxy.aspectDegrees,
+        ].join('|');
+
+        db.landscapeInterpretations.get(geohash6).then(cached => {
+            const cachedInterpretation = cached?.interpretation as LandscapeInterpretation | undefined;
+            if (
+                cachedInterpretation?.engineVersion === ALIE_ENGINE_VERSION &&
+                cached?.inputSignature === inputSignature
+            ) {
+                setLandscapeInterpretation(cachedInterpretation);
+            }
+        }).catch(() => { /* cache read failure is non-fatal */ });
+
+        if (workerRef.current) {
+            workerRef.current.terminate();
+            workerRef.current = null;
+        }
+
+        const input: LandscapeInterpretationWorkerInput = {
+            geohash6,
+            nhleFeatures,
+            aimFeatures,
+            routeFeatures: historicRoutes,
+            geologyContext,
+            hotspotMetrics,
+            hotspotContext,
+            centerLat: center.lat,
+            centerLon: center.lng,
+            potentialBreakdown: potentialScoreBreakdown,
+            ...terrainProxy,
+        };
+
+        console.log('[ALIE] worker input counts', {
+            nhle: nhleFeatures.length,
+            aim: aimFeatures.length,
+            routes: historicRoutes.length,
+        });
+
+        setAlieLoading(true);
+
+        try {
+            const worker = new Worker(
+                new URL('../../workers/landscapeInterpretation.worker.ts', import.meta.url),
+                { type: 'module' }
+            );
+            workerRef.current = worker;
+
+            worker.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerOutput>) => {
+                setAlieLoading(false);
+                if (event.data.result) {
+                    const result = event.data.result;
+                    console.log('[ALIE] result', {
+                        recordSparsity: result.recordSparsity,
+                        temporalPersistence: result.temporalPersistence,
+                        engineVersion: result.engineVersion,
+                    });
+                    setLandscapeInterpretation(result);
+                    // Persist to Dexie (last-write-wins)
+                    db.landscapeInterpretations.put({
+                        geohash6: result.geohash6,
+                        generatedAt: result.generatedAt,
+                        engineVersion: result.engineVersion,
+                        geologyTileKey,
+                        inputSignature,
+                        interpretation: result,
+                    }).catch(() => { /* write failure non-fatal */ });
+                }
+                worker.terminate();
+                workerRef.current = null;
+            };
+
+            worker.onerror = () => {
+                setAlieLoading(false);
+                worker.terminate();
+                workerRef.current = null;
+            };
+
+            worker.postMessage(input);
+        } catch {
+            setAlieLoading(false);
+        }
+
+        // Cleanup on unmount
+        return () => {
+            if (workerRef.current) {
+                workerRef.current.terminate();
+                workerRef.current = null;
+            }
+        };
+    }, [
+        historicScanComplete,
+        loadingPAS,
+        geologyContext?.tileKey,
+        historicRoutes,
+        sortedHotspots,
+        terrainClusters,
+    ]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    if (!historicScanComplete && !landscapeInterpretation) return null;
+
+    return (
+        <LandscapeInterpretationBlock
+            interpretation={landscapeInterpretation}
+            loading={alieLoading}
+        />
     );
 }

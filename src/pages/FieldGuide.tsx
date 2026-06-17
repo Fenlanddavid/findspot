@@ -952,9 +952,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         if (!result) return;
 
-        // If fresh NHLE/AIM data was fetched (standalone mode), push to map
-        if (result.nhleData) applyNhleToMap(result.nhleData);
-        if (result.aimData)  applyAimToMap(result.aimData);
+        // If fresh NHLE/AIM data was fetched (standalone mode), push to map and update refs
+        // so the ALIE worker receives the actual feature data (not empty arrays).
+        if (result.nhleData) { applyNhleToMap(result.nhleData); nhleDataRef.current = result.nhleData; }
+        if (result.aimData)  { applyAimToMap(result.aimData);   aimDataRef.current  = result.aimData; }
 
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
@@ -1443,7 +1444,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             disabled={analyzing}
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                         >
-                            {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Clear' : 'Historic Layers'}
+                            {(loadingPAS && historicMode) ? 'Reading...' : historicMode ? 'Clear' : 'Landscape'}
                         </button>
                     </div>
 
