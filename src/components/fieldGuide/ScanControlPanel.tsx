@@ -61,7 +61,7 @@ export function ScanControlPanel() {
                     disabled={analyzing}
                     className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_12px_rgba(59,130,246,0.24)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
                 >
-                    {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Historic'}
+                    {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Landscape'}
                 </button>
             </div>
             {sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) && (

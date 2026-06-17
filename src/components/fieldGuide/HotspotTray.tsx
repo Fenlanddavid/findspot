@@ -6,7 +6,6 @@ import type { HotspotSignalStrength } from '../../utils/hotspotInterpreter';
 import type { Hotspot, Cluster } from '../../pages/fieldGuideTypes';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES } from './FieldGuideContext';
-import { computeTargetLandscapeNarrative } from '../../utils/landscapeIntelligenceEngine';
 
 function getPotentialTier(score: number): string {
     if (score > 80) return 'High Potential';
@@ -193,7 +192,7 @@ export function HotspotTray() {
     return (
         <>
             {/* Landscape Intelligence Summary — above hotspot or target list */}
-            {!historicMode && (mobileSheetMode === 'hotspots' || mobileSheetMode === 'targets') && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
+            {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
                 <LandscapeIntelligenceSummary />
             )}
 
@@ -243,7 +242,6 @@ export function HotspotTray() {
                         {displayTargets.map(f => {
                             const tI = buildTargetInterpretation(f);
                             const isPrimary = f.id === primaryTargetId;
-                            const landscapeCue = f.isProtected ? null : computeTargetLandscapeNarrative(f);
                             return (
                                 <button
                                     key={f.id}
@@ -257,11 +255,6 @@ export function HotspotTray() {
                                                 {f.isProtected ? getProtectedTargetCopy(f).label : getTargetVerdict(tI.signalStrength, isPrimary)}
                                             </p>
                                             {!f.isProtected && <p className={`text-[10px] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
-                                            {landscapeCue && (
-                                                <p className={`text-[11px] font-bold leading-snug mt-2 line-clamp-2 ${isPrimary ? 'text-sky-100/78' : 'text-sky-100/62'}`}>
-                                                    {landscapeCue}
-                                                </p>
-                                            )}
                                         </div>
                                         {isPrimary && !f.isProtected
                                             ? <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>

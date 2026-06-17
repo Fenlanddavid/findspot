@@ -1071,7 +1071,7 @@ export function FieldGuideMap() {
                     >
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
                         <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">
-                            {loadingPAS ? 'Reading layers...' : 'Historic Layers'}
+                            {loadingPAS ? 'Reading layers...' : 'Landscape'}
                         </span>
                         {!loadingPAS && (() => {
                             const c = mapRef.current?.getCenter();

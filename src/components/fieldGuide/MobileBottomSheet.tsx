@@ -11,11 +11,10 @@ import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES, HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { ScanControlPanel } from './ScanControlPanel';
 import { SavedPointsPanel } from './SavedPointsPanel';
-import { HotspotTray, LandscapeIntelligenceSummary } from './HotspotTray';
+import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
-import { computeTargetLandscapeNarrative } from '../../utils/landscapeIntelligenceEngine';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -223,7 +222,6 @@ export function MobileBottomSheet() {
     } = useFieldGuideContext();
     const [expandedGeologyId,       setExpandedGeologyId]       = React.useState<string | null>(null);
     const [expandedLandscapeHotspot, setExpandedLandscapeHotspot] = React.useState<string | null>(null);
-    const [expandedLandscapeTarget,  setExpandedLandscapeTarget]  = React.useState<string | null>(null);
 
     if (!(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId))) {
         return null;
@@ -239,7 +237,7 @@ export function MobileBottomSheet() {
         : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? getProtectedTargetCopy(selectedTarget).label : 'Target Details')
         : selectedMonument !== undefined ? 'Scheduled Monument'
         : showSavedPoints ? 'Saved Points'
-        : historicMode ? 'Historic Review'
+        : historicMode ? 'Landscape Review'
         : hasScanned ? (mobileSheetMode === 'targets' ? 'Target Review' : 'Terrain Review')
         : 'Ready to Scan';
 
@@ -582,22 +580,6 @@ export function MobileBottomSheet() {
                                 </div>
                             <p className="text-xs font-black text-white/85 leading-snug">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
                             <p className="text-[11px] font-bold text-white/50 leading-snug">{tInterp.hook}</p>
-
-                            <LandscapeIntelligenceSummary />
-
-                            {/* Landscape Interpretation — below verdict, above evidence */}
-                            {(() => {
-                                const narrative = computeTargetLandscapeNarrative(f);
-                                if (!narrative) return null;
-                                const isOpen = expandedLandscapeTarget === f.id;
-                                return (
-                                    <LandscapeInterpretationPanel
-                                        isOpen={isOpen}
-                                        onToggle={() => setExpandedLandscapeTarget(isOpen ? null : f.id)}
-                                        narrative={narrative}
-                                    />
-                                );
-                            })()}
 
                                     {(() => {
                                         const ctx = targetFindContext.get(f.id);

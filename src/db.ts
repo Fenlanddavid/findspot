@@ -418,6 +418,20 @@ export type FieldGuideScanCache = {
   historicLookup?: any;   // standalone Historic button source cache
 };
 
+// ─── Landscape interpretation cache ──────────────────────────────────────────
+// Caches ALIE v5 LandscapeInterpretation results per geohash6 cell.
+// Last-write-wins. Typed as any to avoid coupling db.ts to the engine layer.
+// See: src/types/landscapeInterpretation.ts
+
+export type LandscapeInterpretationRecord = {
+    geohash6:     string;   // Primary key
+    generatedAt:  number;   // Unix ms
+    engineVersion?: string;
+    geologyTileKey?: string;
+    inputSignature?: string;
+    interpretation: any;    // LandscapeInterpretation
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -433,6 +447,7 @@ export class FindSpotDB extends Dexie {
   savedPoints!: Table<SavedPoint, string>;
   geologyContext!: Table<GeologyContextRecord, string>;
   findHotspotSignals!: Table<FindHotspotSignal, string>;
+  landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
 
   constructor() {
     super("findspot_uk");
@@ -631,6 +646,14 @@ export class FindSpotDB extends Dexie {
     // handler needed — new empty table; existing user data is untouched.
     this.version(29).stores({
       findHotspotSignals: "signalKey, permissionId, geohash6, updatedAt",
+    });
+
+    // v30: ALIE v5 landscape interpretation cache.
+    // Stores the most recent LandscapeInterpretation result per geohash6 cell.
+    // Last-write-wins — new results overwrite old ones. No upgrade() handler
+    // needed — new empty table; existing user data is untouched.
+    this.version(30).stores({
+      landscapeInterpretations: "&geohash6, generatedAt",
     });
   }
 }
