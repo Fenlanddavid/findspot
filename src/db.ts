@@ -648,11 +648,18 @@ export class FindSpotDB extends Dexie {
       findHotspotSignals: "signalKey, permissionId, geohash6, updatedAt",
     });
 
-    // v30: ALIE v5 landscape interpretation cache.
+    // v30: Drop the unused autoBackups object store (added in v24, feature
+    // removed May 2026). No user data — snapshots excluded photo blobs and the
+    // feature was pulled before any meaningful data accumulated.
+    this.version(30).stores({
+      autoBackups: null,
+    });
+
+    // v31: ALIE v5 landscape interpretation cache.
     // Stores the most recent LandscapeInterpretation result per geohash6 cell.
     // Last-write-wins — new results overwrite old ones. No upgrade() handler
     // needed — new empty table; existing user data is untouched.
-    this.version(30).stores({
+    this.version(31).stores({
       landscapeInterpretations: "&geohash6, generatedAt",
     });
   }
