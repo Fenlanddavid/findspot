@@ -941,10 +941,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
         };
 
-        const map = mapRef.current;
-        if (!map) return;
-        if (map.loaded()) update();
-        else map.once('load', () => update());
+        update();
     };
 
     const applyAimToMap = (data: { features: unknown[] }) => {
@@ -959,10 +956,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
         };
 
-        const map = mapRef.current;
-        if (!map) return;
-        if (map.loaded()) update();
-        else map.once('load', () => update());
+        update();
     };
 
     // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
