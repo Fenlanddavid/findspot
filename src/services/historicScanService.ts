@@ -105,6 +105,7 @@ const OVERPASS_TOTAL_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_TOTAL_TIMEOUT_MS = 24000;
 const GENERAL_FETCH_TIMEOUT_MS = 7000;
+const NHLE_RETRY_DELAYS_MS = [350, 900];
 const KNOWN_ROMAN_ROUTE_NAMES = [
     'akeman street',
     'cade\'s road',
@@ -144,6 +145,18 @@ function withTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number) {
         signal: combined,
         clear:  () => clearTimeout(timer),
     };
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        if (signal) {
+            signal.addEventListener('abort', () => {
+                clearTimeout(timer);
+                reject(new DOMException('Aborted', 'AbortError'));
+            }, { once: true });
+        }
+    });
 }
 
 // POST is the recommended approach for Overpass — avoids URL length limits
@@ -264,23 +277,30 @@ export async function fetchScheduledMonuments(
     north: number,
     signal?: AbortSignal
 ): Promise<NHLEResponse> {
-    const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
-    try {
-        const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
-        const res = await fetch(url, { signal: timed.signal });
-        if (!res.ok) return { features: [], available: false, error: `HTTP ${res.status}` };
-        const data = await res.json() as NHLEResponse;
-        return { ...data, features: data.features ?? [], available: true };
-    } catch (e) {
-        if (signal && isAbortError(e) && signal.aborted) throw e;
-        return {
-            features: [],
-            available: false,
-            error: e instanceof Error ? e.message : 'Scheduled monument service unavailable',
-        };
-    } finally {
-        timed.clear();
+    const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+    let lastError = 'Scheduled monument service unavailable';
+
+    for (let attempt = 0; attempt <= NHLE_RETRY_DELAYS_MS.length; attempt++) {
+        const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+        try {
+            const res = await fetch(url, { signal: timed.signal });
+            if (res.ok) {
+                const data = await res.json() as NHLEResponse;
+                return { ...data, features: data.features ?? [], available: true };
+            }
+            lastError = `HTTP ${res.status}`;
+        } catch (e) {
+            if (signal && isAbortError(e) && signal.aborted) throw e;
+            lastError = e instanceof Error ? e.message : 'Scheduled monument service unavailable';
+        } finally {
+            timed.clear();
+        }
+
+        const retryDelay = NHLE_RETRY_DELAYS_MS[attempt];
+        if (retryDelay !== undefined) await delay(retryDelay, signal);
     }
+
+    return { features: [], available: false, error: lastError };
 }
 
 /**
