@@ -928,15 +928,41 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // ─── Map source helpers ───────────────────────────────────────────────────
 
     const applyNhleToMap = (data: { features: unknown[] }) => {
-        const src = mapRef.current?.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
-        if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
-        const bufferSrc = mapRef.current?.getSource('monument-buffers') as maplibregl.GeoJSONSource | undefined;
-        if (bufferSrc) bufferSrc.setData(buildMonumentBufferGeoJSON(data));
+        const update = (attempt = 0) => {
+            const map = mapRef.current;
+            if (!map) return;
+            const src = map.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
+            const bufferSrc = map.getSource('monument-buffers') as maplibregl.GeoJSONSource | undefined;
+            if (src && bufferSrc) {
+                src.setData(data as unknown as GeoJSON.FeatureCollection);
+                bufferSrc.setData(buildMonumentBufferGeoJSON(data));
+                return;
+            }
+            if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
+        };
+
+        const map = mapRef.current;
+        if (!map) return;
+        if (map.loaded()) update();
+        else map.once('load', () => update());
     };
 
     const applyAimToMap = (data: { features: unknown[] }) => {
-        const src = mapRef.current?.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
-        if (src) src.setData(data as unknown as GeoJSON.FeatureCollection);
+        const update = (attempt = 0) => {
+            const map = mapRef.current;
+            if (!map) return;
+            const src = map.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
+            if (src) {
+                src.setData(data as unknown as GeoJSON.FeatureCollection);
+                return;
+            }
+            if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
+        };
+
+        const map = mapRef.current;
+        if (!map) return;
+        if (map.loaded()) update();
+        else map.once('load', () => update());
     };
 
     // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
