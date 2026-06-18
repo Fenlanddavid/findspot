@@ -11,6 +11,7 @@ import type {
 import { extractSignals }                                              from '../services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../services/fieldguide/landscapeInterpretation/regionalCalibration';
 import { computePrimaryProcesses }                                     from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
+import type { LIEHints }                                               from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
 import { computeBurialBehaviour }                                      from '../services/fieldguide/landscapeInterpretation/burialBehaviour';
 import { computeDefensiveBehaviour }                                   from '../services/fieldguide/landscapeInterpretation/defensiveBehaviour';
 import { computeSecondaryInterpretations, selectPrimaryAndSecondary }  from '../services/fieldguide/landscapeInterpretation/secondaryInterpretationEngine';
@@ -46,16 +47,24 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
         const extractedSignals = extractSignals(nhleFeatures, aimFeatures, routeFeatures, potentialBreakdown);
         const signals = {
             ...extractedSignals,
-            routeConvergence: extractedSignals.routeConvergence || hotspotContext?.hasRouteConvergenceHotspot === true,
+            routeConvergence:  extractedSignals.routeConvergence  || hotspotContext?.hasRouteConvergenceHotspot === true,
             confluencePresent: extractedSignals.confluencePresent || hotspotContext?.hasCrossingHotspot === true,
+            // Merge LIE terrain classification signals — these are terrain-scan-derived
+            // so they are trustworthy corroboration even when historic records are sparse.
+            wetlandPresent: extractedSignals.wetlandPresent || hotspotContext?.hasWetlandContext === true,
         };
 
         // ── 2. Derive terrain region + regional multiplier ────────────────────
         const region = deriveTerrainRegion(geologyContext);
 
         // ── 3. Compute six primary process scores ─────────────────────────────
+        const lieHints = hotspotContext ? {
+            hasBoundaryTransition: hotspotContext.hasBoundaryTransition,
+            hasLandformProminence: hotspotContext.hasLandformProminence,
+            hasOccupationSignal:   hotspotContext.hasOccupationSignal,
+        } : undefined;
         const processScores = computePrimaryProcesses(
-            signals, geologyContext, elevationM, slopePercent, aspectDegrees, region, potentialBreakdown,
+            signals, geologyContext, elevationM, slopePercent, aspectDegrees, region, potentialBreakdown, lieHints,
         );
 
         // ── 4. Temporal persistence ───────────────────────────────────────────

@@ -58,6 +58,12 @@ function cap(value: number, max = 100): number {
 
 // ─── Compute all six processes ────────────────────────────────────────────────
 
+export interface LIEHints {
+    hasBoundaryTransition: boolean;
+    hasLandformProminence: boolean;
+    hasOccupationSignal: boolean;
+}
+
 export function computePrimaryProcesses(
     signals: AdaptedSignals,
     geologyContext: GeologyContext | null,
@@ -66,6 +72,7 @@ export function computePrimaryProcesses(
     aspectDegrees: number,
     region: TerrainRegionType,
     potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    lieHints?: LIEHints,
 ): PrimaryProcessScore[] {
     const results: PrimaryProcessScore[] = [];
 
@@ -93,6 +100,10 @@ export function computePrimaryProcesses(
         if (isStableGeology(geologyContext)) { settlementScore += 8; }
         // Dry ground near water
         if ((signals.waterProximity || hydroScore > 25) && slopePercent < 5) { settlementScore += 10; settlementSignals.push('dry_ground_water_proximity'); }
+        // LIE corroboration: terrain scan independently detected occupation signal.
+        // Score-only boost — no contributingSignal added as this label has no
+        // catalog entry in evidenceModel or narrativeGenerator.
+        if (lieHints?.hasOccupationSignal) { settlementScore += 12; }
 
         settlementScore = cap(settlementScore);
 
@@ -269,6 +280,10 @@ export function computePrimaryProcesses(
 
         // Restricted approach bonus: steep slope suggests defended/prominent ground
         if (slopePercent > 15) { score = Math.min(100, score + 15); contributingSignals.push('high_ground_restricted_approach'); }
+        // LIE corroboration: terrain scan independently classified a prominent landform.
+        // Score-only boost — avoid reusing slight_elevation here as that would
+        // misrepresent the source in any evidence breakdown.
+        if (lieHints?.hasLandformProminence) { score = Math.min(100, score + 10); }
 
         const rawScore = cap(score);
         const multiplier = getRegionalMultiplier(processId, region);
@@ -323,6 +338,10 @@ export function computePrimaryProcesses(
             score += 20;
             contributingSignals.push('marginal_ground');
         }
+        // LIE corroboration: terrain scan independently detected a landscape transition.
+        // Score-only boost — terrace_edge would misrepresent this as a specific
+        // landform observation rather than a generalised boundary classification.
+        if (lieHints?.hasBoundaryTransition) { score += 10; }
 
         const rawScore = cap(score);
         const multiplier = getRegionalMultiplier(processId, region);

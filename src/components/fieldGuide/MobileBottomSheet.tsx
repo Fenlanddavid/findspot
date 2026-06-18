@@ -104,7 +104,7 @@ function LandscapeInterpretationPanel({
                 onClick={onToggle}
                 className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
             >
-                <span className="text-[9px] font-black text-sky-400/75 uppercase tracking-[0.16em]">Landscape Interpretation</span>
+                <span className="text-[9px] font-black text-sky-400/75 uppercase tracking-[0.16em]">Terrain Reading</span>
                 <svg
                     width="10"
                     height="10"

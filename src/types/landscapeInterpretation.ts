@@ -238,6 +238,11 @@ export interface LandscapeInterpretationWorkerInput {
         hasCrossingHotspot: boolean;
         hasMovementHotspot: boolean;
         hasRouteConvergenceHotspot: boolean;
+        // LIE-derived terrain classification signals (from landscapeIntelligenceMap)
+        hasWetlandContext: boolean;
+        hasBoundaryTransition: boolean;
+        hasLandformProminence: boolean;
+        hasOccupationSignal: boolean;
     };
     centerLat: number;
     centerLon: number;

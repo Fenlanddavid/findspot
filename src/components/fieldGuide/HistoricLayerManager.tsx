@@ -6,7 +6,7 @@ import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { LandscapeInterpretationBlock } from '../fieldguide/LandscapeInterpretationBlock';
 import { db } from '../../db';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
-import type { Cluster, Hotspot } from '../../pages/fieldGuideTypes';
+import type { Cluster, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
 const ALIE_ENGINE_VERSION = 'ALIE-2026.06.17h';
 
@@ -139,6 +139,7 @@ export function HistoricLayerManager() {
         nhleDataRef,
         aimDataRef,
         geologyContext,
+        landscapeIntelligenceMap,
     } = useFieldGuideContext();
 
     // ── ALIE state ────────────────────────────────────────────────────────────
@@ -189,6 +190,7 @@ export function HistoricLayerManager() {
                 setLandscapeInterpretation={setLandscapeInterpretation}
                 alieLoading={alieLoading}
                 setAlieLoading={setAlieLoading}
+                landscapeIntelligenceMap={landscapeIntelligenceMap}
             />
             <div>
                 <p className="text-[8px] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
@@ -444,6 +446,7 @@ interface AlieSectionProps {
     setLandscapeInterpretation: React.Dispatch<React.SetStateAction<LandscapeInterpretation | null>>;
     alieLoading: boolean;
     setAlieLoading: React.Dispatch<React.SetStateAction<boolean>>;
+    landscapeIntelligenceMap: Map<string, LandscapeIntelligence>;
 }
 
 function AlieSection({
@@ -462,6 +465,7 @@ function AlieSection({
     setLandscapeInterpretation,
     alieLoading,
     setAlieLoading,
+    landscapeIntelligenceMap,
 }: AlieSectionProps) {
     // ── On scan complete: load cached result then fire worker ─────────────────
     useEffect(() => {
@@ -476,6 +480,18 @@ function AlieSection({
 
         const primaryHotspot = sortedHotspots[0] ?? null;
         const hotspotMetrics = primaryHotspot?.metrics ?? null;
+
+        // Derive LIE classification signals from sorted (scored) hotspots only —
+        // landscapeIntelligenceMap also contains weak/suppressed hotspots so
+        // we restrict to sortedHotspots which have already passed the score gate.
+        const sortedLI = sortedHotspots
+            .map(h => landscapeIntelligenceMap.get(h.id))
+            .filter((li): li is LandscapeIntelligence => li !== undefined);
+        const lieHasWetland    = sortedLI.some(li => li.wetlandContext !== null);
+        const lieHasBoundary   = sortedLI.some(li => li.transitionType !== null);
+        const lieHasProminence = sortedLI.some(li => li.landformType !== null);
+        const lieHasOccupation = sortedLI.some(li => li.occupationPotential !== null);
+
         const hotspotContext = {
             hasCrossingHotspot: sortedHotspots.some(h =>
                 h.isHighConfidenceCrossing ||
@@ -492,6 +508,10 @@ function AlieSection({
                 h.classification === 'Crossing Point Candidate' ||
                 (h.linkedCount ?? 0) > 0
             ),
+            hasWetlandContext:    lieHasWetland,
+            hasBoundaryTransition: lieHasBoundary,
+            hasLandformProminence: lieHasProminence,
+            hasOccupationSignal:   lieHasOccupation,
         };
         const terrainProxy = deriveTerrainProxy(terrainClusters, primaryHotspot);
         const geologyTileKey = geologyContext?.tileKey ?? 'nogeology';
@@ -505,6 +525,10 @@ function AlieSection({
             hotspotContext.hasCrossingHotspot ? 'crossing' : 'nocrossing',
             hotspotContext.hasMovementHotspot ? 'movement' : 'nomovement',
             hotspotContext.hasRouteConvergenceHotspot ? 'converge' : 'noconverge',
+            lieHasWetland    ? 'liewet' : 'noliewet',
+            lieHasBoundary   ? 'liebnd' : 'noliebnd',
+            lieHasProminence ? 'lieprom' : 'nolieprom',
+            lieHasOccupation ? 'lieocc' : 'nolieocc',
             terrainProxy.elevationM,
             terrainProxy.slopePercent,
             terrainProxy.aspectDegrees,
