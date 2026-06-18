@@ -928,13 +928,17 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // ─── Map source helpers ───────────────────────────────────────────────────
 
     const applyNhleToMap = (data: { features: unknown[] }) => {
+        // NHLEResponse only declares `features`; error fallbacks also omit `type`.
+        // Always normalise to a valid FeatureCollection before calling setData,
+        // otherwise MapLibre throws "Input data is not a valid GeoJSON object".
+        const fc = { type: 'FeatureCollection' as const, features: data.features ?? [] };
         const update = (attempt = 0) => {
             const map = mapRef.current;
             if (!map) return;
             const src = map.getSource('monuments') as maplibregl.GeoJSONSource | undefined;
             const bufferSrc = map.getSource('monument-buffers') as maplibregl.GeoJSONSource | undefined;
             if (src && bufferSrc) {
-                src.setData(data as unknown as GeoJSON.FeatureCollection);
+                src.setData(fc as GeoJSON.FeatureCollection);
                 bufferSrc.setData(buildMonumentBufferGeoJSON(data));
                 return;
             }
@@ -945,12 +949,13 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     };
 
     const applyAimToMap = (data: { features: unknown[] }) => {
+        const fc = { type: 'FeatureCollection' as const, features: data.features ?? [] };
         const update = (attempt = 0) => {
             const map = mapRef.current;
             if (!map) return;
             const src = map.getSource('aim-monuments') as maplibregl.GeoJSONSource | undefined;
             if (src) {
-                src.setData(data as unknown as GeoJSON.FeatureCollection);
+                src.setData(fc as GeoJSON.FeatureCollection);
                 return;
             }
             if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
