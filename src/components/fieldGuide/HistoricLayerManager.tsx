@@ -133,6 +133,7 @@ export function HistoricLayerManager() {
         sourceAvailability,
         sourceUsability,
         scanFromCache,
+        scheduledMonumentCheckFailed,
         clearMapItemSelections,
         setSelectedPASFind,
         setIsIntelOpen,
@@ -192,6 +193,12 @@ export function HistoricLayerManager() {
                 setAlieLoading={setAlieLoading}
                 landscapeIntelligenceMap={landscapeIntelligenceMap}
             />
+            {scheduledMonumentCheckFailed && (
+                <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
+                    <p className="text-[8px] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
+                    <p className="text-[10px] font-bold text-amber-100/75 leading-snug">Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear.</p>
+                </div>
+            )}
             <div>
                 <p className="text-[8px] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>

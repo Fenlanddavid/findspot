@@ -208,6 +208,7 @@ export function MobileBottomSheet() {
         sourceAvailability,
         sourceUsability,
         scanFromCache,
+        scheduledMonumentCheckFailed,
         projectFinds,
         setIsIntelOpen,
         intelDetailsOpen,
@@ -399,7 +400,15 @@ export function MobileBottomSheet() {
 
                 {/* HotspotTray — shown when not in historic mode and no selection */}
                 {!historicMode && !showSavedPoints && !selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
-                    <HotspotTray />
+                    <>
+                        {scheduledMonumentCheckFailed && hasScanned && (
+                            <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
+                                <p className="text-[8px] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
+                                <p className="text-[10px] font-bold text-amber-100/75 leading-snug">Protected monument data could not be checked for this scan. Treat the result as incomplete and verify official records before fieldwork.</p>
+                            </div>
+                        )}
+                        <HotspotTray />
+                    </>
                 )}
 
                 {/* Your Find — in panel (mobile) */}

@@ -186,6 +186,7 @@ export interface FieldGuideContextValue {
     sourceAvailability: Record<string, boolean> | null;
     scanFromCache: boolean;
     scanNoSignal: boolean;
+    scheduledMonumentCheckFailed: boolean;
 
     // PAS / intel state
     pasFinds: HistoricFind[];

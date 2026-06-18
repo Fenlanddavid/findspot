@@ -461,6 +461,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [sourceAvailability,     setSourceAvailability]     = useState<Record<string, boolean> | null>(null);
     const [scanFromCache,          setScanFromCache]          = useState(false);
     const [scanNoSignal,           setScanNoSignal]           = useState(false);
+    const [scheduledMonumentCheckFailed, setScheduledMonumentCheckFailed] = useState(false);
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
     const [selectedPASFind, setSelectedPASFind] = useState<HistoricFind | null>(null);
@@ -914,6 +915,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setSourceAvailability(null);
         setScanFromCache(false);
         setScanNoSignal(false);
+        setScheduledMonumentCheckFailed(false);
         setRawClusters([]);
         setSelectedTraceId(null);
         setAnnotationMode(false);
@@ -981,6 +983,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         // so the ALIE worker receives the actual feature data (not empty arrays).
         if (result.nhleData) { applyNhleToMap(result.nhleData); nhleDataRef.current = result.nhleData; }
         if (result.aimData)  { applyAimToMap(result.aimData);   aimDataRef.current  = result.aimData; }
+        if (result.nhleData) setScheduledMonumentCheckFailed(result.nhleData.available === false);
 
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
@@ -1091,6 +1094,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setSourceAvailability(result.sourceAvailability ?? null);
         setScanFromCache(result.fromCache);
         setScanNoSignal(result.noSignal ?? false);
+        setScheduledMonumentCheckFailed(result.nhleData.available === false);
         setRawClusters(result.rawClusters ?? []);
 
         dispatch({
@@ -1432,7 +1436,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         mobileSheetMode, setMobileSheetMode, selectedTraceId, setSelectedTraceId,
         showSavedPoints, setShowSavedPoints, savingPoint, setSavingPoint,
         savedPointLabel, setSavedPointLabel, pendingDeleteId, setPendingDeleteId,
-        sourceAvailability, scanFromCache, scanNoSignal,
+        sourceAvailability, scanFromCache, scanNoSignal, scheduledMonumentCheckFailed,
         pasFinds, selectedPASFind, setSelectedPASFind, selectedUserFind, setSelectedUserFind, placeSignals,
         permissions, realPermissions, fields, projectFinds, savedPoints,
         potentialScore, scanConfidence, selectedUserFindMedia,
