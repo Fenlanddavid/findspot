@@ -106,6 +106,7 @@ const OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_TOTAL_TIMEOUT_MS = 24000;
 const GENERAL_FETCH_TIMEOUT_MS = 7000;
 const NHLE_RETRY_DELAYS_MS = [350, 900];
+const LANDSCAPE_CONTEXT_RETRY_DELAYS_MS = [500, 1200];
 const KNOWN_ROMAN_ROUTE_NAMES = [
     'akeman street',
     'cade\'s road',
@@ -246,10 +247,20 @@ export async function fetchHistoricContextFeatures(
     const placeRadius = 4000;
     const heritageRadius = 2000;
     const query = `[out:json][timeout:18];(node["place"](around:${placeRadius},${lat},${lng});way["place"](around:${placeRadius},${lat},${lng});rel["place"](around:${placeRadius},${lat},${lng});node["natural"](around:${placeRadius},${lat},${lng});way["natural"](around:${placeRadius},${lat},${lng});node["historic"](around:${placeRadius},${lat},${lng});way["historic"](around:${placeRadius},${lat},${lng});node["landuse"="farmyard"](around:${placeRadius},${lat},${lng});way["landuse"="farmyard"](around:${placeRadius},${lat},${lng});node["heritage"](around:${heritageRadius},${lat},${lng});way["heritage"](around:${heritageRadius},${lat},${lng});rel["heritage"](around:${heritageRadius},${lat},${lng}););out center;`;
-    return overpassFetch(query, signal, {
+    const fetchOptions = {
         endpointTimeoutMs: options.endpointTimeoutMs ?? 6000,
         totalTimeoutMs:    options.totalTimeoutMs    ?? 8000,
-    });
+    };
+
+    for (let attempt = 0; attempt <= LANDSCAPE_CONTEXT_RETRY_DELAYS_MS.length; attempt++) {
+        const result = await overpassFetch(query, signal, fetchOptions);
+        if (result) return result;
+
+        const retryDelay = LANDSCAPE_CONTEXT_RETRY_DELAYS_MS[attempt];
+        if (retryDelay !== undefined) await delay(retryDelay, signal);
+    }
+
+    return null;
 }
 
 /**
