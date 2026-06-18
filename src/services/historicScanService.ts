@@ -57,6 +57,8 @@ export interface NHLEFeature {
 
 export interface NHLEResponse {
     features: NHLEFeature[];
+    available?: boolean;
+    error?: string;
 }
 
 export interface AIMFeature {
@@ -266,11 +268,16 @@ export async function fetchScheduledMonuments(
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
         const res = await fetch(url, { signal: timed.signal });
-        if (!res.ok) return { features: [] };
-        return await res.json() as NHLEResponse;
+        if (!res.ok) return { features: [], available: false, error: `HTTP ${res.status}` };
+        const data = await res.json() as NHLEResponse;
+        return { ...data, features: data.features ?? [], available: true };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
-        return { features: [] };
+        return {
+            features: [],
+            available: false,
+            error: e instanceof Error ? e.message : 'Scheduled monument service unavailable',
+        };
     } finally {
         timed.clear();
     }

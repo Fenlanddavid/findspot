@@ -208,6 +208,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
                     return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
                 });
+                const heritageCount = nhleData.features?.length ?? 0;
+                if (nhleData.available === false) {
+                    onLog('> NHLE: Scheduled monument service unavailable — protected archaeology could not be checked for this terrain scan.', 'terrain', 'warn');
+                } else if (heritageCount > 0) {
+                    onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} in scan area.`, 'terrain');
+                }
                 onStatusChange('Comparing landscape signals...');
                 const merged      = findConsensus(rawCombined);
                 const aimEnriched = applyAIMEnrichment(merged, aimData);
@@ -284,7 +290,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 if (mountedRef.current) setIsScanning(false);
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
-                    nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount: nhleData.features?.length ?? 0,
+                    nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount,
                     sourceAvailability: cached.sourceAvailability, fromCache: true, noSignal: false, scanStartCenter, scanStartBounds,
                 };
             }
@@ -350,7 +356,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
             });
             const heritageCount = nhleData.features?.length ?? 0;
-            if (heritageCount > 0) onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} in scan area.`, 'terrain');
+            if (nhleData.available === false) {
+                onLog('> NHLE: Scheduled monument service unavailable — protected archaeology could not be checked for this terrain scan.', 'terrain', 'warn');
+            } else if (heritageCount > 0) {
+                onLog(`> NHLE: ${heritageCount} scheduled monument${heritageCount !== 1 ? 's' : ''} in scan area.`, 'terrain');
+            }
             const aerialHitCount = springHits.length + summerHits.length;
             if (aerialHitCount > 0) onLog(`> Aerial: ${aerialHitCount} spectral signal${aerialHitCount !== 1 ? 's' : ''} detected.`, 'terrain');
             else onLog('> Aerial: no spectral signals detected (Wayback tiles may not cover this area).', 'terrain', 'warn');

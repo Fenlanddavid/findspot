@@ -201,7 +201,9 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 opts.nhleData
                     ? Promise.resolve(null)
                     : cachedLookup?.nhleData
-                        ? Promise.resolve(cachedLookup.nhleData)
+                        ? cachedLookup.nhleData.available === false
+                            ? fetchScheduledMonuments(west, south, east, north, signal)
+                            : Promise.resolve(cachedLookup.nhleData)
                     : fetchScheduledMonuments(west, south, east, north, signal),
                 opts.aimData
                     ? Promise.resolve(null)
@@ -356,7 +358,11 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             let monumentPoints = opts.monumentPoints;
             let heritageCount  = monumentPoints.length;
 
-            if (nhleRaw) {
+            if (nhleData.available === false) {
+                onLog('> NHLE: Scheduled monument service unavailable — landscape interpretation cannot confirm protected archaeology for this area.', 'historic', 'warn');
+                monumentPoints = [];
+                heritageCount = 0;
+            } else if (nhleRaw) {
                 // Freshly fetched — extract points and log
                 monumentPoints = (nhleData.features || []).map(f => {
                     if (f.geometry?.type === 'Point')        return f.geometry.coordinates as [number, number];
