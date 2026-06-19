@@ -9,7 +9,10 @@ import {
   importData,
   exportToCSV,
   markExternalBackupSaved,
+  estimateMediaSizeBytes,
+  MEDIA_EXPORT_WARN_BYTES,
 } from "../services/data";
+import { exportDiagLog } from "../services/diagLog";
 import { db } from "../db";
 import {
   FIELDGUIDE_PROPRIETARY_NOTICE,
@@ -155,8 +158,13 @@ export default function Settings() {
   const [restoreConfirmText, setRestoreConfirmText] = useState("");
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [exportingWithMedia, setExportingWithMedia] = useState(false);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [mediaPhotoCount, setMediaPhotoCount] = useState<number | null>(null);
+  const [mediaSizeBytes, setMediaSizeBytes] = useState<number | null>(null);
+  const [mediaWarnPending, setMediaWarnPending] = useState(false);
+  const [exportingDiagLog, setExportingDiagLog] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
   const [easterEggUnlocked, setEasterEggUnlocked] = useState(() => localStorage.getItem('fs_dev_egg') === '1');
   const [versionTapCount, setVersionTapCount] = useState(0);
@@ -190,6 +198,10 @@ export default function Settings() {
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
     getSetting("fs_geology_enabled", true).then(v => setGeologyEnabled(v !== false));
+    estimateMediaSizeBytes().then(({ count, bytes }) => {
+      setMediaPhotoCount(count);
+      setMediaSizeBytes(bytes);
+    }).catch(() => {});
 
   }, []);
 
@@ -326,7 +338,8 @@ export default function Settings() {
   async function handleExport() {
     setExporting(true);
     try {
-      const json = await exportData();
+      // Data-only by default — photos excluded to avoid OOM on mobile.
+      const json = await exportData({ includeMedia: false });
       triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
       const savedAt = await markExternalBackupSaved();
       setLastBackup(savedAt);
@@ -334,6 +347,43 @@ export default function Settings() {
       setDataError("Export failed: " + e);
     } finally {
       setExporting(false);
+    }
+  }
+
+  function requestExportWithMedia() {
+    // If estimated export size exceeds threshold, require explicit confirmation.
+    const estimatedBytes = (mediaSizeBytes ?? 0) * 1.37; // base64 overhead
+    if (estimatedBytes > MEDIA_EXPORT_WARN_BYTES) {
+      setMediaWarnPending(true);
+    } else {
+      void doExportWithMedia();
+    }
+  }
+
+  async function doExportWithMedia() {
+    setMediaWarnPending(false);
+    setExportingWithMedia(true);
+    try {
+      const json = await exportData({ includeMedia: true });
+      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-full-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      const savedAt = await markExternalBackupSaved();
+      setLastBackup(savedAt);
+    } catch (e) {
+      setDataError("Full backup failed: " + e);
+    } finally {
+      setExportingWithMedia(false);
+    }
+  }
+
+  async function handleExportDiagLog() {
+    setExportingDiagLog(true);
+    try {
+      const json = await exportDiagLog();
+      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-diagnostics-${new Date().toISOString().slice(0, 10)}.json`);
+    } catch (e) {
+      setDataError("Diagnostic log export failed: " + e);
+    } finally {
+      setExportingDiagLog(false);
     }
   }
 
@@ -551,7 +601,23 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1fr] gap-3 mb-8">
+      {mediaWarnPending && (
+        <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-4 text-sm text-amber-900 dark:text-amber-200">
+          <p className="font-black mb-1">Large backup — confirm before proceeding</p>
+          <p className="mb-3 text-amber-800/80 dark:text-amber-300/80">
+            Estimated export size is {mediaSizeBytes !== null ? `~${Math.round((mediaSizeBytes * 1.37) / (1024 * 1024))} MB` : "large"}.
+            On older devices this may be slow or run out of memory.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={doExportWithMedia} disabled={exportingWithMedia} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">
+              {exportingWithMedia ? "Saving…" : "Proceed with full backup"}
+            </button>
+            <button onClick={() => setMediaWarnPending(false)} className="text-amber-800 dark:text-amber-300 text-xs font-bold hover:underline px-2">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1fr] gap-3">
         <button
           onClick={handleExport}
           disabled={exporting}
@@ -569,6 +635,42 @@ export default function Settings() {
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
         >
           {exportingCSV ? "Exporting…" : "Export CSV"}
+        </button>
+      </div>
+
+      {/* Media size info + full backup */}
+      <div className="mt-3 mb-8 flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="font-bold">Backup JSON</span> saves records only (no photos).
+          {mediaPhotoCount !== null && mediaPhotoCount > 0 && mediaSizeBytes !== null && (
+            <> {mediaPhotoCount} photo{mediaPhotoCount !== 1 ? 's' : ''} on device
+              ({Math.round(mediaSizeBytes / (1024 * 1024))} MB raw).</>
+          )}
+          {mediaPhotoCount === 0 && ' No photos stored.'}
+        </p>
+        {mediaPhotoCount !== null && mediaPhotoCount > 0 && (
+          <button
+            onClick={requestExportWithMedia}
+            disabled={exportingWithMedia || mediaWarnPending}
+            className="shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest px-3 py-2 rounded-lg hover:border-emerald-400 disabled:opacity-60 transition-colors"
+          >
+            {exportingWithMedia ? "Saving…" : "Backup + Photos"}
+          </button>
+        )}
+      </div>
+
+      {/* Diagnostic log export */}
+      <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+        <div>
+          <p className="text-xs font-black text-gray-700 dark:text-gray-200">Diagnostic Log</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">On-device error log for field troubleshooting. Never sent anywhere.</p>
+        </div>
+        <button
+          onClick={handleExportDiagLog}
+          disabled={exportingDiagLog}
+          className="shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-black uppercase tracking-widest px-3 py-2 rounded-lg hover:border-gray-400 disabled:opacity-60 transition-colors"
+        >
+          {exportingDiagLog ? "Exporting…" : "Export Log"}
         </button>
       </div>
       </>
@@ -906,17 +1008,17 @@ export default function Settings() {
         </section>
 
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
-          <h2 className="text-xl font-bold mb-1">External Data Sources</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-            FieldGuide can request geology data from public map services to improve landscape interpretation. These requests send only the selected map tile location — no finds, permissions or sessions leave your device.
-          </p>
+	          <h2 className="text-xl font-bold mb-1">External Data Sources</h2>
+	          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+	            FieldGuide may request public map and heritage datasets for the area being viewed. These requests do not include your finds, permissions, sessions, notes or photos.
+	          </p>
 
           <div className="flex justify-between items-start py-3 border-t border-gray-100 dark:border-gray-700">
             <div className="flex-1 pr-4">
-              <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">BGS Geology Context</div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-                Use online BGS geology context where available. Geology context uses a read-only proxy to request public BGS map data for the selected scan tile. Finds, permissions and sessions are never sent.
-              </div>
+	              <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">BGS Geology Context</div>
+	              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+	                Optional public BGS geology lookup for the current map area. Personal FindSpot records are never sent.
+	              </div>
             </div>
             <button
               onClick={async () => {
@@ -930,14 +1032,15 @@ export default function Settings() {
                   : 'bg-gray-100 border-gray-200 text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-500'
               }`}
             >
-              {geologyEnabled ? 'On' : 'Off'}
-            </button>
-          </div>
+	              {geologyEnabled ? 'On' : 'Off'}
+	            </button>
+	          </div>
 
-          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-            <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
-              <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
-              <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
+	          <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+	            <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+	              <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
+		              <p>Scheduled Monument and AIM data are provided through public Historic England map services.</p>
+	              <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
               <p>Wales LiDAR data © Crown copyright, Natural Resources Wales / Welsh Government. Licensed under the Open Government Licence v3.0. Source: DataMapWales (datamap.gov.wales).</p>
               <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>
             </div>

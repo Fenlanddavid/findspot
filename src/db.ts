@@ -418,6 +418,21 @@ export type FieldGuideScanCache = {
   historicLookup?: any;   // standalone Historic button source cache
 };
 
+// ─── On-device diagnostic ring buffer ────────────────────────────────────────
+// Never transmitted. User-exportable from Settings > Backup.
+// Hard cap 2,000 entries — oldest are pruned on write past the cap.
+
+export type DiagLogLevel = 'info' | 'warn' | 'error';
+
+export type DiagLogEntry = {
+  id: string;
+  ts: string;         // ISO 8601
+  level: DiagLogLevel;
+  scope: string;      // e.g. 'export', 'restore', 'alie', 'historicScan'
+  message: string;
+  detail?: string;    // stringified error or extra context
+};
+
 // ─── Landscape interpretation cache ──────────────────────────────────────────
 // Caches ALIE v5 LandscapeInterpretation results per geohash6 cell.
 // Last-write-wins. Typed as any to avoid coupling db.ts to the engine layer.
@@ -448,6 +463,7 @@ export class FindSpotDB extends Dexie {
   geologyContext!: Table<GeologyContextRecord, string>;
   findHotspotSignals!: Table<FindHotspotSignal, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
+  diagnosticLog!: Table<DiagLogEntry, string>;
 
   constructor() {
     super("findspot_uk");
@@ -653,6 +669,13 @@ export class FindSpotDB extends Dexie {
     // feature was pulled before any meaningful data accumulated.
     this.version(30).stores({
       autoBackups: null,
+    });
+
+    // v32: on-device diagnostic ring buffer (2,000 entry cap).
+    // Additive — no user data migration. Existing records untouched.
+    // Privacy: never transmitted; user-exportable from Settings.
+    this.version(32).stores({
+      diagnosticLog: 'id, ts, level, scope',
     });
 
     // v31: ALIE v5 landscape interpretation cache.

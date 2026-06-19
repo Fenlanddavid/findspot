@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { diagLog } from '../../services/diagLog';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
@@ -474,6 +475,11 @@ function AlieSection({
     setAlieLoading,
     landscapeIntelligenceMap,
 }: AlieSectionProps) {
+    // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
+    // Prevents a stale cache read or slow worker result from clobbering a
+    // newer cell's state when the user pans quickly between geohash6 cells.
+    const alieRequestSeqRef = useRef(0);
+
     // ── On scan complete: load cached result then fire worker ─────────────────
     useEffect(() => {
         if (!historicScanComplete || loadingPAS) return;
@@ -482,6 +488,8 @@ function AlieSection({
         if (!center) return;
 
         const geohash6 = geohashEncode(center.lat, center.lng, 6);
+        const requestSeq = ++alieRequestSeqRef.current;
+
         const nhleFeatures = nhleDataRef.current?.features ?? [];
         const aimFeatures  = aimDataRef.current?.features ?? [];
 
@@ -542,6 +550,10 @@ function AlieSection({
         ].join('|');
 
         db.landscapeInterpretations.get(geohash6).then(cached => {
+            // Guard: bail if the user has panned to a different cell while the
+            // cache read was in flight. Same-cell re-requests still update
+            // because requestSeq will match alieRequestSeqRef.current.
+            if (alieRequestSeqRef.current !== requestSeq) return;
             const cachedInterpretation = cached?.interpretation as LandscapeInterpretation | undefined;
             if (
                 cachedInterpretation?.engineVersion === ALIE_ENGINE_VERSION &&
@@ -549,7 +561,7 @@ function AlieSection({
             ) {
                 setLandscapeInterpretation(cachedInterpretation);
             }
-        }).catch(() => { /* cache read failure is non-fatal */ });
+        }).catch((e: unknown) => diagLog.warn('alie', 'Cache read failed', String(e)));
 
         if (workerRef.current) {
             workerRef.current.terminate();
@@ -586,8 +598,16 @@ function AlieSection({
             workerRef.current = worker;
 
             worker.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerOutput>) => {
+                // Guard: discard result if the user panned to a newer cell.
+                if (alieRequestSeqRef.current !== requestSeq) {
+                    worker.terminate();
+                    workerRef.current = null;
+                    return;
+                }
                 setAlieLoading(false);
-                if (event.data.result) {
+                if (event.data.error) {
+                    diagLog.error('alie', 'Worker pipeline error', event.data.error);
+                } else if (event.data.result) {
                     const result = event.data.result;
                     console.log('[ALIE] result', {
                         recordSparsity: result.recordSparsity,
@@ -603,20 +623,22 @@ function AlieSection({
                         geologyTileKey,
                         inputSignature,
                         interpretation: result,
-                    }).catch(() => { /* write failure non-fatal */ });
+                    }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', String(e)));
                 }
                 worker.terminate();
                 workerRef.current = null;
             };
 
-            worker.onerror = () => {
+            worker.onerror = (e: ErrorEvent) => {
+                diagLog.error('alie', 'Worker error', e.message ?? 'unknown');
                 setAlieLoading(false);
                 worker.terminate();
                 workerRef.current = null;
             };
 
             worker.postMessage(input);
-        } catch {
+        } catch (e) {
+            diagLog.error('alie', 'Failed to start worker', String(e));
             setAlieLoading(false);
         }
 

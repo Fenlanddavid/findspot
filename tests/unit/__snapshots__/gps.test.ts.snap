@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`toOSGridRef — regression snapshots > produces stable output for all fixture points 1`] = `
+[
+  {
+    "name": "Buckingham Palace, London",
+    "ref10": "TQ 29067 79687",
+    "ref6": "TQ 290 796",
+    "ref8": "TQ 2906 7968",
+  },
+  {
+    "name": "Edinburgh Castle",
+    "ref10": "NT 25163 73490",
+    "ref6": "NT 251 734",
+    "ref8": "NT 2516 7349",
+  },
+  {
+    "name": "Manchester Cathedral",
+    "ref10": "SJ 83919 98614",
+    "ref6": "SJ 839 986",
+    "ref8": "SJ 8391 9861",
+  },
+  {
+    "name": "Ben Nevis summit",
+    "ref10": "NN 16677 71287",
+    "ref6": "NN 166 712",
+    "ref8": "NN 1667 7128",
+  },
+]
+`;

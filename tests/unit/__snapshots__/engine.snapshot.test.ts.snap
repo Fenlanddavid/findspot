@@ -1,0 +1,1408 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 1`] = `
+{
+  "depositionAffinity": {
+    "convergenceMet": false,
+    "noteTemplateId": null,
+  },
+  "evidenceAssessment": {
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "behaviourInteractions": [
+      {
+        "contradictingEvidence": [],
+        "drivers": [
+          "occupation_potential",
+          "landscape_prominence",
+        ],
+        "interactionId": "hilltop_settlement",
+        "label": "Hilltop Settlement",
+        "reasoning": "Occupation and prominence signals combine where higher ground could have offered visibility and defensibility.",
+        "score": 30,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+    ],
+    "confidenceSummary": "High confidence: multiple datasets broadly agree with limited contradiction.",
+    "contradictingEvidence": [],
+    "contradictingPercent": 0,
+    "landscapeEngines": [
+      {
+        "contradictingEvidence": [],
+        "engineId": "landscape_opportunity",
+        "label": "Landscape Opportunity",
+        "reasoning": "Opportunity measures the features that would have attracted repeated activity, including water, route access, resources, shelter and visibility.",
+        "score": 19,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "engineId": "landscape_constraint",
+        "label": "Landscape Constraint",
+        "reasoning": "Constraint measures evidence that discourages or complicates activity, such as wet ground, floodplain influence, steep slope or poor drainage.",
+        "score": 0,
+        "supportingEvidence": [],
+        "tier": "very_low",
+      },
+      {
+        "contradictingEvidence": [
+          {
+            "id": "sparse_records",
+            "label": "Few recorded historic datasets agree here",
+            "polarity": "missing",
+            "source": "historic_records",
+            "strength": "moderate",
+            "weight": 16,
+          },
+          {
+            "id": "limited_terrain_expression",
+            "label": "Terrain expression is limited in available scan data",
+            "polarity": "missing",
+            "source": "remote_sensing",
+            "strength": "weak",
+            "weight": 10,
+          },
+        ],
+        "engineId": "landscape_memory",
+        "label": "Landscape Memory",
+        "reasoning": "Memory measures whether the same landscape appears suitable for reuse through time, especially where routes, dry ground, monuments or multi-period records persist.",
+        "score": 12,
+        "supportingEvidence": [],
+        "tier": "very_low",
+      },
+    ],
+    "landscapeSummary": "Supporting evidence accounts for 100% of the weighted model evidence; contradictory evidence accounts for 0%.",
+    "missingEvidence": [
+      {
+        "id": "sparse_records",
+        "label": "Few recorded historic datasets agree here",
+        "polarity": "missing",
+        "source": "historic_records",
+        "strength": "moderate",
+        "weight": 16,
+      },
+      {
+        "id": "limited_terrain_expression",
+        "label": "Terrain expression is limited in available scan data",
+        "polarity": "missing",
+        "source": "remote_sensing",
+        "strength": "weak",
+        "weight": 10,
+      },
+    ],
+    "periodLikelihood": [
+      {
+        "contradictingEvidence": [],
+        "period": "prehistoric_bronze_age",
+        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 48,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "moderate",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "romano_british",
+        "reasoning": "Romano-British likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 27,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "iron_age",
+        "reasoning": "Iron Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 24,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "medieval",
+        "reasoning": "Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 23,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "early_medieval",
+        "reasoning": "Early Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 20,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+    ],
+    "primaryInfluencingFactors": [
+      "Slightly elevated or overlooking ground",
+      "Terrace or dry edge position",
+      "landscape prominence signal is moderate",
+    ],
+    "suggestedInterpretation": "Possible burial or commemorative use",
+    "supportingEvidence": [
+      {
+        "id": "slight_elevation",
+        "label": "Slightly elevated or overlooking ground",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "moderate",
+        "weight": 19,
+      },
+      {
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "moderate",
+        "weight": 12,
+      },
+      {
+        "id": "process_landscape_prominence",
+        "label": "landscape prominence signal is moderate",
+        "polarity": "supporting",
+        "source": "derived_model",
+        "strength": "weak",
+        "weight": 10,
+      },
+    ],
+    "supportingPercent": 100,
+  },
+  "geohash6": "gcpvhp",
+  "interpretationScores": [
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 33.97,
+      "interpretationId": "settlement_activity_area",
+      "periodAffinity": [
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.05,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "agricultural_landscape",
+      "periodAffinity": [
+        {
+          "period": "medieval",
+          "weight": 0.3,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 15,
+      "interpretationId": "movement_corridor",
+      "periodAffinity": [
+        {
+          "period": "romano_british",
+          "weight": 0.3,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "riverine_activity",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.15,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.14,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.14,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.14,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "industrial_landscape",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.3,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.25,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.1,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 25,
+      "interpretationId": "transition_zone",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.15,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.14,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.14,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.14,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "moderate",
+      "derivedScore": 60,
+      "interpretationId": "burial_landscape",
+      "periodAffinity": [
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.5,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.12,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.09,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.09,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.06,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.03,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 33,
+      "interpretationId": "defensive_landscape",
+      "periodAffinity": [
+        {
+          "period": "iron_age",
+          "weight": 0.25,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+  ],
+  "narrative": {
+    "periodSubstitution": "prehistoric_bronze_age",
+    "signalSubstitutions": [
+      "sits on a slight elevation overlooking lower ground",
+      "occupies a terrace edge",
+    ],
+    "templateId": "burial_landscape_barrow_tentative",
+  },
+  "primaryInterpretationId": "burial_landscape",
+  "processScores": [
+    {
+      "contributingSignals": [
+        "slight_elevation",
+        "terrace_edge",
+      ],
+      "finalScore": 30.099999999999998,
+      "processId": "occupation_potential",
+      "rawScore": 30.099999999999998,
+      "regionalMultiplier": 1,
+      "subComponents": [
+        {
+          "id": "settlement_suitability",
+          "score": 43,
+        },
+        {
+          "id": "agricultural_suitability",
+          "score": 0,
+        },
+      ],
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 15,
+      "processId": "movement",
+      "rawScore": 15,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 0,
+      "processId": "resource_exploitation",
+      "rawScore": 0,
+      "regionalMultiplier": 1,
+      "subComponents": [
+        {
+          "id": "agricultural_resource",
+          "score": 0,
+        },
+        {
+          "id": "extractive_resource",
+          "score": 0,
+        },
+      ],
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 0,
+      "processId": "water_relationships",
+      "rawScore": 0,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [
+        "slight_elevation",
+      ],
+      "finalScore": 55,
+      "processId": "landscape_prominence",
+      "rawScore": 55,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [
+        "terrace_edge",
+      ],
+      "finalScore": 25,
+      "processId": "boundary_relationships",
+      "rawScore": 25,
+      "regionalMultiplier": 1,
+    },
+  ],
+  "recordSparsity": true,
+  "scheduledMonumentOverlap": false,
+  "secondaryInterpretationId": "settlement_activity_area",
+  "temporalPersistence": "transient",
+  "uncertainty": "high",
+}
+`;
+
+exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = `
+{
+  "depositionAffinity": {
+    "convergenceMet": false,
+    "noteTemplateId": null,
+  },
+  "evidenceAssessment": {
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "behaviourInteractions": [
+      {
+        "contradictingEvidence": [],
+        "drivers": [
+          "occupation_potential",
+          "landscape_prominence",
+        ],
+        "interactionId": "hilltop_settlement",
+        "label": "Hilltop Settlement",
+        "reasoning": "Occupation and prominence signals combine where higher ground could have offered visibility and defensibility.",
+        "score": 30,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+    ],
+    "confidenceSummary": "High confidence: multiple datasets broadly agree with limited contradiction.",
+    "contradictingEvidence": [],
+    "contradictingPercent": 0,
+    "landscapeEngines": [
+      {
+        "contradictingEvidence": [],
+        "engineId": "landscape_opportunity",
+        "label": "Landscape Opportunity",
+        "reasoning": "Opportunity measures the features that would have attracted repeated activity, including water, route access, resources, shelter and visibility.",
+        "score": 19,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "engineId": "landscape_constraint",
+        "label": "Landscape Constraint",
+        "reasoning": "Constraint measures evidence that discourages or complicates activity, such as wet ground, floodplain influence, steep slope or poor drainage.",
+        "score": 0,
+        "supportingEvidence": [],
+        "tier": "very_low",
+      },
+      {
+        "contradictingEvidence": [
+          {
+            "id": "sparse_records",
+            "label": "Few recorded historic datasets agree here",
+            "polarity": "missing",
+            "source": "historic_records",
+            "strength": "moderate",
+            "weight": 16,
+          },
+          {
+            "id": "limited_terrain_expression",
+            "label": "Terrain expression is limited in available scan data",
+            "polarity": "missing",
+            "source": "remote_sensing",
+            "strength": "weak",
+            "weight": 10,
+          },
+        ],
+        "engineId": "landscape_memory",
+        "label": "Landscape Memory",
+        "reasoning": "Memory measures whether the same landscape appears suitable for reuse through time, especially where routes, dry ground, monuments or multi-period records persist.",
+        "score": 12,
+        "supportingEvidence": [],
+        "tier": "very_low",
+      },
+    ],
+    "landscapeSummary": "Supporting evidence accounts for 100% of the weighted model evidence; contradictory evidence accounts for 0%.",
+    "missingEvidence": [
+      {
+        "id": "sparse_records",
+        "label": "Few recorded historic datasets agree here",
+        "polarity": "missing",
+        "source": "historic_records",
+        "strength": "moderate",
+        "weight": 16,
+      },
+      {
+        "id": "limited_terrain_expression",
+        "label": "Terrain expression is limited in available scan data",
+        "polarity": "missing",
+        "source": "remote_sensing",
+        "strength": "weak",
+        "weight": 10,
+      },
+    ],
+    "periodLikelihood": [
+      {
+        "contradictingEvidence": [],
+        "period": "prehistoric_bronze_age",
+        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 48,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "moderate",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "romano_british",
+        "reasoning": "Romano-British likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 27,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "iron_age",
+        "reasoning": "Iron Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 24,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "medieval",
+        "reasoning": "Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 23,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "early_medieval",
+        "reasoning": "Early Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 20,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 19,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+        ],
+        "tier": "low",
+      },
+    ],
+    "primaryInfluencingFactors": [
+      "Slightly elevated or overlooking ground",
+      "Terrace or dry edge position",
+      "landscape prominence signal is moderate",
+    ],
+    "suggestedInterpretation": "Possible burial or commemorative use",
+    "supportingEvidence": [
+      {
+        "id": "slight_elevation",
+        "label": "Slightly elevated or overlooking ground",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "moderate",
+        "weight": 19,
+      },
+      {
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "moderate",
+        "weight": 12,
+      },
+      {
+        "id": "process_landscape_prominence",
+        "label": "landscape prominence signal is moderate",
+        "polarity": "supporting",
+        "source": "derived_model",
+        "strength": "weak",
+        "weight": 10,
+      },
+    ],
+    "supportingPercent": 100,
+  },
+  "geohash6": "gcpvhp",
+  "interpretationScores": [
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 33.97,
+      "interpretationId": "settlement_activity_area",
+      "periodAffinity": [
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.05,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "agricultural_landscape",
+      "periodAffinity": [
+        {
+          "period": "medieval",
+          "weight": 0.3,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 15,
+      "interpretationId": "movement_corridor",
+      "periodAffinity": [
+        {
+          "period": "romano_british",
+          "weight": 0.3,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "riverine_activity",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.15,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.14,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.14,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.14,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "industrial_landscape",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.3,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.25,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.1,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 25,
+      "interpretationId": "transition_zone",
+      "periodAffinity": [
+        {
+          "period": "post_medieval",
+          "weight": 0.15,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0.15,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.14,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.14,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.14,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.14,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "moderate",
+      "derivedScore": 60,
+      "interpretationId": "burial_landscape",
+      "periodAffinity": [
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.5,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.12,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.09,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.09,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.06,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.03,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 33,
+      "interpretationId": "defensive_landscape",
+      "periodAffinity": [
+        {
+          "period": "iron_age",
+          "weight": 0.25,
+        },
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.2,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.2,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.2,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.1,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+  ],
+  "narrative": {
+    "periodSubstitution": "prehistoric_bronze_age",
+    "signalSubstitutions": [
+      "sits on a slight elevation overlooking lower ground",
+      "occupies a terrace edge",
+    ],
+    "templateId": "scheduled_monument_notice",
+  },
+  "primaryInterpretationId": "burial_landscape",
+  "processScores": [
+    {
+      "contributingSignals": [
+        "slight_elevation",
+        "terrace_edge",
+      ],
+      "finalScore": 30.099999999999998,
+      "processId": "occupation_potential",
+      "rawScore": 30.099999999999998,
+      "regionalMultiplier": 1,
+      "subComponents": [
+        {
+          "id": "settlement_suitability",
+          "score": 43,
+        },
+        {
+          "id": "agricultural_suitability",
+          "score": 0,
+        },
+      ],
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 15,
+      "processId": "movement",
+      "rawScore": 15,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 0,
+      "processId": "resource_exploitation",
+      "rawScore": 0,
+      "regionalMultiplier": 1,
+      "subComponents": [
+        {
+          "id": "agricultural_resource",
+          "score": 0,
+        },
+        {
+          "id": "extractive_resource",
+          "score": 0,
+        },
+      ],
+    },
+    {
+      "contributingSignals": [],
+      "finalScore": 0,
+      "processId": "water_relationships",
+      "rawScore": 0,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [
+        "slight_elevation",
+      ],
+      "finalScore": 55,
+      "processId": "landscape_prominence",
+      "rawScore": 55,
+      "regionalMultiplier": 1,
+    },
+    {
+      "contributingSignals": [
+        "terrace_edge",
+      ],
+      "finalScore": 25,
+      "processId": "boundary_relationships",
+      "rawScore": 25,
+      "regionalMultiplier": 1,
+    },
+  ],
+  "recordSparsity": true,
+  "scheduledMonumentOverlap": true,
+  "secondaryInterpretationId": "settlement_activity_area",
+  "temporalPersistence": "transient",
+  "uncertainty": "high",
+}
+`;
+
+exports[`hotspotEngine — (a) terrain cluster produces a hotspot > snapshot 1`] = `
+[
+  {
+    "bounds": [
+      [
+        52.4996,
+        -1.5004,
+      ],
+      [
+        52.5004,
+        -1.4996,
+      ],
+    ],
+    "center": [
+      52.5,
+      -1.5,
+    ],
+    "classification": "Multi-Signal Activity Zone",
+    "classificationReason": "Mixed signals from multiple independent sources",
+    "confidence": "Developing Signal",
+    "disturbanceRisk": undefined,
+    "explanation": [
+      "Multi-season cropmark agreement",
+      "LiDAR + Hydrology correlation",
+      "LiDAR + Spectral agreement",
+      "Reliable LiDAR relief signature",
+    ],
+    "id": "hs-5250000--150000",
+    "isHighConfidenceCrossing": false,
+    "isOnCorridor": false,
+    "linkedCount": 0,
+    "memberIds": [
+      "c1",
+    ],
+    "metrics": {
+      "anomaly": 33,
+      "behaviour": 0,
+      "context": 2,
+      "convergence": 6,
+      "penalty": 0,
+      "signalClassCount": 3,
+      "signalCount": 4,
+    },
+    "number": 1,
+    "role": undefined,
+    "scale": undefined,
+    "score": 38,
+    "secondaryTag": undefined,
+    "soilMechanics": undefined,
+    "suggestedFocus": undefined,
+    "type": "General Activity Zone",
+  },
+]
+`;
+
+exports[`hotspotEngine — (b) no clusters produces empty output > snapshot 1`] = `[]`;
+
+exports[`hotspotEngine — (c) protected cluster (scheduled monument) > snapshot 1`] = `[]`;

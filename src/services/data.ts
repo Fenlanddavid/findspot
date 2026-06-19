@@ -12,8 +12,20 @@ export async function markExternalBackupSaved() {
   return now;
 }
 
+// Threshold above which a media-included export triggers a UI size warning.
+export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB (base64-inflated estimate)
+
+export async function estimateMediaSizeBytes(): Promise<{ count: number; bytes: number }> {
+  const media = await db.media.toArray();
+  // Sum raw blob sizes. Base64 encoding adds ~37% overhead; caller multiplies if needed.
+  const bytes = media.reduce((sum, m) => sum + (m.blob instanceof Blob ? m.blob.size : 0), 0);
+  return { count: media.length, bytes };
+}
+
 export async function exportData(options: { includeMedia?: boolean } = {}): Promise<string> {
-  const includeMedia = options.includeMedia !== false;
+  // Default is data-only to avoid OOM on mobile when photo libraries are large.
+  // Pass { includeMedia: true } explicitly to include photos.
+  const includeMedia = options.includeMedia === true;
 
   const projects = await db.projects.toArray();
   const permissions = await db.permissions.toArray();
@@ -132,7 +144,7 @@ function assertRowsHaveId(rows: any[], table: string) {
   });
 }
 
-function validateBackupData(data: any): BackupData {
+export function validateBackupData(data: any): BackupData {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid backup file: expected an object.");
   }
