@@ -26,6 +26,8 @@ export interface AdaptedSignals {
     hasNHLEBurialRecord: boolean;
     hasNHLEDefenceRecord: boolean;
     hasNHLEIndustrialRecord: boolean;
+    hasNHLECeremonialRecord: boolean;
+    ceremonialRecordCount: number;
 
     // All feature descriptions for matching
     nhleDescriptions: string[];
@@ -35,7 +37,11 @@ export interface AdaptedSignals {
 
 // ─── Period mapping ───────────────────────────────────────────────────────────
 
-const BURIAL_TYPES = ['barrow', 'cemetery', 'tumulus', 'round barrow', 'long barrow', 'cairn'];
+const BURIAL_TYPES = ['barrow', 'cemetery', 'tumulus', 'round barrow', 'long barrow', 'cairn', 'ring ditch'];
+// Multi-word / unambiguous terms — safe for substring matching
+const CEREMONIAL_TYPES_PHRASE = ['henge', 'stone circle', 'stone setting', 'standing stone', 'cursus', 'causewayed enclosure', 'timber circle'];
+// Short terms — require word-boundary matching to avoid "covered", "territorial", etc.
+const CEREMONIAL_TYPES_WORD = ['cove', 'sarsen', 'monolith', 'ceremonial', 'ritual'];
 const DEFENCE_TYPES = ['hillfort', 'hill fort', 'castle', 'fort', 'motte', 'bailey', 'moat', 'moated', 'pillbox', 'anti-tank', 'military', 'battery', 'redoubt'];
 const INDUSTRIAL_TYPES = ['ironwork', 'kiln', 'mine', 'quarry', 'furnace', 'smithing', 'pottery', 'industrial', 'manufact', 'brick', 'lime', 'mill', 'extraction'];
 const AGRICULTURAL_TYPES = ['ridge and furrow', 'ridge', 'furrow', 'field system', 'field boundary', 'cultivation', 'lynchet', 'plough'];
@@ -65,6 +71,11 @@ function mapCertaintyWeight(raw: string | undefined): number {
 function containsAny(text: string, terms: string[]): boolean {
     const lower = text.toLowerCase();
     return terms.some(t => lower.includes(t));
+}
+
+function containsAnyWord(text: string, terms: string[]): boolean {
+    const lower = text.toLowerCase();
+    return terms.some(t => new RegExp(`\\b${t}\\b`).test(lower));
 }
 
 // ─── Main extraction function ─────────────────────────────────────────────────
@@ -192,6 +203,12 @@ export function extractSignals(
     const hasNHLEIndustrialRecord = nhleDescriptions.some(d => containsAny(d, INDUSTRIAL_TYPES)) ||
         aimTypes.some(t => containsAny(t.toLowerCase(), INDUSTRIAL_TYPES));
 
+    const ceremonialDescriptions = [...nhleDescriptions, ...aimTypes.map(t => t.toLowerCase())];
+    const ceremonialRecordCount = ceremonialDescriptions.filter(d =>
+        containsAny(d, CEREMONIAL_TYPES_PHRASE) || containsAnyWord(d, CEREMONIAL_TYPES_WORD),
+    ).length;
+    const hasNHLECeremonialRecord = ceremonialRecordCount > 0;
+
     return {
         periodAggregates,
         recordSparsity,
@@ -206,6 +223,8 @@ export function extractSignals(
         hasNHLEBurialRecord,
         hasNHLEDefenceRecord,
         hasNHLEIndustrialRecord,
+        hasNHLECeremonialRecord,
+        ceremonialRecordCount,
         nhleDescriptions,
         aimPeriods,
         aimTypes,

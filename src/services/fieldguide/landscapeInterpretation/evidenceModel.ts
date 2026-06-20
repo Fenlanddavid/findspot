@@ -45,6 +45,7 @@ const INTERPRETATION_LABELS: Record<SecondaryInterpretationId, string> = {
     transition_zone:            'boundary or edge-zone use',
     burial_landscape:           'burial or commemorative use',
     defensive_landscape:        'defensive or controlling use',
+    ceremonial_ritual:          'Ceremonial / Ritual Landscape',
 };
 
 const SIGNAL_EVIDENCE: Record<string, { label: string; source: EvidenceSource }> = {
@@ -428,6 +429,13 @@ export function computeEvidenceAssessment(
     temporalPersistence: TemporalPersistenceLabel,
 ): ArchaeologicalEvidenceAssessment {
     const signalEvidence = buildSignalEvidence(processScores);
+
+    if (signals.hasNHLECeremonialRecord) {
+        signalEvidence.push(evidence(
+            'recorded_ceremonial_monument',
+            'Recorded ceremonial or ritual monument in area',
+            'historic_records', 16));
+    }
 
     const processEvidence = processScores
         .filter(p => p.finalScore >= 35)

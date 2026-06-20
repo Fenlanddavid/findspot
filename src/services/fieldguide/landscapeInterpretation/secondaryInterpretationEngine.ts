@@ -27,6 +27,7 @@ export const CONFIDENCE_CEILINGS: Record<SecondaryInterpretationId, ConfidenceTi
     transition_zone:            'moderate',
     burial_landscape:           'moderate',   // bumped to 'high' if NHLE burial record present
     defensive_landscape:        'moderate',   // bumped to 'high' if NHLE defence record present
+    ceremonial_ritual:          'very_high',
 };
 
 // ─── Period affinity static weights ──────────────────────────────────────────
@@ -64,6 +65,10 @@ const PERIOD_AFFINITIES: Record<SecondaryInterpretationId, Record<Archaeological
     defensive_landscape: {
         prehistoric_bronze_age: 0.20, iron_age: 0.25, romano_british: 0.20,
         early_medieval: 0.10, medieval: 0.20, post_medieval: 0.05, modern_industrial: 0.0,
+    },
+    ceremonial_ritual: {
+        prehistoric_bronze_age: 0.60, iron_age: 0.15, romano_british: 0.10,
+        early_medieval: 0.05, medieval: 0.05, post_medieval: 0.05, modern_industrial: 0.0,
     },
 };
 
@@ -110,6 +115,7 @@ export function computeSecondaryInterpretations(
     burial: BurialBehaviourResult,
     defensive: DefensiveBehaviourResult,
     hasNHLEIndustrialRecord: boolean,
+    ceremonialRecordCount: number,
 ): SecondaryInterpretationScore[] {
     const results: SecondaryInterpretationScore[] = [];
 
@@ -132,8 +138,15 @@ export function computeSecondaryInterpretations(
     // ── agricultural_landscape ────────────────────────────────────────────────
     {
         const id: SecondaryInterpretationId = 'agricultural_landscape';
-        const derivedScore = getSubScore(processScores, 'resource_exploitation', 'agricultural_resource');
-        const tier = capTier(scoreToTier(derivedScore), CONFIDENCE_CEILINGS[id]);
+        let derivedScore = getSubScore(processScores, 'resource_exploitation', 'agricultural_resource');
+        const resourceProc = processScores.find(p => p.processId === 'resource_exploitation');
+        const ridgeFurrowFired = resourceProc?.contributingSignals?.includes('ridge_and_furrow') ?? false;
+        let ceiling = CONFIDENCE_CEILINGS[id];
+        if (!ridgeFurrowFired) {
+            derivedScore = Math.min(derivedScore, 34); // geology-only inference cannot headline
+            ceiling = 'lower';
+        }
+        const tier = capTier(scoreToTier(derivedScore), ceiling);
         results.push({
             interpretationId: id,
             derivedScore: Math.min(100, Math.max(0, derivedScore)),
@@ -199,7 +212,7 @@ export function computeSecondaryInterpretations(
     {
         const id: SecondaryInterpretationId = 'burial_landscape';
         const derivedScore = Math.max(burial.barrowLandscape, burial.cemeteryLandscape);
-        const ceiling = defensive.nhleRecordPresent ? 'high' : CONFIDENCE_CEILINGS[id];
+        const ceiling = burial.nhleRecordPresent ? 'high' : CONFIDENCE_CEILINGS[id];
 
         // Override period affinity based on dominant sub-score
         let affinities = buildPeriodAffinity(id);
@@ -240,6 +253,26 @@ export function computeSecondaryInterpretations(
         });
     }
 
+    // ── ceremonial_ritual ─────────────────────────────────────────────────────
+    {
+        const id: SecondaryInterpretationId = 'ceremonial_ritual';
+        // Record-led — no score at all without at least one matched record
+        const derivedScore = ceremonialRecordCount === 0 ? 0 : (() => {
+            const prominence = getProcessScore(processScores, 'landscape_prominence');
+            const water = getProcessScore(processScores, 'water_relationships');
+            const base = 58;
+            const countBump = Math.min(Math.max(ceremonialRecordCount - 1, 0), 4) * 8;
+            return Math.min(100, base + countBump + prominence * 0.15 + water * 0.10);
+        })();
+        const tier = capTier(scoreToTier(derivedScore), CONFIDENCE_CEILINGS[id]);
+        results.push({
+            interpretationId: id,
+            derivedScore: Math.min(100, Math.max(0, derivedScore)),
+            periodAffinity: buildPeriodAffinity(id),
+            confidenceTier: tier,
+        });
+    }
+
     return results;
 }
 
@@ -249,6 +282,22 @@ export function selectPrimaryAndSecondary(
     interpretations: SecondaryInterpretationScore[],
 ): { primaryId: SecondaryInterpretationId | null; secondaryId: SecondaryInterpretationId | null } {
     const sorted = [...interpretations].sort((a, b) => b.derivedScore - a.derivedScore);
+
+    // Recorded ceremonial monuments outrank inferred land use
+    const ceremonial = interpretations.find(i => i.interpretationId === 'ceremonial_ritual');
+    if (ceremonial && ceremonial.derivedScore >= 50) {
+        const burial = interpretations.find(i => i.interpretationId === 'burial_landscape');
+        let secondaryId: SecondaryInterpretationId | null = null;
+        if (burial && burial.derivedScore >= 30) {
+            secondaryId = 'burial_landscape';
+        } else {
+            const nextBest = sorted.find(i =>
+                i.interpretationId !== 'ceremonial_ritual' && i.derivedScore >= 30,
+            );
+            secondaryId = nextBest?.interpretationId ?? null;
+        }
+        return { primaryId: 'ceremonial_ritual', secondaryId };
+    }
 
     const agricultural = interpretations.find(i => i.interpretationId === 'agricultural_landscape');
     const movement = interpretations.find(i => i.interpretationId === 'movement_corridor');

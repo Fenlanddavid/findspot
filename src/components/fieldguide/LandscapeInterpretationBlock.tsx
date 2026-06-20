@@ -26,6 +26,7 @@ const INTERPRETATION_LABELS: Record<SecondaryInterpretationId, string> = {
     transition_zone:            'Transition Zone',
     burial_landscape:           'Burial Landscape',
     defensive_landscape:        'Defensive Landscape',
+    ceremonial_ritual:          'Ceremonial / Ritual Landscape',
 };
 
 const CONFIDENCE_LABELS: Record<ConfidenceTier, string> = {
@@ -79,6 +80,8 @@ const FIND_TYPE_TEXT: Partial<Record<SecondaryInterpretationId, string>> = {
         'Tool fragments, ironworking waste, smithing-related fittings',
     transition_zone:
         'Boundary-adjacent loss, occasional market-related items, jettons',
+    ceremonial_ritual:
+        'Votive deposits, structured deposition, occasional prestige metalwork; context is archaeologically sensitive',
 };
 
 // Defensive variants depend on period branch — handled in template logic
@@ -291,6 +294,17 @@ export function LandscapeInterpretationBlock({ interpretation, loading = false }
             <p className="text-[8px] font-black text-blue-300/70 uppercase tracking-[0.2em]">
                 Archaeological Interpretation
             </p>
+
+            {scheduledMonumentOverlap && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5">
+                    <p className="text-[8px] font-black text-amber-300/80 uppercase tracking-[0.18em] mb-1">
+                        Protected — Scheduled Monument
+                    </p>
+                    <p className="text-[10px] font-bold text-amber-100/90 leading-snug">
+                        {getTemplateText('scheduled_monument_notice')}
+                    </p>
+                </div>
+            )}
 
             {/* 1. Landscape assessment summary */}
             <div className="space-y-2">

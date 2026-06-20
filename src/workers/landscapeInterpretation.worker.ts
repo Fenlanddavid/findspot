@@ -22,7 +22,7 @@ import { isScheduledMonumentOverlap }                                  from '../
 import { generateHedgedNarrative }                                     from '../services/fieldguide/landscapeInterpretation/narrativeGenerator';
 import { computeEvidenceAssessment }                                   from '../services/fieldguide/landscapeInterpretation/evidenceModel';
 
-const ENGINE_VERSION = 'ALIE-2026.06.17h';
+const ENGINE_VERSION = 'ALIE-2026.06.20a';
 
 self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
     try {
@@ -98,6 +98,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             burialResult,
             defensiveResult,
             signals.hasNHLEIndustrialRecord,
+            signals.ceremonialRecordCount,
         );
 
         // ── 8. Primary / secondary selection ─────────────────────────────────

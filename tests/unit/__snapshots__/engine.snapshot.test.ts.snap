@@ -585,6 +585,41 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         },
       ],
     },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "ceremonial_ritual",
+      "periodAffinity": [
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.6,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
   ],
   "narrative": {
     "periodSubstitution": "prehistoric_bronze_age",
@@ -1248,6 +1283,41 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         {
           "period": "early_medieval",
           "weight": 0.1,
+        },
+        {
+          "period": "post_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "modern_industrial",
+          "weight": 0,
+        },
+      ],
+    },
+    {
+      "confidenceTier": "lower",
+      "derivedScore": 0,
+      "interpretationId": "ceremonial_ritual",
+      "periodAffinity": [
+        {
+          "period": "prehistoric_bronze_age",
+          "weight": 0.6,
+        },
+        {
+          "period": "iron_age",
+          "weight": 0.15,
+        },
+        {
+          "period": "romano_british",
+          "weight": 0.1,
+        },
+        {
+          "period": "early_medieval",
+          "weight": 0.05,
+        },
+        {
+          "period": "medieval",
+          "weight": 0.05,
         },
         {
           "period": "post_medieval",

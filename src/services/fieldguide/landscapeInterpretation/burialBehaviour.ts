@@ -14,6 +14,7 @@ export interface BurialBehaviourResult {
     cemeteryLandscape: number;  // 0–100
     mortuaryComplex: boolean;   // barrow_landscape > 65 AND persistent temporal label
     dominantSubScore: 'barrow' | 'cemetery';
+    nhleRecordPresent: boolean;
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
@@ -77,5 +78,6 @@ export function computeBurialBehaviour(
         cemeteryLandscape: cemeteryScore,
         mortuaryComplex,
         dominantSubScore,
+        nhleRecordPresent: hasNHLEBurialRecord,
     };
 }

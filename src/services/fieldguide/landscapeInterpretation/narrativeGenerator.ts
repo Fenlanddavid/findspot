@@ -72,6 +72,10 @@ export const TEMPLATES: Record<string, string> = {
         'The persistent prominence of this location, combined with a strong barrow landscape signature, is consistent with locations used repeatedly as mortuary monuments across generations.',
     temporal_persistence_sparsity:
         'Recorded heritage data for this area is limited. How long this landscape remained in active use cannot be assessed from available records alone.',
+    ceremonial_ritual_confident:
+        'This area shows characteristics of a ceremonial or ritual landscape — recorded monuments of ceremonial type, often with prominence and structured placement, mark locations used for gathering, observance and commemoration, predominantly in the Neolithic and Bronze Age.',
+    ceremonial_ritual_tentative:
+        'Some features here are consistent with a ceremonial or ritual landscape, though the signal is limited. Recorded monument context and landscape setting are noted as relevant.',
     scheduled_monument_notice:
         'One or more Scheduled Monuments are recorded within or near this area. Under the Ancient Monuments and Archaeological Areas Act 1979, searching on or within a Scheduled Monument without consent from Historic England is a criminal offence. Check the Historic Environment Record and the National Heritage List before any fieldwork.',
 };
@@ -167,6 +171,9 @@ export function selectTemplateId(
             }
             return confident ? 'defensive_landscape_pre_modern_confident' : 'defensive_landscape_pre_modern_tentative';
         }
+
+        case 'ceremonial_ritual':
+            return confident ? 'ceremonial_ritual_confident' : 'ceremonial_ritual_tentative';
 
         default:
             return 'mixed_indeterminate';

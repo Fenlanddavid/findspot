@@ -9,7 +9,7 @@ import { db } from '../../db';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
 import type { Cluster, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
-const ALIE_ENGINE_VERSION = 'ALIE-2026.06.17h';
+const ALIE_ENGINE_VERSION = 'ALIE-2026.06.20a';
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 // Self-contained — avoids coupling to engine layer.

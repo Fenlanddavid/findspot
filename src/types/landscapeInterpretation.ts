@@ -51,7 +51,8 @@ export type SecondaryInterpretationId =
     | 'industrial_landscape'
     | 'transition_zone'
     | 'burial_landscape'
-    | 'defensive_landscape';
+    | 'defensive_landscape'
+    | 'ceremonial_ritual';
 
 export type ArchaeologicalPeriod =
     | 'prehistoric_bronze_age'

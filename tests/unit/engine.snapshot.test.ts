@@ -92,7 +92,7 @@ function runAliePipeline(input: LandscapeInterpretationWorkerInput) {
   const burialResult    = computeBurialBehaviour(processScores, signals.periodAggregates, temporalPersistence, signals.hasNHLEBurialRecord);
   const defensiveResult = computeDefensiveBehaviour(processScores, signals.periodAggregates, signals.nhleDescriptions, input.slopePercent, signals.hasNHLEDefenceRecord);
 
-  const interpretationScores = computeSecondaryInterpretations(processScores, burialResult, defensiveResult, signals.hasNHLEIndustrialRecord);
+  const interpretationScores = computeSecondaryInterpretations(processScores, burialResult, defensiveResult, signals.hasNHLEIndustrialRecord, signals.ceremonialRecordCount);
   const { primaryId: primaryInterpretationId, secondaryId: secondaryInterpretationId } = selectPrimaryAndSecondary(interpretationScores);
   const depositionAffinity = computeDepositionAffinity(processScores, interpretationScores, signals);
 
