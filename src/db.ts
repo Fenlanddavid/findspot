@@ -671,19 +671,19 @@ export class FindSpotDB extends Dexie {
       autoBackups: null,
     });
 
-    // v32: on-device diagnostic ring buffer (2,000 entry cap).
-    // Additive — no user data migration. Existing records untouched.
-    // Privacy: never transmitted; user-exportable from Settings.
-    this.version(32).stores({
-      diagnosticLog: 'id, ts, level, scope',
-    });
-
     // v31: ALIE v5 landscape interpretation cache.
     // Stores the most recent LandscapeInterpretation result per geohash6 cell.
     // Last-write-wins — new results overwrite old ones. No upgrade() handler
     // needed — new empty table; existing user data is untouched.
     this.version(31).stores({
       landscapeInterpretations: "&geohash6, generatedAt",
+    });
+
+    // v32: on-device diagnostic ring buffer (2,000 entry cap).
+    // Additive — no user data migration. Existing records untouched.
+    // Privacy: never transmitted; user-exportable from Settings.
+    this.version(32).stores({
+      diagnosticLog: 'id, ts, level, scope',
     });
   }
 }

@@ -15,6 +15,7 @@ import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
+import { usePersistedHotspotSignals } from '../../hooks/usePersistedHotspotSignals';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -223,6 +224,7 @@ export function MobileBottomSheet() {
     } = useFieldGuideContext();
     const [expandedGeologyId,       setExpandedGeologyId]       = React.useState<string | null>(null);
     const [expandedLandscapeHotspot, setExpandedLandscapeHotspot] = React.useState<string | null>(null);
+    const persistedSignals = usePersistedHotspotSignals(hotspots);
 
     if (!(!isIntelOpen || historicMode || selectedMonument !== undefined || !!selectedUserFind || !!selectedPASFind || (!!selectedId && !selectedHotspotId))) {
         return null;
@@ -792,6 +794,18 @@ export function MobileBottomSheet() {
                                             </span>
                                         </div>
                                         <p className="text-[9px] font-bold text-white/65 leading-snug">{feedback.note}</p>
+                                    </div>
+                                );
+                            })()}
+                            {(() => {
+                                const persisted = persistedSignals.get(h.id);
+                                if (!persisted) return null;
+                                return (
+                                    <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5 space-y-1">
+                                        <span className="text-[7px] font-black uppercase tracking-widest text-amber-400">
+                                            Track record
+                                        </span>
+                                        <p className="text-[9px] font-bold text-white/65 leading-snug">{persisted.note}</p>
                                     </div>
                                 );
                             })()}

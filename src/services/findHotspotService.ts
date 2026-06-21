@@ -1,5 +1,5 @@
 import { db } from '../db';
-import type { Find } from '../db';
+import type { Find, FindHotspotSignal } from '../db';
 import type { Hotspot } from '../pages/fieldGuideTypes';
 import { getDistance } from '../utils/fieldGuideAnalysis';
 import { HOTSPOT_TITLES } from '../components/fieldGuide/FieldGuideContext';
@@ -323,4 +323,84 @@ export function buildFindHotspotAnnotation(
         distanceM: bestMatch.status === 'within' ? null : Math.round(bestMatch.dist),
         note,
     };
+}
+
+// ─── Part 4: persisted signal read path ──────────────────────────────────────
+
+export interface PersistedSignalSummary {
+    geohash6:     string;
+    totalFinds:   number;
+    periods:      string[];
+    sessionsSeen: number;
+    note:         string;
+}
+
+/** Read all persisted signals for a cell (by geohash6 index), across permissions.
+ *  center is [lon, lat] — same convention as hotspot.center. */
+export async function getCellSignals(center: [number, number]): Promise<FindHotspotSignal[]> {
+    const gh = geohashEncode(center[1], center[0], 6);
+    try {
+        return await db.findHotspotSignals.where('geohash6').equals(gh).toArray();
+    } catch {
+        return [];
+    }
+}
+
+/** Pure aggregator — no DB, no async. Returns null if nothing accumulated. */
+export function summarisePersistedSignals(
+    records: FindHotspotSignal[],
+): PersistedSignalSummary | null {
+    if (records.length === 0) return null;
+
+    const merged: Record<string, number> = {};
+    let totalFinds = 0;
+    for (const r of records) {
+        totalFinds += r.findCount;
+        for (const [p, c] of Object.entries(r.periodCounts)) {
+            merged[p] = (merged[p] ?? 0) + c;
+        }
+    }
+    if (totalFinds === 0) return null;
+
+    const periods = Object.entries(merged).sort((a, b) => b[1] - a[1]).map(([p]) => p);
+
+    let periodStr = '';
+    if (periods.length === 1) periodStr = periods[0];
+    else if (periods.length === 2) periodStr = `${periods[0]} and ${periods[1]}`;
+    else if (periods.length >= 3) periodStr = `${periods[0]} and other periods`;
+
+    const note = periodStr
+        ? `${totalFinds} find${totalFinds !== 1 ? 's' : ''} logged here across past sessions — ${periodStr}.`
+        : `${totalFinds} find${totalFinds !== 1 ? 's' : ''} logged here across past sessions.`;
+
+    return {
+        geohash6:     records[0].geohash6,
+        totalFinds,
+        periods,
+        sessionsSeen: records.length,
+        note,
+    };
+}
+
+/** Per-permission rollup. Not consumed by the UI yet — ships the read path
+ *  complete for future Permission-page track record display. */
+export async function getPermissionSignalSummary(
+    permissionId: string,
+): Promise<{ corroboratedCells: number; totalFinds: number; periods: string[] }> {
+    try {
+        const rows = await db.findHotspotSignals.where('permissionId').equals(permissionId).toArray();
+        const merged: Record<string, number> = {};
+        let totalFinds = 0;
+        for (const r of rows) {
+            totalFinds += r.findCount;
+            for (const [p, c] of Object.entries(r.periodCounts)) merged[p] = (merged[p] ?? 0) + c;
+        }
+        return {
+            corroboratedCells: rows.length,
+            totalFinds,
+            periods: Object.entries(merged).sort((a, b) => b[1] - a[1]).map(([p]) => p),
+        };
+    } catch {
+        return { corroboratedCells: 0, totalFinds: 0, periods: [] };
+    }
 }
