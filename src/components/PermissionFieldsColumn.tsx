@@ -5,6 +5,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { area as turfArea } from "@turf/turf";
 import { db, GeoJSONPolygon, Field } from "../db";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
+import {
+  BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
+  type BasemapMode,
+} from "./permission/basemaps";
 
 const landTypes = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -157,6 +161,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [shownFieldGapIds, setShownFieldGapIds] = useState<Set<string>>(new Set());
     const [fieldGapResults, setFieldGapResults] = useState<Map<string, CoverageResult>>(new Map());
     const [fieldGapErrors, setFieldGapErrors] = useState<Set<string>>(new Set());
+    const [mapStyle, setMapStyle] = useState<BasemapMode>('satellite');
     const showCoverage = false; // always false, kept for effect
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
     const [coverageError, setCoverageError] = useState(false); // dead but keep
@@ -231,15 +236,8 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                 container: mapDivRef.current,
                 style: {
                     version: 8,
-                    sources: {
-                        "raster-tiles": {
-                            type: "raster",
-                            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-                            tileSize: 256,
-                            attribution: "© Esri World Imagery"
-                        }
-                    },
-                    layers: [{ id: "base", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
+                    sources: { ...BASEMAP_SOURCES },
+                    layers:  [ ...BASEMAP_LAYERS ],
                 },
                 center: [lon || -2, lat || 54.5],
                 zoom: 16,
@@ -250,6 +248,8 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
             }
 
             map.on("load", () => {
+                applyBasemap(map, mapStyle);
+
                 map.addSource("boundary", {
                     type: "geojson",
                     data: boundary || { type: "FeatureCollection", features: [] }
@@ -466,6 +466,12 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
             }
         };
     }, [boundary, fields, permissionId, isEditing]);
+
+    // Basemap toggle effect — switches layers without rebuilding the map
+    useEffect(() => {
+        const m = mapRef.current;
+        if (m && m.isStyleLoaded()) applyBasemap(m, mapStyle);
+    }, [mapStyle]);
 
     // Coverage display effect
     useEffect(() => {
@@ -1181,6 +1187,23 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {/* Map Preview */}
                         <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                             <div ref={mapDivRef} className="absolute inset-0" />
+                            {/* Basemap toggle */}
+                            <div className="absolute top-2 left-2 z-10 flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                                {BASEMAP_MODES.map(m => (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => setMapStyle(m.id)}
+                                        aria-pressed={mapStyle === m.id}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                            mapStyle === m.id
+                                                ? "bg-emerald-600 text-white shadow-sm"
+                                                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        }`}
+                                    >
+                                        {m.emoji} {m.label}
+                                    </button>
+                                ))}
+                            </div>
 
                             {/* Permission-level stats — shown when boundary tapped and no sub-fields exist */}
                             {permissionSelected && (!fields || fields.length === 0) && (

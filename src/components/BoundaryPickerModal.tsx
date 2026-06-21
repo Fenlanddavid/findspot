@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Modal } from "./Modal";
+import {
+  BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
+  type BasemapMode,
+} from "./permission/basemaps";
 
 interface BoundaryPickerModalProps {
   initialBoundary?: any; // GeoJSON Polygon
@@ -47,7 +51,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [points, setPoints] = useState<[number, number][]>([]);
-  const [mapStyle, setMapStyle] = useState<"streets" | "satellite">("satellite");
+  const [mapStyle, setMapStyle] = useState<BasemapMode>("satellite");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -97,28 +101,25 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     }
   }, [initialBoundary]);
 
+  // Separate effect: switch basemap layers without rebuilding the map.
+  // Runs whenever mapStyle changes AFTER the map has been built.
+  useEffect(() => {
+    const m = mapRef.current;
+    if (m && m.isStyleLoaded()) applyBasemap(m, mapStyle);
+  }, [mapStyle]);
+
+  // Map build effect — runs ONCE on mount (mapStyle not in deps).
+  // Basemap is set via applyBasemap() inside map.on('load'), keeping the
+  // camera and any in-progress drawn points stable across layer switches.
   useEffect(() => {
     if (!mapDivRef.current) return;
-
-    const style = mapStyle === "streets"
-      ? "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      : "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
     const map = new maplibregl.Map({
       container: mapDivRef.current,
       style: {
         version: 8,
-        sources: {
-          "base": {
-            type: "raster",
-            tiles: [style],
-            tileSize: 256,
-            attribution: mapStyle === "streets" ? "© OpenStreetMap" : "© Esri World Imagery"
-          }
-        },
-        layers: [
-          { id: "base", type: "raster", source: "base" }
-        ]
+        sources: { ...BASEMAP_SOURCES },
+        layers:  [ ...BASEMAP_LAYERS ],
       },
       center: initialLon && initialLat ? [initialLon, initialLat] : [-2, 54.5],
       zoom: initialLon && initialLat ? 16 : 5,
@@ -140,6 +141,8 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
 
     map.on("load", () => {
+      applyBasemap(map, mapStyle);
+
       map.addSource("boundary", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
@@ -281,7 +284,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     mapRef.current = map;
 
     return () => map.remove();
-  }, [mapStyle]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const map = mapRef.current;
@@ -339,12 +342,22 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             {searchError && (
               <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
             )}
-            <button
-              onClick={() => setMapStyle(prev => prev === "streets" ? "satellite" : "streets")}
-              className="w-fit bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-lg shadow-md text-[10px] font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all uppercase"
-            >
-              {mapStyle === "streets" ? "🛰️ Satellite" : "🗺️ Streets"}
-            </button>
+            <div className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+              {BASEMAP_MODES.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setMapStyle(m.id)}
+                  aria-pressed={mapStyle === m.id}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    mapStyle === m.id
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {m.emoji} {m.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
