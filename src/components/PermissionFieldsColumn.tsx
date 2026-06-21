@@ -714,7 +714,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                   <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Event Site & Fields" : "Field Setup & Geometry"}</div>
                   <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                 </div>
-                <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
+                <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-4 sm:p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 grid gap-4">
                     <div className="flex flex-col sm:flex-row gap-2">
                         <button
                             type="button"
@@ -755,15 +755,15 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     {/* Fields inside Geometry box */}
                     {isEdit && (
                         <div className="grid gap-3 border-t-2 border-emerald-200/70 dark:border-emerald-700/50 pt-5 mt-1">
-                            <div className="flex justify-between items-start gap-3">
-                                <div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
+                                <div className="min-w-0">
                                     <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">{isRally ? "Rally Fields / Detecting Areas" : "Sub-Fields / Specific Areas"}</h4>
                                     <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">{isRally ? "Add the mapped field boundaries that can be shared in the Club Day QR pack." : "Break larger permissions into manageable working areas."}</p>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => onAddField()}
-                                    className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
+                                    className="w-full sm:w-auto text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
                                 >
                                     {isRally ? "+ Add Field" : "+ Add Sub-Field"}
                                 </button>
@@ -771,14 +771,14 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             {fields && fields.length > 0 ? (
                                 <div className="grid grid-cols-1 gap-2">
                                     {fields.map((f) => (
-                                        <div key={f.id} className="flex items-center gap-3 bg-white dark:bg-gray-800/80 border border-emerald-100 dark:border-emerald-800/60 px-3 py-2.5 rounded-xl shadow-sm">
+                                        <div key={f.id} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white dark:bg-gray-800/80 border border-emerald-100 dark:border-emerald-800/60 px-3 py-2.5 rounded-xl shadow-sm">
                                             <div className="min-w-0 flex-1">
                                                 <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
                                                 <div className="text-[10px] mt-0.5 font-medium text-emerald-600/70 dark:text-emerald-400/70">
                                                     {f.boundary ? "Boundary mapped" : "No boundary yet"}
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
+                                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                                                 <button
                                                     type="button"
                                                     onClick={() => onShowFieldNotes(f.id)}
@@ -1188,13 +1188,13 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                             <div ref={mapDivRef} className="absolute inset-0" />
                             {/* Basemap toggle */}
-                            <div className="absolute top-2 left-2 z-10 flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                            <div className="absolute top-2 left-2 right-2 sm:right-auto z-10 grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
                                 {BASEMAP_MODES.map(m => (
                                     <button
                                         key={m.id}
                                         onClick={() => setMapStyle(m.id)}
                                         aria-pressed={mapStyle === m.id}
-                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                        className={`px-2 py-1.5 sm:py-1 rounded-lg text-[10px] font-bold leading-tight transition-all ${
                                             mapStyle === m.id
                                                 ? "bg-emerald-600 text-white shadow-sm"
                                                 : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"

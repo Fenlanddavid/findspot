@@ -20,11 +20,11 @@ export const BASEMAP_MODES: { id: BasemapMode; label: string; emoji: string }[] 
 
 export const BASEMAP_SOURCES: Record<string, maplibregl.RasterSourceSpecification> = {
     'bm-streets': {
-        type: 'raster', tileSize: 256, attribution: '© OpenStreetMap',
+        type: 'raster', tileSize: 256, maxzoom: 19, attribution: '© OpenStreetMap',
         tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
     },
     'bm-satellite': {
-        type: 'raster', tileSize: 256, attribution: '© Esri World Imagery',
+        type: 'raster', tileSize: 256, maxzoom: 19, attribution: '© Esri World Imagery',
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     },
     'bm-os': {

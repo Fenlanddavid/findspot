@@ -88,12 +88,12 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
           />
         </label>
 
-        <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex items-center justify-between">
+        <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-4 sm:p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Field Boundary</div>
             <button 
                 type="button" 
                 onClick={() => setIsPickingBoundary(true)} 
-                className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-all border ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-emerald-600 border-emerald-100 dark:border-emerald-900 hover:bg-emerald-600 hover:text-white'}`}
+                className={`w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-xl text-xs font-bold shadow-sm transition-all border ${boundary ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white dark:bg-gray-800 text-emerald-600 border-emerald-100 dark:border-emerald-900 hover:bg-emerald-600 hover:text-white'}`}
             >
                 {boundary ? "📐 Boundary Set ✓" : "📐 Define Boundary"}
             </button>
@@ -115,7 +115,7 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
         <button
           onClick={handleSave}
           disabled={saving || !name.trim() || !boundary}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all disabled:opacity-50"
+          className="bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg shadow-xl transition-all disabled:opacity-50"
         >
           {saving ? "Saving..." : field ? "Update Field ✓" : "Add Field →"}
         </button>

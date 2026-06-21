@@ -315,26 +315,26 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
 
   return (
     <Modal title="Define Field Boundary" onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl text-xs font-medium text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
+      <div className="flex flex-col gap-3 sm:gap-4">
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2.5 sm:p-4 rounded-xl text-[11px] sm:text-xs leading-snug font-medium text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
           Tap the corners of the field to place points. Hold and drag a dot to reposition it.
         </div>
 
-        <div className="relative h-[400px] sm:h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner">
+        <div className="relative h-[52svh] min-h-[340px] max-h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner">
           <div ref={mapDivRef} className="absolute inset-0" />
 
-          <div className="absolute top-4 left-4 flex flex-col gap-2 z-10 max-w-[calc(100%-100px)]">
+          <div className="absolute top-3 left-3 right-16 sm:top-4 sm:left-4 sm:right-auto flex flex-col gap-2 z-10 sm:max-w-[calc(100%-100px)]">
             <form onSubmit={handleSearch} className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search area..."
-                className="bg-transparent text-xs font-bold px-2 py-1 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
+                className="min-w-0 bg-transparent text-xs font-bold px-2 py-1.5 outline-none w-full sm:w-48 text-gray-800 dark:text-gray-100"
               />
               <button
                 type="submit"
                 disabled={isSearching}
-                className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                className="shrink-0 bg-emerald-600 text-white px-2 py-1 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
               >
                 {isSearching ? "..." : "🔍"}
               </button>
@@ -342,13 +342,13 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             {searchError && (
               <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
             )}
-            <div className="flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
               {BASEMAP_MODES.map(m => (
                 <button
                   key={m.id}
                   onClick={() => setMapStyle(m.id)}
                   aria-pressed={mapStyle === m.id}
-                  className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                  className={`px-2 py-1.5 sm:py-1 rounded-lg text-[10px] font-bold leading-tight transition-all ${
                     mapStyle === m.id
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -360,11 +360,11 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             </div>
           </div>
 
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+          <div className="absolute bottom-12 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex justify-center gap-2">
             <button
               onClick={undo}
               disabled={points.length === 0}
-              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
+              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
             >
               ↩ Undo Point
             </button>
@@ -372,7 +372,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
               <button
                 onClick={() => setConfirmingClear(true)}
                 disabled={points.length === 0}
-                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-4 py-2 rounded-xl shadow-lg text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
               >
                 🗑️ Clear
               </button>
@@ -386,17 +386,17 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
           </div>
         </div>
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-1 sm:pt-2">
           <button
             onClick={handleSave}
             disabled={points.length < 3}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-lg shadow-xl transition-all disabled:opacity-50"
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg shadow-xl transition-all disabled:opacity-50"
           >
             Save Boundary ✓
           </button>
           <button
             onClick={onClose}
-            className="px-8 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold hover:bg-gray-200 transition-all"
+            className="px-6 sm:px-8 py-3 sm:py-0 bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-2xl font-bold hover:bg-gray-200 transition-all"
           >
             Cancel
           </button>
