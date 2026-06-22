@@ -56,6 +56,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
 
   // Refs for drag state — accessible inside map event handlers without stale closures
   const pointsRef = useRef<[number, number][]>([]);
@@ -283,8 +284,30 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
 
     mapRef.current = map;
 
-    return () => map.remove();
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const id = requestAnimationFrame(() => map.resize());
+    return () => cancelAnimationFrame(id);
+  }, [isMapExpanded]);
+
+  useEffect(() => {
+    if (!isMapExpanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setIsMapExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [isMapExpanded]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -320,7 +343,13 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
           Tap the corners of the field to place points. Hold and drag a dot to reposition it.
         </div>
 
-        <div className="relative h-[52svh] min-h-[340px] max-h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner">
+        <div
+          className={
+            isMapExpanded
+              ? "fixed inset-0 z-[200] bg-gray-100 dark:bg-black overflow-hidden"
+              : "relative h-[52svh] min-h-[340px] max-h-[500px] bg-gray-100 dark:bg-black rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 shadow-inner"
+          }
+        >
           <div ref={mapDivRef} className="absolute inset-0" />
 
           <div className="absolute top-3 left-3 right-16 sm:top-4 sm:left-4 sm:right-auto flex flex-col gap-2 z-10 sm:max-w-[calc(100%-100px)]">
@@ -342,26 +371,27 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             {searchError && (
               <p className="text-xs font-medium text-red-600 bg-white/90 dark:bg-gray-800/90 px-2 py-1 rounded-lg shadow-sm">{searchError}</p>
             )}
-            <div className="grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
               {BASEMAP_MODES.map(m => (
                 <button
                   key={m.id}
                   onClick={() => setMapStyle(m.id)}
                   aria-pressed={mapStyle === m.id}
-                  className={`px-2 py-1.5 sm:py-1 rounded-lg text-[10px] font-bold leading-tight transition-all ${
+                  className={`px-1.5 py-1 rounded-md text-[9px] font-bold leading-tight transition-all ${
                     mapStyle === m.id
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                   }`}
                 >
-                  {m.emoji} {m.label}
+                  {m.label}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="absolute bottom-12 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex justify-center gap-2">
+          <div className="absolute bottom-16 left-3 right-3 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 flex justify-center gap-2">
             <button
+              type="button"
               onClick={undo}
               disabled={points.length === 0}
               className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
@@ -370,6 +400,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             </button>
             {!confirmingClear ? (
               <button
+                type="button"
                 onClick={() => setConfirmingClear(true)}
                 disabled={points.length === 0}
                 className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
@@ -379,11 +410,20 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
             ) : (
               <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur flex items-center gap-1 px-2 py-1 rounded-xl shadow-lg border border-red-200 dark:border-red-800">
                 <span className="text-[10px] font-bold text-red-600">Clear all?</span>
-                <button onClick={clear} className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">Yes</button>
-                <button onClick={() => setConfirmingClear(false)} className="text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">No</button>
+                <button type="button" onClick={clear} className="bg-red-600 text-white px-2 py-0.5 rounded text-[10px] font-bold">Yes</button>
+                <button type="button" onClick={() => setConfirmingClear(false)} className="text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold">No</button>
               </div>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsMapExpanded(v => !v)}
+            aria-label={isMapExpanded ? "Exit full screen" : "Expand map to full screen"}
+            className="absolute bottom-4 left-4 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest"
+          >
+            {isMapExpanded ? "✕ Exit full screen" : "⛶ Full screen"}
+          </button>
         </div>
 
         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 pt-1 sm:pt-2">

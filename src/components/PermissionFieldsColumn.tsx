@@ -165,6 +165,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const showCoverage = false; // always false, kept for effect
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
     const [coverageError, setCoverageError] = useState(false); // dead but keep
+    const [isMapExpanded, setIsMapExpanded] = useState(false);
 
     // Refs
     const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -472,6 +473,26 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
         const m = mapRef.current;
         if (m && m.isStyleLoaded()) applyBasemap(m, mapStyle);
     }, [mapStyle]);
+
+    // MapLibre needs an explicit resize after CSS expands or collapses its container.
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const id = requestAnimationFrame(() => map.resize());
+        return () => cancelAnimationFrame(id);
+    }, [isMapExpanded]);
+
+    useEffect(() => {
+        if (!isMapExpanded) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.stopPropagation();
+                setIsMapExpanded(false);
+            }
+        };
+        window.addEventListener("keydown", onKey, true);
+        return () => window.removeEventListener("keydown", onKey, true);
+    }, [isMapExpanded]);
 
     // Coverage display effect
     useEffect(() => {
@@ -1185,29 +1206,35 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         </div>
 
                         {/* Map Preview */}
-                        <div className="relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
+                        <div
+                            className={
+                                isMapExpanded
+                                    ? "fixed inset-0 z-[200] bg-gray-100 dark:bg-gray-900 overflow-hidden"
+                                    : "relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900"
+                            }
+                        >
                             <div ref={mapDivRef} className="absolute inset-0" />
                             {/* Basemap toggle */}
-                            <div className="absolute top-2 left-2 right-2 sm:right-auto z-10 grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-xl shadow-md border border-gray-200 dark:border-gray-700">
+                            <div className="absolute top-2 left-2 right-2 sm:right-auto z-10 grid grid-cols-2 sm:flex gap-1 bg-white/90 dark:bg-gray-800/90 backdrop-blur p-1 rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
                                 {BASEMAP_MODES.map(m => (
                                     <button
                                         key={m.id}
                                         onClick={() => setMapStyle(m.id)}
                                         aria-pressed={mapStyle === m.id}
-                                        className={`px-2 py-1.5 sm:py-1 rounded-lg text-[10px] font-bold leading-tight transition-all ${
+                                        className={`px-1.5 py-1 rounded-md text-[9px] font-bold leading-tight transition-all ${
                                             mapStyle === m.id
                                                 ? "bg-emerald-600 text-white shadow-sm"
                                                 : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                         }`}
                                     >
-                                        {m.emoji} {m.label}
+                                        {m.label}
                                     </button>
                                 ))}
                             </div>
 
                             {/* Permission-level stats — shown when boundary tapped and no sub-fields exist */}
                             {permissionSelected && (!fields || fields.length === 0) && (
-                                <div className="absolute bottom-3 left-3 right-3 bg-gray-900/90 backdrop-blur-sm rounded-xl border border-emerald-500/40 p-3 shadow-lg">
+                                <div className="absolute bottom-16 left-3 right-3 bg-gray-900/90 backdrop-blur-sm rounded-xl border border-emerald-500/40 p-3 shadow-lg">
                                     <div className="flex items-center justify-between mb-2">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Permission Area</p>
                                         <button onClick={() => setPermissionSelected(false)} aria-label="Close permission area summary" className="text-white/40 hover:text-white/80 text-xs leading-none">×</button>
@@ -1235,6 +1262,15 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                     )}
                                 </div>
                             )}
+
+                            <button
+                                type="button"
+                                onClick={() => setIsMapExpanded(v => !v)}
+                                aria-label={isMapExpanded ? "Exit full screen" : "Expand map to full screen"}
+                                className="absolute bottom-4 left-4 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest"
+                            >
+                                {isMapExpanded ? "✕ Exit full screen" : "⛶ Full screen"}
+                            </button>
                         </div>
 
                         {/* Sub-Fields Carousel */}
