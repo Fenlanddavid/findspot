@@ -58,7 +58,7 @@ export function ScanControlPanel() {
     return (
         <>
             <div className={`grid grid-cols-[auto_auto_1fr] gap-2 transition-[margin] duration-300 ${sheetExpanded ? '' : 'mt-3'}`} onClick={e => e.stopPropagation()}>
-                <button onClick={findMe} disabled={isLocating} className="min-h-[34px] bg-slate-800/90 text-slate-200 px-2.5 rounded-xl text-[8px] font-black tracking-widest uppercase hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap border border-white/10 shrink-0">
+                <button onClick={findMe} disabled={isLocating} className="min-h-[34px] bg-slate-800/90 text-slate-200 px-2.5 rounded-xl text-[0.5rem] font-black tracking-widest uppercase hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap border border-white/10 shrink-0">
                     {isLocating ? '...' : 'GPS'}
                 </button>
                 <button onClick={() => setFocusMode(v => !v)} className={`min-h-[34px] px-2.5 rounded-xl border shrink-0 transition-colors ${focusMode ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-slate-800/90 border-white/10 text-slate-200 hover:bg-slate-700 hover:text-white'}`} title={focusMode ? 'Exit focus' : 'Focus — full screen map'}>
@@ -70,7 +70,7 @@ export function ScanControlPanel() {
                 <button
                     onClick={hasScanResult ? clearScan : executeScan}
                     disabled={scanBusy}
-                    className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${hasScanResult ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500 text-white border-emerald-300/50 shadow-[0_0_12px_rgba(16,185,129,0.22)] hover:bg-emerald-400'}`}
+                    className={`min-h-[34px] px-3 rounded-xl text-[0.625rem] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${hasScanResult ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500 text-white border-emerald-300/50 shadow-[0_0_12px_rgba(16,185,129,0.22)] hover:bg-emerald-400'}`}
                 >
                     {scanBusy ? 'Reading...' : hasScanResult ? 'Clear Scan' : 'Scan Area'}
                 </button>
@@ -83,7 +83,7 @@ export function ScanControlPanel() {
                             value={activeHotspotId}
                             onChange={e => openHotspot(e.target.value)}
                             disabled={sortedHotspots.length === 0}
-                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
+                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[0.625rem] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
                         >
                             <option value="">Hotspots</option>
                             {sortedHotspots.map(h => (
@@ -99,12 +99,12 @@ export function ScanControlPanel() {
                             value={activeTargetId}
                             onChange={e => openTarget(e.target.value)}
                             disabled={displayTargets.length === 0}
-                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
+                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[0.625rem] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
                         >
                             <option value="">Targets</option>
                             {displayTargets.map(t => (
                                 <option key={t.id} value={t.id}>
-                                    {`${t.isProtected ? 'Scheduled Monument' : `Target ${t.number}`}${t.id === selectedId ? ' - Open' : ''}`}
+                                    {`${t.isProtected ? 'Scheduled Monument' : `Target ${t.number.toString().padStart(2, '0')}`}${t.id === selectedId ? ' - Open' : ''}`}
                                 </option>
                             ))}
                         </select>

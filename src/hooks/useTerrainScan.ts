@@ -159,8 +159,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const qEast  = bounds.getEast();
         const qNorth = bounds.getNorth();
         const scanStartBounds = { west: qWest, south: qSouth, east: qEast, north: qNorth };
-        const monumentQueryBounds = padBoundsByMetres(
-            qWest, qSouth, qEast, qNorth, center.lat, MONUMENT_BOUNDARY_BUFFER_M + 5,
+        // The terrain scanner always reads a fixed 3x3 tile footprint at Z16.
+        // Keep historic/protection lookups aligned to that footprint; using the
+        // visible viewport here makes zoomed-out scans pull thousands of records.
+        const contextQueryBounds = padBoundsByMetres(
+            scanWest, scanSouth, scanEast, scanNorth, center.lat, MONUMENT_BOUNDARY_BUFFER_M + 5,
         );
 
         // ── Fire route + ways fetches before cache check ──────────────────────
@@ -197,8 +200,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onStatusChange('Checking protected archaeology...');
                 // Still run NHLE/AIM/routes so the historic phase has fresh data.
                 const [nhleData, aimData] = await Promise.all([
-                    fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal),
-                    fetchAIMData(bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(), signal),
+                    fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal),
+                    fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal),
                 ]);
                 if (tokenRef.current !== token || signal.aborted || !mountedRef.current) { setIsScanning(false); return null; }
 
@@ -244,7 +247,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 // included here as it is in the fresh scan path, otherwise cached
                 // scans miss Roman road context and produce no corridor link lines.
                 try {
-                    const romanRoads = await fetchRomanRoads(qWest, qSouth, qEast, qNorth);
+                    const romanRoads = await fetchRomanRoads(scanWest, scanSouth, scanEast, scanNorth);
                     if (romanRoads.length > 0) routes = [...routes, ...romanRoads];
                 } catch { /* asset unavailable */ }
                 onStatusChange('Building hotspot model...');
@@ -303,8 +306,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // check — reuse them here. Fire remaining requests now.
         const waybackPromise = resolveWaybackIds();
 
-        const nhlePromise = fetchScheduledMonuments(monumentQueryBounds.west, monumentQueryBounds.south, monumentQueryBounds.east, monumentQueryBounds.north, signal);
-        const aimPromise  = fetchAIMData(qWest, qSouth, qEast, qNorth, signal);
+        const nhlePromise = fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
+        const aimPromise  = fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
 
         onStatusChange('Reading terrain...');
 
@@ -379,7 +382,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             // Itiner-e Roman roads — independent of OSM timeout; loads from static GeoJSON asset
             try {
-                const romanRoads = await fetchRomanRoads(qWest, qSouth, qEast, qNorth);
+                const romanRoads = await fetchRomanRoads(scanWest, scanSouth, scanEast, scanNorth);
                 if (romanRoads.length > 0) {
                     routes = [...routes, ...romanRoads];
                     onLog(`> Routes: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'terrain');

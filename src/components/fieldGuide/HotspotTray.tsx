@@ -85,6 +85,23 @@ function getProtectedTargetCopy(f: Cluster): { label: string; body: string; deta
     };
 }
 
+function TargetNumberBadge({ number }: { number: number }) {
+    return (
+        <span className="inline-flex items-center rounded-full border border-amber-300/25 bg-amber-300/8 px-2 py-0.5 text-[0.5rem] font-black text-amber-100/85 uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] shrink-0">
+            Target {number.toString().padStart(2, '0')}
+        </span>
+    );
+}
+
+function StartBadge() {
+    return (
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/45 bg-[linear-gradient(135deg,rgba(6,78,59,0.92),rgba(15,118,110,0.72)_55%,rgba(245,158,11,0.34))] px-2.5 py-1 text-[0.4375rem] font-black uppercase tracking-widest text-emerald-50 shadow-[0_0_0_1px_rgba(16,185,129,0.15),0_8px_22px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.22)] shrink-0">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+            Start
+        </span>
+    );
+}
+
 export function HotspotTray() {
     const {
         showSavedPoints,
@@ -122,7 +139,7 @@ export function HotspotTray() {
             {/* Hotspot list */}
             {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
                 <div>
-                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Landscape Hotspots</p>
+                    <p className="text-[0.5rem] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Landscape Hotspots</p>
                     <div className="space-y-2">
                         {sortedHotspots.map(h => {
                             const isPrimary = h.number === 1;
@@ -133,22 +150,22 @@ export function HotspotTray() {
                                 <button key={h.id} onClick={onClick} className="w-full text-left p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_14px_rgba(16,185,129,0.08)] active:scale-[0.98] transition-all hover:border-emerald-500/50">
                                     <div className="flex items-start justify-between gap-2 mb-1.5">
                                         <div className="min-w-0">
-                                            <p className="text-[8px] font-black text-white uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
+                                            <p className="text-[0.5rem] font-black text-white uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
                                             <p className="text-xs font-black text-emerald-300 leading-tight">{hier.signalStrength}</p>
                                         </div>
-                                        <span className="text-[7px] font-black text-emerald-500/50 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">Priority</span>
+                                        <span className="text-[0.4375rem] font-black text-emerald-500/50 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">Priority</span>
                                     </div>
-                                    <p className="text-[10px] font-bold text-emerald-200/70 leading-tight line-clamp-2">{hier.whyItMatters}</p>
+                                    <p className="text-[0.625rem] font-bold text-emerald-200/70 leading-tight line-clamp-2">{hier.whyItMatters}</p>
                                 </button>
                             );
                             return (
                                 <button key={h.id} onClick={onClick} className="w-full text-left px-3 py-2 rounded-xl bg-slate-900/40 border border-white/6 active:scale-[0.98] transition-all hover:border-white/12">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="min-w-0">
-                                            <p className="text-[8px] font-black text-white uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
-                                            <p className="text-[10px] font-bold text-white/70 leading-tight truncate">{hier.signalStrength}</p>
+                                            <p className="text-[0.5rem] font-black text-white uppercase tracking-widest mb-0.5">{HOTSPOT_TITLES[h.classification]}</p>
+                                            <p className="text-[0.625rem] font-bold text-white/70 leading-tight truncate">{hier.signalStrength}</p>
                                         </div>
-                                        <span className="text-[8px] font-black text-white/25 shrink-0 uppercase tracking-widest">{getPotentialTierShort(h.score)}</span>
+                                        <span className="text-[0.5rem] font-black text-white/25 shrink-0 uppercase tracking-widest">{getPotentialTierShort(h.score)}</span>
                                     </div>
                                 </button>
                             );
@@ -160,7 +177,7 @@ export function HotspotTray() {
             {/* Target list */}
             {!historicMode && mobileSheetMode === 'targets' && displayTargets.length > 0 && (
                 <div>
-                    <p className="text-[8px] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Investigation Targets</p>
+                    <p className="text-[0.5rem] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Investigation Targets</p>
                     <div className="space-y-2">
                         {displayTargets.map(f => {
                             const tI = buildTargetInterpretation(f);
@@ -173,15 +190,19 @@ export function HotspotTray() {
                                 >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="min-w-0">
-                                            {!f.isProtected && <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-emerald-100' : 'text-sky-200/55'}`}>{f.type}</p>}
+                                            {!f.isProtected && <p className={`text-[0.5rem] font-black uppercase tracking-widest mb-0.5 ${isPrimary ? 'text-emerald-100' : 'text-sky-200/55'}`}>{f.type}</p>}
                                             <p className={`text-xs font-black leading-tight ${f.isProtected ? 'text-stone-400' : isPrimary ? 'text-emerald-300' : 'text-white/78'}`}>
                                                 {f.isProtected ? getProtectedTargetCopy(f).label : getTargetVerdict(tI.signalStrength, isPrimary)}
                                             </p>
-                                            {!f.isProtected && <p className={`text-[10px] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
+                                            {!f.isProtected && <p className={`text-[0.625rem] font-bold leading-tight mt-0.5 line-clamp-2 ${isPrimary ? 'text-emerald-100/60' : 'text-white/45'}`}>{tI.hook}</p>}
                                         </div>
-                                        {isPrimary && !f.isProtected
-                                            ? <span className="text-[7px] font-black text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded-full shrink-0">Start</span>
-                                            : !f.isProtected && <span className="text-[8px] font-black uppercase tracking-widest text-white/24 shrink-0 pt-0.5">{getPotentialTierShort(f.findPotential)}</span>}
+                                        {!f.isProtected && (
+                                            <div className="flex flex-col items-end gap-1">
+                                                {isPrimary && <StartBadge />}
+                                                <TargetNumberBadge number={f.number} />
+                                                {!isPrimary && <span className="text-[0.5rem] font-black uppercase tracking-widest text-white/24 shrink-0 pt-0.5">{getPotentialTierShort(f.findPotential)}</span>}
+                                            </div>
+                                        )}
                                     </div>
                                 </button>
                             );
@@ -193,7 +214,7 @@ export function HotspotTray() {
             {/* Trace Signals */}
             {!historicMode && mobileSheetMode === 'targets' && traceTargets.length > 0 && hasScanned && (
                 <div>
-                    <p className="text-[8px] font-black text-amber-500/40 uppercase tracking-[0.25em] mb-2 px-1 mt-1">Trace Signals</p>
+                    <p className="text-[0.5rem] font-black text-amber-500/40 uppercase tracking-[0.25em] mb-2 px-1 mt-1">Trace Signals</p>
                     <div className="space-y-1.5">
                         {traceTargets.map(t => {
                             const isSelected = t.id === selectedTraceId;
@@ -214,26 +235,26 @@ export function HotspotTray() {
                                 >
                                     <div className="flex items-start justify-between gap-2 mb-1.5">
                                         <div className="min-w-0">
-                                            <p className={`text-[8px] font-black uppercase tracking-widest leading-tight ${isSelected ? 'text-amber-200' : 'text-amber-300/55'}`}>{t.traceLabel}</p>
-                                            <p className="text-[10px] font-bold text-white/45 leading-snug mt-0.5">{t.traceReason}</p>
+                                            <p className={`text-[0.5rem] font-black uppercase tracking-widest leading-tight ${isSelected ? 'text-amber-200' : 'text-amber-300/55'}`}>{t.traceLabel}</p>
+                                            <p className="text-[0.625rem] font-bold text-white/45 leading-snug mt-0.5">{t.traceReason}</p>
                                         </div>
-                                        <span className={`text-[8px] font-black uppercase tracking-widest rounded-full border px-1.5 py-0.5 shrink-0 ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>Clue</span>
+                                        <span className={`text-[0.5rem] font-black uppercase tracking-widest rounded-full border px-1.5 py-0.5 shrink-0 ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>Clue</span>
                                     </div>
                                     <div className="flex flex-wrap gap-1 mb-1.5">
                                         {sourceChips.map(chip => (
-                                            <span key={chip} className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>
+                                            <span key={chip} className={`text-[0.5625rem] font-bold px-1.5 py-0.5 rounded border ${isSelected ? 'border-amber-300/25 text-amber-100/70 bg-amber-300/[0.08]' : 'border-white/10 text-white/38 bg-white/[0.03]'}`}>
                                                 {chip}
                                             </span>
                                         ))}
                                     </div>
                                     <div className="flex items-center justify-end gap-2 pt-0.5">
-                                        <span className="text-[8px] font-mono text-white/22 shrink-0">{distanceLabel}</span>
+                                        <span className="text-[0.5rem] font-mono text-white/22 shrink-0">{distanceLabel}</span>
                                     </div>
                                 </div>
                             );
                         })}
                     </div>
-                    <p className="text-[8px] font-bold text-white/20 italic text-center mt-2">Trace signals are weaker clues, not investigation targets.</p>
+                    <p className="text-[0.5rem] font-bold text-white/20 italic text-center mt-2">Trace signals are weaker clues, not investigation targets.</p>
                 </div>
             )}
 
@@ -241,21 +262,20 @@ export function HotspotTray() {
             {!historicMode && hasScanned && sortedHotspots.length === 0 && displayTargets.length === 0 && (
                 <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 text-center">
                     <p className="text-xs font-black text-white/70 leading-tight">{scanNoSignal ? 'No signal' : 'Quiet scan area'}</p>
-                    <p className="text-[10px] font-bold text-white/35 leading-snug mt-1">{scanNoSignal ? 'Tile data could not be fetched — check your connection and scan again.' : 'No strong hotspots or investigation targets stood out here. Try widening the view, checking the historic layers, or scanning a neighbouring field.'}</p>
+                    <p className="text-[0.625rem] font-bold text-white/35 leading-snug mt-1">{scanNoSignal ? 'Tile data could not be fetched — check your connection and scan again.' : 'No strong hotspots or investigation targets stood out here. Try widening the view, checking the historic layers, or scanning a neighbouring field.'}</p>
                 </div>
             )}
 
             {/* No targets notice within targets tab */}
             {!historicMode && mobileSheetMode === 'targets' && hasScanned && displayTargets.length === 0 && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
-                <p className="text-center text-[10px] font-bold text-white/20 uppercase tracking-widest italic py-6">No investigation targets from this scan</p>
+                <p className="text-center text-[0.625rem] font-bold text-white/20 uppercase tracking-widest italic py-6">No investigation targets from this scan</p>
             )}
 
             {/* Not yet scanned */}
             {!hasScanned && (
-                <p className="text-center text-[10px] font-bold text-white/20 uppercase tracking-widest italic py-6">Scan to read the landscape</p>
+                <p className="text-center text-[0.625rem] font-bold text-white/20 uppercase tracking-widest italic py-6">Scan to read the landscape</p>
             )}
 
         </>
     );
 }
-

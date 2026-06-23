@@ -367,18 +367,18 @@ export function FieldGuideMap() {
                         <span className="text-lg shrink-0">⚠️</span>
                         <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-amber-200">Concentrated find pattern</p>
-                            <p className="text-[11px] text-amber-300/80 mt-0.5 leading-snug">Your finds this session are clustering tightly. Could this be an in situ deposit?</p>
+                            <p className="text-[0.6875rem] text-amber-300/80 mt-0.5 leading-snug">Your finds this session are clustering tightly. Could this be an in situ deposit?</p>
                         </div>
                         <div className="flex flex-col gap-1 shrink-0">
                             <button
                                 onClick={() => { setSfBannerDismissed(true); onSignificantFind?.({ currentStep: "scatter_confirm", path: "map_scatter" }); }}
-                                className="text-[11px] font-black text-white bg-amber-600 hover:bg-amber-500 px-2.5 py-1 rounded-lg transition-all"
+                                className="text-[0.6875rem] font-black text-white bg-amber-600 hover:bg-amber-500 px-2.5 py-1 rounded-lg transition-all"
                             >
                                 Review
                             </button>
                             <button
                                 onClick={() => setSfBannerDismissed(true)}
-                                className="text-[10px] text-amber-400/60 hover:text-amber-300 text-center transition-all"
+                                className="text-[0.625rem] text-amber-400/60 hover:text-amber-300 text-center transition-all"
                             >
                                 Dismiss
                             </button>
@@ -393,17 +393,17 @@ export function FieldGuideMap() {
                     <div className="bg-slate-900/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-md p-2 w-full max-h-[45vh] overflow-y-auto lg:w-auto lg:min-w-[170px] lg:max-w-[220px] lg:max-h-[60vh]">
                         {fieldPickerStep === 'top' ? (
                             <>
-                                <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1 mb-1.5">Show fields</p>
+                                <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1 mb-1.5">Show fields</p>
                                 <button
                                     onClick={() => { setShowFields(false); setShowFieldsPicker(false); }}
-                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-0.5 ${showFields === false ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10'}`}
+                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-[0.6875rem] font-bold transition-all truncate mb-0.5 ${showFields === false ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10'}`}
                                 >
                                     Off
                                 </button>
                                 {(fields.some(f => f.boundary) || permissions.some(p => p.boundary && !fields.some(f => f.permissionId === p.id))) && (
                                     <button
                                         onClick={() => { setShowFields('all'); setShowFieldsPicker(false); }}
-                                        className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-1 ${showFields === 'all' ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                        className={`w-full text-left px-3 py-1.5 rounded-lg text-[0.6875rem] font-bold transition-all truncate mb-1 ${showFields === 'all' ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
                                     >
                                         All fields
                                     </button>
@@ -432,11 +432,11 @@ export function FieldGuideMap() {
                                                     }
                                                 }
                                             }}
-                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : hasBoundaries ? 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10' : 'bg-white/5 border border-white/5 text-white/25 cursor-default'}`}
+                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[0.6875rem] font-bold transition-all truncate mt-0.5 flex items-center justify-between gap-2 ${isActive ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : hasBoundaries ? 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10' : 'bg-white/5 border border-white/5 text-white/25 cursor-default'}`}
                                         >
                                             <span className="truncate">{p.name || '(Unnamed)'}</span>
                                             {!hasBoundaries
-                                                ? <span className="text-[8px] font-normal opacity-50 shrink-0">No boundaries</span>
+                                                ? <span className="text-[0.5rem] font-normal opacity-50 shrink-0">No boundaries</span>
                                                 : permFieldCount > 1 && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="shrink-0 opacity-50"><polyline points="9 18 15 12 9 6"/></svg>
                                             }
                                         </button>
@@ -447,14 +447,14 @@ export function FieldGuideMap() {
                             <>
                                 <button
                                     onClick={() => setFieldPickerStep('top')}
-                                    className="flex items-center gap-1 text-[9px] font-black text-white/40 hover:text-white/70 uppercase tracking-widest px-1 mb-1.5 transition-colors"
+                                    className="flex items-center gap-1 text-[0.5625rem] font-black text-white/40 hover:text-white/70 uppercase tracking-widest px-1 mb-1.5 transition-colors"
                                 >
                                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="15 18 9 12 15 6"/></svg>
                                     {realPermissions.find(p => p.id === fieldPickerStep)?.name ?? 'Back'}
                                 </button>
                                 <button
                                     onClick={() => { setShowFields(fieldPickerStep); setShowFieldsPicker(false); setFieldPickerStep('top'); }}
-                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mb-1 ${showFields === fieldPickerStep ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                    className={`w-full text-left px-3 py-1.5 rounded-lg text-[0.6875rem] font-bold transition-all truncate mb-1 ${showFields === fieldPickerStep ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
                                 >
                                     All fields
                                 </button>
@@ -473,7 +473,7 @@ export function FieldGuideMap() {
                                                     mapRef.current.fitBounds(bounds, { padding: 60 });
                                                 }
                                             }}
-                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all truncate mt-0.5 ${showFields === `field:${f.id}` ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
+                                            className={`w-full text-left px-3 py-1.5 rounded-lg text-[0.6875rem] font-bold transition-all truncate mt-0.5 ${showFields === `field:${f.id}` ? 'bg-teal-500/20 border border-teal-500/40 text-teal-300' : 'bg-white/5 border border-white/10 text-white/70 hover:text-white hover:bg-white/10'}`}
                                         >
                                             {f.name || '(Unnamed)'}
                                         </button>
@@ -521,12 +521,12 @@ export function FieldGuideMap() {
                     </button>
                     {showLayerPicker && (
                         <div className="absolute top-12 right-0 z-[60] bg-slate-900/95 border border-white/12 rounded-xl shadow-2xl backdrop-blur-xl p-2 min-w-[130px] animate-in fade-in slide-in-from-top-1 duration-150">
-                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mb-1.5">Map Style</p>
-                            <button onClick={() => setIsSatellite(v => !v)} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${isSatellite ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                            <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mb-1.5">Map Style</p>
+                            <button onClick={() => setIsSatellite(v => !v)} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 ${isSatellite ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                                 Satellite
                             </button>
-                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
+                            <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
                             <button onClick={() => handleRasterOverlayPress('lidar')} className={rasterOverlayButtonClass('lidar', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
                                 LiDAR
@@ -543,15 +543,15 @@ export function FieldGuideMap() {
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                                 OS 1900
                             </button>
-                            <p className="text-[7px] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Finds</p>
-                            <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all ${historicLayerVisibility.userFinds ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                            <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Finds</p>
+                            <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all ${historicLayerVisibility.userFinds ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                 My Finds
                             </button>
                             <div className="border-t border-white/8 mt-1.5 pt-1.5" />
                             <button
                                 onClick={() => { setShowSavedPoints(v => { if (!v) persistSheetExpanded(true); return !v; }); setShowLayerPicker(false); }}
-                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition-all mb-0.5 ${showSavedPoints ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 ${showSavedPoints ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
                             >
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                                 Saved Points{savedPoints.length > 0 ? ` (${savedPoints.length})` : ''}
@@ -562,7 +562,7 @@ export function FieldGuideMap() {
                                     setSavingPoint(true);
                                     setShowLayerPicker(false);
                                 }}
-                                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white/50 hover:text-white hover:bg-white/5 transition-all"
+                                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold text-white/50 hover:text-white hover:bg-white/5 transition-all"
                             >
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                                 Save This Point
@@ -574,7 +574,7 @@ export function FieldGuideMap() {
 
             {activeOverlayOpacityLayer && !showLayerPicker && (
                 <div className="absolute right-3 top-28 bottom-[158px] z-[58] w-11 rounded-2xl border border-emerald-500/35 bg-slate-900/92 px-1.5 py-2 shadow-2xl backdrop-blur-xl flex flex-col items-center gap-2 animate-in fade-in slide-in-from-right-2 duration-150">
-                    <span className="text-[8px] font-black text-emerald-300 leading-none">{Math.round(historicLayerOpacity[activeOverlayOpacityLayer] * 100)}%</span>
+                    <span className="text-[0.5rem] font-black text-emerald-300 leading-none">{Math.round(historicLayerOpacity[activeOverlayOpacityLayer] * 100)}%</span>
                     <input
                         type="range"
                         min={0}
@@ -585,7 +585,7 @@ export function FieldGuideMap() {
                         className="min-h-0 flex-1 w-8 accent-emerald-400"
                         style={{ writingMode: 'vertical-rl', direction: 'rtl' }}
                     />
-                    <span className="text-[7px] font-black text-white/45 uppercase tracking-widest leading-tight text-center">{RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]}</span>
+                    <span className="text-[0.4375rem] font-black text-white/45 uppercase tracking-widest leading-tight text-center">{RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]}</span>
                 </div>
             )}
 
@@ -635,17 +635,17 @@ export function FieldGuideMap() {
             {/* Floating Alerts */}
             <div className="absolute top-12 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none w-[90%] max-w-sm">
                 {!analyzing && !historicMode && detectedFeatures.length === 0 && hotspots.length === 0 && scanCount < 1 && realPermissions.length === 0 && projectFinds.length === 0 && (
-                    <div className="bg-slate-700/60 text-slate-200 px-4 py-2 rounded-full text-[9px] sm:text-[10px] font-black tracking-widest uppercase shadow-lg border border-white/10 backdrop-blur-md">
+                    <div className="bg-slate-700/60 text-slate-200 px-4 py-2 rounded-full text-[0.5625rem] sm:text-[0.625rem] font-black tracking-widest uppercase shadow-lg border border-white/10 backdrop-blur-md">
                         Navigate, search or GPS to your area · then scan
                     </div>
                 )}
                 {mapClickLabel && (
-                    <div className="bg-slate-900/95 text-white px-4 py-1.5 rounded-full text-[9px] font-black tracking-widest uppercase shadow-2xl border border-blue-500/40">
+                    <div className="bg-slate-900/95 text-white px-4 py-1.5 rounded-full text-[0.5625rem] font-black tracking-widest uppercase shadow-2xl border border-blue-500/40">
                         {mapClickLabel}
                     </div>
                 )}
                 {zoomWarning && !historicLayerToggles.lidar && (
-                    <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-[8px] sm:text-[10px] font-black tracking-widest uppercase shadow-2xl border border-white/20">
+                    <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-[0.5rem] sm:text-[0.625rem] font-black tracking-widest uppercase shadow-2xl border border-white/20">
                         ⚠️ MAX SCAN ZOOM
                     </div>
                 )}
@@ -668,7 +668,7 @@ export function FieldGuideMap() {
                     <button
                         type="button"
                         onClick={() => toggleGeologyDetails('scan')}
-                        className="rounded-full border border-sky-400/30 bg-slate-950/90 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-sky-300 shadow-xl backdrop-blur-xl transition-colors hover:border-sky-300/50 hover:text-sky-200"
+                        className="rounded-full border border-sky-400/30 bg-slate-950/90 px-3 py-2 text-[0.5625rem] font-black uppercase tracking-widest text-sky-300 shadow-xl backdrop-blur-xl transition-colors hover:border-sky-300/50 hover:text-sky-200"
                     >
                         Geology
                     </button>
@@ -702,7 +702,7 @@ export function FieldGuideMap() {
                 <div className="hidden absolute bottom-6 left-auto right-6 w-96 z-[100] animate-in slide-in-from-bottom-4 fade-in duration-200">
                     <div className="bg-slate-950/98 border border-stone-700/50 rounded-3xl p-5 shadow-2xl">
                         <div className="flex items-start justify-between mb-3">
-                            <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em]">Scheduled Monument</p>
+                            <p className="text-[0.5rem] font-black text-stone-400/70 uppercase tracking-[0.2em]">Scheduled Monument</p>
                             <button onClick={() => setSelectedMonument(undefined)} className="text-white/30 hover:text-white/60 transition-colors -mt-0.5 -mr-1 p-1">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                             </button>
@@ -710,7 +710,7 @@ export function FieldGuideMap() {
                         {selectedMonument && <p className="text-white/90 font-black text-sm leading-snug mb-3">{selectedMonument}</p>}
                         <div className="space-y-1.5">
                             <p className="text-stone-200/80 text-xs font-bold leading-snug">This area is protected as a Scheduled Monument.</p>
-                            <p className="text-stone-400/60 text-[11px] leading-snug">Metal detecting or intrusive activity may require legal consent. Check current protections before any fieldwork.</p>
+                            <p className="text-stone-400/60 text-[0.6875rem] leading-snug">Metal detecting or intrusive activity may require legal consent. Check current protections before any fieldwork.</p>
                         </div>
                     </div>
                 </div>
@@ -737,43 +737,43 @@ export function FieldGuideMap() {
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`hotspot:${h.id}`); }}
-                                                        className={`text-[8px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `hotspot:${h.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                                        className={`text-[0.5rem] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `hotspot:${h.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
                                                     >
                                                         Geology
                                                     </button>
                                                     {isPrimaryHotspot && (
-                                                        <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-widest shrink-0">Priority</span>
+                                                        <span className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-200 px-1.5 py-0.5 rounded-full text-[0.4375rem] font-black uppercase tracking-widest shrink-0">Priority</span>
                                                     )}
                                                 </div>
                                             </div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-[8px] lg:text-[9px] font-black text-white/40 uppercase tracking-[0.16em]">Hotspot {h.number}</span>
-                                            <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-black ${hStrength === 'Strong Zone' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : hStrength === 'Moderate Zone' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>{hierarchy.signalStrength}</span>
+                                            <span className="text-[0.5rem] lg:text-[0.5625rem] font-black text-white/40 uppercase tracking-[0.16em]">Hotspot {h.number}</span>
+                                            <span className={`rounded-full border px-1.5 py-0.5 text-[0.5rem] font-black ${hStrength === 'Strong Zone' ? 'border-amber-400/30 bg-amber-500/10 text-amber-300' : hStrength === 'Moderate Zone' ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.04] text-slate-300'}`}>{hierarchy.signalStrength}</span>
                                         </div>
                                     </div>
                                     <div className="space-y-2 mb-2">
                                         <div>
-                                            <p className="text-[8px] font-black text-white/35 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
-                                            <p className="text-xs lg:text-[13px] font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
+                                            <p className="text-[0.5rem] font-black text-white/35 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
+                                            <p className="text-xs lg:text-[0.8125rem] font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
                                         </div>
                                         <div>
-                                            <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-[0.18em] mb-0.5">Interpretive cue</p>
-                                            <p className="text-[11px] lg:text-[12px] font-bold text-emerald-300 leading-snug">{hierarchy.nextAction}</p>
+                                            <p className="text-[0.5rem] font-black text-emerald-400/60 uppercase tracking-[0.18em] mb-0.5">Interpretive cue</p>
+                                            <p className="text-[0.6875rem] lg:text-[0.75rem] font-bold text-emerald-300 leading-snug">{hierarchy.nextAction}</p>
                                         </div>
                                     </div>
                                     {(h.secondaryTag || h.isOnCorridor || (h.linkedCount ?? 0) > 0) && (
                                         <div className="flex items-center gap-2.5 flex-wrap mt-1">
-                                            {h.secondaryTag && <span className="text-[9px] font-bold text-amber-300/60 uppercase tracking-widest">{h.secondaryTag}</span>}
-                                            {h.isOnCorridor && <span className="text-[9px] font-bold text-emerald-500/60 uppercase tracking-widest">On corridor</span>}
-                                            {(h.linkedCount ?? 0) > 0 && <span className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
+                                            {h.secondaryTag && <span className="text-[0.5625rem] font-bold text-amber-300/60 uppercase tracking-widest">{h.secondaryTag}</span>}
+                                            {h.isOnCorridor && <span className="text-[0.5625rem] font-bold text-emerald-500/60 uppercase tracking-widest">On corridor</span>}
+                                            {(h.linkedCount ?? 0) > 0 && <span className="text-[0.5625rem] font-bold text-white/40 uppercase tracking-widest">Linked to {h.linkedCount} nearby</span>}
                                         </div>
                                     )}
                                 {(() => {
                                     const ctx = hotspotFindContext.get(h.id);
                                     if (!ctx) return null;
                                     return ctx.status === 'within'
-                                        ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                        : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                        ? <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                        : <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest mt-1.5">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
                                 })()}
                             </div>
                             <button onClick={() => setSelectedHotspotId(null)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/70 hover:text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
@@ -782,28 +782,28 @@ export function FieldGuideMap() {
                             </div>
                             {h.isHighConfidenceCrossing && (
                             <div className="bg-blue-600/30 p-2 rounded-xl lg:rounded-2xl border border-blue-400/70 mb-3 lg:mb-4 animate-pulse">
-                                <p className="m-0 text-[10px] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
+                                <p className="m-0 text-[0.625rem] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
                                 </div>
                             )}
                             {h.disturbanceRisk === 'High' && (
                                 <div className="bg-red-500/15 p-2 rounded-xl lg:rounded-2xl border border-red-400/30 mb-3 lg:mb-4">
-                                    <p className="m-0 text-[9px] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
+                                    <p className="m-0 text-[0.5625rem] font-black uppercase text-red-300 tracking-widest">Disturbed ground — interpret with caution</p>
                                 </div>
                             )}
                             <div className="border-t border-white/8 pt-3 mb-3">
-                                <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-2.5">Evidence summary</p>
+                                <p className="text-[0.5625rem] font-black text-white/60 uppercase tracking-widest mb-2.5">Evidence summary</p>
                                 <div className="space-y-2">
                                     {h.explanation.slice(0, 3).map((reason, idx) => (
                                         <div key={idx} className="flex items-start gap-3">
                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                            <p className="text-xs lg:text-[13px] font-bold text-white leading-tight flex-1">{reason}</p>
+                                            <p className="text-xs lg:text-[0.8125rem] font-bold text-white leading-tight flex-1">{reason}</p>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                             {h.suggestedFocus && (
                                 <div className="mt-3 pt-3 border-t border-emerald-500/15">
-                                    <p className="text-[9px] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Field focus</p>
+                                    <p className="text-[0.5625rem] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Field focus</p>
                                     <p className="text-xs font-bold text-emerald-300 leading-snug">{h.suggestedFocus}</p>
                                 </div>
                             )}
@@ -824,45 +824,45 @@ export function FieldGuideMap() {
                                         ];
                                         return (
                                             <div id={`desktop-hotspot-details-${h.id}`} className="mt-4 space-y-4 animate-in fade-in duration-200">
-                                                <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
+                                                <p className="text-[0.5625rem] font-black text-white/30 uppercase tracking-[0.2em]">{getInterpretationLabel(h.confidence)}</p>
                                             <div>
-                                                <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
+                                                <p className="text-[0.5625rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
                                                 <p className="text-xs text-white/85 leading-relaxed">{interp.summary}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
+                                                <p className="text-[0.5625rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
                                                 <p className="text-xs text-white/85 leading-relaxed">{interp.reasoning}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[9px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
+                                                <p className="text-[0.5625rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
                                                 <p className="text-xs text-white/85 leading-relaxed">{interp.strategy}</p>
                                             </div>
                                             {interp.soilNote && (
                                                 <div className="border-t border-white/8 pt-3">
-                                                    <p className="text-[9px] font-black text-sky-400/60 uppercase tracking-[0.15em] mb-1.5">Soil mechanics note</p>
+                                                    <p className="text-[0.5625rem] font-black text-sky-400/60 uppercase tracking-[0.15em] mb-1.5">Soil mechanics note</p>
                                                     <p className="text-xs text-sky-300/70 leading-relaxed italic">{interp.soilNote}</p>
                                                 </div>
                                             )}
                                             <div className="border-t border-white/10 pt-3">
-                                                <p className="text-[8px] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
+                                                <p className="text-[0.5rem] font-black text-white/45 uppercase tracking-[0.2em] mb-2">Signal breakdown</p>
                                                 <div className="space-y-1.5">
                                                     {breakdown.map(({ label, val, cap }) => (
                                                         <div key={label} className="flex items-center gap-2">
-                                                            <span className="text-[7px] text-white/55 w-16 flex-shrink-0">{label}</span>
+                                                            <span className="text-[0.4375rem] text-white/55 w-16 flex-shrink-0">{label}</span>
                                                             <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
                                                                 <div className="h-full bg-emerald-500/70 rounded-full" style={{ width: `${Math.min(100, (val / cap) * 100)}%` }} />
                                                             </div>
-                                                            <span className="text-[7px] text-white/50 w-14 text-right flex-shrink-0">{getSignalBand(val, cap)}</span>
+                                                            <span className="text-[0.4375rem] text-white/50 w-14 text-right flex-shrink-0">{getSignalBand(val, cap)}</span>
                                                         </div>
                                                     ))}
-                                                    {h.metrics.penalty !== 0 && <p className="text-[7px] text-white/45 mt-1">Modern disturbance or noise was discounted before interpretation.</p>}
+                                                    {h.metrics.penalty !== 0 && <p className="text-[0.4375rem] text-white/45 mt-1">Modern disturbance or noise was discounted before interpretation.</p>}
                                                 </div>
                                             </div>
                                         </div>
                                     );
                                         })()}
                                     </div>
-                                    <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                    <p className="text-center text-[0.4375rem] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                         </div>
                         );
                     })}
@@ -894,14 +894,14 @@ export function FieldGuideMap() {
                                     <div className="space-y-3">
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <p className="text-[8px] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">{protectedCopy.label}</p>
+                                                    <p className="text-[0.5rem] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">{protectedCopy.label}</p>
                                                     {f.aimInfo && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{f.aimInfo.type}</h3>}
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     <button
                                                         type="button"
                                                         onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`target:${f.id}`); }}
-                                                        className={`text-[8px] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                                        className={`text-[0.5rem] font-black uppercase tracking-widest transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
                                                     >
                                                         Geology
                                                     </button>
@@ -912,12 +912,12 @@ export function FieldGuideMap() {
                                             </div>
                                         <div className="rounded-xl bg-stone-900/40 border border-stone-700/40 p-3 space-y-2">
                                             <p className="text-xs font-bold text-stone-200/85 leading-snug">{protectedCopy.body}</p>
-                                            <p className="text-[11px] font-bold text-stone-300/60 leading-snug">{protectedCopy.detail}</p>
+                                            <p className="text-[0.6875rem] font-bold text-stone-300/60 leading-snug">{protectedCopy.detail}</p>
                                         </div>
                                             {f.aimInfo && (
                                                 <div className="p-2 rounded-xl border bg-stone-900/30 border-stone-700/30">
-                                                    <p className="text-[9px] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
-                                                    <p className="text-[10px] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-stone-400/60 leading-tight mb-0.5">Recorded designation</p>
+                                                    <p className="text-[0.625rem] font-bold text-stone-200/70 leading-tight">{f.aimInfo.type} · {f.aimInfo.period}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -929,8 +929,9 @@ export function FieldGuideMap() {
                                                 <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); focusTarget(f); }}
-                                                className="bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full text-[7px] lg:text-[8px] font-black uppercase tracking-widest active:scale-[0.98]"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/45 bg-[linear-gradient(135deg,rgba(6,78,59,0.92),rgba(15,118,110,0.72)_55%,rgba(245,158,11,0.34))] px-2.5 py-1 text-[0.4375rem] lg:text-[0.5rem] font-black uppercase tracking-widest text-emerald-50 shadow-[0_0_0_1px_rgba(16,185,129,0.15),0_8px_22px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.22)] transition-transform active:scale-[0.98]"
                                             >
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
                                                     Start Here
                                                 </button>
                                             )}
@@ -938,11 +939,11 @@ export function FieldGuideMap() {
                                                 <button
                                                     type="button"
                                                     onClick={(e) => { e.stopPropagation(); toggleGeologyDetails(`target:${f.id}`); }}
-                                                    className={`text-[8px] lg:text-[9px] font-black uppercase tracking-[0.2em] transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
+                                                    className={`text-[0.5rem] lg:text-[0.5625rem] font-black uppercase tracking-[0.2em] transition-colors ${expandedGeologyId === `target:${f.id}` ? 'text-emerald-300' : 'text-sky-300 hover:text-sky-200'}`}
                                                 >
                                                     Geology
                                                 </button>
-                                                <p className="text-[8px] lg:text-[9px] font-black text-white/55 uppercase tracking-[0.2em]">Target {f.number}</p>
+                                                <p className="rounded-full border border-amber-300/25 bg-amber-300/8 px-2 py-0.5 text-[0.5rem] lg:text-[0.5625rem] font-black text-amber-100/85 uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">Target {f.number.toString().padStart(2, '0')}</p>
                                             </div>
                                         </div>
                                     <div className="flex justify-between items-start mb-3 lg:mb-4">
@@ -956,17 +957,17 @@ export function FieldGuideMap() {
                                     </div>
                                     <>
                                         <p className="text-xs lg:text-sm font-black text-white/85 leading-snug mb-0.5">{getTargetVerdict(tInterp.signalStrength, isPrimaryTarget)}</p>
-                                        <p className="text-[11px] font-bold text-white/50 leading-snug mb-3">{tInterp.hook}</p>
+                                        <p className="text-[0.6875rem] font-bold text-white/50 leading-snug mb-3">{tInterp.hook}</p>
                                                 {(() => {
                                                     const ctx = targetFindContext.get(f.id);
                                                 if (!ctx) return null;
                                                     return ctx.status === 'within'
-                                                        ? <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
-                                                        : <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
+                                                        ? <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded here — signal supported</p>
+                                                        : <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest mb-2">{ctx.count} find{ctx.count !== 1 ? 's' : ''} recorded nearby</p>;
                                                 })()}
                                                 {f.isHighConfidenceCrossing && (
                                                 <div className="bg-blue-600/30 p-2 rounded-xl lg:rounded-2xl border border-blue-400/70 mb-3 animate-pulse">
-                                                    <p className="m-0 text-[10px] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
+                                                    <p className="m-0 text-[0.625rem] lg:text-xs font-black uppercase text-white text-center tracking-[0.18em]">Likely historic crossing point</p>
                                             </div>
                                         )}
                                         {(() => {
@@ -976,18 +977,18 @@ export function FieldGuideMap() {
                                             const isEdge = cxPx < EDGE_PX || cyPx < EDGE_PX || cxPx > 768 - EDGE_PX || cyPx > 768 - EDGE_PX;
                                             return isEdge ? (
                                                 <div className="bg-amber-500/10 p-2 rounded-xl border border-amber-400/25 mb-3">
-                                                    <p className="text-[9px] font-black uppercase text-amber-300/80 tracking-widest">Near scan edge — wider scan may improve confidence</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-amber-300/80 tracking-widest">Near scan edge — wider scan may improve confidence</p>
                                                 </div>
                                             ) : null;
                                         })()}
                                         <div className="border-t border-white/8 pt-3 mb-3">
-                                            <p className="text-[9px] font-black text-white/60 uppercase tracking-widest mb-2.5">Why this matters</p>
+                                            <p className="text-[0.5625rem] font-black text-white/60 uppercase tracking-widest mb-2.5">Why this matters</p>
                                             {f.explanationLines && f.explanationLines.length > 0 ? (
                                                 <div className="space-y-2">
                                                     {f.explanationLines.slice(0, 3).map((line, idx) => (
                                                         <div key={idx} className="flex items-start gap-3">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                                            <p className="text-xs lg:text-[13px] font-bold text-white leading-tight flex-1">{line}</p>
+                                                            <p className="text-xs lg:text-[0.8125rem] font-bold text-white leading-tight flex-1">{line}</p>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -996,37 +997,37 @@ export function FieldGuideMap() {
                                             )}
                                             {f.disturbanceRisk && f.disturbanceRisk !== 'Low' && (
                                                 <div className={`mt-3 p-2 rounded-xl border ${f.disturbanceRisk === 'High' ? 'bg-red-500/20 border-red-400/50' : 'bg-amber-500/20 border-amber-400/50'}`}>
-                                                    <p className={`text-[9px] font-black uppercase leading-tight mb-0.5 ${f.disturbanceRisk === 'High' ? 'text-red-300' : 'text-amber-300'}`}>Disturbance risk: {f.disturbanceRisk}</p>
-                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">{f.disturbanceReason}</p>
+                                                    <p className={`text-[0.5625rem] font-black uppercase leading-tight mb-0.5 ${f.disturbanceRisk === 'High' ? 'text-red-300' : 'text-amber-300'}`}>Disturbance risk: {f.disturbanceRisk}</p>
+                                                    <p className="text-[0.625rem] font-bold text-white/80 leading-tight">{f.disturbanceReason}</p>
                                                 </div>
                                             )}
                                             {f.aimInfo && (
                                                 <div className="mt-2 p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
-                                                    <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Historic verification</p>
-                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-amber-300 leading-tight mb-0.5">Historic verification</p>
+                                                    <p className="text-[0.625rem] font-bold text-white/80 leading-tight">{f.aimInfo.type} ({f.aimInfo.period})</p>
                                                 </div>
                                             )}
                                             {f.routeAssessment?.relationship === 'route_edge_activity_candidate' && (
                                                 <div className="mt-2 p-2 rounded-xl border bg-sky-500/10 border-sky-400/30">
-                                                    <p className="text-[9px] font-black uppercase text-sky-300 leading-tight mb-0.5">Route-Edge Signal</p>
-                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">This signal sits beside, not on, a mapped route. It may reflect older movement or route-edge activity.</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-sky-300 leading-tight mb-0.5">Route-Edge Signal</p>
+                                                    <p className="text-[0.625rem] font-bold text-white/80 leading-tight">This signal sits beside, not on, a mapped route. It may reflect older movement or route-edge activity.</p>
                                                 </div>
                                             )}
                                             {f.routeAssessment?.relationship === 'historic_movement_candidate' && (
                                                 <div className="mt-2 p-2 rounded-xl border bg-amber-500/10 border-amber-400/30">
-                                                    <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Movement Corridor</p>
-                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">Multiple signals suggest this may relate to an older movement corridor rather than a modern track.</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-amber-300 leading-tight mb-0.5">Movement Corridor</p>
+                                                    <p className="text-[0.625rem] font-bold text-white/80 leading-tight">Multiple signals suggest this may relate to an older movement corridor rather than a modern track.</p>
                                                 </div>
                                             )}
                                             {f.routeAssessment?.relationship === 'possible_modern_route_noise' && (
                                                 <div className="mt-2 p-2 rounded-xl border bg-amber-500/15 border-amber-400/40">
-                                                    <p className="text-[9px] font-black uppercase text-amber-300 leading-tight mb-0.5">Proximity Caution</p>
-                                                    <p className="text-[10px] font-bold text-white/80 leading-tight">This signal lies close to a mapped modern track or road edge. Treat with additional caution.</p>
+                                                    <p className="text-[0.5625rem] font-black uppercase text-amber-300 leading-tight mb-0.5">Proximity Caution</p>
+                                                    <p className="text-[0.625rem] font-bold text-white/80 leading-tight">This signal lies close to a mapped modern track or road edge. Treat with additional caution.</p>
                                                 </div>
                                             )}
                                         </div>
                                         <div className="mt-3 pt-3 border-t border-emerald-500/15">
-                                            <p className="text-[9px] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Target focus</p>
+                                            <p className="text-[0.5625rem] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Target focus</p>
                                             <p className="text-xs font-bold text-emerald-300 leading-snug">{tInterp.focus}</p>
                                         </div>
                                             <div className="mt-3 pt-3 border-t border-white/8">
@@ -1039,22 +1040,22 @@ export function FieldGuideMap() {
                                                 {expandedTargetId === f.id && (
                                                     <div id={`desktop-target-details-${f.id}`} className="mt-4 space-y-4 animate-in fade-in duration-200">
                                                         <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.summary}</p>
+                                                        <p className="text-[0.5rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Summary</p>
+                                                        <p className="text-[0.6875rem] text-white/85 leading-relaxed">{tInterp.summary}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.whyItStandsOut}</p>
+                                                        <p className="text-[0.5rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">Why it stands out</p>
+                                                        <p className="text-[0.6875rem] text-white/85 leading-relaxed">{tInterp.whyItStandsOut}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-[8px] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
-                                                        <p className="text-[11px] text-white/85 leading-relaxed">{tInterp.howToApproach}</p>
+                                                        <p className="text-[0.5rem] font-black text-white/55 uppercase tracking-[0.15em] mb-1.5">How to approach it</p>
+                                                        <p className="text-[0.6875rem] text-white/85 leading-relaxed">{tInterp.howToApproach}</p>
                                                     </div>
                                                 </div>
                                                     )}
                                                 </div>
                                             </>
-                                    <p className="text-center text-[7px] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
+                                    <p className="text-center text-[0.4375rem] text-white/55 italic mt-3">Highlights historic activity — not guaranteed finds.</p>
                                     </>
                                 )}
                             </div>
@@ -1070,13 +1071,13 @@ export function FieldGuideMap() {
                         className="hidden absolute top-14 left-4 z-[90] bg-slate-900/90 px-3 py-1.5 rounded-xl border border-blue-500/30 shadow-lg items-center gap-2 active:scale-95 transition-all"
                     >
                         <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
-                        <span className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em]">
+                        <span className="text-[0.625rem] font-black text-blue-400 uppercase tracking-[0.2em]">
                             {loadingPAS ? 'Reading layers...' : 'Landscape'}
                         </span>
                         {!loadingPAS && (() => {
                             const c = mapRef.current?.getCenter();
                             const n = c ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [c.lng, c.lat]) <= 500).length : 0;
-                            return n > 0 ? <span className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{n} find{n !== 1 ? 's' : ''}</span> : null;
+                            return n > 0 ? <span className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest">{n} find{n !== 1 ? 's' : ''}</span> : null;
                         })()}
                     </button>
             )}
@@ -1090,10 +1091,10 @@ export function FieldGuideMap() {
                 <div className="bg-slate-900 border-2 border-amber-500/40 shadow-[0_0_40px_rgba(245,158,11,0.15)] rounded-3xl overflow-hidden">
 
                     <div className="flex justify-between items-start px-5 pt-4 pb-0">
-                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em]">Landscape Context</p>
+                        <p className="text-[0.5625rem] font-black text-blue-400 uppercase tracking-[0.2em]">Landscape Context</p>
                         <div className="flex items-center gap-2 -mt-1 -mr-1">
                             {devMode && sourceAvailability && (
-                                <button onClick={handleLabExport} className="text-[8px] font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest transition-colors px-2 py-1 border border-amber-500/30 rounded-lg bg-amber-500/10 hover:bg-amber-500/20">
+                                <button onClick={handleLabExport} className="text-[0.5rem] font-black text-amber-400 hover:text-amber-300 uppercase tracking-widest transition-colors px-2 py-1 border border-amber-500/30 rounded-lg bg-amber-500/10 hover:bg-amber-500/20">
                                     ↓ Export for Lab
                                 </button>
                             )}
@@ -1105,11 +1106,11 @@ export function FieldGuideMap() {
 
                     <div className="overflow-y-auto max-h-[52vh] px-5 pb-5 pt-2 space-y-3">
                             <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{interp.title}</h3>
-                            <p className="text-[11px] font-bold text-white/70 leading-snug mb-3">{interp.subtitle}</p>
+                            <p className="text-[0.6875rem] font-bold text-white/70 leading-snug mb-3">{interp.subtitle}</p>
                             <GeologyContextCard context={geologyContext} loading={geologyContextLoading} className="mb-3" />
                             {sigLines.length > 0 && (
                                 <div className="border-t border-white/8 pt-3 mb-3">
-                                <p className="text-[8px] font-medium text-white/40 mb-2.5">Why this stands out</p>
+                                <p className="text-[0.5rem] font-medium text-white/40 mb-2.5">Why this stands out</p>
                                 <div className="space-y-2">
                                     {sigLines.map((line, i) => (
                                         <div key={i} className="flex items-start gap-3">
@@ -1121,7 +1122,7 @@ export function FieldGuideMap() {
                             </div>
                         )}
                         {nearbyProjectFinds.length > 0 && (
-                            <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
+                            <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
                         )}
                         {hasData && (
                             <>
@@ -1129,30 +1130,30 @@ export function FieldGuideMap() {
                                 {pasFinds.length > 0 && (
                                     <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
                                         <span className="block text-lg font-black text-blue-400">{pasFinds.length}</span>
-                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Sites</span>
+                                        <span className="text-[0.5rem] font-black text-slate-500 uppercase tracking-widest">Sites</span>
                                     </div>
                                 )}
                                 {historicRoutes.length > 0 && (
                                     <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
                                         <span className="block text-lg font-black text-blue-400">{historicRoutes.length}</span>
-                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Routes</span>
+                                        <span className="text-[0.5rem] font-black text-slate-500 uppercase tracking-widest">Routes</span>
                                     </div>
                                 )}
                                 {placeSignals.length > 0 && (
                                     <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
                                         <span className="block text-lg font-black text-blue-300">{placeSignals.length}</span>
-                                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Place Names</span>
+                                        <span className="text-[0.5rem] font-black text-slate-500 uppercase tracking-widest">Place Names</span>
                                     </div>
                                 )}
                             </div>
-                            <p className="text-[9px] font-black text-white/60 italic mt-2 text-center tracking-wide">Zoom out to understand wider context</p>
+                            <p className="text-[0.5625rem] font-black text-white/60 italic mt-2 text-center tracking-wide">Zoom out to understand wider context</p>
                             </>
                         )}
                         {sourceAvailability && (
                             <div className="border-t border-white/8 pt-3">
                                 <div className="flex justify-between items-center mb-2">
-                                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Scan Source Coverage</p>
-                                    {scanFromCache && <span className="text-[7px] font-black text-amber-500/60 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Cached</span>}
+                                    <p className="text-[0.5rem] font-black text-white/40 uppercase tracking-widest">Scan Source Coverage</p>
+                                    {scanFromCache && <span className="text-[0.4375rem] font-black text-amber-500/60 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Cached</span>}
                                 </div>
                                 <div className="grid grid-cols-3 gap-1.5">
                                     {[
@@ -1167,12 +1168,12 @@ export function FieldGuideMap() {
                                         return (
                                             <div key={key} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border ${usability === 'usable' ? 'bg-emerald-500/10 border-emerald-500/25' : usability === 'loaded' ? 'bg-white/5 border-white/15' : 'bg-white/3 border-white/8'}`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${usability === 'usable' ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]' : usability === 'loaded' ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                                                <span className={`text-[7px] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
+                                                <span className={`text-[0.4375rem] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
                                             </div>
                                         );
                                     })}
                                 </div>
-                                <p className="text-[7px] text-white/20 mt-1.5 text-center italic">Green = signal contributed · Grey = data present · Dark = no data</p>
+                                <p className="text-[0.4375rem] text-white/20 mt-1.5 text-center italic">Green = source loaded · Dark = unavailable for this scan</p>
                             </div>
                         )}
                         {(hasData || potentialScore) && (
@@ -1180,13 +1181,13 @@ export function FieldGuideMap() {
                                 <div className="flex justify-between items-center">
                                     <span
                                         onClick={() => setIntelDetailsOpen(v => !v)}
-                                        className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
+                                        className="text-[0.6875rem] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
                                     >
                                         {intelDetailsOpen ? '▲ Hide details' : '▼ View full breakdown'}
                                     </span>
                                     <span
                                         onClick={() => setIntelLayersOpen(v => !v)}
-                                        className="text-[11px] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
+                                        className="text-[0.6875rem] font-black text-amber-400 hover:text-amber-300 transition-colors duration-150 cursor-pointer"
                                     >
                                         {intelLayersOpen ? '▲ Hide layers' : '▼ Map layers'}
                                     </span>
@@ -1195,7 +1196,7 @@ export function FieldGuideMap() {
                                 {intelLayersOpen && (
                                     <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
                                         {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
-                                            <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                            <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[0.5625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                                                 {label}
                                             </button>
                                         ))}
@@ -1206,11 +1207,11 @@ export function FieldGuideMap() {
                                     <div className="mt-4 space-y-4 animate-in fade-in duration-200">
                                         {pasFinds.length > 0 && (
                                             <div className="space-y-2">
-                                                <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Period Profile</p>
+                                                <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Period Profile</p>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
                                                         <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
-                                                            <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                                            <span className="text-[0.5625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
                                                             <span className="text-sm font-black text-blue-400">{count}</span>
                                                         </div>
                                                     ))}
@@ -1219,12 +1220,12 @@ export function FieldGuideMap() {
                                         )}
                                         {nearbyProjectFinds.length > 0 && (
                                             <div className="space-y-2">
-                                                <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
+                                                <p className="text-[0.5rem] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
                                                 <div className="space-y-1.5">
                                                     {nearbyProjectFinds.map(f => (
                                                         <div key={f.id} className="bg-emerald-500/5 border border-emerald-500/10 px-3 py-2 rounded-xl flex justify-between items-center">
-                                                            <span className="text-[10px] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
-                                                            <span className="text-[9px] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
+                                                            <span className="text-[0.625rem] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
+                                                            <span className="text-[0.5625rem] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1232,17 +1233,17 @@ export function FieldGuideMap() {
                                         )}
                                         {pasFinds.length > 0 && (
                                             <div className="space-y-2">
-                                                <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
+                                                <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
                                                 <div className="space-y-2">
                                                     {pasFinds.map(f => (
                                                         <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
                                                             <div className="flex-1 min-w-0 pr-4">
                                                                 <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
-                                                                <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
+                                                                <p className="text-[0.5625rem] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
                                                             </div>
                                                             <div className="text-right shrink-0">
-                                                                <p className="text-[9px] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
-                                                                <p className="text-[8px] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
+                                                                <p className="text-[0.5625rem] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
+                                                                <p className="text-[0.5rem] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1251,23 +1252,23 @@ export function FieldGuideMap() {
                                         )}
                                         {placeSignals.length > 0 && (
                                             <div className="space-y-2">
-                                                <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
-                                                <p className="text-[9px] text-slate-500 font-bold">Place-name evidence suggests historic activity in the wider area.</p>
+                                                <p className="text-[0.5rem] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
+                                                <p className="text-[0.5625rem] text-slate-500 font-bold">Place-name evidence suggests historic activity in the wider area.</p>
                                                 <div className="space-y-2">
                                                     {placeSignals.map((s, i) => (
                                                         <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl relative overflow-hidden">
-                                                            <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[7px] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
+                                                            <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[0.4375rem] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
                                                             <div className="flex justify-between items-start mb-1">
                                                                 <span className="text-sm font-black text-white uppercase italic tracking-tight">"{s.name}"</span>
-                                                                <span className="text-[9px] font-bold text-emerald-500/60 uppercase">{s.distance.toFixed(1)} km</span>
+                                                                <span className="text-[0.5625rem] font-bold text-emerald-500/60 uppercase">{s.distance.toFixed(1)} km</span>
                                                             </div>
-                                                            <p className="text-[8px] font-black text-emerald-500/40 uppercase mb-2 tracking-widest">{s.type}</p>
-                                                            <p className="text-[10px] font-bold text-slate-300 leading-tight"><span className="text-emerald-500/80 uppercase text-[9px]">Meaning:</span> {s.meaning}</p>
+                                                            <p className="text-[0.5rem] font-black text-emerald-500/40 uppercase mb-2 tracking-widest">{s.type}</p>
+                                                            <p className="text-[0.625rem] font-bold text-slate-300 leading-tight"><span className="text-emerald-500/80 uppercase text-[0.5625rem]">Meaning:</span> {s.meaning}</p>
                                                             <div className="mt-2.5 flex items-center justify-between border-t border-white/5 pt-2">
-                                                                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest bg-white/5 px-1.5 py-0.5 rounded">{s.period}</span>
+                                                                <span className="text-[0.5rem] font-black text-slate-400 uppercase tracking-widest bg-white/5 px-1.5 py-0.5 rounded">{s.period}</span>
                                                                 <div className="flex items-center gap-1.5">
                                                                     <div className="w-10 h-1 bg-black/40 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${s.confidence * 100}%` }} /></div>
-                                                                    <span className="text-[7px] font-black text-emerald-500/60">{(s.confidence * 100).toFixed(0)}%</span>
+                                                                    <span className="text-[0.4375rem] font-black text-emerald-500/60">{(s.confidence * 100).toFixed(0)}%</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1277,28 +1278,28 @@ export function FieldGuideMap() {
                                         )}
                                         {potentialScore && (
                                             <div className="space-y-2">
-                                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Detailed Breakdown</p>
+                                                <p className="text-[0.5rem] font-black text-slate-500 uppercase tracking-widest">Detailed Breakdown</p>
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div className="bg-white/5 p-4 rounded-3xl border border-white/10 relative">
                                                         {scanConfidence && (
-                                                            <span className={`absolute top-2 right-2 text-[6px] font-black px-1 rounded border ${scanConfidence === 'Corroborated Signal' ? 'text-emerald-400 border-emerald-400/30' : scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' : 'text-white/35 border-white/20'}`}>{scanConfidence}</span>
+                                                            <span className={`absolute top-2 right-2 text-[0.375rem] font-black px-1 rounded border ${scanConfidence === 'Corroborated Signal' ? 'text-emerald-400 border-emerald-400/30' : scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' : 'text-white/35 border-white/20'}`}>{scanConfidence}</span>
                                                         )}
-                                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
+                                                        <span className="block text-[0.5rem] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
                                                         <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-emerald-500" style={{ width: `${potentialScore.breakdown?.terrain || 0}%` }} /></div>
                                                         <span className="text-sm font-black text-emerald-500">{getSignalBand(potentialScore.breakdown?.terrain)}</span>
                                                     </div>
                                                     <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
+                                                        <span className="block text-[0.5rem] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
                                                         <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-blue-500" style={{ width: `${potentialScore.breakdown?.hydro || 0}%` }} /></div>
                                                         <span className="text-sm font-black text-blue-500">{getSignalBand(potentialScore.breakdown?.hydro)}</span>
                                                     </div>
                                                     <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
+                                                        <span className="block text-[0.5rem] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
                                                         <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-amber-500" style={{ width: `${potentialScore.breakdown?.historic || 0}%` }} /></div>
                                                         <span className="text-sm font-black text-amber-500">{getSignalBand(potentialScore.breakdown?.historic)}</span>
                                                     </div>
                                                     <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
+                                                        <span className="block text-[0.5rem] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
                                                         <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.signals || 0}%` }} /></div>
                                                         <span className="text-sm font-black text-purple-500">{getSignalBand(potentialScore.breakdown?.signals)}</span>
                                                     </div>
@@ -1312,7 +1313,7 @@ export function FieldGuideMap() {
                                     <div className="pt-2 border-t border-white/8 flex flex-col gap-1">
                                         <button
                                             onClick={handleLabExport}
-                                            className="w-full text-center text-[9px] font-black text-amber-600/70 hover:text-amber-400 uppercase tracking-widest transition-colors py-1"
+                                            className="w-full text-center text-[0.5625rem] font-black text-amber-600/70 hover:text-amber-400 uppercase tracking-widest transition-colors py-1"
                                         >
                                             ↓ Export for Lab
                                         </button>
@@ -1358,14 +1359,14 @@ export function FieldGuideMap() {
                                                 document.body.appendChild(a); a.click();
                                                 setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
                                             }}
-                                            className="w-full text-center text-[9px] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-colors py-1"
+                                            className="w-full text-center text-[0.5625rem] font-black text-slate-500 hover:text-slate-300 uppercase tracking-widest transition-colors py-1"
                                         >
                                             ↓ Export scan data
                                         </button>
                                     </div>
                                 )}
 
-                                <p className="text-[7px] text-white/15 text-center italic pt-2">Signal agreement, not direct detection</p>
+                                <p className="text-[0.4375rem] text-white/15 text-center italic pt-2">Signal agreement, not direct detection</p>
                             </div>
                         )}
                     </div>

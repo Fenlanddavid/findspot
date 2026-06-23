@@ -596,24 +596,18 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         };
     }, [hotspots, sortedHotspots, terrainClusters]);
 
-    // Source usability: three-state model distinguishing data-present vs signal-useful.
-    // Satellite is only usable when both seasons loaded (enables multi-season agreement).
-    // All other sources are usable if they loaded AND produced hotspot results.
+    // Source coverage: the panel answers "did this scan source load?"
+    // Keep the third state for failed/unavailable sources, but don't make
+    // satellite look healthier than LiDAR/slope/water just because both seasons
+    // loaded. Signal strength is shown in the hotspot/target evidence instead.
     const sourceUsability = useMemo((): Record<string, 'usable' | 'loaded' | 'none'> => {
         if (!sourceAvailability) return {};
-        const hasResults = sortedHotspots.length > 0;
-        const bothSat = sourceAvailability.satellite_spring && sourceAvailability.satellite_summer;
         const result: Record<string, 'usable' | 'loaded' | 'none'> = {};
         for (const key of ['terrain', 'terrain_global', 'slope', 'hydrology', 'satellite_spring', 'satellite_summer']) {
-            if (!sourceAvailability[key]) { result[key] = 'none'; continue; }
-            if (key === 'satellite_spring' || key === 'satellite_summer') {
-                result[key] = bothSat ? 'usable' : 'loaded';
-            } else {
-                result[key] = hasResults ? 'usable' : 'loaded';
-            }
+            result[key] = sourceAvailability[key] ? 'usable' : 'none';
         }
         return result;
-    }, [sourceAvailability, sortedHotspots]);
+    }, [sourceAvailability]);
 
     const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument' | 'trace') => {
         if (keep !== 'target') setSelectedId(null);

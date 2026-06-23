@@ -87,26 +87,49 @@ function makeAnnotationLabelElement(index: number) {
     return el;
 }
 
-function makeTargetLabelElement(label: string, primary: boolean) {
+function makeTargetLabelElement(label: string, primary: boolean, targetNumber?: number) {
     const el = document.createElement('div');
-    el.textContent = label;
     el.style.alignItems = 'center';
-    el.style.background = primary ? 'rgba(5, 150, 105, 0.95)' : 'rgba(15, 23, 42, 0.88)';
-    el.style.border = primary ? '1px solid rgba(167, 243, 208, 0.9)' : '1px solid rgba(255, 255, 255, 0.75)';
+    el.style.background = primary
+        ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.98), rgba(15, 118, 110, 0.94) 52%, rgba(245, 158, 11, 0.92))'
+        : 'linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.9))';
+    el.style.border = primary ? '1px solid rgba(236, 253, 245, 0.9)' : '1px solid rgba(251, 191, 36, 0.78)';
     el.style.borderRadius = '999px';
-    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
-    el.style.color = '#ffffff';
+    el.style.boxShadow = primary
+        ? '0 0 0 3px rgba(16, 185, 129, 0.16), 0 8px 20px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.32)'
+        : '0 0 0 2px rgba(251, 191, 36, 0.12), 0 5px 14px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.18)';
+    el.style.color = primary ? '#ecfdf5' : '#fde68a';
     el.style.display = 'flex';
-    el.style.font = primary
-        ? "900 8px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-        : "900 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    el.style.height = primary ? '1.15rem' : '1.1rem';
+    el.style.font = "900 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    el.style.gap = '0.22rem';
+    el.style.height = primary ? '1.35rem' : '1.2rem';
     el.style.justifyContent = 'center';
-    el.style.letterSpacing = primary ? '0.06em' : '0';
-    el.style.minWidth = primary ? '2.15rem' : '1.1rem';
-    el.style.padding = primary ? '0 0.25rem' : '0 0.2rem';
+    el.style.letterSpacing = '0.04em';
+    el.style.minWidth = primary ? '3rem' : '1.35rem';
+    el.style.padding = primary ? '0 0.4rem' : '0 0.32rem';
     el.style.pointerEvents = 'none';
     el.style.textTransform = 'uppercase';
+
+    if (primary) {
+        const start = document.createElement('span');
+        start.textContent = label;
+        start.style.fontSize = '0.45rem';
+        start.style.letterSpacing = '0.12em';
+        start.style.lineHeight = '1';
+
+        const number = document.createElement('span');
+        number.textContent = targetNumber !== undefined ? targetNumber.toString().padStart(2, '0') : '';
+        number.style.borderLeft = '1px solid rgba(236, 253, 245, 0.36)';
+        number.style.color = '#ffffff';
+        number.style.fontSize = '0.65rem';
+        number.style.lineHeight = '1';
+        number.style.paddingLeft = '0.24rem';
+
+        el.append(start, number);
+        return el;
+    }
+
+    el.textContent = label.padStart(2, '0');
     return el;
 }
 
@@ -545,7 +568,7 @@ export function useFieldGuideMap({
             .forEach(f => {
                 const primary = f.id === primaryTargetId;
                 const marker = new maplibregl.Marker({
-                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary),
+                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary, f.number),
                     anchor: 'center',
                 })
                     .setLngLat(f.center)
