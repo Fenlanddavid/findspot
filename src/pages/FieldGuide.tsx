@@ -700,7 +700,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                 if (!f.suppressedBy.includes('failed_physical_gate')) f.suppressedBy.push('failed_physical_gate');
             }
         }
-        return detectedFeatures
+        const visible = detectedFeatures
             .filter(f => (f.isProtected && !f.monumentBufferM) || (
                 hasTargetEvidence(f) &&
                 hasLocalPhysicalEvidence(f) &&
@@ -708,6 +708,12 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             ))
             .sort((a, b) => b.findPotential - a.findPotential)
             .slice(0, 12);
+
+        let targetNumber = 0;
+        return visible.map(f => f.isProtected
+            ? { ...f, number: 0 }
+            : { ...f, number: ++targetNumber },
+        );
     }, [detectedFeatures]);
 
     // ─── Trace Signals ────────────────────────────────────────────────────────
@@ -929,6 +935,31 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
     // ─── Map source helpers ───────────────────────────────────────────────────
 
+    const warnForVisibleMonument = (attempt = 0) => {
+        const map = mapRef.current;
+        if (!map || !map.getLayer('monuments-fill')) return;
+
+        const canvas = map.getCanvas();
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        if (width <= 0 || height <= 0) return;
+
+        const features = map.queryRenderedFeatures(
+            [[0, 0], [width, height]],
+            { layers: ['monuments-fill'] },
+        );
+
+        if (!features.length) {
+            if (attempt < 5) window.setTimeout(() => warnForVisibleMonument(attempt + 1), 180);
+            return;
+        }
+
+        const name = features[0].properties?.Name as string | undefined;
+        clearMapItemSelections('monument');
+        setSelectedMonument(name || null);
+        persistSheetExpanded(true);
+    };
+
     const applyNhleToMap = (data: { features: unknown[] }) => {
         // NHLEResponse only declares `features`; error fallbacks also omit `type`.
         // Always normalise to a valid FeatureCollection before calling setData,
@@ -942,6 +973,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             if (src && bufferSrc) {
                 src.setData(fc as GeoJSON.FeatureCollection);
                 bufferSrc.setData(buildMonumentBufferGeoJSON(data));
+                window.setTimeout(() => warnForVisibleMonument(), 180);
                 return;
             }
             if (attempt < 20) window.setTimeout(() => update(attempt + 1), 100);
@@ -1062,10 +1094,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         }
     }, [geologyContext, hotspots, hotspotVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ─── Main terrain scan ────────────────────────────────────────────────────
+    // ─── Main combined scan ───────────────────────────────────────────────────
 
     const executeScan = async () => {
-        if (!mapRef.current || analyzing) return;
+        if (!mapRef.current || analyzing || isTerrainScanning || isHistoricScanning) return;
 
         setScanCount(prev => {
             const next = prev + 1;
@@ -1075,7 +1107,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         clearScan();
         dispatch({ type: 'SCAN_START' });
         setHistoricScanCompleted(false);
-        addLog('> SCAN: Reading terrain at survey zoom.', 'terrain');
+        addLog('> SCAN: Reading terrain, targets and historic landscape context.', 'terrain');
 
         const result = await runTerrainScan({ mapRef, permissions, fields, targetPeriod });
 
@@ -1135,6 +1167,11 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             scanCenter,
         };
         await runHistoricPhase(context);
+        setSelectedHotspotId(null);
+        setHistoricMode(true);
+        setIntelDetailsOpen(false);
+        setIntelLayersOpen(false);
+        persistSheetExpanded(true);
     };
 
     // ─── Standalone historic scan (context drawer / historic layers button) ───
@@ -1161,11 +1198,11 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // ─── Auto-trigger effects ─────────────────────────────────────────────────
 
     useEffect(() => {
-        if (isIntelOpen && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
+        if (isIntelOpen && !historicScanComplete && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
     }, [isIntelOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        if (historicMode && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
+        if (historicMode && !historicScanComplete && !isHistoricScanning && pasFinds.length === 0 && placeSignals.length === 0) loadStandaloneHistoric();
     }, [historicMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
 

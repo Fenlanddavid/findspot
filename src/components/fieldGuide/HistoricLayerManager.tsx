@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { diagLog } from '../../services/diagLog';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
@@ -6,10 +6,15 @@ import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { LandscapeInterpretationBlock } from '../fieldguide/LandscapeInterpretationBlock';
 import { db } from '../../db';
+import type { Find } from '../../db';
+import { buildLandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
+import type { LandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
+import { buildFieldStrategy } from '../../services/fieldguide/fieldStrategy';
+import { deriveTerrainSignals } from '../../services/fieldguide/terrainSignals';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
-import type { Cluster, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
+import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
-const ALIE_ENGINE_VERSION = 'ALIE-2026.06.20a';
+const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 // Self-contained — avoids coupling to engine layer.
@@ -66,45 +71,6 @@ function getSignalSummary(breakdown: { terrain: number; hydro: number; historic:
     return lines;
 }
 
-function averageAspect(clusters: Cluster[]): number {
-    const aspects = clusters
-        .map(c => c.aspect)
-        .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-    if (!aspects.length) return 180;
-
-    const vector = aspects.reduce((acc, degrees) => {
-        const radians = degrees * Math.PI / 180;
-        return {
-            x: acc.x + Math.cos(radians),
-            y: acc.y + Math.sin(radians),
-        };
-    }, { x: 0, y: 0 });
-
-    const degrees = Math.atan2(vector.y, vector.x) * 180 / Math.PI;
-    return Math.round((degrees + 360) % 360);
-}
-
-function deriveTerrainProxy(
-    clusters: Cluster[],
-    primaryHotspot: Hotspot | null,
-): Pick<LandscapeInterpretationWorkerInput, 'elevationM' | 'slopePercent' | 'aspectDegrees'> {
-    const memberIds = new Set(primaryHotspot?.memberIds ?? []);
-    const relevant = memberIds.size
-        ? clusters.filter(c => memberIds.has(c.id))
-        : clusters;
-
-    const hasSlopeSignal = relevant.some(c => c.sources.includes('slope') || c.relativeElevation === 'Slope');
-    const hasRaisedSignal = relevant.some(c => c.relativeElevation === 'Ridge' || c.polarity === 'Raised');
-    const hasHollowSignal = relevant.some(c => c.relativeElevation === 'Hollow' || c.polarity === 'Sunken');
-
-    return {
-        // Proxy values: the terrain scan exposes relative landform cues, not DEM metres.
-        elevationM: hasRaisedSignal ? 18 : hasHollowSignal ? -2 : hasSlopeSignal ? 6 : 0,
-        slopePercent: hasSlopeSignal ? 6 : hasRaisedSignal ? 3 : 0,
-        aspectDegrees: averageAspect(relevant),
-    };
-}
-
 export function HistoricLayerManager() {
     const {
         showSavedPoints,
@@ -114,6 +80,7 @@ export function HistoricLayerManager() {
         selectedHotspotId,
         selectedMonument,
         historicMode,
+        hasScanned,
         historicScanComplete,
         loadingPAS,
         intelLayersOpen,
@@ -126,6 +93,7 @@ export function HistoricLayerManager() {
         scanConfidence,
         pasFinds,
         historicRoutes,
+        displayTargets,
         sortedHotspots,
         terrainClusters,
         placeSignals,
@@ -136,6 +104,7 @@ export function HistoricLayerManager() {
         scanFromCache,
         scheduledMonumentCheckFailed,
         clearMapItemSelections,
+        focusTarget,
         setSelectedPASFind,
         setIsIntelOpen,
         nhleDataRef,
@@ -169,7 +138,7 @@ export function HistoricLayerManager() {
             const label = r.type === 'holloway' ? 'Holloway' : 'Historic trackway';
             return `${label}${r.name ? ` ${r.name}` : ''} detected in this scan area.`;
         }),
-    ])];
+    ])].slice(0, 4);
     const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
     const mc = mapRef.current?.getCenter();
     const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
@@ -177,13 +146,14 @@ export function HistoricLayerManager() {
     return (
         <div className="space-y-3">
             <AlieSection
-                historicScanComplete={historicScanComplete}
+                historicScanComplete={historicScanComplete || (hasScanned && !loadingPAS)}
                 loadingPAS={loadingPAS}
                 nhleDataRef={nhleDataRef}
                 aimDataRef={aimDataRef}
                 historicRoutes={historicRoutes}
                 geologyContext={geologyContext}
                 sortedHotspots={sortedHotspots}
+                displayTargets={displayTargets}
                 terrainClusters={terrainClusters}
                 potentialScoreBreakdown={potentialScore?.breakdown ?? null}
                 mapRef={mapRef}
@@ -193,6 +163,9 @@ export function HistoricLayerManager() {
                 alieLoading={alieLoading}
                 setAlieLoading={setAlieLoading}
                 landscapeIntelligenceMap={landscapeIntelligenceMap}
+                projectFinds={projectFinds}
+                pasFinds={pasFinds}
+                focusTarget={focusTarget}
             />
             {scheduledMonumentCheckFailed && (
                 <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
@@ -215,7 +188,7 @@ export function HistoricLayerManager() {
                                 <p className="text-xs font-bold text-white/85 leading-tight">{line}</p>
                             </div>
                         ))}
-                        {sigLines.map((line, i) => (
+                        {sigLines.slice(0, 4).map((line, i) => (
                             <div key={`s-${i}`} className="flex items-start gap-2">
                                 <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.7)]" />
                                 <p className="text-xs font-bold text-white/85 leading-tight">{line}</p>
@@ -446,6 +419,7 @@ interface AlieSectionProps {
     historicRoutes: import('../../pages/fieldGuideTypes').HistoricRoute[];
     geologyContext: import('../../engines/geologyContext').GeologyContext | null;
     sortedHotspots: import('../../pages/fieldGuideTypes').Hotspot[];
+    displayTargets: Cluster[];
     terrainClusters: import('../../pages/fieldGuideTypes').Cluster[];
     potentialScoreBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null;
     mapRef: React.RefObject<import('maplibre-gl').Map | null>;
@@ -455,6 +429,9 @@ interface AlieSectionProps {
     alieLoading: boolean;
     setAlieLoading: React.Dispatch<React.SetStateAction<boolean>>;
     landscapeIntelligenceMap: Map<string, LandscapeIntelligence>;
+    projectFinds: Find[];
+    pasFinds: HistoricFind[];
+    focusTarget: (target: Cluster) => void;
 }
 
 function AlieSection({
@@ -465,6 +442,7 @@ function AlieSection({
     historicRoutes,
     geologyContext,
     sortedHotspots,
+    displayTargets,
     terrainClusters,
     potentialScoreBreakdown,
     mapRef,
@@ -474,11 +452,26 @@ function AlieSection({
     alieLoading,
     setAlieLoading,
     landscapeIntelligenceMap,
+    projectFinds,
+    pasFinds,
+    focusTarget,
 }: AlieSectionProps) {
     // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
     // Prevents a stale cache read or slow worker result from clobbering a
     // newer cell's state when the user pans quickly between geohash6 cells.
     const alieRequestSeqRef = useRef(0);
+    const [landscapeEvidence, setLandscapeEvidence] = useState<LandscapeEvidence | null>(null);
+
+    const fieldStrategy = useMemo(() =>
+        landscapeInterpretation || sortedHotspots.length
+            ? buildFieldStrategy(sortedHotspots, landscapeInterpretation?.processScores ?? [], {
+                historicRoutes,
+                pasFindPeriods: pasFinds.map(f => f.broadperiod || 'Unknown'),
+                potentialBreakdown: potentialScoreBreakdown,
+            })
+            : null,
+        [sortedHotspots, landscapeInterpretation, historicRoutes, pasFinds, potentialScoreBreakdown],
+    );
 
     // ── On scan complete: load cached result then fire worker ─────────────────
     useEffect(() => {
@@ -528,8 +521,18 @@ function AlieSection({
             hasLandformProminence: lieHasProminence,
             hasOccupationSignal:   lieHasOccupation,
         };
-        const terrainProxy = deriveTerrainProxy(terrainClusters, primaryHotspot);
+        const terrainSignals = deriveTerrainSignals(terrainClusters, primaryHotspot);
         const geologyTileKey = geologyContext?.tileKey ?? 'nogeology';
+
+        // ── P5: terrain signature — cache cell varies when measured terrain differs ──
+        const terrainSig = terrainSignals.terrainMeasured
+            ? [
+                Math.round((terrainSignals.relativeReliefNorm ?? 0) / 0.1),
+                Math.round((terrainSignals.slopeGradient     ?? 0) / 0.1),
+                Math.round((terrainSignals.aspectDegrees     ?? 0) / 45),
+              ].join(':')
+            : 'proxy';
+
         const inputSignature = [
             ALIE_ENGINE_VERSION,
             geologyTileKey,
@@ -544,9 +547,7 @@ function AlieSection({
             lieHasBoundary   ? 'liebnd' : 'noliebnd',
             lieHasProminence ? 'lieprom' : 'nolieprom',
             lieHasOccupation ? 'lieocc' : 'nolieocc',
-            terrainProxy.elevationM,
-            terrainProxy.slopePercent,
-            terrainProxy.aspectDegrees,
+            terrainSig,
         ].join('|');
 
         db.landscapeInterpretations.get(geohash6).then(cached => {
@@ -568,6 +569,33 @@ function AlieSection({
             workerRef.current = null;
         }
 
+        // ── P2: assemble unified evidence object ─────────────────────────────
+        const nearbyFinds = projectFinds.filter(
+            f => f.lat !== null && f.lon !== null &&
+                 getDistance([f.lon!, f.lat!], [center.lng, center.lat]) <= 750,
+        );
+        const nearbyFindPeriods = [...new Set(nearbyFinds.map(f => f.period))];
+        // Approximate density: geohash6 cell ≈ 0.72 km²
+        const nearbyFindDensity = nearbyFinds.length / 0.72;
+
+        const evidence = buildLandscapeEvidence(
+            terrainClusters,
+            primaryHotspot,
+            sortedHotspots,
+            historicRoutes,
+            nhleFeatures,
+            aimFeatures,
+            {
+                relativeReliefNorm: terrainSignals.relativeReliefNorm,
+                slopeGradient:      terrainSignals.slopeGradient,
+                aspectDegrees:      terrainSignals.aspectDegrees,
+                terrainMeasured:    terrainSignals.terrainMeasured ?? false,
+            },
+            nearbyFindPeriods,
+            nearbyFindDensity,
+        );
+        setLandscapeEvidence(evidence);
+
         const input: LandscapeInterpretationWorkerInput = {
             geohash6,
             nhleFeatures,
@@ -579,7 +607,7 @@ function AlieSection({
             centerLat: center.lat,
             centerLon: center.lng,
             potentialBreakdown: potentialScoreBreakdown,
-            ...terrainProxy,
+            ...terrainSignals,
         };
 
         console.log('[ALIE] worker input counts', {
@@ -664,6 +692,10 @@ function AlieSection({
         <LandscapeInterpretationBlock
             interpretation={landscapeInterpretation}
             loading={alieLoading}
+            evidence={landscapeEvidence ?? undefined}
+            fieldStrategy={fieldStrategy ?? undefined}
+            targetFeatures={displayTargets}
+            onFocusTarget={focusTarget}
         />
     );
 }

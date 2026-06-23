@@ -605,6 +605,12 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
                         else if (lower >= 6)         cluster.relativeElevation = 'Ridge';
                         else if (higher >= 1 && lower >= 1) cluster.relativeElevation = 'Slope';
                         else                         cluster.relativeElevation = 'Flat';
+
+                        // Measured terrain signals (vNext-P1): same gradients / ring values
+                        // already computed above. Normalised DEM units — NOT absolute metres.
+                        cluster.slopeGradient = Math.min(1, Math.hypot(dz_dx, dz_dy));
+                        const ringMean = neighbors.reduce((a, b) => a + b, 0) / neighbors.length;
+                        cluster.relativeReliefNorm = cVal - ringMean;
                     }
                 }
 

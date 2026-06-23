@@ -1,5 +1,7 @@
 import React from 'react';
+import type maplibregl from 'maplibre-gl';
 import { useFieldGuideContext } from './FieldGuideContext';
+import { HOTSPOT_TITLES } from './FieldGuideContext';
 
 export function ScanControlPanel() {
     const {
@@ -13,12 +15,6 @@ export function ScanControlPanel() {
         clearScan,
         executeScan,
         historicMode,
-        setIsIntelOpen,
-        setIntelDetailsOpen,
-        setIntelLayersOpen,
-        setHistoricMode,
-        setHistoricLayerToggles,
-        setActiveOpacityLayer,
         loadingPAS,
         sheetExpanded,
         selectedMonument,
@@ -27,15 +23,41 @@ export function ScanControlPanel() {
         hasScanned,
         sortedHotspots,
         displayTargets,
-        mobileSheetMode,
         setMobileSheetMode,
         clearMapItemSelections,
         selectedId,
+        selectedHotspotId,
+        setSelectedHotspotId,
+        persistSheetExpanded,
+        focusTarget,
+        mapRef,
     } = useFieldGuideContext();
+
+    const scanBusy = analyzing || isTerrainScanning || loadingPAS;
+    const hasScanResult = hasScanned || historicMode || detectedFeatures.length > 0 || sortedHotspots.length > 0 || displayTargets.length > 0;
+    const activeTargetId = displayTargets.some(t => t.id === selectedId) ? selectedId ?? '' : '';
+    const activeHotspotId = sortedHotspots.some(h => h.id === selectedHotspotId) ? selectedHotspotId ?? '' : '';
+
+    const openHotspot = (id: string) => {
+        const hotspot = sortedHotspots.find(h => h.id === id);
+        if (!hotspot) return;
+        clearMapItemSelections('hotspot');
+        setMobileSheetMode('hotspots');
+        setSelectedHotspotId(hotspot.id);
+        persistSheetExpanded(true);
+        mapRef.current?.fitBounds(hotspot.bounds as maplibregl.LngLatBoundsLike, { padding: 40 });
+    };
+
+    const openTarget = (id: string) => {
+        const target = displayTargets.find(t => t.id === id);
+        if (!target) return;
+        setMobileSheetMode('targets');
+        focusTarget(target);
+    };
 
     return (
         <>
-            <div className={`grid grid-cols-[auto_auto_1fr_1fr] gap-2 transition-[margin] duration-300 ${sheetExpanded ? '' : 'mt-3'}`} onClick={e => e.stopPropagation()}>
+            <div className={`grid grid-cols-[auto_auto_1fr] gap-2 transition-[margin] duration-300 ${sheetExpanded ? '' : 'mt-3'}`} onClick={e => e.stopPropagation()}>
                 <button onClick={findMe} disabled={isLocating} className="min-h-[34px] bg-slate-800/90 text-slate-200 px-2.5 rounded-xl text-[8px] font-black tracking-widest uppercase hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 whitespace-nowrap border border-white/10 shrink-0">
                     {isLocating ? '...' : 'GPS'}
                 </button>
@@ -46,38 +68,47 @@ export function ScanControlPanel() {
                     }
                 </button>
                 <button
-                    onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
-                    disabled={analyzing || isTerrainScanning}
-                    className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500 text-white border-emerald-300/50 shadow-[0_0_12px_rgba(16,185,129,0.22)] hover:bg-emerald-400'}`}
+                    onClick={hasScanResult ? clearScan : executeScan}
+                    disabled={scanBusy}
+                    className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${hasScanResult ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40' : 'bg-emerald-500 text-white border-emerald-300/50 shadow-[0_0_12px_rgba(16,185,129,0.22)] hover:bg-emerald-400'}`}
                 >
-                    {analyzing || isTerrainScanning ? '...' : detectedFeatures.length > 0 ? 'Clear' : 'Terrain'}
-                </button>
-                <button
-                    onClick={() => {
-                        if (analyzing) return;
-                        if (!historicMode) { clearScan(); setHistoricMode(true); }
-                        else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
-                    }}
-                    disabled={analyzing}
-                    className={`min-h-[34px] px-3 rounded-xl text-[10px] font-black tracking-widest uppercase border transition-all whitespace-nowrap ${analyzing ? 'bg-slate-800 text-slate-500 border-white/5 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_12px_rgba(59,130,246,0.24)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}
-                >
-                    {(loadingPAS && historicMode) ? '...' : historicMode ? 'Clear' : 'Landscape'}
+                    {scanBusy ? 'Reading...' : hasScanResult ? 'Clear Scan' : 'Scan Area'}
                 </button>
             </div>
-            {sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
+            {sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0) && (
                 <div className="grid grid-cols-2 gap-1 rounded-xl border border-emerald-500/25 bg-slate-950/80 p-1 shadow-[0_0_14px_rgba(16,185,129,0.08)]" onClick={e => e.stopPropagation()}>
-                    <button
-                        onClick={() => { clearMapItemSelections(); setMobileSheetMode('hotspots'); }}
-                        className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'hotspots' && !selectedId ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
-                    >
-                        Hotspots
-                    </button>
-                    <button
-                        onClick={() => { clearMapItemSelections(); setMobileSheetMode('targets'); }}
-                        className={`rounded-lg px-2 py-2 text-[10px] font-black uppercase tracking-widest transition-colors ${mobileSheetMode === 'targets' || !!selectedId ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.25)]' : 'bg-white/[0.04] text-white/65 hover:text-white'}`}
-                    >
-                        Targets
-                    </button>
+                    <label className="min-w-0">
+                        <span className="sr-only">Open hotspot</span>
+                        <select
+                            value={activeHotspotId}
+                            onChange={e => openHotspot(e.target.value)}
+                            disabled={sortedHotspots.length === 0}
+                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
+                        >
+                            <option value="">Hotspots</option>
+                            {sortedHotspots.map(h => (
+                                <option key={h.id} value={h.id}>
+                                    {`Hotspot ${h.number} - ${HOTSPOT_TITLES[h.classification]}`}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="min-w-0">
+                        <span className="sr-only">Open target</span>
+                        <select
+                            value={activeTargetId}
+                            onChange={e => openTarget(e.target.value)}
+                            disabled={displayTargets.length === 0}
+                            className="h-9 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 text-[10px] font-black uppercase tracking-widest text-white/80 outline-none transition-colors disabled:opacity-35"
+                        >
+                            <option value="">Targets</option>
+                            {displayTargets.map(t => (
+                                <option key={t.id} value={t.id}>
+                                    {`${t.isProtected ? 'Scheduled Monument' : `Target ${t.number}`}${t.id === selectedId ? ' - Open' : ''}`}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
                 </div>
             )}
         </>

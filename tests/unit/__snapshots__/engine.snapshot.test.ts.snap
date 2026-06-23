@@ -2,6 +2,28 @@
 
 exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 1`] = `
 {
+  "confidenceContributions": [
+    {
+      "label": "1 of 6 landscape processes above threshold",
+      "sign": "−",
+      "weight": 12,
+    },
+    {
+      "label": "2 evidence types missing",
+      "sign": "−",
+      "weight": 10,
+    },
+    {
+      "label": "100% supporting evidence",
+      "sign": "+",
+      "weight": 6,
+    },
+    {
+      "label": "Limited heritage record coverage",
+      "sign": "−",
+      "weight": 5,
+    },
+  ],
   "depositionAffinity": {
     "convergenceMet": false,
     "noteTemplateId": null,
@@ -711,6 +733,28 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
 
 exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = `
 {
+  "confidenceContributions": [
+    {
+      "label": "1 of 6 landscape processes above threshold",
+      "sign": "−",
+      "weight": 12,
+    },
+    {
+      "label": "2 evidence types missing",
+      "sign": "−",
+      "weight": 10,
+    },
+    {
+      "label": "100% supporting evidence",
+      "sign": "+",
+      "weight": 6,
+    },
+    {
+      "label": "Limited heritage record coverage",
+      "sign": "−",
+      "weight": 5,
+    },
+  ],
   "depositionAffinity": {
     "convergenceMet": false,
     "noteTemplateId": null,

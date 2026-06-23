@@ -238,6 +238,7 @@ export function MobileBottomSheet() {
         : selectedUserFind ? 'Your Find'
         : selectedPASFind ? 'Heritage Feature'
         : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? getProtectedTargetCopy(selectedTarget).label : 'Target Details')
+        : selectedHotspotId ? 'Hotspot Details'
         : selectedMonument !== undefined ? 'Scheduled Monument'
         : showSavedPoints ? 'Saved Points'
         : historicMode ? 'Landscape Review'
@@ -249,6 +250,7 @@ export function MobileBottomSheet() {
         : selectedUserFind ? 'Tap × to dismiss'
         : selectedPASFind ? 'Heritage record'
         : (selectedId && !selectedHotspotId) ? (selectedTarget?.isProtected ? (selectedTarget.monumentBufferM ? '20 m safety buffer' : 'Legal protection applies') : 'Signal analysis')
+        : selectedHotspotId ? 'Signal analysis'
         : selectedMonument !== undefined ? 'Legal protection applies'
         : showSavedPoints ? (savedPoints.length > 0 ? `${savedPoints.length} point${savedPoints.length !== 1 ? 's' : ''} saved` : 'No saved points yet')
         : historicMode ? 'Tap panel for historic details'
@@ -703,7 +705,7 @@ export function MobileBottomSheet() {
                 )}
 
                 {/* Hotspot Inspector (mobile) */}
-                {selectedMonument === undefined && selectedHotspotId && !historicMode && (() => {
+                {selectedMonument === undefined && selectedHotspotId && (() => {
                     const h = hotspots.find(h => h.id === selectedHotspotId);
                     if (!h) return null;
                     const hStrength = getHotspotSignalStrength(h.score);

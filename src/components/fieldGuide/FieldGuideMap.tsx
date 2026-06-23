@@ -717,7 +717,7 @@ export function FieldGuideMap() {
             )}
 
             {/* Hotspot Card Popup — desktop only */}
-            {selectedHotspotId && !historicMode && (
+            {selectedHotspotId && (
                 <div className="hidden absolute bottom-6 left-auto right-6 w-96 max-h-[80vh] overflow-y-auto scrollbar-hide animate-in slide-in-from-bottom-4 fade-in duration-200">
                     {hotspots.filter(h => h.id === selectedHotspotId).map(h => {
                         const hStrength = getHotspotSignalStrength(h.score);

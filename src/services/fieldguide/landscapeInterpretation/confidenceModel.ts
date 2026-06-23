@@ -18,9 +18,18 @@ export const PROCESS_CONVERGENCE_THRESHOLD = 50;
 
 // ─── Main function ────────────────────────────────────────────────────────────
 
+export interface ConfidenceContribution {
+    label:  string;
+    sign:   '+' | '−';
+    weight: number;  // approximate impact on final score (0–100 scale)
+}
+
 export interface ConfidenceResult {
-    tier: ConfidenceTier;
-    uncertainty: UncertaintyLevel;
+    tier:          ConfidenceTier;
+    uncertainty:   UncertaintyLevel;
+    // Transparent breakdown of what raised or lowered this confidence level.
+    // Ordered by weight descending. Powers the "why" list in the UI (P6).
+    contributions: ConfidenceContribution[];
 }
 
 export function computeConfidence(
@@ -111,5 +120,64 @@ export function computeConfidence(
         else if (uncertainty === 'moderate') uncertainty = 'high';
     }
 
-    return { tier, uncertainty };
+    // ── Transparent contributions (P4) ───────────────────────────────────────
+    // Build a human-readable breakdown of what raised / lowered confidence.
+    // Weights are approximate contributions to finalConfidenceScore.
+    const contributions: ConfidenceContribution[] = [];
+
+    // Process convergence component
+    if (processesAboveThreshold > 0) {
+        contributions.push({
+            label: `${processesAboveThreshold} of 6 landscape processes above threshold`,
+            sign:  processesAboveThreshold >= 2 ? '+' : '−',
+            weight: Math.round(processConvergence * 0.7),
+        });
+    } else {
+        contributions.push({ label: 'No landscape processes above threshold', sign: '−', weight: 30 });
+    }
+
+    // Hotspot convergence component
+    if (hotspotMetrics !== null) {
+        const hc = hotspotConvergenceNormalised;
+        contributions.push({
+            label: hc > 40 ? 'Strong hotspot signal convergence' : hc > 15 ? 'Moderate hotspot convergence' : 'Weak hotspot convergence',
+            sign:  hc > 20 ? '+' : '−',
+            weight: Math.round(hc * 0.3),
+        });
+    }
+
+    // Evidence balance components
+    if (evidenceBalance) {
+        if (evidenceBalance.supportingPercent > 50) {
+            contributions.push({
+                label: `${Math.round(evidenceBalance.supportingPercent)}% supporting evidence`,
+                sign:  '+',
+                weight: Math.round(Math.max(0, evidenceBalance.supportingPercent - 50) * 0.12),
+            });
+        }
+        if (evidenceBalance.contradictingPercent > 0) {
+            contributions.push({
+                label: `${Math.round(evidenceBalance.contradictingPercent)}% contradicting evidence`,
+                sign:  '−',
+                weight: Math.round(evidenceBalance.contradictingPercent * 0.42),
+            });
+        }
+        if (evidenceBalance.missingCount > 0) {
+            contributions.push({
+                label: `${evidenceBalance.missingCount} evidence type${evidenceBalance.missingCount !== 1 ? 's' : ''} missing`,
+                sign:  '−',
+                weight: Math.min(14, evidenceBalance.missingCount * 5),
+            });
+        }
+    }
+
+    // Record sparsity
+    if (recordSparsity) {
+        contributions.push({ label: 'Limited heritage record coverage', sign: '−', weight: 5 });
+    }
+
+    // Sort by weight descending
+    contributions.sort((a, b) => b.weight - a.weight);
+
+    return { tier, uncertainty, contributions };
 }

@@ -62,6 +62,11 @@ export interface Cluster {
     suppressedBy?: string[];
     // Signal strength decomposition for confidence transparency.
     signalBreakdown?: { terrain: number; hydrology: number; spectral: number; disturbance: number; };
+    // Measured terrain values emitted by terrainScanWorker (vNext-P1).
+    // Derived from the same normalised DEM used for aspect/relativeElevation —
+    // NOT absolute metres. relativeReliefNorm is signed (raised +, sunken −).
+    slopeGradient?:      number;  // 0–1 local gradient magnitude
+    relativeReliefNorm?: number;  // centre value minus ring mean (normalised DEM units)
     // Relationship annotation set by analyzeContext relationship pass.
     relationshipTag?: string;
 }

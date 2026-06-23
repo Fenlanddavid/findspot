@@ -64,6 +64,14 @@ export interface LIEHints {
     hasOccupationSignal: boolean;
 }
 
+// Measured terrain signals passed through from terrainScanWorker (vNext-P3).
+// Optional — engine falls back to elevationM/slopePercent proxy when absent.
+export interface MeasuredTerrain {
+    relativeReliefNorm: number;  // signed, centre vs ring mean (raised +, sunken −)
+    slopeGradient:      number;  // 0–1 local gradient magnitude
+    terrainMeasured:    boolean;
+}
+
 export function computePrimaryProcesses(
     signals: AdaptedSignals,
     geologyContext: GeologyContext | null,
@@ -73,8 +81,14 @@ export function computePrimaryProcesses(
     region: TerrainRegionType,
     potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
     lieHints?: LIEHints,
+    measuredTerrain?: MeasuredTerrain,
 ): PrimaryProcessScore[] {
     const results: PrimaryProcessScore[] = [];
+
+    // Whether to trust the measured DEM-derived signals over categorical proxies
+    const useMeasured = measuredTerrain?.terrainMeasured === true;
+    const relief      = measuredTerrain?.relativeReliefNorm ?? 0;
+    const gradient    = measuredTerrain?.slopeGradient      ?? 0;
 
     // ── 1. Occupation Potential ───────────────────────────────────────────────
     {
@@ -82,12 +96,21 @@ export function computePrimaryProcesses(
         let settlementScore = 0;
         const settlementSignals: string[] = [];
 
-        // Slope < 10%: suitable for settlement
+        // Slope < 10%: suitable for settlement (proxy path)
         if (slopePercent < 10) { settlementScore += 15; }
         // South/SE/SW aspect
         if (isSouthFacingAspect(aspectDegrees)) { settlementScore += 10; settlementSignals.push('slight_elevation'); }
         // Elevation 5–50m above sea level (broad proxy for terrace/dry ground)
         if (elevationM >= 5 && elevationM <= 50) { settlementScore += 10; settlementSignals.push('terrace_edge'); }
+
+        // Measured terrain (vNext-P3): raised stable ground at low gradient —
+        // the classic settlement position (terrace above wet, passable slope).
+        // relativeReliefNorm > 0.02 = detectably raised; gradient < 0.15 = gently graded.
+        if (useMeasured && relief > 0.02 && gradient < 0.15) {
+            settlementScore += 14;
+            settlementSignals.push('raised_relief_measured');
+            settlementSignals.push('low_gradient_measured');
+        }
         // Water proximity — use hydro score as fallback when no feature-based signal
         const hydroScore = potentialBreakdown?.hydro ?? 0;
         if (signals.waterProximity || hydroScore > 25) {
@@ -143,9 +166,16 @@ export function computePrimaryProcesses(
         if (signals.routeConvergence)         { score += 25; contributingSignals.push('route_convergence'); }
         if (signals.confluencePresent)        { score += 20; contributingSignals.push('crossing_point'); }
 
-        // Saddle/col heuristic: moderate elevation + moderate slope
+        // Saddle/col heuristic: moderate elevation + moderate slope (proxy path)
         if (elevationM > 20 && elevationM < 150 && slopePercent > 2 && slopePercent < 15) {
             score += 15;
+        }
+
+        // Measured terrain (vNext-P3): low gradient = passable ground, the
+        // prerequisite for any sustained movement corridor.
+        if (useMeasured && gradient < 0.12) {
+            score += 10;
+            contributingSignals.push('low_gradient_measured');
         }
 
         const rawScore = cap(score);
@@ -278,12 +308,19 @@ export function computePrimaryProcesses(
             if (terrainScore > 80) contributingSignals.push('high_ground_restricted_approach');
         }
 
-        // Restricted approach bonus: steep slope suggests defended/prominent ground
+        // Restricted approach bonus: steep slope suggests defended/prominent ground (proxy)
         if (slopePercent > 15) { score = Math.min(100, score + 15); contributingSignals.push('high_ground_restricted_approach'); }
         // LIE corroboration: terrain scan independently classified a prominent landform.
         // Score-only boost — avoid reusing slight_elevation here as that would
         // misrepresent the source in any evidence breakdown.
         if (lieHints?.hasLandformProminence) { score = Math.min(100, score + 10); }
+
+        // Measured terrain (vNext-P3): locally raised ground is a direct measurement
+        // of relative prominence. Thresholds: 0.05 = faint rise, 0.15 = clear rise.
+        if (useMeasured && relief > 0.05) {
+            score = Math.min(100, score + Math.round(Math.min(relief, 0.5) * 60));
+            contributingSignals.push('raised_relief_measured');
+        }
 
         const rawScore = cap(score);
         const multiplier = getRegionalMultiplier(processId, region);

@@ -30,12 +30,14 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'cluster-links-casing',            visibleWhen: s => !s.historicMode && s.devMode },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode && s.devMode },
-    { id: 'trace-targets-circle',            visibleWhen: s => !s.historicMode },
-    { id: 'trace-targets-selected',          visibleWhen: s => !s.historicMode },
-    { id: 'targets-halo',                    visibleWhen: s => !s.historicMode },
-    { id: 'targets-circle',                  visibleWhen: s => !s.historicMode },
-    { id: 'hotspots-outline',                visibleWhen: s => !s.historicMode },
-    { id: 'hotspots-fill',                   visibleWhen: s => !s.historicMode },
+    // Keep targets/hotspots available in landscape review mode. The combined
+    // scan overlays historic context, but target pins must remain inspectable.
+    { id: 'trace-targets-circle',            visibleWhen: () => true },
+    { id: 'trace-targets-selected',          visibleWhen: () => true },
+    { id: 'targets-halo',                    visibleWhen: () => true },
+    { id: 'targets-circle',                  visibleWhen: () => true },
+    { id: 'hotspots-outline',                visibleWhen: () => true },
+    { id: 'hotspots-fill',                   visibleWhen: () => true },
 ];
 
 function getPolygonCenter(boundary: any): [number, number] | null {
@@ -82,6 +84,29 @@ function makeAnnotationLabelElement(index: number) {
     el.style.padding = '0.05rem 0.25rem';
     el.style.pointerEvents = 'none';
     el.style.textAlign = 'center';
+    return el;
+}
+
+function makeTargetLabelElement(label: string, primary: boolean) {
+    const el = document.createElement('div');
+    el.textContent = label;
+    el.style.alignItems = 'center';
+    el.style.background = primary ? 'rgba(5, 150, 105, 0.95)' : 'rgba(15, 23, 42, 0.88)';
+    el.style.border = primary ? '1px solid rgba(167, 243, 208, 0.9)' : '1px solid rgba(255, 255, 255, 0.75)';
+    el.style.borderRadius = '999px';
+    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
+    el.style.color = '#ffffff';
+    el.style.display = 'flex';
+    el.style.font = primary
+        ? "900 8px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        : "900 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    el.style.height = primary ? '1.15rem' : '1.1rem';
+    el.style.justifyContent = 'center';
+    el.style.letterSpacing = primary ? '0.06em' : '0';
+    el.style.minWidth = primary ? '2.15rem' : '1.1rem';
+    el.style.padding = primary ? '0 0.25rem' : '0 0.2rem';
+    el.style.pointerEvents = 'none';
+    el.style.textTransform = 'uppercase';
     return el;
 }
 
@@ -172,6 +197,7 @@ export function useFieldGuideMap({
     const callbacksRef       = useRef<MapCallbacks>(callbacks);
     const annotationModeRef  = useRef(false);
     const fieldLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
+    const targetLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
     const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
     const savedPointMarkersRef = useRef<maplibregl.Marker[]>([]);
 
@@ -302,7 +328,6 @@ export function useFieldGuideMap({
                     'circle-stroke-color': ['case', ['get', 'isProtected'], '#fecaca', '#fff'],
                 },
             });
-
             map.addSource('pas-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'pas-circles', type: 'circle', source: 'pas-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 10, 'circle-color': '#3b82f6', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
 
@@ -449,6 +474,8 @@ export function useFieldGuideMap({
             if (clickLabelTimer.current) clearTimeout(clickLabelTimer.current);
             fieldLabelMarkersRef.current.forEach(marker => marker.remove());
             fieldLabelMarkersRef.current = [];
+            targetLabelMarkersRef.current.forEach(marker => marker.remove());
+            targetLabelMarkersRef.current = [];
             devAnnotationMarkersRef.current.forEach(marker => marker.remove());
             devAnnotationMarkersRef.current = [];
             savedPointMarkersRef.current.forEach(marker => marker.remove());
@@ -494,9 +521,37 @@ export function useFieldGuideMap({
             features: detectedFeatures.filter(f => !f.isRouteArtefactRisk).map(f => ({
                 type: 'Feature' as const,
                 geometry: { type: 'Point' as const, coordinates: f.center },
-                properties: { id: f.id, number: f.number.toString(), isProtected: f.isProtected, source: f.sources[0], consensus: f.sources.length, isPrimary: f.id === primaryTargetId },
+                properties: {
+                    id: f.id,
+                    number: f.number.toString(),
+                    isProtected: f.isProtected,
+                    source: f.sources[0],
+                    consensus: f.sources.length,
+                    isPrimary: f.id === primaryTargetId,
+                },
             })),
         } as GeoJSON.FeatureCollection);
+    }, [detectedFeatures, primaryTargetId]);
+
+    // ── Target pin labels ────────────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        targetLabelMarkersRef.current.forEach(marker => marker.remove());
+        targetLabelMarkersRef.current = [];
+
+        detectedFeatures
+            .filter(f => !f.isRouteArtefactRisk && !f.isProtected)
+            .forEach(f => {
+                const primary = f.id === primaryTargetId;
+                const marker = new maplibregl.Marker({
+                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary),
+                    anchor: 'center',
+                })
+                    .setLngLat(f.center)
+                    .addTo(map);
+                targetLabelMarkersRef.current.push(marker);
+            });
     }, [detectedFeatures, primaryTargetId]);
 
     // ── Trace Signals source ──────────────────────────────────────────────────

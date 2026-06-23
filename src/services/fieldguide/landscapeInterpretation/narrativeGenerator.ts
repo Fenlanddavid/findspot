@@ -105,6 +105,9 @@ const SIGNAL_ID_MAP: Record<string, ControlledSignalPhrase> = {
     confluence:             'lies at or near a river confluence',
     industrial_resource:    'shows evidence of historic industrial resource proximity',
     marginal_ground:        'occupies marginal ground between two landscape types',
+    // Measured-terrain signals (vNext-P3) — only emitted when terrainMeasured is true
+    raised_relief_measured: 'shows locally raised relief above surrounding terrain',
+    low_gradient_measured:  'lies on low-gradient accessible ground',
 };
 
 export function signalIdToControlledPhrase(signalId: string): ControlledSignalPhrase | null {

@@ -11,7 +11,7 @@ import type {
 import { extractSignals }                                              from '../services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../services/fieldguide/landscapeInterpretation/regionalCalibration';
 import { computePrimaryProcesses }                                     from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
-import type { LIEHints }                                               from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
+import type { LIEHints, MeasuredTerrain }                              from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
 import { computeBurialBehaviour }                                      from '../services/fieldguide/landscapeInterpretation/burialBehaviour';
 import { computeDefensiveBehaviour }                                   from '../services/fieldguide/landscapeInterpretation/defensiveBehaviour';
 import { computeSecondaryInterpretations, selectPrimaryAndSecondary }  from '../services/fieldguide/landscapeInterpretation/secondaryInterpretationEngine';
@@ -22,7 +22,7 @@ import { isScheduledMonumentOverlap }                                  from '../
 import { generateHedgedNarrative }                                     from '../services/fieldguide/landscapeInterpretation/narrativeGenerator';
 import { computeEvidenceAssessment }                                   from '../services/fieldguide/landscapeInterpretation/evidenceModel';
 
-const ENGINE_VERSION = 'ALIE-2026.06.20a';
+const ENGINE_VERSION = 'ALIE-2026.06.22a';
 
 self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
     try {
@@ -41,6 +41,9 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             slopePercent,
             aspectDegrees,
             potentialBreakdown,
+            relativeReliefNorm,
+            slopeGradient,
+            terrainMeasured,
         } = input;
 
         // ── 1. Extract adapted signals ────────────────────────────────────────
@@ -63,8 +66,14 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             hasLandformProminence: hotspotContext.hasLandformProminence,
             hasOccupationSignal:   hotspotContext.hasOccupationSignal,
         } : undefined;
+
+        // Measured terrain (vNext-P3): pass through when present
+        const measuredTerrain: MeasuredTerrain | undefined = terrainMeasured
+            ? { relativeReliefNorm: relativeReliefNorm ?? 0, slopeGradient: slopeGradient ?? 0, terrainMeasured: true }
+            : undefined;
+
         const processScores = computePrimaryProcesses(
-            signals, geologyContext, elevationM, slopePercent, aspectDegrees, region, potentialBreakdown, lieHints,
+            signals, geologyContext, elevationM, slopePercent, aspectDegrees, region, potentialBreakdown, lieHints, measuredTerrain,
         );
 
         // ── 4. Temporal persistence ───────────────────────────────────────────
@@ -122,7 +131,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
         );
 
         // ── 11. Confidence model ──────────────────────────────────────────────
-        const { tier: confidenceTier, uncertainty } = computeConfidence(
+        const { tier: confidenceTier, uncertainty, contributions: confidenceContributions } = computeConfidence(
             processScores,
             interpretationScores,
             primaryInterpretationId,
@@ -144,10 +153,13 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
         );
         const primaryPeriodAffinities = primaryInterpretation?.periodAffinity ?? [];
 
+        // The NHLE query reports scheduled monuments in the scan context, not
+        // a precise active-card overlap. Keep that as a UI safety banner and do
+        // not let it replace the actual landscape interpretation narrative.
         const narrative = generateHedgedNarrative(
             primaryInterpretationId,
             confidenceTier,
-            scheduledMonumentOverlap,
+            false,
             processScores,
             burialResult,
             defensiveResult.periodBranch,
@@ -166,6 +178,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             temporalPersistence,
             recordSparsity,
             uncertainty,
+            confidenceContributions,
             scheduledMonumentOverlap,
             narrative,
             engineVersion: ENGINE_VERSION,

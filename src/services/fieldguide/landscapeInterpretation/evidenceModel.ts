@@ -65,6 +65,8 @@ const SIGNAL_EVIDENCE: Record<string, { label: string; source: EvidenceSource }>
     confluence:                        { label: 'River confluence or water meeting point', source: 'hydrology' },
     industrial_resource:               { label: 'Resource geology suitable for extraction', source: 'geology' },
     marginal_ground:                   { label: 'Marginal ground between landscape types', source: 'derived_model' },
+    raised_relief_measured:            { label: 'Measured local rise above surrounding ground', source: 'terrain' },
+    low_gradient_measured:             { label: 'Measured low-gradient accessible ground', source: 'terrain' },
 };
 
 function cap(value: number, max = 100): number {

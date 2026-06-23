@@ -29,6 +29,9 @@ export const CONTROLLED_SIGNAL_VOCABULARY = [
     'lies at or near a river confluence',
     'shows evidence of historic industrial resource proximity',
     'occupies marginal ground between two landscape types',
+    // Measured-terrain phrases (vNext-P3) — only asserted when terrainMeasured is true
+    'shows locally raised relief above surrounding terrain',
+    'lies on low-gradient accessible ground',
 ] as const;
 
 export type ControlledSignalPhrase = typeof CONTROLLED_SIGNAL_VOCABULARY[number];
@@ -200,6 +203,12 @@ export interface ArchaeologicalEvidenceAssessment {
 
 // ─── Main result type ─────────────────────────────────────────────────────────
 
+export interface ConfidenceContribution {
+    label:  string;
+    sign:   '+' | '−';
+    weight: number;
+}
+
 export interface LandscapeInterpretation {
     geohash6: string;
     processScores: PrimaryProcessScore[];
@@ -211,6 +220,8 @@ export interface LandscapeInterpretation {
     temporalPersistence: TemporalPersistenceLabel;
     recordSparsity: boolean;
     uncertainty: UncertaintyLevel;
+    // Transparent breakdown of what raised / lowered confidence (P4).
+    confidenceContributions?: ConfidenceContribution[];
     scheduledMonumentOverlap: boolean;
     narrative: HedgedNarrative;
     engineVersion: string;
@@ -251,6 +262,12 @@ export interface LandscapeInterpretationWorkerInput {
     elevationM: number;
     slopePercent: number;
     aspectDegrees: number;
+    // Measured terrain signals from terrainScanWorker (vNext-P1).
+    // Present when real DEM data underlies the scan; absent on cached / no-DEM
+    // scans. The engine prefers these over the proxy values above.
+    relativeReliefNorm?: number;  // signed: centre vs ring mean (raised +, sunken −)
+    slopeGradient?:      number;  // 0–1 local gradient magnitude (normalised DEM)
+    terrainMeasured?:    boolean; // true = measured values present and trustworthy
     // PotentialScore breakdown from the existing hotspot engine — used as
     // primary terrain/water proxy when raw terrain data is unavailable.
     // terrain: 0–100 terrain relief/anomaly. hydro: 0–100 water proximity.

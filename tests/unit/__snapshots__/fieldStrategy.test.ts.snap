@@ -1,0 +1,81 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildFieldStrategy > snapshot: mixed-behaviour scan 1`] = `
+{
+  "avoidZones": [
+    {
+      "hotspotId": "c",
+      "reason": "Current evidence suggests this ground is less likely to represent primary activity. Any material here may reflect plough movement rather than in-situ deposition.",
+      "title": "Movement Corridor (Likely)",
+    },
+  ],
+  "behaviours": [
+    {
+      "emphasis": "Primary",
+      "label": "Movement",
+      "processId": "movement",
+      "reason": "Multiple independent datasets express this behaviour most clearly here.",
+      "representativeHotspotId": "a",
+      "representedBy": "Movement Corridor (Likely)",
+      "stars": "★★★★★",
+    },
+    {
+      "emphasis": "Strong",
+      "label": "Occupation",
+      "processId": "occupation_potential",
+      "reason": "Multiple independent datasets express this behaviour most clearly here.",
+      "representativeHotspotId": "b",
+      "representedBy": "Movement Corridor (Likely)",
+      "stars": "★★★★☆",
+    },
+    {
+      "emphasis": "Background",
+      "label": "Water",
+      "processId": "water_relationships",
+      "reason": "Indicated by the landscape signal, without a single dominant zone.",
+      "representativeHotspotId": null,
+      "representedBy": null,
+      "stars": "★★☆☆☆",
+    },
+  ],
+  "confidenceLabel": "Very High",
+  "confidenceReason": "4 independent signal classes converge on the leading interpretation.",
+  "hasPlan": true,
+  "landscapeNote": null,
+  "leadLine": "Available evidence points first to the movement corridor (likely).",
+  "searchOrder": [
+    {
+      "approach": "",
+      "behaviour": "movement",
+      "caution": undefined,
+      "focus": "On a historic route",
+      "hotspotId": "a",
+      "rank": 1,
+      "reasoning": [
+        "a",
+        "b",
+      ],
+      "stars": "★★★★★",
+      "technique": "Cross-search the convergence from two directions; work outward from the crossing.",
+      "title": "Movement Corridor (Likely)",
+    },
+    {
+      "approach": "",
+      "behaviour": "occupation_potential",
+      "caution": undefined,
+      "focus": "On a historic route",
+      "hotspotId": "b",
+      "rank": 2,
+      "reasoning": [
+        "a",
+        "b",
+      ],
+      "stars": "★★★★☆",
+      "technique": "Slow overlapping grid; check the edge transition between zones.",
+      "title": "Movement Corridor (Likely)",
+    },
+  ],
+  "surveyorNote": "A practical first pass would concentrate on the movement corridor (likely), where the landscape signal is strongest. Treat disturbed, lower-priority ground as secondary. Reassess the evidence before continuing.",
+  "uncertaintyReasons": [],
+}
+`;

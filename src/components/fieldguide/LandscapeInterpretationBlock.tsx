@@ -12,8 +12,12 @@ import type {
     EvidenceItem,
     LikelihoodTier,
 } from '../../types/landscapeInterpretation';
+import type { LandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
+import type { FieldStrategy } from '../../services/fieldguide/fieldStrategy';
+import type { Cluster } from '../../pages/fieldGuideTypes';
 import { getTemplateText } from '../../services/fieldguide/landscapeInterpretation/narrativeGenerator';
 import { LandscapeBehaviourBars } from './LandscapeBehaviourBars';
+import { FieldStrategyBlock } from './FieldStrategyBlock';
 
 // ─── Label maps ───────────────────────────────────────────────────────────────
 
@@ -108,7 +112,7 @@ function ConfidenceBadge({ tier }: { tier: ConfidenceTier }) {
         lower:     'bg-white/8 border-white/20 text-white/65',
     };
     return (
-        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border ${colours[tier]}`}>
+        <span className={`text-[11px] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border ${colours[tier]}`}>
             {CONFIDENCE_LABELS[tier]}
         </span>
     );
@@ -223,14 +227,22 @@ function LoadingSkeleton() {
 interface Props {
     interpretation: LandscapeInterpretation | null;
     loading?: boolean;
+    evidence?: LandscapeEvidence;
+    fieldStrategy?: FieldStrategy;
+    targetFeatures?: Cluster[];
+    onFocusTarget?: (target: Cluster) => void;
 }
 
-export function LandscapeInterpretationBlock({ interpretation, loading = false }: Props) {
-    const [whyOpen, setWhyOpen] = useState(false);
-    const [evidenceOpen, setEvidenceOpen] = useState(false);
-    const [periodOpen, setPeriodOpen] = useState(false);
-    const [interactionOpen, setInteractionOpen] = useState(false);
-    const [findTypeOpen, setFindTypeOpen] = useState(false);
+export function LandscapeInterpretationBlock({
+    interpretation,
+    loading = false,
+    evidence,
+    fieldStrategy,
+    targetFeatures,
+    onFocusTarget,
+}: Props) {
+    const [scheduledOpen, setScheduledOpen] = useState(false);
+    const [detailsOpen, setDetailsOpen] = useState(false);
 
     if (loading && !interpretation) {
         return (
@@ -292,18 +304,38 @@ export function LandscapeInterpretationBlock({ interpretation, loading = false }
     return (
         <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-3 space-y-3">
             <p className="text-[8px] font-black text-blue-300/70 uppercase tracking-[0.2em]">
-                Archaeological Interpretation
+                Landscape Read
             </p>
 
             {scheduledMonumentOverlap && (
-                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5">
-                    <p className="text-[8px] font-black text-amber-300/80 uppercase tracking-[0.18em] mb-1">
-                        Protected — Scheduled Monument
-                    </p>
-                    <p className="text-[10px] font-bold text-amber-100/90 leading-snug">
-                        {getTemplateText('scheduled_monument_notice')}
-                    </p>
-                </div>
+                <button
+                    type="button"
+                    onClick={() => setScheduledOpen(v => !v)}
+                    className="w-full text-left rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2"
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-[9px] font-black text-amber-300 uppercase tracking-[0.18em]">
+                            Scheduled Monument Nearby
+                        </p>
+                        <span className="text-[12px] font-black text-amber-300/80">
+                            {scheduledOpen ? '-' : '+'}
+                        </span>
+                    </div>
+                    {scheduledOpen && (
+                        <p className="mt-1.5 text-[10px] font-bold text-amber-100/85 leading-snug">
+                            A scheduled monument is returned in this scan context. It may be outside the current visible map area; check the official record and avoid protected ground before detecting.
+                        </p>
+                    )}
+                </button>
+            )}
+
+            {/* Field action comes first; model interpretation follows below. */}
+            {fieldStrategy && (
+                <FieldStrategyBlock
+                    strategy={fieldStrategy}
+                    targetFeatures={targetFeatures}
+                    onFocusTarget={onFocusTarget}
+                />
             )}
 
             {/* 1. Landscape assessment summary */}
@@ -320,10 +352,6 @@ export function LandscapeInterpretationBlock({ interpretation, loading = false }
                             <p className="text-[10px] font-bold text-white/84 leading-snug">
                                 {evidenceAssessment.archaeologicalReasoning || narrativeText}
                             </p>
-                            <EvidenceMeter
-                                support={evidenceAssessment.supportingPercent}
-                                contradiction={evidenceAssessment.contradictingPercent}
-                            />
                         </div>
                     ) : (
                         <p className="text-[10px] font-bold text-white/70 leading-snug italic">
@@ -347,155 +375,171 @@ export function LandscapeInterpretationBlock({ interpretation, loading = false }
                     )}
             </div>
 
-            {evidenceAssessment.landscapeEngines
-                .filter(engine => engine.engineId === 'landscape_opportunity')
-                .map(engine => (
-                    <div
-                        key={engine.engineId}
-                        className="rounded-xl bg-white/[0.035] border border-white/10 p-2 min-w-0 flex items-center justify-between gap-2"
-                    >
-                        <p className="min-w-0 text-[8px] font-black text-white/48 uppercase tracking-[0.08em] leading-tight truncate">
-                            {engine.label.replace('Landscape ', '')}
-                        </p>
-                        <div className="shrink-0">
-                            <TierBadge tier={engine.tier} compact />
-                        </div>
-                    </div>
-                ))}
-
-            {/* 3. Temporal persistence */}
             <div className="border-t border-white/8 pt-2">
                 <p className="text-[9px] font-bold text-white/68 leading-snug">{temporalLabel}</p>
-                <p className="text-[9px] font-bold text-white/56 leading-snug mt-1">
-                    {evidenceAssessment.confidenceSummary}
-                </p>
             </div>
 
-            {/* 4. Deposition note */}
-            {depositionAffinity.convergenceMet && depositionAffinity.noteTemplateId && (
-                <div className="border-t border-white/8 pt-2">
-                    <p className="text-[9px] font-bold text-white/62 italic leading-snug">
-                        {getTemplateText(depositionAffinity.noteTemplateId)}
-                    </p>
-                </div>
-            )}
-
-            {/* 5. Evidence expander */}
             <div className="border-t border-white/8 pt-2">
                 <button
-                    onClick={() => setEvidenceOpen(v => !v)}
-                    className="flex items-center gap-1.5 text-[9px] font-black text-white/62 uppercase tracking-widest hover:text-white/82 transition-colors"
+                    onClick={() => setDetailsOpen(v => !v)}
+                    className="flex items-center gap-1.5 text-[9px] font-black text-white/55 uppercase tracking-widest hover:text-white/82 transition-colors"
                 >
-                    <span>{evidenceOpen ? '-' : '+'}</span>
-                    Supporting and contradicting evidence
+                    <span>{detailsOpen ? '-' : '+'}</span>
+                    Model details
                 </button>
-                {evidenceOpen && (
+                {detailsOpen && (
                     <div className="mt-2 grid gap-3 animate-in fade-in duration-200">
+                        <EvidenceMeter
+                            support={evidenceAssessment.supportingPercent}
+                            contradiction={evidenceAssessment.contradictingPercent}
+                        />
+
+                        <p className="text-[9px] font-bold text-white/56 leading-snug">
+                            {evidenceAssessment.confidenceSummary}
+                        </p>
+
+                        {depositionAffinity.convergenceMet && depositionAffinity.noteTemplateId && (
+                            <p className="text-[9px] font-bold text-white/62 italic leading-snug">
+                                {getTemplateText(depositionAffinity.noteTemplateId)}
+                            </p>
+                        )}
+
+                        {evidenceAssessment.landscapeEngines.length > 0 && (
+                            <div className="grid grid-cols-3 gap-1.5">
+                                {evidenceAssessment.landscapeEngines.map(engine => (
+                                    <div key={engine.engineId} className="rounded-lg bg-white/[0.035] border border-white/10 px-2 py-1.5 min-w-0">
+                                        <p className="text-[7px] font-black text-white/45 uppercase tracking-[0.08em] leading-tight truncate">
+                                            {engine.label.replace('Landscape ', '')}
+                                        </p>
+                                        <div className="mt-1">
+                                            <TierBadge tier={engine.tier} compact />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         <EvidenceList title="Supporting Evidence" items={evidenceAssessment.supportingEvidence} tone="support" />
                         <EvidenceList title="Contradicting Evidence" items={evidenceAssessment.contradictingEvidence} tone="against" />
                         <EvidenceList title="Missing or Weak Evidence" items={evidenceAssessment.missingEvidence} tone="missing" />
-                    </div>
-                )}
-            </div>
 
-            {/* 6. Period likelihood */}
-            {evidenceAssessment.periodLikelihood.length > 0 && (
-                <div className="border-t border-white/8 pt-2">
-                    <button
-                        onClick={() => setPeriodOpen(v => !v)}
-                        className="flex items-center gap-1.5 text-[9px] font-black text-white/62 uppercase tracking-widest hover:text-white/82 transition-colors"
-                    >
-                        <span>{periodOpen ? '-' : '+'}</span>
-                        Period likelihood
-                    </button>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                        {evidenceAssessment.periodLikelihood.slice(0, periodOpen ? 5 : 3).map(period => (
-                            <span
-                                key={period.period}
-                                className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
-                            >
-                                {PERIOD_LABELS[period.period]} · {TIER_LABELS[period.tier]}
-                            </span>
-                        ))}
-                    </div>
-                    {periodOpen && (
-                        <div className="mt-2 space-y-1.5 animate-in fade-in duration-200">
-                            {evidenceAssessment.periodLikelihood.slice(0, 5).map(period => (
-                                <p key={period.period} className="text-[9px] font-bold text-white/60 leading-snug">
-                                    {period.reasoning}
+                        {evidenceAssessment.periodLikelihood.length > 0 && (
+                            <div className="space-y-1.5 border-t border-white/8 pt-2">
+                                <p className="text-[8px] font-black text-blue-300/70 uppercase tracking-widest">
+                                    Period likelihood
                                 </p>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* 7. Behaviour interactions */}
-            {evidenceAssessment.behaviourInteractions.length > 0 && (
-                <div className="border-t border-white/8 pt-2">
-                    <button
-                        onClick={() => setInteractionOpen(v => !v)}
-                        className="flex items-center gap-1.5 text-[9px] font-black text-white/62 uppercase tracking-widest hover:text-white/82 transition-colors"
-                    >
-                        <span>{interactionOpen ? '-' : '+'}</span>
-                        Behaviour interactions
-                    </button>
-                    <div className="mt-2 space-y-1.5">
-                        {evidenceAssessment.behaviourInteractions.slice(0, interactionOpen ? 4 : 2).map(interaction => (
-                            <div key={interaction.interactionId} className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black text-white/82 leading-tight">{interaction.label}</p>
-                                    {interactionOpen && (
-                                        <p className="text-[9px] font-bold text-white/56 leading-snug mt-0.5">{interaction.reasoning}</p>
-                                    )}
+                                <div className="flex flex-wrap gap-1">
+                                    {evidenceAssessment.periodLikelihood.slice(0, 4).map(period => (
+                                        <span
+                                            key={period.period}
+                                            className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
+                                        >
+                                            {PERIOD_LABELS[period.period]} · {TIER_LABELS[period.tier]}
+                                        </span>
+                                    ))}
                                 </div>
-                                <TierBadge tier={interaction.tier} />
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                        )}
 
-            {/* 8. "Why this interpretation?" expander */}
-            <div className="border-t border-white/8 pt-2">
-                <button
-                    onClick={() => setWhyOpen(v => !v)}
-                    className="flex items-center gap-1.5 text-[9px] font-black text-white/62 uppercase tracking-widest hover:text-white/82 transition-colors"
-                >
-                    <span>{whyOpen ? '-' : '+'}</span>
-                    Behaviour engines
-                </button>
-                {whyOpen && (
-                    <div className="mt-2 animate-in fade-in duration-200">
-                        <LandscapeBehaviourBars processScores={processScores} />
+                        {evidenceAssessment.behaviourInteractions.length > 0 && (
+                            <div className="space-y-1.5 border-t border-white/8 pt-2">
+                                <p className="text-[8px] font-black text-white/45 uppercase tracking-widest">
+                                    Behaviour interactions
+                                </p>
+                                {evidenceAssessment.behaviourInteractions.slice(0, 3).map(interaction => (
+                                    <div key={interaction.interactionId} className="flex items-start justify-between gap-2">
+                                        <p className="text-[10px] font-black text-white/78 leading-tight">{interaction.label}</p>
+                                        <TierBadge tier={interaction.tier} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {evidence?.hydrology.hydrologicalContext != null && (
+                            <div className="space-y-1.5 border-t border-white/8 pt-2">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-white/50">
+                                    Hydrology
+                                </p>
+                                {evidence.hydrology.dryMarginScore != null && evidence.hydrology.dryMarginScore > 0.2 && (
+                                    <p className="text-[10px] font-bold text-white/68 leading-snug">
+                                        Dry margin {(evidence.hydrology.dryMarginScore * 100).toFixed(0)}% — raised usable ground beside local wet terrain.
+                                    </p>
+                                )}
+                                {evidence.hydrology.flowConvergence != null && evidence.hydrology.flowConvergence > 0.2 && (
+                                    <p className="text-[10px] font-bold text-white/68 leading-snug">
+                                        Flow convergence {(evidence.hydrology.flowConvergence * 100).toFixed(0)}% — water routes converge here.
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {interpretation.confidenceContributions && interpretation.confidenceContributions.length > 0 && (
+                            <div className="space-y-1.5 border-t border-white/8 pt-2">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-white/50">
+                                    Why this confidence
+                                </p>
+                                {interpretation.confidenceContributions.map((c, i) => (
+                                    <div key={i} className="flex items-center gap-2">
+                                        <span className={`text-[11px] font-black shrink-0 ${c.sign === '+' ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                            {c.sign}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-white/68 leading-snug">
+                                            {c.label}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {evidence && (evidence.historic.routes.length > 0 || evidence.historic.nhle.length > 0 || evidence.historic.aim.length > 0 || evidence.user.findPeriods.length > 0) && (
+                            <div className="space-y-1 border-t border-white/8 pt-2">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-white/50">
+                                    Dataset counts
+                                </p>
+                                {evidence.historic.routes.length > 0 && (
+                                    <p className="text-[10px] font-bold text-white/56 leading-snug">
+                                        {evidence.historic.routes.length} historic route{evidence.historic.routes.length !== 1 ? 's' : ''} in scan
+                                    </p>
+                                )}
+                                {evidence.historic.nhle.length > 0 && (
+                                    <p className="text-[10px] font-bold text-white/56 leading-snug">
+                                        {evidence.historic.nhle.length} scheduled monument{evidence.historic.nhle.length !== 1 ? 's' : ''} recorded
+                                    </p>
+                                )}
+                                {evidence.historic.aim.length > 0 && (
+                                    <p className="text-[10px] font-bold text-white/56 leading-snug">
+                                        {evidence.historic.aim.length} aerial intelligence feature{evidence.historic.aim.length !== 1 ? 's' : ''}
+                                    </p>
+                                )}
+                                {evidence.user.findPeriods.length > 0 && (
+                                    <p className="text-[10px] font-bold text-white/56 leading-snug">
+                                        Your finds: {evidence.user.findPeriods.join(', ')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="border-t border-white/8 pt-2">
+                            <LandscapeBehaviourBars processScores={processScores} />
+                        </div>
+
+                        {uncertainty !== 'low' && (
+                            <UncertaintyNote uncertainty={uncertainty} />
+                        )}
+
+                        {findTypeText && (
+                            <div className="bg-white/[0.03] border border-white/8 rounded-xl p-2">
+                                <p className="text-[8px] font-black text-white/45 uppercase tracking-widest mb-1">
+                                    Typical find types
+                                </p>
+                                <p className="text-[9px] font-bold text-white/68 leading-snug">
+                                    {findTypeText}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
-
-            {/* 9. Uncertainty */}
-            {uncertainty !== 'low' && (
-                <UncertaintyNote uncertainty={uncertainty} />
-            )}
-
-            {/* 10. Find-type panel */}
-            {findTypeText && (
-                <div className="border-t border-white/8 pt-2">
-                    <button
-                        onClick={() => setFindTypeOpen(v => !v)}
-                        className="flex items-center gap-1.5 text-[9px] font-black text-white/62 uppercase tracking-widest hover:text-white/82 transition-colors"
-                    >
-                        <span>{findTypeOpen ? '-' : '+'}</span>
-                        Typical find types
-                    </button>
-                    {findTypeOpen && (
-                        <div className="mt-2 bg-white/[0.03] border border-white/8 rounded-xl p-2 animate-in fade-in duration-200">
-                            <p className="text-[9px] font-bold text-white/72 leading-snug">
-                                {findTypeText}
-                            </p>
-                        </div>
-                    )}
-                </div>
-            )}
 
             <ModelNotice />
         </div>
