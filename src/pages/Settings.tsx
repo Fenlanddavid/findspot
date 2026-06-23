@@ -1125,7 +1125,7 @@ export default function Settings() {
                 }
               }}
             >
-              Version 3.0
+              Version&nbsp;&nbsp;4.0
             </button>
             {easterEggUnlocked ? (
               typeof installCount === 'number' && (

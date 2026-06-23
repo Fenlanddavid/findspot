@@ -87,7 +87,7 @@ function makeAnnotationLabelElement(index: number) {
     return el;
 }
 
-function makeTargetLabelElement(label: string, primary: boolean, targetNumber?: number) {
+function makeTargetLabelElement(label: string, primary: boolean) {
     const el = document.createElement('div');
     el.style.alignItems = 'center';
     el.style.background = primary
@@ -105,8 +105,8 @@ function makeTargetLabelElement(label: string, primary: boolean, targetNumber?: 
     el.style.height = primary ? '1.35rem' : '1.2rem';
     el.style.justifyContent = 'center';
     el.style.letterSpacing = '0.04em';
-    el.style.minWidth = primary ? '3rem' : '1.35rem';
-    el.style.padding = primary ? '0 0.4rem' : '0 0.32rem';
+    el.style.minWidth = primary ? '2.8rem' : '1.35rem';
+    el.style.padding = primary ? '0 0.5rem' : '0 0.32rem';
     el.style.pointerEvents = 'none';
     el.style.textTransform = 'uppercase';
 
@@ -117,15 +117,7 @@ function makeTargetLabelElement(label: string, primary: boolean, targetNumber?: 
         start.style.letterSpacing = '0.12em';
         start.style.lineHeight = '1';
 
-        const number = document.createElement('span');
-        number.textContent = targetNumber !== undefined ? targetNumber.toString().padStart(2, '0') : '';
-        number.style.borderLeft = '1px solid rgba(236, 253, 245, 0.36)';
-        number.style.color = '#ffffff';
-        number.style.fontSize = '0.65rem';
-        number.style.lineHeight = '1';
-        number.style.paddingLeft = '0.24rem';
-
-        el.append(start, number);
+        el.append(start);
         return el;
     }
 
@@ -568,7 +560,7 @@ export function useFieldGuideMap({
             .forEach(f => {
                 const primary = f.id === primaryTargetId;
                 const marker = new maplibregl.Marker({
-                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary, f.number),
+                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary),
                     anchor: 'center',
                 })
                     .setLngLat(f.center)

@@ -138,7 +138,7 @@ export function HotspotTray() {
         <>
             {/* Hotspot list */}
             {!historicMode && mobileSheetMode === 'hotspots' && sortedHotspots.length > 0 && (
-                <div>
+                <div id="mobile-hotspots-list">
                     <p className="text-[0.5rem] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Landscape Hotspots</p>
                     <div className="space-y-2">
                         {sortedHotspots.map(h => {
@@ -176,7 +176,7 @@ export function HotspotTray() {
 
             {/* Target list */}
             {!historicMode && mobileSheetMode === 'targets' && displayTargets.length > 0 && (
-                <div>
+                <div id="mobile-targets-list">
                     <p className="text-[0.5rem] font-black text-white/25 uppercase tracking-[0.25em] mb-2 px-1">Investigation Targets</p>
                     <div className="space-y-2">
                         {displayTargets.map(f => {

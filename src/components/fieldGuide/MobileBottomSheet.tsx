@@ -230,7 +230,7 @@ export function MobileBottomSheet() {
         return null;
     }
 
-    const sheetHeaderExpanded = sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && !historicMode && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0);
+    const sheetHeaderExpanded = sheetExpanded && selectedMonument === undefined && !selectedUserFind && !selectedPASFind && hasScanned && (sortedHotspots.length > 0 || displayTargets.length > 0);
 
     // Compute header title
     const headerTitle = analyzing || isTerrainScanning || loadingPAS
@@ -310,7 +310,7 @@ export function MobileBottomSheet() {
         >
             {/* Handle + Status + Actions — always visible */}
             <div
-                className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetHeaderExpanded ? 'h-[180px]' : 'h-[136px]'}`}
+                className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetHeaderExpanded ? 'h-auto' : 'h-[136px]'}`}
                 onClick={() => persistSheetExpanded(!sheetExpanded)}
                 onTouchStart={handleSheetTouchStart}
                 onTouchEnd={handleSheetTouchEnd}
@@ -349,6 +349,8 @@ export function MobileBottomSheet() {
             <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
 
                 <SavedPointsPanel />
+
+                <div id="mobile-landscape-read" className="-mt-1" />
 
                 {!showSavedPoints && !selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
                     historicScanComplete ? (
