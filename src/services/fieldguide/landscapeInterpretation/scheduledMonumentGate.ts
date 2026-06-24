@@ -23,7 +23,7 @@ export function isScheduledMonumentOverlap(
     const hasScheduled = nhleFeatures.some(f => {
         if (!f.properties) return true; // present = scheduled monument
         const name = (f.properties.Name ?? '').toLowerCase();
-        return name.includes('scheduled') || name.length === 0 || true;
+        return name.includes('scheduled') || name.length === 0;
         // Defensive: any NHLE feature from this endpoint is a SM
     });
 
