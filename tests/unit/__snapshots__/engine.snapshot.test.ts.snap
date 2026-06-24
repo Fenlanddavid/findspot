@@ -29,7 +29,7 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
     "noteTemplateId": null,
   },
   "evidenceAssessment": {
-    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including terrace or dry edge position, slightly elevated or overlooking ground, landscape prominence signal is moderate.",
     "behaviourInteractions": [
       {
         "contradictingEvidence": [],
@@ -43,16 +43,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 30,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -74,16 +74,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 19,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -95,16 +95,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
       {
         "contradictingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -172,16 +172,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 48,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -197,16 +197,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 27,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -222,16 +222,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 24,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -247,16 +247,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 23,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -272,16 +272,16 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "score": 20,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -292,23 +292,23 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
       },
     ],
     "primaryInfluencingFactors": [
-      "Slightly elevated or overlooking ground",
       "Terrace or dry edge position",
+      "Slightly elevated or overlooking ground",
       "landscape prominence signal is moderate",
     ],
     "suggestedInterpretation": "Possible burial or commemorative use",
     "supportingEvidence": [
       {
-        "id": "slight_elevation",
-        "label": "Slightly elevated or overlooking ground",
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
         "polarity": "supporting",
         "source": "terrain",
         "strength": "moderate",
-        "weight": 19,
+        "weight": 12,
       },
       {
-        "id": "terrace_edge",
-        "label": "Terrace or dry edge position",
+        "id": "slight_elevation",
+        "label": "Slightly elevated or overlooking ground",
         "polarity": "supporting",
         "source": "terrain",
         "strength": "moderate",
@@ -646,8 +646,8 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
   "narrative": {
     "periodSubstitution": "prehistoric_bronze_age",
     "signalSubstitutions": [
-      "sits on a slight elevation overlooking lower ground",
       "occupies a terrace edge",
+      "sits on a slight elevation overlooking lower ground",
     ],
     "templateId": "burial_landscape_barrow_tentative",
   },
@@ -655,7 +655,6 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
   "processScores": [
     {
       "contributingSignals": [
-        "slight_elevation",
         "terrace_edge",
       ],
       "finalScore": 30.099999999999998,
@@ -760,7 +759,7 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
     "noteTemplateId": null,
   },
   "evidenceAssessment": {
-    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including terrace or dry edge position, slightly elevated or overlooking ground, landscape prominence signal is moderate.",
     "behaviourInteractions": [
       {
         "contradictingEvidence": [],
@@ -774,16 +773,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 30,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -805,16 +804,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 19,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -826,16 +825,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       {
         "contradictingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -903,16 +902,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 48,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -928,16 +927,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 27,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -953,16 +952,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 24,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -978,16 +977,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 23,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -1003,16 +1002,16 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "score": 20,
         "supportingEvidence": [
           {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
-            "weight": 19,
+            "weight": 12,
           },
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
@@ -1023,23 +1022,23 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       },
     ],
     "primaryInfluencingFactors": [
-      "Slightly elevated or overlooking ground",
       "Terrace or dry edge position",
+      "Slightly elevated or overlooking ground",
       "landscape prominence signal is moderate",
     ],
     "suggestedInterpretation": "Possible burial or commemorative use",
     "supportingEvidence": [
       {
-        "id": "slight_elevation",
-        "label": "Slightly elevated or overlooking ground",
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
         "polarity": "supporting",
         "source": "terrain",
         "strength": "moderate",
-        "weight": 19,
+        "weight": 12,
       },
       {
-        "id": "terrace_edge",
-        "label": "Terrace or dry edge position",
+        "id": "slight_elevation",
+        "label": "Slightly elevated or overlooking ground",
         "polarity": "supporting",
         "source": "terrain",
         "strength": "moderate",
@@ -1377,8 +1376,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
   "narrative": {
     "periodSubstitution": "prehistoric_bronze_age",
     "signalSubstitutions": [
-      "sits on a slight elevation overlooking lower ground",
       "occupies a terrace edge",
+      "sits on a slight elevation overlooking lower ground",
     ],
     "templateId": "scheduled_monument_notice",
   },
@@ -1386,7 +1385,6 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
   "processScores": [
     {
       "contributingSignals": [
-        "slight_elevation",
         "terrace_edge",
       ],
       "finalScore": 30.099999999999998,

@@ -5,6 +5,7 @@ import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { LandscapeInterpretationBlock } from '../fieldguide/LandscapeInterpretationBlock';
+import { GlanceCard } from '../fieldguide/GlanceCard';
 import { db } from '../../db';
 import type { Find } from '../../db';
 import { buildLandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
@@ -166,21 +167,22 @@ export function HistoricLayerManager() {
                 projectFinds={projectFinds}
                 pasFinds={pasFinds}
                 focusTarget={focusTarget}
+                scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
             />
             {scheduledMonumentCheckFailed && (
                 <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
-                    <p className="text-[8px] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
-                    <p className="text-[10px] font-bold text-amber-100/75 leading-snug">Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear.</p>
+                    <p className="text-[0.5rem] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
+                    <p className="text-[0.625rem] font-bold text-amber-100/75 leading-snug">Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear.</p>
                 </div>
             )}
             <div>
-                <p className="text-[8px] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
+                <p className="text-[0.5rem] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
-                <p className="text-[11px] font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
+                <p className="text-[0.6875rem] font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
             </div>
             {(routeLines.length > 0 || sigLines.length > 0) && (
                 <div className="border-t border-white/8 pt-3">
-                    <p className="text-[8px] font-black text-white/62 uppercase tracking-widest mb-2">Why this stands out</p>
+                    <p className="text-[0.5rem] font-black text-white/62 uppercase tracking-widest mb-2">Why this stands out</p>
                     <div className="space-y-2">
                         {routeLines.map((line, i) => (
                             <div key={`r-${i}`} className="flex items-start gap-2">
@@ -201,27 +203,27 @@ export function HistoricLayerManager() {
                 <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{pasFinds.length}</span>
-                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Sites</span>
+                        <span className="text-[0.4375rem] font-black text-white/65 uppercase tracking-widest">Sites</span>
                     </div>
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{historicRoutes.length}</span>
-                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Routes</span>
+                        <span className="text-[0.4375rem] font-black text-white/65 uppercase tracking-widest">Routes</span>
                         {historicRoutes.some(r => r.type === 'roman_road') && (
-                            <span className="block text-[7px] font-black text-amber-400/70 uppercase tracking-widest mt-0.5">inc. Roman</span>
+                            <span className="block text-[0.4375rem] font-black text-amber-400/70 uppercase tracking-widest mt-0.5">inc. Roman</span>
                         )}
                     </div>
                     <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
                         <span className="block text-sm font-black text-blue-300">{placeSignals.length}</span>
-                        <span className="text-[7px] font-black text-white/65 uppercase tracking-widest">Names</span>
+                        <span className="text-[0.4375rem] font-black text-white/65 uppercase tracking-widest">Names</span>
                     </div>
                 </div>
             )}
             {nearbyProjectFinds.length > 0 && (
-                <p className="text-[9px] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
+                <p className="text-[0.5625rem] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
             )}
             {sourceAvailability && (
                 <div className="border-t border-white/8 pt-3">
-                    <p className="text-[8px] font-black text-white/62 uppercase tracking-widest mb-2">Scan Source Coverage</p>
+                    <p className="text-[0.5rem] font-black text-white/62 uppercase tracking-widest mb-2">Scan Source Coverage</p>
                     <div className="grid grid-cols-3 gap-1.5">
                         {[
                             { key: 'terrain', label: 'LiDAR' },
@@ -235,7 +237,7 @@ export function HistoricLayerManager() {
                             return (
                                 <div key={key} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border ${usability === 'usable' ? 'bg-emerald-500/10 border-emerald-500/25' : usability === 'loaded' ? 'bg-white/5 border-white/15' : 'bg-white/3 border-white/8'}`}>
                                     <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${usability === 'usable' ? 'bg-emerald-400' : usability === 'loaded' ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                                    <span className={`text-[7px] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
+                                    <span className={`text-[0.4375rem] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
                                 </div>
                             );
                         })}
@@ -243,7 +245,7 @@ export function HistoricLayerManager() {
                 </div>
             )}
             {!loadingPAS && !hasData && (
-                <p className="text-center text-[10px] font-bold text-white/55 uppercase tracking-widest italic py-4">No historic context found here</p>
+                <p className="text-center text-[0.625rem] font-bold text-white/55 uppercase tracking-widest italic py-4">No historic context found here</p>
             )}
             {(hasData || potentialScore) && (
                 <div className="border-t border-white/8 pt-3">
@@ -251,7 +253,7 @@ export function HistoricLayerManager() {
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={() => setIntelDetailsOpen(v => !v)}
-                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                className={`rounded-xl border px-3 py-2 text-[0.5625rem] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
                             >
                                 Details
                             </button>
@@ -261,13 +263,13 @@ export function HistoricLayerManager() {
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={() => setIntelDetailsOpen(v => !v)}
-                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                className={`rounded-xl border px-3 py-2 text-[0.5625rem] font-black uppercase tracking-widest transition-colors ${intelDetailsOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
                             >
                                 Details
                             </button>
                             <button
                                 onClick={() => setIntelLayersOpen(v => !v)}
-                                className={`rounded-xl border px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
+                                className={`rounded-xl border px-3 py-2 text-[0.5625rem] font-black uppercase tracking-widest transition-colors ${intelLayersOpen ? 'bg-amber-500/20 border-amber-400/40 text-amber-200' : 'bg-white/[0.04] border-white/10 text-amber-400'}`}
                             >
                                 Layers
                             </button>
@@ -276,7 +278,7 @@ export function HistoricLayerManager() {
                     {intelLayersOpen && !historicScanComplete && (
                         <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
                             {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
-                                <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[0.5625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
                                     {label}
                                 </button>
                             ))}
@@ -302,11 +304,11 @@ export function HistoricLayerManager() {
                                 ];
                                 return augmentedFinds.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Period Signals</p>
+                                    <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Period Signals</p>
                                     <div className="grid grid-cols-2 gap-2">
                                         {Object.entries(augmentedFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
                                             <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl flex justify-between items-center">
-                                                <span className="text-[9px] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                                <span className="text-[0.5625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
                                                 <span className="text-sm font-black text-blue-400">{count}</span>
                                             </div>
                                         ))}
@@ -316,12 +318,12 @@ export function HistoricLayerManager() {
                             })()}
                             {nearbyProjectFinds.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
+                                    <p className="text-[0.5rem] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
                                     <div className="space-y-1.5">
                                         {nearbyProjectFinds.map(f => (
                                             <div key={f.id} className="bg-emerald-500/5 border border-emerald-500/10 px-3 py-2 rounded-xl flex justify-between items-center">
-                                                <span className="text-[10px] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
-                                                <span className="text-[9px] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
+                                                <span className="text-[0.625rem] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
+                                                <span className="text-[0.5625rem] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -329,17 +331,17 @@ export function HistoricLayerManager() {
                             )}
                             {pasFinds.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
+                                    <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
                                     <div className="space-y-2">
                                         {pasFinds.map(f => (
                                             <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
                                                 <div className="flex-1 min-w-0 pr-3">
                                                     <p className="text-xs font-black text-white uppercase truncate">{f.objectType}</p>
-                                                    <p className="text-[9px] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
+                                                    <p className="text-[0.5625rem] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
                                                 </div>
                                                 <div className="text-right shrink-0">
-                                                    <p className="text-[9px] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
-                                                    <p className="text-[8px] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
+                                                    <p className="text-[0.5625rem] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
+                                                    <p className="text-[0.5rem] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
                                                 </div>
                                             </div>
                                         ))}
@@ -348,13 +350,13 @@ export function HistoricLayerManager() {
                             )}
                             {sortedHotspots.some(h => h.isHighConfidenceCrossing) && (
                                 <div className="bg-blue-500/10 border border-blue-500/25 p-3 rounded-xl space-y-1">
-                                    <p className="text-[9px] font-black text-blue-300 uppercase tracking-widest">Possible crossing point in scan area</p>
-                                    <p className="text-[10px] font-bold text-slate-300 leading-tight">A route and water signal overlap here. Historic crossing points concentrate activity from multiple periods — they are high-value targets.</p>
+                                    <p className="text-[0.5625rem] font-black text-blue-300 uppercase tracking-widest">Possible crossing point in scan area</p>
+                                    <p className="text-[0.625rem] font-bold text-slate-300 leading-tight">A route and water signal overlap here. Historic crossing points concentrate activity from multiple periods — they are high-value targets.</p>
                                 </div>
                             )}
                             {historicRoutes.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-amber-400/60 uppercase tracking-widest">Movement Corridors & Roads</p>
+                                    <p className="text-[0.5rem] font-black text-amber-400/60 uppercase tracking-widest">Movement Corridors & Roads</p>
                                     <div className="space-y-2">
                                         {dedupedRoutes.map((r, i) => {
                                             const isRoman = r.type === 'roman_road';
@@ -366,33 +368,33 @@ export function HistoricLayerManager() {
                                                 <div key={i} className="bg-amber-500/5 border border-amber-500/15 p-3 rounded-xl">
                                                     <div className="flex items-start justify-between gap-2 mb-1">
                                                         <p className="text-xs font-black text-white uppercase truncate">{r.name ?? typeLabel}</p>
-                                                        <span className="text-[8px] font-black text-amber-400/70 uppercase tracking-widest shrink-0">{typeLabel}</span>
+                                                        <span className="text-[0.5rem] font-black text-amber-400/70 uppercase tracking-widest shrink-0">{typeLabel}</span>
                                                     </div>
-                                                    <p className="text-[9px] font-bold text-slate-400 uppercase">{confidenceLabel} · {sourceName}</p>
+                                                    <p className="text-[0.5625rem] font-bold text-slate-400 uppercase">{confidenceLabel} · {sourceName}</p>
                                                     {isRoman && (
-                                                        <p className="text-[10px] font-bold text-amber-300/70 leading-tight mt-1.5">Focus detection along the road edge, not on the road surface — coin scatter concentrates in the zone of activity beside the road.</p>
+                                                        <p className="text-[0.625rem] font-bold text-amber-300/70 leading-tight mt-1.5">Focus detection along the road edge, not on the road surface — coin scatter concentrates in the zone of activity beside the road.</p>
                                                     )}
                                                 </div>
                                             );
                                         })}
                                     </div>
                                     {historicRoutes.some(r => r.type === 'roman_road') && (
-                                        <p className="text-[9px] font-bold text-amber-400/60 leading-tight px-1">Roman roads are the strongest single predictor of coin scatter in England.</p>
+                                        <p className="text-[0.5625rem] font-bold text-amber-400/60 leading-tight px-1">Roman roads are the strongest single predictor of coin scatter in England.</p>
                                     )}
                                 </div>
                             )}
                             {placeSignals.length > 0 && (
                                 <div className="space-y-2">
-                                    <p className="text-[8px] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
+                                    <p className="text-[0.5rem] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
                                     <div className="space-y-2">
                                         {placeSignals.map((s, i) => (
                                             <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl">
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className="text-xs font-black text-white uppercase italic tracking-tight truncate pr-2">"{s.name}"</span>
-                                                    <span className="text-[9px] font-bold text-emerald-500/60 uppercase shrink-0">{s.distance.toFixed(1)} km</span>
+                                                    <span className="text-[0.5625rem] font-bold text-emerald-500/60 uppercase shrink-0">{s.distance.toFixed(1)} km</span>
                                                 </div>
-                                                <p className="text-[8px] font-black text-emerald-500/40 uppercase mb-1 tracking-widest">{s.type}</p>
-                                                <p className="text-[10px] font-bold text-slate-300 leading-tight">{s.meaning}</p>
+                                                <p className="text-[0.5rem] font-black text-emerald-500/40 uppercase mb-1 tracking-widest">{s.type}</p>
+                                                <p className="text-[0.625rem] font-bold text-slate-300 leading-tight">{s.meaning}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -402,7 +404,7 @@ export function HistoricLayerManager() {
                     )}
                 </div>
             )}
-            <div className="px-1 text-center text-[9px] font-medium leading-snug text-slate-400">
+            <div className="px-1 text-center text-[0.5625rem] font-medium leading-snug text-slate-400">
                 {FIELDGUIDE_SHORT_NOTICE}
             </div>
         </div>
@@ -432,6 +434,7 @@ interface AlieSectionProps {
     projectFinds: Find[];
     pasFinds: HistoricFind[];
     focusTarget: (target: Cluster) => void;
+    scheduledMonumentCheckFailed: boolean;
 }
 
 function AlieSection({
@@ -455,12 +458,60 @@ function AlieSection({
     projectFinds,
     pasFinds,
     focusTarget,
+    scheduledMonumentCheckFailed,
 }: AlieSectionProps) {
     // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
     // Prevents a stale cache read or slow worker result from clobbering a
     // newer cell's state when the user pans quickly between geohash6 cells.
     const alieRequestSeqRef = useRef(0);
     const [landscapeEvidence, setLandscapeEvidence] = useState<LandscapeEvidence | null>(null);
+
+    // ── View mode state ───────────────────────────────────────────────────────────
+    const [viewMode, setViewMode] = useState<'glance' | 'detail'>('glance');
+    const [showPreferDetailPrompt, setShowPreferDetailPrompt] = useState(false);
+    const tapThroughCountRef = useRef(0);
+    const hasShownPromptRef  = useRef(false);
+    const expandedCurrentScanRef = useRef(false);
+
+    // Load stored preference once on mount
+    useEffect(() => {
+        db.settings.get('fieldGuideViewMode').then(s => {
+            const v = s?.value;
+            if (v === 'detail' || v === 'glance') setViewMode(v as 'glance' | 'detail');
+        }).catch(() => {});
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Reset tap-through streak when a new scan completes (Path B)
+    const prevScanCompleteRef = useRef(false);
+    useEffect(() => {
+        if (historicScanComplete && !prevScanCompleteRef.current) {
+            if (!expandedCurrentScanRef.current) tapThroughCountRef.current = 0;
+            expandedCurrentScanRef.current = false;
+            prevScanCompleteRef.current = true;
+        } else if (!historicScanComplete) {
+            prevScanCompleteRef.current = false;
+        }
+    }, [historicScanComplete]);
+
+    function handleReadFull() {
+        expandedCurrentScanRef.current = true;
+        tapThroughCountRef.current++;
+        if (tapThroughCountRef.current >= 3 && !hasShownPromptRef.current) {
+            hasShownPromptRef.current = true;
+            setShowPreferDetailPrompt(true);
+        }
+        setViewMode('detail');
+    }
+
+    function handlePersistDetail() {
+        setViewMode('detail');
+        db.settings.put({ key: 'fieldGuideViewMode', value: 'detail' }).catch(() => {});
+    }
+
+    function handleGlance() {
+        setViewMode('glance');
+        db.settings.put({ key: 'fieldGuideViewMode', value: 'glance' }).catch(() => {});
+    }
 
     const fieldStrategy = useMemo(() =>
         landscapeInterpretation || sortedHotspots.length
@@ -688,14 +739,53 @@ function AlieSection({
 
     if (!historicScanComplete && !landscapeInterpretation) return null;
 
+    // Glance view
+    if (viewMode === 'glance' && landscapeInterpretation && !alieLoading) {
+        return (
+            <GlanceCard
+                interpretation={landscapeInterpretation}
+                scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
+                onReadFull={handleReadFull}
+                onPersistDetail={handlePersistDetail}
+            />
+        );
+    }
+
+    // Detail view (loading skeleton + full block)
     return (
-        <LandscapeInterpretationBlock
-            interpretation={landscapeInterpretation}
-            loading={alieLoading}
-            evidence={landscapeEvidence ?? undefined}
-            fieldStrategy={fieldStrategy ?? undefined}
-            targetFeatures={displayTargets}
-            onFocusTarget={focusTarget}
-        />
+        <>
+            {showPreferDetailPrompt && (
+                <div className="rounded-xl border border-blue-500/25 bg-blue-500/[0.07] px-3 py-2.5 space-y-2">
+                    <p className="text-[0.5625rem] font-black text-blue-200 leading-snug">
+                        You usually open the full view — make that the default?
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setShowPreferDetailPrompt(false); handlePersistDetail(); }}
+                            className="px-3 py-1 rounded-lg bg-blue-500/20 border border-blue-500/35 text-[0.5625rem] font-black text-blue-300 uppercase tracking-widest"
+                        >
+                            Yes
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowPreferDetailPrompt(false)}
+                            className="px-3 py-1 rounded-lg bg-white/5 border border-white/12 text-[0.5625rem] font-black text-white/55 uppercase tracking-widest"
+                        >
+                            Keep showing the summary
+                        </button>
+                    </div>
+                </div>
+            )}
+            <LandscapeInterpretationBlock
+                interpretation={landscapeInterpretation}
+                loading={alieLoading}
+                evidence={landscapeEvidence ?? undefined}
+                fieldStrategy={fieldStrategy ?? undefined}
+                targetFeatures={displayTargets}
+                onFocusTarget={focusTarget}
+                onGlance={handleGlance}
+            />
+        </>
     );
 }

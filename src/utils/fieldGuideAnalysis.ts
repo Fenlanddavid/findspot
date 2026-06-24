@@ -155,6 +155,46 @@ export function getDistance(c1: [number, number], c2: [number, number]): number 
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+// ─── Spatial grid ─────────────────────────────────────────────────────────────
+// Reduces the O(n²) neighbour searches in analyzeContext and suppressDisturbance
+// to O(n·k) by bucketing clusters into roughly 200 m cells. Candidate lookups
+// expand by the real metre radius, because longitude cell width shrinks at
+// northern latitudes. center format is [lng, lat] throughout.
+
+const GRID_LAT = 0.0018; // ≈ 200 m north–south
+const GRID_LNG = 0.003;  // ≈ 200 m east–west at ~52 °N
+
+type SpatialGrid = Map<string, Cluster[]>;
+
+function buildSpatialGrid(clusters: Cluster[]): SpatialGrid {
+    const grid: SpatialGrid = new Map();
+    for (const c of clusters) {
+        const key = `${Math.floor(c.center[1] / GRID_LAT)}:${Math.floor(c.center[0] / GRID_LNG)}`;
+        const cell = grid.get(key) ?? [];
+        cell.push(c);
+        grid.set(key, cell);
+    }
+    return grid;
+}
+
+/** Candidate clusters whose grid cells overlap the search radius.
+ *  Always apply the real distance check afterwards — this is a pre-filter. */
+function gridCandidates(grid: SpatialGrid, lng: number, lat: number, radiusM = 200): Cluster[] {
+    const row = Math.floor(lat / GRID_LAT);
+    const col = Math.floor(lng / GRID_LNG);
+    const latRadiusCells = Math.max(1, Math.ceil((radiusM / 111320) / GRID_LAT));
+    const cosLat = Math.max(0.1, Math.abs(Math.cos(lat * Math.PI / 180)));
+    const lngRadiusCells = Math.max(1, Math.ceil((radiusM / (111320 * cosLat)) / GRID_LNG));
+    const out: Cluster[] = [];
+    for (let dr = -latRadiusCells; dr <= latRadiusCells; dr++) {
+        for (let dc = -lngRadiusCells; dc <= lngRadiusCells; dc++) {
+            const cell = grid.get(`${row + dr}:${col + dc}`);
+            if (cell) out.push(...cell);
+        }
+    }
+    return out;
+}
+
 function _getFlatDistanceSq(p1: [number, number], p2: [number, number]): number {
     const dx = (p1[0] - p2[0]) * Math.cos(p1[1] * Math.PI / 180);
     const dy = p1[1] - p2[1];
@@ -383,6 +423,7 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
 export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []): Cluster[] {
     const results = [...clusters];
     const proximityM = 60;
+    const grid = buildSpatialGrid(results);
 
     for (let i = 0; i < results.length; i++) {
         const c = results[i];
@@ -406,7 +447,7 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
             c.role = 'Access / Division';
         }
 
-        const neighbors = results.filter(n => n.id !== c.id && getDistance(c.center, n.center) < proximityM);
+        const neighbors = gridCandidates(grid, c.center[0], c.center[1], proximityM).filter(n => n.id !== c.id && getDistance(c.center, n.center) < proximityM);
 
         if (neighbors.length >= 2) {
             const houses = neighbors.filter(n => n.type.includes('Roundhouse') || n.type.includes('Foundation'));
@@ -478,7 +519,7 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
     // ── Second pass: cluster linking by route alignment ───────────────────────
     for (const c of results) {
         if (c.routeAlignment === undefined) continue;
-        const aligned = results.filter(n =>
+        const aligned = gridCandidates(grid, c.center[0], c.center[1], 200).filter(n =>
             n.id !== c.id &&
             n.routeAlignment !== undefined &&
             bearingDiff(c.routeAlignment!, n.routeAlignment!) <= 10 &&
@@ -492,7 +533,7 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
     // explanationLines + a relationshipTag. No score changes — interpretation only.
     for (const c of results) {
         if (!c.explanationLines) c.explanationLines = [];
-        const nearby = results.filter(n => n.id !== c.id && getDistance(c.center, n.center) < 200);
+        const nearby = gridCandidates(grid, c.center[0], c.center[1], 200).filter(n => n.id !== c.id && getDistance(c.center, n.center) < 200);
         if (nearby.length === 0) continue;
 
         // Circular/ring near another circular — possible barrow group or ring ditch cemetery
@@ -532,6 +573,7 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
 
 export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
     const results = [...clusters];
+    const grid = buildSpatialGrid(results);
 
     for (let i = 0; i < results.length; i++) {
         const c = results[i];
@@ -539,7 +581,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         let reason = "";
         let suppressCode = '';
 
-        const parallelNeighbors = results.filter(n =>
+        const parallelNeighbors = gridCandidates(grid, c.center[0], c.center[1], 100).filter(n =>
             n.id !== c.id &&
             getDistance(c.center, n.center) < 100 &&
             Math.abs((c.bearing || 0) - (n.bearing || 0)) < 1.5 &&
@@ -567,7 +609,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         // is defined by its strip alternation; two features with identical polarity
         // are more likely genuine archaeology than plough ridges.
         if (risk === 'Low' && c.metrics!.ratio > 5.0) {
-            const ridgeFurrowNeighbors = results.filter(n =>
+            const ridgeFurrowNeighbors = gridCandidates(grid, c.center[0], c.center[1], 200).filter(n =>
                 n.id !== c.id &&
                 n.metrics &&
                 getDistance(c.center, n.center) < 200 &&
@@ -604,7 +646,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
         // Field boundary network: a linear feature flanked by both parallel
         // AND perpendicular linear neighbors — the signature of a field grid.
         if (risk === 'Low' && c.metrics!.ratio > 5.0) {
-            const perpNeighbors = results.filter(n => {
+            const perpNeighbors = gridCandidates(grid, c.center[0], c.center[1], 150).filter(n => {
                 if (n.id === c.id || !n.metrics || n.metrics.ratio < 4.0) return false;
                 if (getDistance(c.center, n.center) > 150) return false;
                 const diff = Math.abs((c.bearing || 0) - (n.bearing || 0));

@@ -40,21 +40,21 @@ export function SavedPointsPanel() {
             {savedPoints.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-8 text-center">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/15"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-                    <p className="text-[11px] text-white/30">No saved points yet.<br/>Use the layers menu to save a map position.</p>
+                    <p className="text-[0.6875rem] text-white/30">No saved points yet.<br/>Use the layers menu to save a map position.</p>
                 </div>
             ) : savedPoints.map(sp => (
                 <div key={sp.id} className="rounded-xl bg-white/[0.03] border border-white/8 px-3 py-2.5 flex items-center gap-3">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="#10b981" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-black text-white truncate leading-tight">{sp.label}</p>
-                        <p className="text-[9px] text-white/35 mt-0.5">{formatRelativeDate(sp.createdAt)}</p>
+                        <p className="text-[0.5625rem] text-white/35 mt-0.5">{formatRelativeDate(sp.createdAt)}</p>
                         {sp.scanSnapshot && (
-                            <p className="text-[9px] text-emerald-400/70 mt-0.5">{sp.scanSnapshot.hotspotCount} hotspot{sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · {sp.scanSnapshot.topHotspotTitle}</p>
+                            <p className="text-[0.5625rem] text-emerald-400/70 mt-0.5">{sp.scanSnapshot.hotspotCount} hotspot{sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · {sp.scanSnapshot.topHotspotTitle}</p>
                         )}
                     </div>
                     <button
                         onClick={() => { mapRef.current?.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom }); setShowSavedPoints(false); }}
-                        className="text-[9px] font-black text-emerald-300 uppercase tracking-widest shrink-0 px-2 py-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                        className="text-[0.5625rem] font-black text-emerald-300 uppercase tracking-widest shrink-0 px-2 py-1 rounded-lg hover:bg-emerald-500/10 transition-colors"
                     >
                         Fly to
                     </button>

@@ -35,6 +35,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'trace-targets-circle',            visibleWhen: () => true },
     { id: 'trace-targets-selected',          visibleWhen: () => true },
     { id: 'targets-halo',                    visibleWhen: () => true },
+    { id: 'targets-selected',                visibleWhen: () => true },
     { id: 'targets-circle',                  visibleWhen: () => true },
     { id: 'hotspots-outline',                visibleWhen: () => true },
     { id: 'hotspots-fill',                   visibleWhen: () => true },
@@ -91,32 +92,32 @@ function makeTargetLabelElement(label: string, primary: boolean) {
     const el = document.createElement('div');
     el.style.alignItems = 'center';
     el.style.background = primary
-        ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.98), rgba(15, 118, 110, 0.94) 52%, rgba(245, 158, 11, 0.92))'
-        : 'linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.9))';
-    el.style.border = primary ? '1px solid rgba(236, 253, 245, 0.9)' : '1px solid rgba(251, 191, 36, 0.78)';
+        ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.98), rgba(13, 148, 136, 0.96))'
+        : 'rgba(15, 23, 42, 0.94)';
+    el.style.border = primary ? '1px solid rgba(209, 250, 229, 0.92)' : '1px solid rgba(226, 232, 240, 0.82)';
     el.style.borderRadius = '999px';
     el.style.boxShadow = primary
-        ? '0 0 0 3px rgba(16, 185, 129, 0.16), 0 8px 20px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.32)'
-        : '0 0 0 2px rgba(251, 191, 36, 0.12), 0 5px 14px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.18)';
-    el.style.color = primary ? '#ecfdf5' : '#fde68a';
+        ? '0 0 0 4px rgba(16, 185, 129, 0.16), 0 8px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.28)'
+        : '0 5px 14px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.20)';
+    el.style.color = primary ? '#ecfdf5' : '#f8fafc';
     el.style.display = 'flex';
-    el.style.font = "900 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    el.style.gap = '0.22rem';
-    el.style.height = primary ? '1.35rem' : '1.2rem';
+    el.style.font = "900 9px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    el.style.gap = '0';
+    el.style.height = primary ? '1.55rem' : '1.45rem';
     el.style.justifyContent = 'center';
-    el.style.letterSpacing = '0.04em';
-    el.style.minWidth = primary ? '2.8rem' : '1.35rem';
-    el.style.padding = primary ? '0 0.5rem' : '0 0.32rem';
+    el.style.letterSpacing = '0.06em';
+    el.style.minWidth = primary ? '2.75rem' : '1.55rem';
+    el.style.padding = primary ? '0 0.55rem' : '0 0.36rem';
     el.style.pointerEvents = 'none';
     el.style.textTransform = 'uppercase';
 
     if (primary) {
         const start = document.createElement('span');
-        start.textContent = label;
-        start.style.fontSize = '0.45rem';
+        start.textContent = 'Start';
+        start.style.color = '#a7f3d0';
+        start.style.fontSize = '0.48rem';
         start.style.letterSpacing = '0.12em';
         start.style.lineHeight = '1';
-
         el.append(start);
         return el;
     }
@@ -159,6 +160,7 @@ export type UseFieldGuideMapOptions = {
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
+    selectedTargetId: string | null;
     traceTargets: TraceTarget[];
     selectedTraceId: string | null;
     primaryTargetId: string | null;
@@ -201,7 +203,7 @@ function ensureCogProtocolRegistered() {
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useFieldGuideMap({
-    hotspots, selectedHotspotId, detectedFeatures, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
+    hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
     savedPoints, showSavedPoints,
     initLat, initLng, devMode, annotationMode, devAnnotations, callbacks,
@@ -299,12 +301,12 @@ export function useFieldGuideMap({
             map.addLayer({
                 id: 'trace-targets-circle', type: 'circle', source: 'trace-targets',
                 paint: {
-                    'circle-radius':        9,
-                    'circle-color':         '#94a3b8',  // slate-400 — deliberately muted
-                    'circle-opacity':       0.30,
-                    'circle-stroke-width':  1,
-                    'circle-stroke-color':  '#94a3b8',
-                    'circle-stroke-opacity': 0.45,
+                    'circle-radius':        7,
+                    'circle-color':         '#f59e0b',
+                    'circle-opacity':       0.12,
+                    'circle-stroke-width':  2,
+                    'circle-stroke-color':  '#f59e0b',
+                    'circle-stroke-opacity': 0.82,
                 },
             });
             // Selected trace — amber highlight ring, rendered above base layer
@@ -327,22 +329,39 @@ export function useFieldGuideMap({
                 id: 'targets-halo', type: 'circle', source: 'targets',
                 filter: ['==', ['get', 'isPrimary'], true],
                 paint: {
-                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 32, 2, 36, 3, 40],
-                    'circle-color':  ['case', ['>=', ['get', 'consensus'], 2], '#f59e0b', '#10b981'],
-                    'circle-opacity': 0.12,
+                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 24, 2, 28, 3, 32],
+                    'circle-color':  '#10b981',
+                    'circle-opacity': 0.16,
                     'circle-stroke-width': 0,
+                },
+            });
+            map.addLayer({
+                id: 'targets-selected', type: 'circle', source: 'targets',
+                filter: ['==', ['get', 'id'], ''],
+                paint: {
+                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 20, 2, 23, 3, 26],
+                    'circle-color': '#ffffff',
+                    'circle-opacity': 0,
+                    'circle-stroke-width': 3,
+                    'circle-stroke-color': '#f8fafc',
+                    'circle-stroke-opacity': 0.95,
                 },
             });
             map.addLayer({
                 id: 'targets-circle', type: 'circle', source: 'targets',
                 paint: {
-                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 18, 2, 22, 3, 26],
-                    'circle-color':  ['case', ['get', 'isProtected'], '#7f1d1d', ['>=', ['get', 'consensus'], 2], '#f59e0b', ['==', ['get', 'source'], 'terrain'], '#10b981', ['==', ['get', 'source'], 'historic'], '#f59e0b', '#3b82f6'],
-                    'circle-opacity': ['case', ['get', 'isProtected'], 0.55, 0.9],
-                    'circle-stroke-width': ['case', ['get', 'isProtected'], 1.5, 2],
-                    'circle-stroke-color': ['case', ['get', 'isProtected'], '#fecaca', '#fff'],
+                    'circle-radius': ['interpolate', ['linear'], ['get', 'consensus'], 1, 13, 2, 15, 3, 17],
+                    'circle-color':  ['case', ['get', 'isProtected'], '#7f1d1d', ['get', 'isPrimary'], '#0f766e', ['>=', ['get', 'consensus'], 2], '#d97706', ['==', ['get', 'source'], 'terrain'], '#059669', ['==', ['get', 'source'], 'historic'], '#d97706', '#2563eb'],
+                    'circle-opacity': ['case', ['get', 'isProtected'], 0.62, 0.92],
+                    'circle-stroke-width': ['case', ['get', 'isProtected'], 1.5, ['get', 'isPrimary'], 2.5, 2],
+                    'circle-stroke-color': ['case', ['get', 'isProtected'], '#fecaca', ['get', 'isPrimary'], '#d1fae5', '#f8fafc'],
                 },
             });
+            // Trace signals are secondary, but must remain visible beside the
+            // numbered target system. Keep them above target circles while the
+            // HTML target badges still sit on top.
+            map.moveLayer('trace-targets-circle');
+            map.moveLayer('trace-targets-selected');
             map.addSource('pas-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'pas-circles', type: 'circle', source: 'pas-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 10, 'circle-color': '#3b82f6', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
 
@@ -548,6 +567,15 @@ export function useFieldGuideMap({
         } as GeoJSON.FeatureCollection);
     }, [detectedFeatures, primaryTargetId]);
 
+    // ── Selected target highlight ────────────────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!map) return;
+        const layer = map.getLayer('targets-selected');
+        if (!layer) return;
+        map.setFilter('targets-selected', ['==', ['get', 'id'], selectedTargetId ?? '']);
+    }, [selectedTargetId]);
+
     // ── Target pin labels ────────────────────────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
@@ -560,7 +588,7 @@ export function useFieldGuideMap({
             .forEach(f => {
                 const primary = f.id === primaryTargetId;
                 const marker = new maplibregl.Marker({
-                    element: makeTargetLabelElement(primary ? 'Start' : f.number.toString(), primary),
+                    element: makeTargetLabelElement(f.number.toString(), primary),
                     anchor: 'center',
                 })
                     .setLngLat(f.center)

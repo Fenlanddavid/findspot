@@ -943,7 +943,7 @@ export function FieldGuideMap() {
                                                 >
                                                     Geology
                                                 </button>
-                                                <p className="rounded-full border border-amber-300/25 bg-amber-300/8 px-2 py-0.5 text-[0.5rem] lg:text-[0.5625rem] font-black text-amber-100/85 uppercase tracking-[0.16em] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">Target {f.number.toString().padStart(2, '0')}</p>
+                                                <p className="rounded-full border border-slate-200/25 bg-slate-900/45 px-2 py-0.5 text-[0.5rem] lg:text-[0.5625rem] font-black text-slate-100 uppercase tracking-[0.14em] shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]">T{f.number.toString().padStart(2, '0')}</p>
                                             </div>
                                         </div>
                                     <div className="flex justify-between items-start mb-3 lg:mb-4">

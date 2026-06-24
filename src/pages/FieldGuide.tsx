@@ -794,7 +794,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
-        hotspots, selectedHotspotId, detectedFeatures: displayTargets, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
+        hotspots, selectedHotspotId, detectedFeatures: displayTargets, selectedTargetId: selectedId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
         fieldBoundaries: [
             ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
             // Fall back to the permission's own boundary when no fields have been drawn
@@ -1160,12 +1160,15 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             aimData:         result.aimData,
             scanCenter,
         };
-        await runHistoricPhase(context);
-        setSelectedHotspotId(null);
         setHistoricMode(true);
         setIntelDetailsOpen(false);
         setIntelLayersOpen(false);
-        persistSheetExpanded(true);
+
+        addLog('> Terrain result ready — historic landscape context continues in the background.', 'terrain');
+        void runHistoricPhase(context).then(() => {
+            setSelectedHotspotId(null);
+            persistSheetExpanded(true);
+        });
     };
 
     // ─── Standalone historic scan (context drawer / historic layers button) ───

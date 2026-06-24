@@ -13,7 +13,7 @@ import maplibregl from 'maplibre-gl';
 import { Cluster, Hotspot, HistoricFind, PlaceSignal, HistoricRoute, ETYMOLOGY_SIGNALS } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
-    NHLEResponse, AIMResponse, NominatimResponse, OverpassElement, OverpassResponse,
+    NHLEResponse, AIMResponse, NominatimResponse, OverpassAttemptTiming, OverpassElement, OverpassResponse,
     fetchLocationLabel, fetchHistoricContextFeatures,
     fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
     parseOverpassRoutes,
@@ -24,7 +24,7 @@ import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
-import { fetchRomanRoads } from '../services/romanRoadService';
+import { fetchRomanRoads, prefetchRomanRoads } from '../services/romanRoadService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +51,23 @@ export interface HistoricScanResult {
 interface UseHistoricScanOptions {
     onLog:          (msg: string, source?: LogSource, level?: LogLevel) => void;
     onStatusChange: (status: string) => void;
+}
+
+function seconds(start: number): string {
+    return ((performance.now() - start) / 1000).toFixed(1);
+}
+
+function attemptSummary(timing: OverpassAttemptTiming): string {
+    const status = timing.status === 'http-error'
+        ? `HTTP ${timing.httpStatus ?? '?'}`
+        : timing.status;
+    return `${timing.endpoint} ${(timing.elapsedMs / 1000).toFixed(1)}s ${status}`;
+}
+
+async function timedRecord<T>(promise: Promise<T>): Promise<{ value: T; elapsed: string }> {
+    const start = performance.now();
+    const value = await promise;
+    return { value, elapsed: seconds(start) };
 }
 
 interface HistoricLookupCache {
@@ -149,7 +166,9 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         const { signal } = abort;
 
         if (mountedRef.current) setIsScanning(true);
+        const perfStart = performance.now();
         onStatusChange('Reading historic layers...');
+        prefetchRomanRoads(); // prime GeoJSON cache in parallel with NHLE/AIM/Overpass
 
         const center = map.getCenter();
         const bounds = map.getBounds();
@@ -191,34 +210,65 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
             onStatusChange('Reading historic records...');
             const hasTerrainRouteAttempt = !!opts.nhleData || !!opts.aimData;
-            const [geoData, contextData, nhleRaw, aimRaw, routeRaw] = await Promise.all([
-                cachedLookup?.geoData
+            const recordsStart = performance.now();
+            const geoMode = cachedLookup?.geoData ? 'cached' : 'fetch';
+            const contextMode = cachedLookup?.contextData ? 'cached' : 'fetch';
+            const nhleMode = opts.nhleData
+                ? 'provided'
+                : cachedLookup?.nhleData
+                    ? cachedLookup.nhleData.available === false ? 'retry' : 'cached'
+                    : 'fetch';
+            const aimMode = opts.aimData ? 'provided' : cachedLookup?.aimData ? 'cached' : 'fetch';
+            const routeMode = opts.routes.length === 0 && !hasTerrainRouteAttempt
+                ? cachedLookup?.routeRaw ? 'cached' : 'fetch'
+                : 'provided';
+            const contextAttempts: string[] = [];
+            const routeAttempts: string[] = [];
+
+            const [geoTimed, contextTimed, nhleTimed, aimTimed, routeTimed] = await Promise.all([
+                timedRecord(cachedLookup?.geoData
                     ? Promise.resolve(cachedLookup.geoData)
-                    : fetchLocationLabel(center.lat, center.lng, signal),
-                cachedLookup?.contextData
+                    : fetchLocationLabel(center.lat, center.lng, signal)),
+                timedRecord(cachedLookup?.contextData
                     ? Promise.resolve(cachedLookup.contextData)
-                    : fetchHistoricContextFeatures(center.lat, center.lng, signal),
-                opts.nhleData
+                    : fetchHistoricContextFeatures(center.lat, center.lng, signal, {
+                        onAttempt: timing => contextAttempts.push(attemptSummary(timing)),
+                    })),
+                timedRecord(opts.nhleData
                     ? Promise.resolve(null)
                     : cachedLookup?.nhleData
                         ? cachedLookup.nhleData.available === false
                             ? fetchScheduledMonuments(west, south, east, north, signal)
                             : Promise.resolve(cachedLookup.nhleData)
-                    : fetchScheduledMonuments(west, south, east, north, signal),
-                opts.aimData
+                    : fetchScheduledMonuments(west, south, east, north, signal)),
+                timedRecord(opts.aimData
                     ? Promise.resolve(null)
                     : cachedLookup?.aimData
                         ? Promise.resolve(cachedLookup.aimData)
-                    : fetchAIMData(west, south, east, north, signal),
-                opts.routes.length === 0 && !hasTerrainRouteAttempt
+                    : fetchAIMData(west, south, east, north, signal)),
+                timedRecord(opts.routes.length === 0 && !hasTerrainRouteAttempt
                     ? cachedLookup?.routeRaw
                         ? Promise.resolve(cachedLookup.routeRaw)
                         : fetchHistoricRoutes(center.lat, center.lng, signal, {
                             endpointTimeoutMs: 3500,
                             totalTimeoutMs:    5000,
+                            onAttempt:         timing => routeAttempts.push(attemptSummary(timing)),
                         })
-                    : Promise.resolve(null),
+                    : Promise.resolve(null)),
             ]);
+            const geoData = geoTimed.value;
+            const contextData = contextTimed.value;
+            const nhleRaw = nhleTimed.value;
+            const aimRaw = aimTimed.value;
+            const routeRaw = routeTimed.value;
+            const recordsSeconds = seconds(recordsStart);
+            onLog(`> TIMING historic records detail: location ${geoTimed.elapsed}s (${geoMode}), OSM context ${contextTimed.elapsed}s (${contextMode}), NHLE ${nhleTimed.elapsed}s (${nhleMode}), AIM ${aimTimed.elapsed}s (${aimMode}), routes ${routeTimed.elapsed}s (${routeMode}).`, 'historic');
+            if (contextAttempts.length > 0) {
+                onLog(`> TIMING historic OSM context detail: ${contextAttempts.join('; ')}.`, 'historic');
+            }
+            if (routeAttempts.length > 0) {
+                onLog(`> TIMING historic route detail: ${routeAttempts.join('; ')}.`, 'historic');
+            }
             const etymData = contextData;
             const osmData  = contextData;
 
@@ -443,6 +493,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // 6b. Itiner-e Roman roads — serve from cache when available
             let freshRomanRoads: HistoricRoute[] = [];
             const hasRomanRoads = routes.some(r => r.source === 'itinere');
+            const romanStart = performance.now();
             if (!hasRomanRoads) {
                 if (cachedLookup?.romanRoads?.length) {
                     routes = [...routes, ...cachedLookup.romanRoads];
@@ -456,6 +507,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                     } catch { /* Itiner-e asset unavailable */ }
                 }
             }
+            const romanSeconds = seconds(romanStart);
 
             // Cache write — after Roman roads so they can be included
             try {
@@ -486,6 +538,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
 
             // ── Hotspot enhancement ───────────────────────────────────────────
             let enhancedHotspots: Hotspot[] = [];
+            const enhanceStart = performance.now();
             if (!drifted) {
                 onLog('> Historic layers integrated — refining hotspots...', 'historic');
                 onStatusChange('Building hotspot model...');
@@ -527,6 +580,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             } else {
                 onLog('> HISTORIC: Map moved during scan — hotspot update skipped.', 'historic', 'warn');
             }
+            const enhanceSeconds = seconds(enhanceStart);
+            onLog(`> TIMING historic: records ${recordsSeconds}s, roman roads ${romanSeconds}s, enrichment ${enhanceSeconds}s, total ${seconds(perfStart)}s.`, 'historic');
 
             if (mountedRef.current) setIsScanning(false);
             return {

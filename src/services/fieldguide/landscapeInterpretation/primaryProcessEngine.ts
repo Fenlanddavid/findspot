@@ -98,15 +98,16 @@ export function computePrimaryProcesses(
 
         // Slope < 10%: suitable for settlement (proxy path)
         if (slopePercent < 10) { settlementScore += 15; }
-        // South/SE/SW aspect
-        if (isSouthFacingAspect(aspectDegrees)) { settlementScore += 10; settlementSignals.push('slight_elevation'); }
+        // South/SE/SW aspect — score boost only; no signal push (aspect direction ≠ elevation)
+        if (isSouthFacingAspect(aspectDegrees)) { settlementScore += 10; }
         // Elevation 5–50m above sea level (broad proxy for terrace/dry ground)
         if (elevationM >= 5 && elevationM <= 50) { settlementScore += 10; settlementSignals.push('terrace_edge'); }
 
         // Measured terrain (vNext-P3): raised stable ground at low gradient —
         // the classic settlement position (terrace above wet, passable slope).
-        // relativeReliefNorm > 0.02 = detectably raised; gradient < 0.15 = gently graded.
-        if (useMeasured && relief > 0.02 && gradient < 0.15) {
+        // relativeReliefNorm > 0.05 = faint rise (matches landscape_prominence threshold);
+        // gradient < 0.15 = gently graded.
+        if (useMeasured && relief > 0.05 && gradient < 0.15) {
             settlementScore += 14;
             settlementSignals.push('raised_relief_measured');
             settlementSignals.push('low_gradient_measured');

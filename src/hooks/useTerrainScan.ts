@@ -68,6 +68,10 @@ interface UseTerrainScanOptions {
     onStatusChange: (status: string) => void;
 }
 
+function seconds(start: number): string {
+    return ((performance.now() - start) / 1000).toFixed(1);
+}
+
 function padBoundsByMetres(
     west: number,
     south: number,
@@ -129,6 +133,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
         if (mountedRef.current) setIsScanning(true);
         const scanStart = Date.now();
+        const perfStart = performance.now();
 
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
@@ -304,28 +309,35 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // ── Fire remaining parallel requests for fresh scan ───────────────────
         // routePromise and modernWaysPromise were already fired before the cache
         // check — reuse them here. Fire remaining requests now.
+        const waybackStart = performance.now();
         const waybackPromise = resolveWaybackIds();
 
+        const nhleStart = performance.now();
         const nhlePromise = fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
+        const aimStart = performance.now();
         const aimPromise  = fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
 
         onStatusChange('Reading terrain...');
 
         // Non-satellite workers start immediately — no wayback dependency
+        const terrainStart = performance.now();
         const terrainTask       = scanDataSource('terrain',       zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
         const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
         const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
 
         onStatusChange('Reading hydrology...');
+        const hydroStart = performance.now();
         const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
 
         onStatusChange('Comparing spectral layers...');
         // Satellite workers need waybackIds — await the (already in-flight) promise
         const waybackIds = await waybackPromise;
+        const waybackSeconds = seconds(waybackStart);
         if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
             setIsScanning(false);
             return null;
         }
+        const satelliteStart = performance.now();
         const springTask   = scanDataSource('satellite_spring', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
         const summerTask   = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
 
@@ -335,6 +347,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 nhlePromise, aimPromise,
                 terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask,
             ]);
+            const sourceWaitSeconds = seconds(perfStart);
+            const terrainSeconds = seconds(terrainStart);
+            const hydroSeconds = seconds(hydroStart);
+            const satelliteSeconds = seconds(satelliteStart);
+            const nhleSeconds = seconds(nhleStart);
+            const aimSeconds = seconds(aimStart);
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
                 setIsScanning(false);
@@ -371,6 +389,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             // Routes — started in parallel, should already be done
             onStatusChange('Reading route context...');
+            const routeStart = performance.now();
             let routes: HistoricRoute[] = [];
             try {
                 const timeout  = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS));
@@ -388,6 +407,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     onLog(`> Routes: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'terrain');
                 }
             } catch { /* Itiner-e asset unavailable */ }
+            const routeSeconds = seconds(routeStart);
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {
                 setIsScanning(false);
@@ -396,6 +416,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             // ── Cluster processing pipeline ───────────────────────────────────
             onStatusChange('Comparing landscape signals...');
+            const processStart = performance.now();
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
 
@@ -452,7 +473,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             // sets isRouteArtefactRisk on confirmed artefacts. Runs after AIM/NHLE
             // enrichment and analyzeContext so full archaeological context is available.
             onStatusChange('Interpreting route signals...');
+            const modernWaysStart = performance.now();
             const modernWayResult = await modernWaysPromise;
+            const modernWaysSeconds = seconds(modernWaysStart);
             let modernWays = modernWayResult.ways;
             let modernWaysFetchedAt: number | undefined = modernWayResult.available ? Date.now() : undefined;
             if (modernWays.length > 0) {
@@ -486,9 +509,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
             onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
+            const processSeconds = seconds(processStart);
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
+            onLog(`> TIMING terrain: sources ${sourceWaitSeconds}s (terrain ${terrainSeconds}s, hydro ${hydroSeconds}s, wayback ${waybackSeconds}s, satellite ${satelliteSeconds}s, NHLE ${nhleSeconds}s, AIM ${aimSeconds}s), routes ${routeSeconds}s, modern ways ${modernWaysSeconds}s, processing ${processSeconds}s, total ${seconds(perfStart)}s.`, 'terrain');
 
             if (mountedRef.current) setIsScanning(false);
             return {

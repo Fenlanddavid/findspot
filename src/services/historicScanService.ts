@@ -106,7 +106,9 @@ const OVERPASS_BROAD_ENDPOINT_TIMEOUT_MS = 12000;
 const OVERPASS_BROAD_TOTAL_TIMEOUT_MS = 24000;
 const GENERAL_FETCH_TIMEOUT_MS = 7000;
 const NHLE_RETRY_DELAYS_MS = [350, 900];
-const LANDSCAPE_CONTEXT_RETRY_DELAYS_MS = [500, 1200];
+// The context query is useful enrichment, but terrain/NHLE/AIM already provide
+// the core scan. Keep it bounded so public Overpass slowness cannot dominate.
+const LANDSCAPE_CONTEXT_RETRY_DELAYS_MS: number[] = [];
 const KNOWN_ROMAN_ROUTE_NAMES = [
     'akeman street',
     'cade\'s road',
@@ -127,9 +129,17 @@ const KNOWN_ROMAN_ROUTE_NAME_REGEX = KNOWN_ROMAN_ROUTE_NAMES
     .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
 
+export type OverpassAttemptTiming = {
+    endpoint: string;
+    elapsedMs: number;
+    status: 'ok' | 'http-error' | 'timeout' | 'error';
+    httpStatus?: number;
+};
+
 export type OverpassFetchOptions = {
     endpointTimeoutMs?: number;
     totalTimeoutMs?: number;
+    onAttempt?: (timing: OverpassAttemptTiming) => void;
 };
 
 function isAbortError(e: unknown): boolean {
@@ -173,6 +183,8 @@ async function overpassFetch(
     for (const url of OVERPASS_URLS) {
         const remainingMs = totalTimeoutMs - (Date.now() - started);
         if (remainingMs <= 0) break;
+        const attemptStarted = Date.now();
+        const endpoint = new URL(url).host;
         const timed = withTimeoutSignal(signal, Math.min(endpointTimeoutMs, remainingMs));
         try {
             const res = await fetch(url, {
@@ -181,10 +193,29 @@ async function overpassFetch(
                 body: 'data=' + encodeURIComponent(query),
                 signal: timed.signal,
             });
-            if (!res.ok) continue;
-            return await res.json() as OverpassResponse;
+            if (!res.ok) {
+                options.onAttempt?.({
+                    endpoint,
+                    elapsedMs: Date.now() - attemptStarted,
+                    status:    'http-error',
+                    httpStatus: res.status,
+                });
+                continue;
+            }
+            const data = await res.json() as OverpassResponse;
+            options.onAttempt?.({
+                endpoint,
+                elapsedMs: Date.now() - attemptStarted,
+                status:    'ok',
+            });
+            return data;
         } catch (e) {
             if (signal && isAbortError(e) && signal.aborted) throw e;
+            options.onAttempt?.({
+                endpoint,
+                elapsedMs: Date.now() - attemptStarted,
+                status:    timed.signal.aborted ? 'timeout' : 'error',
+            });
         } finally {
             timed.clear();
         }
@@ -246,10 +277,11 @@ export async function fetchHistoricContextFeatures(
 ): Promise<OverpassResponse | null> {
     const placeRadius = 4000;
     const heritageRadius = 2000;
-    const query = `[out:json][timeout:18];(node["place"](around:${placeRadius},${lat},${lng});way["place"](around:${placeRadius},${lat},${lng});rel["place"](around:${placeRadius},${lat},${lng});node["natural"](around:${placeRadius},${lat},${lng});way["natural"](around:${placeRadius},${lat},${lng});node["historic"](around:${placeRadius},${lat},${lng});way["historic"](around:${placeRadius},${lat},${lng});node["landuse"="farmyard"](around:${placeRadius},${lat},${lng});way["landuse"="farmyard"](around:${placeRadius},${lat},${lng});node["heritage"](around:${heritageRadius},${lat},${lng});way["heritage"](around:${heritageRadius},${lat},${lng});rel["heritage"](around:${heritageRadius},${lat},${lng}););out center;`;
+    const query = `[out:json][timeout:8];(node["place"](around:${placeRadius},${lat},${lng});way["place"](around:${placeRadius},${lat},${lng});rel["place"](around:${placeRadius},${lat},${lng});node["natural"](around:${placeRadius},${lat},${lng});way["natural"](around:${placeRadius},${lat},${lng});node["historic"](around:${placeRadius},${lat},${lng});way["historic"](around:${placeRadius},${lat},${lng});node["landuse"="farmyard"](around:${placeRadius},${lat},${lng});way["landuse"="farmyard"](around:${placeRadius},${lat},${lng});node["heritage"](around:${heritageRadius},${lat},${lng});way["heritage"](around:${heritageRadius},${lat},${lng});rel["heritage"](around:${heritageRadius},${lat},${lng}););out center;`;
     const fetchOptions = {
-        endpointTimeoutMs: options.endpointTimeoutMs ?? 6000,
-        totalTimeoutMs:    options.totalTimeoutMs    ?? 8000,
+        endpointTimeoutMs: options.endpointTimeoutMs ?? 3000,
+        totalTimeoutMs:    options.totalTimeoutMs    ?? 6000,
+        onAttempt:         options.onAttempt,
     };
 
     for (let attempt = 0; attempt <= LANDSCAPE_CONTEXT_RETRY_DELAYS_MS.length; attempt++) {

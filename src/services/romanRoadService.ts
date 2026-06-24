@@ -38,6 +38,16 @@ function getFeatures(): Promise<ItinereFeature[]> {
 }
 
 /**
+ * Prime the module-level GeoJSON cache without blocking the call site.
+ * Call this at scan start so the 150 KB asset is in-flight while other
+ * requests (NHLE, AIM, Overpass) are also running — avoids a sequential
+ * wait later when fetchRomanRoads() is actually awaited.
+ */
+export function prefetchRomanRoads(): void {
+    getFeatures().catch(() => { /* silently ignore — fetchRomanRoads handles retry */ });
+}
+
+/**
  * Return Itiner-e Roman road alignments within the given bounding box.
  * Adds 2km padding so roads just outside the visible viewport are included.
  * Multi-ring segments are split into individual HistoricRoute entries.
