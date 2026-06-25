@@ -661,12 +661,6 @@ function AlieSection({
             ...terrainSignals,
         };
 
-        console.log('[ALIE] worker input counts', {
-            nhle: nhleFeatures.length,
-            aim: aimFeatures.length,
-            routes: historicRoutes.length,
-        });
-
         setAlieLoading(true);
 
         try {
@@ -688,11 +682,6 @@ function AlieSection({
                     diagLog.error('alie', 'Worker pipeline error', event.data.error);
                 } else if (event.data.result) {
                     const result = event.data.result;
-                    console.log('[ALIE] result', {
-                        recordSparsity: result.recordSparsity,
-                        temporalPersistence: result.temporalPersistence,
-                        engineVersion: result.engineVersion,
-                    });
                     setLandscapeInterpretation(result);
                     // Persist to Dexie (last-write-wins)
                     db.landscapeInterpretations.put({

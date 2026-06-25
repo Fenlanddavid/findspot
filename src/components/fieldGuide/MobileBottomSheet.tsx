@@ -696,7 +696,11 @@ export function MobileBottomSheet() {
                                 <p className="text-[0.5rem] font-black text-stone-400/70 uppercase tracking-[0.2em] mb-1">Scheduled Monument</p>
                                 {selectedMonument && <h3 className="text-sm font-black text-white/90 tracking-tight leading-tight">{selectedMonument}</h3>}
                             </div>
-                            <button onClick={() => setSelectedMonument(undefined)} className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0">
+                            <button
+                                onClick={() => setSelectedMonument(undefined)}
+                                aria-label="Close scheduled monument details"
+                                className="bg-white/[0.04] hover:bg-white/[0.08] text-white/50 hover:text-white rounded-full p-1.5 transition-colors border border-white/10 shrink-0"
+                            >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                             </button>
                         </div>
