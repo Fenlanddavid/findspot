@@ -703,11 +703,7 @@ export function FieldGuideMap() {
                     <div className="bg-slate-950/98 border border-stone-700/50 rounded-3xl p-5 shadow-2xl">
                         <div className="flex items-start justify-between mb-3">
                             <p className="text-[0.5rem] font-black text-stone-400/70 uppercase tracking-[0.2em]">Scheduled Monument</p>
-                            <button
-                                onClick={() => setSelectedMonument(undefined)}
-                                aria-label="Close scheduled monument details"
-                                className="text-white/30 hover:text-white/60 transition-colors -mt-0.5 -mr-1 p-1"
-                            >
+                            <button onClick={() => setSelectedMonument(undefined)} className="text-white/30 hover:text-white/60 transition-colors -mt-0.5 -mr-1 p-1">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                             </button>
                         </div>
