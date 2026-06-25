@@ -99,15 +99,16 @@ export function applyNHLEProtection(clusters: Cluster[], nhleData: NHLELike): Cl
 // Tags clusters that fall within AIM monument polygons with aimInfo metadata.
 
 type AIMLike = {
-    features: Array<{
+    features?: Array<{
         geometry?: { type: string; coordinates: unknown };
         properties?: { MONUMENT_TYPE?: string; PERIOD?: string; EVIDENCE_1?: string };
     }>;
 };
 
 export function applyAIMEnrichment(clusters: Cluster[], aimData: AIMLike): Cluster[] {
+    const features = Array.isArray(aimData.features) ? aimData.features : [];
     return clusters.map(c => {
-        for (const aim of aimData.features) {
+        for (const aim of features) {
             const coords = aim.geometry?.coordinates;
             if (!coords) continue;
             let isMatch = false;

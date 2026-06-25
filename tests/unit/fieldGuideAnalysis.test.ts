@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeContext } from '../../src/utils/fieldGuideAnalysis';
+import { analyzeContext, applyAIMEnrichment } from '../../src/utils/fieldGuideAnalysis';
 import type { Cluster } from '../../src/pages/fieldGuideTypes';
 
 function cluster(overrides: Partial<Cluster> = {}): Cluster {
@@ -33,5 +33,14 @@ describe('analyzeContext spatial grid', () => {
 
         expect(result.find(c => c.id === 'west')?.relationshipTag).toBe('barrow_group');
         expect(result.find(c => c.id === 'east')?.relationshipTag).toBe('barrow_group');
+    });
+});
+
+describe('applyAIMEnrichment', () => {
+    it('treats missing AIM features as no enrichment', () => {
+        const input = [cluster({ id: 'safe-aim' })];
+
+        expect(() => applyAIMEnrichment(input, {})).not.toThrow();
+        expect(applyAIMEnrichment(input, {})[0].sources).toEqual(['terrain']);
     });
 });
