@@ -368,7 +368,7 @@ function Shell() {
         {needRefresh && (
           <div className="mb-4 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-4 flex items-center justify-between gap-4">
             <div className="text-sm text-sky-800 dark:text-sky-300">
-              <span className="font-bold">Update available.</span> {UPDATE_NOTES} — tap to install.
+              <span className="font-bold">Update available.</span> {UPDATE_NOTES}
             </div>
             <button
               onClick={async () => {

@@ -683,12 +683,10 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
   await expect(page.getByText("Ready to Scan")).toBeVisible();
 
-  await page.getByRole("button", { name: "GPS" }).click();
-  await expect(page.getByRole("button", { name: "GPS" })).toBeEnabled();
-  await page.waitForTimeout(1500);
-  await page.getByRole("button", { name: "Historic", exact: true }).click();
+  await page.getByRole("button", { name: "Scan Area", exact: true }).click();
 
-  await expect(page.getByText("Landscape Context", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Supporting Context", { exact: true })).toBeVisible();
 
   const layersButton = page.getByRole("button", { name: "Layers", exact: true });
   await expect(layersButton).toBeVisible();
@@ -697,8 +695,8 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await detailsButton.scrollIntoViewIfNeeded();
   await expect(detailsButton).toBeVisible();
   await detailsButton.click();
-  await expect(page.getByText("Historic Findings")).toBeVisible();
-  await expect(page.getByText("Regression Barrow (archaeological_site)")).toBeVisible();
+  await expect(page.getByText("Movement Corridors & Roads")).toBeVisible();
+  await expect(page.getByText("Regression Roman Road", { exact: true })).toBeVisible();
 });
 
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
