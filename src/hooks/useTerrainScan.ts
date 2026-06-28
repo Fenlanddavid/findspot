@@ -9,7 +9,7 @@ import maplibregl from 'maplibre-gl';
 import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
-    NHLEResponse, AIMResponse, OverpassElement,
+    NHLEFeature, NHLEResponse, AIMResponse, OverpassElement,
     parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
     fetchScheduledMonuments, fetchAIMData,
 } from '../services/historicScanService';
@@ -89,6 +89,37 @@ function padBoundsByMetres(
         east:  east  + lonPad,
         north: north + latPad,
     };
+}
+
+// ─── Shared scan helpers ──────────────────────────────────────────────────────
+
+// Extracts first representative coordinate for Point / Polygon / MultiPolygon
+// NHLE geometries. Typed; avoids (f: any) cast on the monument flatMap hot path.
+function extractMonumentPoints(features: NHLEFeature[]): [number, number][] {
+    return features.flatMap(f => {
+        if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
+        if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
+        return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
+    });
+}
+
+// AIM 15m proximity collapse: merges hits within 15m, elevates confidence.
+// Shared between cache-hit and fresh-scan paths to prevent divergence.
+function collapseByProximity(features: Cluster[]): Cluster[] {
+    const result: Cluster[] = [];
+    features.forEach(newHit => {
+        let anchored = false;
+        for (const existing of result) {
+            if (getDistance(newHit.center, existing.center) < 15) {
+                newHit.sources.forEach(s => { if (!existing.sources.includes(s)) existing.sources.push(s); });
+                if (newHit.confidence === 'High') existing.confidence = 'High';
+                anchored = true;
+                break;
+            }
+        }
+        if (!anchored) result.push(newHit);
+    });
+    return result;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -211,11 +242,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 if (tokenRef.current !== token || signal.aborted || !mountedRef.current) { setIsScanning(false); return null; }
 
                 const rawCombined = cached.rawClusters as Cluster[];
-                const monumentPoints: [number, number][] = (nhleData.features || []).flatMap((f: any) => {
-                    if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
-                    if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
-                    return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
-                });
+                const monumentPoints = extractMonumentPoints(nhleData.features || []);
                 const heritageCount = nhleData.features?.length ?? 0;
                 if (nhleData.available === false) {
                     onLog('> NHLE: Scheduled monument service unavailable — protected archaeology could not be checked for this terrain scan.', 'terrain', 'warn');
@@ -225,18 +252,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onStatusChange('Comparing landscape signals...');
                 const merged      = findConsensus(rawCombined);
                 const aimEnriched = applyAIMEnrichment(merged, aimData);
-                const updatedFeatures: Cluster[] = [];
-                aimEnriched.forEach(newHit => {
-                    let anchored = false;
-                    for (const existing of updatedFeatures) {
-                        if (getDistance(newHit.center, existing.center) < 15) {
-                            newHit.sources.forEach(s => { if (!existing.sources.includes(s)) existing.sources.push(s); });
-                            if (newHit.confidence === 'High') existing.confidence = 'High';
-                            anchored = true; break;
-                        }
-                    }
-                    if (!anchored) updatedFeatures.push(newHit);
-                });
+                const updatedFeatures = collapseByProximity(aimEnriched);
                 applyNHLEProtection(updatedFeatures, nhleData);
                 onStatusChange('Filtering disturbance patterns...');
                 const suppressed     = suppressDisturbance(updatedFeatures);
@@ -371,11 +387,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 'terrain',
             );
 
-            const monumentPoints: [number, number][] = (nhleData.features || []).flatMap(f => {
-                if (f.geometry.type === 'Point')   return [f.geometry.coordinates as [number, number]];
-                if (f.geometry.type === 'Polygon') return [(f.geometry.coordinates as number[][][])?.[0]?.[0] as [number, number]].filter(Boolean);
-                return [(f.geometry.coordinates as number[][][][])?.[0]?.[0]?.[0] as [number, number]].filter(Boolean);
-            });
+            const monumentPoints = extractMonumentPoints(nhleData.features || []);
             const heritageCount = nhleData.features?.length ?? 0;
             if (nhleData.available === false) {
                 onLog('> NHLE: Scheduled monument service unavailable — protected archaeology could not be checked for this terrain scan.', 'terrain', 'warn');
@@ -438,19 +450,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const aimEnriched = applyAIMEnrichment(merged, aimData);
 
             // Proximity-collapse features within 15 m
-            const updatedFeatures: Cluster[] = [];
-            aimEnriched.forEach(newHit => {
-                let anchored = false;
-                for (const existing of updatedFeatures) {
-                    if (getDistance(newHit.center, existing.center) < 15) {
-                        newHit.sources.forEach(s => { if (!existing.sources.includes(s)) existing.sources.push(s); });
-                        if (newHit.confidence === 'High') existing.confidence = 'High';
-                        anchored = true;
-                        break;
-                    }
-                }
-                if (!anchored) updatedFeatures.push(newHit);
-            });
+            const updatedFeatures = collapseByProximity(aimEnriched);
 
             onStatusChange('Checking protected archaeology...');
             applyNHLEProtection(updatedFeatures, nhleData);

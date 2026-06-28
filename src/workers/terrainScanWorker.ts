@@ -87,7 +87,7 @@ function convexHullPerimeter(pts: {x: number; y: number}[]): number {
 // from outside the worker bundle. Each additional boost yields diminishing returns
 // as scores approach 100, making "High potential" actually mean something.
 
-function boostScoreLocal(base: number, boost: number): number {
+export function boostScoreLocal(base: number, boost: number): number {
     if (base <= 0) return Math.min(96, 100 * (1 - Math.exp(-boost / 100)));
     const raw = -Math.log(Math.max(0.001, 1 - Math.min(0.999, base / 100))) * 100;
     return Math.min(96, 100 * (1 - Math.exp(-(raw + boost) / 100)));
@@ -786,7 +786,16 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
 
 // ─── Worker message handler ───────────────────────────────────────────────────
 
-self.onmessage = async (e: MessageEvent<WorkerParams>) => {
-    const result = await processSource(e.data);
-    self.postMessage(result);
-};
+// Guard: self is not defined in Node test environments. Named exports (e.g.
+// boostScoreLocal) remain importable without triggering the handler assignment.
+if (typeof self !== 'undefined') {
+    self.onmessage = async (e: MessageEvent<WorkerParams>) => {
+        try {
+            const result = await processSource(e.data);
+            self.postMessage(result);
+        } catch {
+            // Fail-safe: an empty result is recoverable; a missing message hangs Promise.all.
+            self.postMessage({ clusters: [], tilesLoaded: 0 } satisfies WorkerResult);
+        }
+    };
+}

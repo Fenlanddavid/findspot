@@ -228,17 +228,15 @@ describe('ALIE pipeline — (e) scheduled monument overlap flag', () => {
     // Inject a fake NHLE feature that looks like a scheduled monument at the test geohash.
     // The geohash6 'gcpvhp' covers ~52.5°N, -1.5°E (English Midlands).
     // isScheduledMonumentOverlap tests whether any NHLE feature nearby is a SM.
+    // Realistic SM property shape: Name (capital N) is the asset name, never
+    // contains "scheduled". This would have defeated the old name-matching gate.
     const smFeature = {
       id: 'nhle-sm-1',
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [-1.5, 52.5] },
       properties: {
-        name: 'Test Scheduled Monument',
-        designation: 'Scheduled Monument',
-        listEntry: '1234567',
-        grade: null,
-        hyperlink: null,
-        period: 'Romano British',
+        Name: 'Roman fort 500m NE of test village',
+        ListEntry: '1234567',
       },
     };
     const result = runAliePipeline(makeAlieInput({ nhleFeatures: [smFeature as any] }));
