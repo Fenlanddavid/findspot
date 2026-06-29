@@ -24,7 +24,7 @@ import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoads } from '../services/romanRoadService';
-import { findPackCoveringBbox, PackMeta } from '../services/offlinePack';
+import { findPackMatchForBbox, PackMeta } from '../services/offlinePack';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -237,9 +237,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             }
         } catch { /* non-fatal */ }
 
-        const offlinePackMeta = await findPackCoveringBbox([scanWest, scanSouth, scanEast, scanNorth], zoom).catch(() => null);
+        const packMatch = await findPackMatchForBbox([scanWest, scanSouth, scanEast, scanNorth], zoom).catch(() => null);
+        const offlinePackMeta = packMatch?.coverage.full ? packMatch.meta : null;
         if (offlinePackMeta) {
             onLog('> Offline pack: downloaded terrain pack covers this scan; live route lookups skipped.', 'terrain');
+        } else if (packMatch) {
+            onLog(`> Offline pack: partial coverage (${packMatch.coverage.covered}/${packMatch.coverage.total} terrain tiles); live/cached hybrid scan used.`, 'terrain', 'warn');
         }
 
         // ── Fire route + ways fetches before cache check ──────────────────────

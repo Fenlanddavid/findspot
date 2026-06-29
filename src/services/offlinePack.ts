@@ -18,6 +18,7 @@ import { FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { LayerFetchStatus } from '../pages/fieldGuideTypes';
 import type { NHLEFeature, NHLEGeometry } from './historicScanService';
+import { romanRoadsAssetUrl } from './romanRoadService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ const BASE_TILE_URLS_PER_CELL = 7;
 /** Staleness threshold in ms — 90 days. */
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
 const DESIGNATION_BBOX_PAD_M = 50;
+const PERMISSION_SCAN_TILE_MARGIN = 1;
 const NHLE_FEATURE_SERVER =
     'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
     'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
@@ -55,6 +57,17 @@ export type PackMeta = {
     /** Per-layer cache status recorded at build time. */
     layers: Record<string, LayerFetchStatus>;
     cacheName: string;
+};
+
+export type PackCoverage = {
+    covered: number;
+    total: number;
+    full: boolean;
+};
+
+export type PackMatch = {
+    meta: PackMeta;
+    coverage: PackCoverage;
 };
 
 // ─── Cache key helpers ────────────────────────────────────────────────────────
@@ -103,14 +116,45 @@ function tileKey(tx: number, ty: number): string {
     return `${tx}:${ty}`;
 }
 
-function packCoversBboxTiles(
+function tile2lon(tx: number, zoom: number) {
+    return tx / Math.pow(2, zoom) * 360 - 180;
+}
+
+function tile2lat(ty: number, zoom: number) {
+    const n2 = Math.PI - 2 * Math.PI * ty / Math.pow(2, zoom);
+    return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n2) - Math.exp(-n2)));
+}
+
+function expandBboxByTileMargin(
+    bbox: [number, number, number, number],
+    zoom: number,
+    marginTiles: number,
+): [number, number, number, number] {
+    const tiles = bboxTiles(bbox, zoom);
+    if (!tiles.length) return bbox;
+    const xs = tiles.map(([tx]) => tx);
+    const ys = tiles.map(([, ty]) => ty);
+    const txMin = Math.min(...xs) - marginTiles;
+    const txMax = Math.max(...xs) + marginTiles;
+    const tyMin = Math.min(...ys) - marginTiles;
+    const tyMax = Math.max(...ys) + marginTiles;
+    return [
+        tile2lon(txMin, zoom),
+        tile2lat(tyMax + 1, zoom),
+        tile2lon(txMax + 1, zoom),
+        tile2lat(tyMin, zoom),
+    ];
+}
+
+function packCoverageForBboxTiles(
     packBbox: [number, number, number, number],
     queryBbox: [number, number, number, number],
     zoom: number,
-): boolean {
+): PackCoverage {
     const packTiles = new Set(bboxTiles(packBbox, zoom).map(([tx, ty]) => tileKey(tx, ty)));
     const queryTiles = bboxTiles(queryBbox, zoom);
-    return queryTiles.length > 0 && queryTiles.every(([tx, ty]) => packTiles.has(tileKey(tx, ty)));
+    const covered = queryTiles.filter(([tx, ty]) => packTiles.has(tileKey(tx, ty))).length;
+    return { covered, total: queryTiles.length, full: queryTiles.length > 0 && covered === queryTiles.length };
 }
 
 function padBboxByMetres(
@@ -290,8 +334,11 @@ export async function resolveBbox(
         const coords = permission.boundary.coordinates[0];
         const lons = coords.map(c => c[0]);
         const lats = coords.map(c => c[1]);
+        const boundaryBbox: [number, number, number, number] = [
+            Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats),
+        ];
         return {
-            bbox: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)],
+            bbox: expandBboxByTileMargin(boundaryBbox, ZOOM, PERMISSION_SCAN_TILE_MARGIN),
             projectId: permission.projectId,
         };
     } else {
@@ -304,11 +351,6 @@ export async function resolveBbox(
         const tX = Math.floor(cX) - 1;
         const tY = Math.floor(cY) - 1;
         // Convert the 3×3 tile grid back to a geographic bbox
-        function tile2lon(tx: number, z: number) { return tx / Math.pow(2, z) * 360 - 180; }
-        function tile2lat(ty: number, z: number) {
-            const n2 = Math.PI - 2 * Math.PI * ty / Math.pow(2, z);
-            return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n2) - Math.exp(-n2)));
-        }
         const west  = tile2lon(tX,     ZOOM);
         const east  = tile2lon(tX + 3, ZOOM);
         const north = tile2lat(tY,     ZOOM);
@@ -341,7 +383,12 @@ export async function getPackMeta(owner: PackOwner): Promise<PackMeta | null> {
     if (typeof caches === 'undefined') return null;
     const { bbox } = await resolveBbox(owner);
     const cacheName = packCacheName(owner, bbox);
-    if (!(await caches.has(cacheName))) return null;
+    if (!(await caches.has(cacheName))) {
+        const metas = await listPacks();
+        return metas
+            .filter(meta => meta.ownerType === owner.ownerType && meta.ownerId === owner.ownerId)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+    }
     const cache = await caches.open(cacheName);
     const metaRes = await cache.match(metaUrl(cacheName));
     if (!metaRes) return null;
@@ -371,22 +418,42 @@ export async function listPacks(): Promise<PackMeta[]> {
 }
 
 /**
- * Return the newest prepared pack whose downloaded tile cells cover a scan bbox.
- * This checks tile coverage rather than raw bbox containment because permission
- * packs may have narrow polygon bounds but still cache whole intersecting tiles.
+ * Return the best prepared pack for a scan bbox, including partial overlaps.
+ * Use this for designation reads where a partial cached shard can still draw a
+ * monument. For terrain scans, use findPackCoveringBbox() so the full 3x3 tile
+ * grid is known to be present before skipping live paths.
+ */
+export async function findPackMatchForBbox(
+    bbox: [number, number, number, number],
+    zoom = ZOOM,
+): Promise<PackMatch | null> {
+    const metas = await listPacks();
+    return metas
+        .map(meta => ({
+            meta,
+            coverage: meta.zoom === zoom &&
+                (meta.layers.terrain === 'cached' || meta.layers.terrain === 'partial')
+                ? packCoverageForBboxTiles(meta.bbox, bbox, zoom)
+                : { covered: 0, total: 0, full: false },
+        }))
+        .filter(({ coverage }) => coverage.covered > 0)
+        .sort((a, b) =>
+            Number(b.coverage.full) - Number(a.coverage.full) ||
+            b.coverage.covered - a.coverage.covered ||
+            new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime()
+        )[0] ?? null;
+}
+
+/**
+ * Return a prepared pack only when its downloaded tile cells cover the full scan
+ * bbox. This is the safe signal for fast offline terrain scans.
  */
 export async function findPackCoveringBbox(
     bbox: [number, number, number, number],
     zoom = ZOOM,
 ): Promise<PackMeta | null> {
-    const metas = await listPacks();
-    return metas
-        .filter(meta =>
-            meta.zoom === zoom &&
-            (meta.layers.terrain === 'cached' || meta.layers.terrain === 'partial') &&
-            packCoversBboxTiles(meta.bbox, bbox, zoom)
-        )
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
+    const match = await findPackMatchForBbox(bbox, zoom);
+    return match?.coverage.full ? match.meta : null;
 }
 
 /** Delete a pack and all its cached tiles. */
@@ -527,8 +594,19 @@ export async function buildPack(
         layers['aim'] = 'unavailable';
     }
 
-    // 6 — Roman roads are served from /public (SW precache) — already offline
-    layers['romanRoads'] = 'ok';
+    // 6 — Cache Roman roads in the pack as well as relying on SW precache.
+    try {
+        const url = romanRoadsAssetUrl();
+        const res = await fetch(url);
+        if (res.ok) {
+            await cache.put(url, res);
+            layers['romanRoads'] = 'cached';
+        } else {
+            layers['romanRoads'] = 'unavailable';
+        }
+    } catch {
+        layers['romanRoads'] = 'unavailable';
+    }
 
     onProgress?.({ phase: 'meta', done: 0, total: 1 });
     const sizeBytesApprox = tilesOk * BYTES_PER_TILE_EST;

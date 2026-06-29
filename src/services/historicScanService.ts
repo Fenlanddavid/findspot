@@ -443,6 +443,7 @@ async function _fetchSMFromR2(
     const query: [number, number, number, number] = [west, south, east, north];
     const seen = new Set<string>();
     const features: NHLEFeature[] = [];
+    let missingCacheShards = 0;
 
     try {
         await Promise.all(cells.map(async (cell) => {
@@ -452,9 +453,8 @@ async function _fetchSMFromR2(
                 // cachedFetchAny serves from any open offline pack before network
                 const res = await cachedFetchAny(url, { signal: timed.signal }, { cacheOnly: options.cacheOnly });
                 if (!res.ok) {
-                    // Non-200 from the worker = genuine error (worker turns empty
-                    // cells into 200 [], so 4xx/5xx here means service failure)
-                    throw new Error(`SM shard HTTP ${res.status}`);
+                    missingCacheShards++;
+                    return;
                 }
                 const entries: SMShardEntry[] = await res.json();
                 for (const entry of entries) {
@@ -471,10 +471,23 @@ async function _fetchSMFromR2(
                         properties: { Name: entry.name, ListEntry: entry.listEntry },
                     });
                 }
+            } catch (e) {
+                if (!(signal && isAbortError(e) && signal.aborted)) {
+                    missingCacheShards++;
+                    return;
+                }
+                throw e;
             } finally {
                 timed.clear();
             }
         }));
+        if (missingCacheShards > 0) {
+            return {
+                features,
+                available: false,
+                error: `SM offline pack missing ${missingCacheShards}/${cells.length} shard${missingCacheShards !== 1 ? 's' : ''}`,
+            };
+        }
         return { features, available: true };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;

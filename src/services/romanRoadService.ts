@@ -4,6 +4,7 @@
 // A session-level cache avoids re-fetching on every scan.
 
 import { HistoricRoute } from '../pages/fieldGuideTypes';
+import { cachedFetchAny } from '../utils/cachedFetch';
 
 interface ItinereFeature {
     type: 'Feature';
@@ -21,9 +22,13 @@ interface ItinereFeature {
 
 let _cache: Promise<ItinereFeature[]> | null = null;
 
+export function romanRoadsAssetUrl(): string {
+    return new URL(`${import.meta.env.BASE_URL}roman-roads-gb.geojson`, window.location.origin).toString();
+}
+
 function getFeatures(): Promise<ItinereFeature[]> {
     if (!_cache) {
-        _cache = fetch(import.meta.env.BASE_URL + 'roman-roads-gb.geojson')
+        _cache = cachedFetchAny(romanRoadsAssetUrl())
             .then(r => {
                 if (!r.ok) throw new Error(`roman-roads-gb.geojson: ${r.status}`);
                 return r.json();
