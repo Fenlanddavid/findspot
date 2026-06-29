@@ -19,6 +19,7 @@ import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { LayerFetchStatus } from '../pages/fieldGuideTypes';
 import type { NHLEFeature, NHLEGeometry } from './historicScanService';
 import { romanRoadsAssetUrl } from './romanRoadService';
+import { osmTileUrl, worldImageryTileUrl } from '../utils/mapTileCache';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ const BYTES_PER_TILE_EST = 25_000;
 const AIM_PACK_MAX_SHARDS = 500;
 /** Tile URLs per cell before optional Wayback imagery. Must match tileUrlsForCell(). */
 const BASE_TILE_URLS_PER_CELL = 7;
+const BASEMAP_ZOOMS = [14, 15, 16] as const;
 /** Staleness threshold in ms — 90 days. */
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
 const DESIGNATION_BBOX_PAD_M = 50;
@@ -186,6 +188,19 @@ function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: Wayba
         );
     }
     urls.push(`https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`);
+    return urls;
+}
+
+function basemapTileUrlsForBbox(bbox: [number, number, number, number]): string[] {
+    const urls: string[] = [];
+    for (const zoom of BASEMAP_ZOOMS) {
+        for (const [tx, ty] of bboxTiles(bbox, zoom)) {
+            urls.push(
+                osmTileUrl(zoom, tx, ty),
+                worldImageryTileUrl(zoom, tx, ty),
+            );
+        }
+    }
     return urls;
 }
 
@@ -374,7 +389,7 @@ export async function estimatePack(owner: PackOwner): Promise<PackEstimate> {
     const { bbox } = await resolveBbox(owner);
     const tiles = bboxTiles(bbox, ZOOM);
     // Each tile cell has base terrain/fallback URLs plus up to 2 Wayback sources.
-    const tileCount = tiles.length * (BASE_TILE_URLS_PER_CELL + 2);
+    const tileCount = tiles.length * (BASE_TILE_URLS_PER_CELL + 2) + basemapTileUrlsForBbox(bbox).length;
     return { tileCount, estBytes: tileCount * BYTES_PER_TILE_EST };
 }
 
@@ -561,6 +576,26 @@ export async function buildPack(
         layers['terrain'] = 'unavailable';
         layers['satellite'] = 'unavailable';
     }
+
+    // 3b — Fetch + cache map basemap tiles used by MapLibre itself.
+    let basemapOk = 0;
+    let basemapFailed = 0;
+    for (const url of basemapTileUrlsForBbox(bbox)) {
+        try {
+            const res = await fetch(url);
+            if (res.ok) {
+                await cache.put(url, res);
+                basemapOk++;
+            } else {
+                basemapFailed++;
+            }
+        } catch {
+            basemapFailed++;
+        }
+    }
+    if (basemapFailed === 0 && basemapOk > 0) layers['mapTiles'] = 'cached';
+    else if (basemapOk > 0) layers['mapTiles'] = 'partial';
+    else layers['mapTiles'] = 'unavailable';
 
     // 4 — Cache SM index shards for the bbox
     onProgress?.({ phase: 'shards', done: 0, total: 1 });

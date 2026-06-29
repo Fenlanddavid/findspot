@@ -6,6 +6,7 @@ import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../p
 import { Find, SavedPoint, db } from '../db';
 import { deletePack } from '../services/offlinePack';
 import { DevAnnotation } from '../utils/devAnnotation';
+import { cacheBackedTileUrl, loadCacheBackedTile, MAP_TILE_CACHE_PROTOCOL } from '../utils/mapTileCache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,9 @@ let cogProtocolRegistered = false;
 function ensureCogProtocolRegistered() {
     if (cogProtocolRegistered) return;
     addProtocol('cog', cogProtocol);
+    addProtocol(MAP_TILE_CACHE_PROTOCOL, (params, abortController) =>
+        loadCacheBackedTile(params.url, abortController.signal)
+    );
     cogProtocolRegistered = true;
 }
 
@@ -241,8 +245,8 @@ export function useFieldGuideMap({
             style: {
                 version: 8,
                 sources: {
-                    'osm':          { type: 'raster', tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '&copy; OSM' },
-                    'satellite':    { type: 'raster', tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' },
+                    'osm':          { type: 'raster', tiles: [cacheBackedTileUrl('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png')], tileSize: 256, attribution: '&copy; OSM' },
+                    'satellite':    { type: 'raster', tiles: [cacheBackedTileUrl('https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}')], tileSize: 256, attribution: 'Esri' },
                     'overlay-lidar':       { type: 'raster', tiles: ['https://environment.data.gov.uk/spatialdata/lidar-composite-digital-terrain-model-dtm-1m-2022/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=Lidar_Composite_Hillshade_DTM_1m&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'], tileSize: 256, attribution: 'Environment Agency (OGL)' },
                     'overlay-lidar-wales': { type: 'raster', url: `cog://${WALES_LIDAR_COG_URL}`, tileSize: 256, minzoom: 10, attribution: '© Crown copyright (OGL) — Welsh Government / NRW, DataMapWales' },
                     'overlay-os1930': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/os/6inchsecond/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 16, attribution: '&copy; National Library of Scotland' },
@@ -262,7 +266,8 @@ export function useFieldGuideMap({
             clickTolerance: 40,
         });
 
-        map.on('load', () => {
+        const initialiseMapLayers = () => {
+            if (map.getSource('targets')) return;
             map.addSource('monument-buffers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'monument-buffer-fill',    type: 'fill', source: 'monument-buffers', paint: { 'fill-color': '#f97316', 'fill-opacity': 0.16 } });
             map.addLayer({ id: 'monument-buffer-outline', type: 'line', source: 'monument-buffers', paint: { 'line-color': '#f97316', 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } });
@@ -504,7 +509,11 @@ export function useFieldGuideMap({
                 map.flyTo({ center: [initLng, initLat], zoom: 14 });
             }
             setTimeout(() => map.resize(), 300);
-        });
+        };
+
+        if (map.isStyleLoaded()) initialiseMapLayers();
+        else map.once('style.load', initialiseMapLayers);
+        map.once('load', initialiseMapLayers);
 
         mapRef.current = map;
         return () => {
@@ -806,8 +815,8 @@ export function useFieldGuideMap({
 
             src.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
         };
-        if (map.loaded()) doUpdate();
-        else map.once('load', doUpdate);
+        if (map.getSource('landscape-context')) doUpdate();
+        else map.once('style.load', doUpdate);
     }, [historicRoutes, pasFinds, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Config-driven layer visibility ────────────────────────────────────────
@@ -875,8 +884,8 @@ export function useFieldGuideMap({
                 fieldLabelMarkersRef.current.push(marker);
             });
         };
-        if (map.loaded()) doUpdate();
-        else map.once('load', doUpdate);
+        if (map.getSource('permission-fields')) doUpdate();
+        else map.once('style.load', doUpdate);
         return () => { canceled = true; };
     }, [fieldBoundaries, showFields]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -924,7 +933,7 @@ export function useFieldGuideMap({
             const hasCircle = !!map.getLayer('user-finds-circles');
             const hasHitbox = !!map.getLayer('user-finds-hitbox');
             if (!hasCircle || !hasHitbox) {
-                if (!map.loaded()) setTimeout(applyVisibility, 250);
+                setTimeout(applyVisibility, 250);
                 return;
             }
             map.setLayoutProperty('user-finds-circles', 'visibility', vis);
@@ -968,8 +977,8 @@ export function useFieldGuideMap({
                 devAnnotationMarkersRef.current.push(marker);
             });
         };
-        if (map.loaded()) doUpdate();
-        else map.once('load', doUpdate);
+        if (map.getSource('dev-annotations')) doUpdate();
+        else map.once('style.load', doUpdate);
         return () => { canceled = true; };
     }, [devAnnotations, mapReadyVersion]);
 
@@ -1075,8 +1084,7 @@ export function useFieldGuideMap({
             }
         };
 
-        if (map.loaded()) doAdd();
-        else map.once('load', doAdd);
+        doAdd();
     }, [savedPoints, showSavedPoints]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
