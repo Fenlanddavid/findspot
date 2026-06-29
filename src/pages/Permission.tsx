@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { usePermissionForm } from "../hooks/usePermissionForm";
 import { db, Permission, Find, Media, GeoJSONPolygon } from "../db";
 import { v4 as uuid } from "uuid";
@@ -23,8 +23,23 @@ import { PermissionActivityColumn } from "../components/PermissionActivityColumn
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { CoachTip, CoachTips } from "../components/CoachTips";
+import {
+    buildPack, deletePack, getPackMeta, isPackStale,
+    estimatePack, PackMeta, BuildProgress,
+} from "../services/offlinePack";
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
+
+function formatMB(bytes: number): string {
+    return `${(bytes / 1_000_000).toFixed(0)} MB`;
+}
+
+type PermPackStatus =
+    | { kind: 'checking' }
+    | { kind: 'none'; estMB: string }
+    | { kind: 'building'; pct: number }
+    | { kind: 'done'; meta: PackMeta; stale: boolean }
+    | { kind: 'error' };
 
 function getBoundaryCenter(boundary?: GeoJSONPolygon | null): { lat: number; lon: number } | null {
   const ring = boundary?.coordinates?.[0];
@@ -103,6 +118,11 @@ export default function PermissionPage(props: {
   const [showImportClubDayData, setShowImportClubDayData] = useState(false);
   const [permissionCoachActive, setPermissionCoachActive] = useState(false);
   const [permissionCoachStep, setPermissionCoachStep] = useState(0);
+
+  // Offline pack state for this permission
+  const [permPackStatus, setPermPackStatus] = useState<PermPackStatus>({ kind: 'checking' });
+  const [pendingEvictPerm, setPendingEvictPerm] = useState(false);
+  const boundaryPackKey = useMemo(() => boundary ? JSON.stringify(boundary.coordinates) : '', [boundary]);
 
   const fields = useLiveQuery(async () => {
     if (!id) return [];
@@ -285,6 +305,24 @@ export default function PermissionPage(props: {
     }
   }, [loading, isEdit, openClubDayParam]);
 
+  // Load offline pack status when permission has a boundary
+  useEffect(() => {
+    if (!isEdit || !id || !boundary) return;
+    setPermPackStatus({ kind: 'checking' });
+    Promise.all([
+        getPackMeta({ ownerType: 'permission', ownerId: id }),
+        estimatePack({ ownerType: 'permission', ownerId: id }),
+    ]).then(([meta, est]) => {
+        if (meta) {
+            setPermPackStatus({ kind: 'done', meta, stale: isPackStale(meta) });
+        } else {
+            setPermPackStatus({ kind: 'none', estMB: formatMB(est.estBytes) });
+        }
+    }).catch(() => {
+        setPermPackStatus({ kind: 'none', estMB: '~30 MB' });
+    });
+  }, [isEdit, id, boundaryPackKey, !!boundary]);
+
   async function doGPS() {
     setError(null);
     try {
@@ -296,6 +334,33 @@ export default function PermissionPage(props: {
       setError(e?.message ?? "GPS failed");
     }
   }
+
+  const handlePackPrepare = useCallback(async () => {
+    if (!id) return;
+    setPermPackStatus({ kind: 'building', pct: 0 });
+    try {
+        await buildPack(
+            { ownerType: 'permission', ownerId: id },
+            (p: BuildProgress) => {
+                const pct = p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+                setPermPackStatus({ kind: 'building', pct });
+            },
+            true,
+        );
+        const meta = await getPackMeta({ ownerType: 'permission', ownerId: id });
+        if (meta) setPermPackStatus({ kind: 'done', meta, stale: false });
+    } catch {
+        setPermPackStatus({ kind: 'error' });
+    }
+  }, [id]);
+
+  const handlePackEvict = useCallback(async () => {
+    if (!id) return;
+    await deletePack({ ownerType: 'permission', ownerId: id });
+    const est = await estimatePack({ ownerType: 'permission', ownerId: id }).catch(() => ({ estBytes: 30_000_000 }));
+    setPermPackStatus({ kind: 'none', estMB: formatMB(est.estBytes) });
+    setPendingEvictPerm(false);
+  }, [id]);
 
   async function handleDelete() {
     if (!id) return;
@@ -327,6 +392,7 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
+      await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
@@ -377,6 +443,7 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
+      await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
       await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
@@ -1449,6 +1516,90 @@ export default function PermissionPage(props: {
             />
             </React.Fragment>
                 )}
+
+            {/* Offline Access card — regular permissions with a mapped boundary */}
+            {isEdit && !isClubDayMember && !isEditing && !!boundary && (
+            <div className="lg:col-span-3">
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Offline Access</div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so FieldGuide works without a signal.</p>
+
+                    {permPackStatus.kind === 'checking' && (
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                            <div className="w-3 h-3 rounded-full border border-gray-300 border-t-transparent animate-spin" />
+                            Checking…
+                        </div>
+                    )}
+
+                    {permPackStatus.kind === 'none' && (
+                        <button
+                            onClick={handlePackPrepare}
+                            className="flex items-center gap-2 text-sm font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                        >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                            Prepare for Offline (~{permPackStatus.estMB})
+                        </button>
+                    )}
+
+                    {permPackStatus.kind === 'building' && (
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 max-w-xs h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${permPackStatus.pct}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-400 shrink-0">{permPackStatus.pct}%</span>
+                            <div className="w-3 h-3 rounded-full border border-emerald-400/40 border-t-emerald-500 animate-spin shrink-0" />
+                        </div>
+                    )}
+
+                    {permPackStatus.kind === 'done' && (
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={permPackStatus.stale ? '#f59e0b' : '#10b981'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                    {formatMB(permPackStatus.meta.sizeBytesApprox)} downloaded
+                                    {permPackStatus.stale && <span className="ml-1 text-amber-500"> · pack is old</span>}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 ml-auto">
+                                {permPackStatus.stale && (
+                                    <button
+                                        onClick={handlePackPrepare}
+                                        className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                                    >
+                                        Re-prepare
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        if (pendingEvictPerm) {
+                                            handlePackEvict();
+                                        } else {
+                                            setPendingEvictPerm(true);
+                                            setTimeout(() => setPendingEvictPerm(false), 3000);
+                                        }
+                                    }}
+                                    className={`text-xs font-bold transition-colors ${pendingEvictPerm ? 'text-amber-500' : 'text-gray-400 hover:text-red-500'}`}
+                                >
+                                    {pendingEvictPerm ? 'Tap again to remove' : 'Remove offline data'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {permPackStatus.kind === 'error' && (
+                        <div className="flex items-center gap-3">
+                            <span className="text-xs text-red-500">Download failed.</span>
+                            <button
+                                onClick={handlePackPrepare}
+                                className="text-xs font-black text-red-500 hover:text-red-400 transition-colors"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+            )}
         </div>
       </div>
 

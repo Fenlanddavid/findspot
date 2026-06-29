@@ -7,6 +7,7 @@
 
 import { Cluster, SCAN_PROFILE } from '../pages/fieldGuideTypes';
 import { waybackTileUrl } from '../utils/waybackService';
+import { cachedFetchAny } from '../utils/cachedFetch';
 
 type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
 
@@ -37,7 +38,10 @@ async function fetchBitmapTimed(url: string): Promise<ImageBitmap | null> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 4000);
     try {
-        const res = await fetch(url, { signal: ctrl.signal });
+        // cachedFetchAny checks all open Cache Storage caches first (offline pack),
+        // then falls through to network. caches.match() is available in dedicated
+        // Workers in Chrome 43+, Firefox 44+, Safari 16+.
+        const res = await cachedFetchAny(url, { signal: ctrl.signal });
         clearTimeout(timer);
         if (!res.ok) return null;
         return await createImageBitmap(await res.blob());

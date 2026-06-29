@@ -1,5 +1,14 @@
 // ─── Shared types & constants for the Field Guide feature ───────────────────
 
+/**
+ * Per-layer fetch status for W2 offline-graceful states.
+ * - ok:          fetched fresh from network
+ * - cached:      served from the W3 offline pack (Cache Storage)
+ * - partial:     some tiles/shards missing (tile layers: tilesLoaded < 9)
+ * - unavailable: fetch failed entirely; layer excluded from confident scoring
+ */
+export type LayerFetchStatus = 'ok' | 'cached' | 'unavailable' | 'partial';
+
 export interface Cluster {
     id: string; points: {x: number, y: number}[];
     minX: number; maxX: number; minY: number; maxY: number;

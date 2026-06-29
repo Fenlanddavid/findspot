@@ -1,4 +1,7 @@
 // ─── External API fetch helpers for the Field Guide terrain/heritage scanner ──
+import { USE_R2_DESIGNATIONS, FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
+import { bboxToGeohash6Cells } from '../utils/geohashUtils';
+import { cachedFetchAny } from '../utils/cachedFetch';
 
 // ─── Typed API response shapes ────────────────────────────────────────────────
 
@@ -76,6 +79,7 @@ export interface AIMFeature {
 
 export interface AIMResponse {
     features: AIMFeature[];
+    available?: boolean;
 }
 
 export interface NominatimAddress {
@@ -310,16 +314,231 @@ export async function fetchHeritageFeatures(
     });
 }
 
+// ─── R2 static designation helpers (W1) ──────────────────────────────────────
+
+type SMShardEntry = {
+    listEntry: string;
+    name: string;
+    bbox: [number, number, number, number];
+    geometry?: NHLEGeometry;
+};
+
+function _smBboxIntersects(
+    sm: [number, number, number, number],
+    q:  [number, number, number, number],
+): boolean {
+    return sm[0] <= q[2] && sm[2] >= q[0] && sm[1] <= q[3] && sm[3] >= q[1];
+}
+
+function _pointInBbox(point: [number, number], bbox: [number, number, number, number]): boolean {
+    return point[0] >= bbox[0] && point[0] <= bbox[2] && point[1] >= bbox[1] && point[1] <= bbox[3];
+}
+
+function _pointInRing(point: [number, number], ring: number[][]): boolean {
+    const [lon, lat] = point;
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0], yi = ring[i][1];
+        const xj = ring[j][0], yj = ring[j][1];
+        if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+    }
+    return inside;
+}
+
+function _orientation(a: [number, number], b: [number, number], c: [number, number]): number {
+    return (b[1] - a[1]) * (c[0] - b[0]) - (b[0] - a[0]) * (c[1] - b[1]);
+}
+
+function _onSegment(a: [number, number], b: [number, number], c: [number, number]): boolean {
+    return b[0] <= Math.max(a[0], c[0]) && b[0] >= Math.min(a[0], c[0]) &&
+        b[1] <= Math.max(a[1], c[1]) && b[1] >= Math.min(a[1], c[1]);
+}
+
+function _segmentsIntersect(p1: [number, number], q1: [number, number], p2: [number, number], q2: [number, number]): boolean {
+    const o1 = _orientation(p1, q1, p2);
+    const o2 = _orientation(p1, q1, q2);
+    const o3 = _orientation(p2, q2, p1);
+    const o4 = _orientation(p2, q2, q1);
+    if ((o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return true;
+    if (o1 === 0 && _onSegment(p1, p2, q1)) return true;
+    if (o2 === 0 && _onSegment(p1, q2, q1)) return true;
+    if (o3 === 0 && _onSegment(p2, p1, q2)) return true;
+    if (o4 === 0 && _onSegment(p2, q1, q2)) return true;
+    return false;
+}
+
+function _ringIntersectsBbox(ring: number[][], bbox: [number, number, number, number]): boolean {
+    if (ring.some(p => _pointInBbox(p as [number, number], bbox))) return true;
+    const [w, s, e, n] = bbox;
+    const corners: [number, number][] = [[w, s], [e, s], [e, n], [w, n]];
+    if (corners.some(corner => _pointInRing(corner, ring))) return true;
+    const edges: Array<[[number, number], [number, number]]> = [
+        [[w, s], [e, s]], [[e, s], [e, n]], [[e, n], [w, n]], [[w, n], [w, s]],
+    ];
+    for (let i = 1; i < ring.length; i++) {
+        const a = ring[i - 1] as [number, number];
+        const b = ring[i] as [number, number];
+        if (edges.some(([c, d]) => _segmentsIntersect(a, b, c, d))) return true;
+    }
+    return false;
+}
+
+function _smGeometryIntersectsBbox(geometry: NHLEGeometry, bbox: [number, number, number, number]): boolean {
+    if (geometry.type === 'Point') return _pointInBbox(geometry.coordinates as [number, number], bbox);
+    if (geometry.type === 'Polygon') {
+        return (geometry.coordinates as number[][][]).some(ring => _ringIntersectsBbox(ring, bbox));
+    }
+    if (geometry.type === 'MultiPolygon') {
+        return (geometry.coordinates as number[][][][]).some(poly => poly.some(ring => _ringIntersectsBbox(ring, bbox)));
+    }
+    return false;
+}
+
 /**
- * NHLE scheduled monuments query via ArcGIS FeatureServer.
+ * Fetch SM data from R2 static index.
+ * Returns NHLEResponse identical to the live path.
+ * On ANY failure: available:false (gate goes amber — never false-clear).
+ *
+ * Coverage sentinel: _meta.json is fetched first. A missing _meta.json means
+ * the index has never been built/deployed — we cannot distinguish "no SM in
+ * cell" from "shard never uploaded", so we must return available:false rather
+ * than risk a false-clear on the legal gate. Only once _meta.json is confirmed
+ * present can a shard 200-[] be trusted as "genuinely empty cell."
  */
-export async function fetchScheduledMonuments(
+async function _fetchSMFromR2(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal,
+): Promise<NHLEResponse> {
+    // ── 1. Coverage sentinel ──────────────────────────────────────────────────
+    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`;
+    try {
+        const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+        try {
+            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal });
+            if (!metaRes.ok) {
+                return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
+            }
+            const meta = await metaRes.json().catch(() => null);
+            if (!meta || meta.schemaVersion !== 2 || meta.geometryMode !== 'full-geojson') {
+                return { features: [], available: false, error: 'SM index requires full-geometry schema v2' };
+            }
+        } finally {
+            metaTimed.clear();
+        }
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        return { features: [], available: false, error: 'SM index unreachable' };
+    }
+
+    // ── 2. Shard reads ────────────────────────────────────────────────────────
+    const cells = bboxToGeohash6Cells(west, south, east, north);
+    const query: [number, number, number, number] = [west, south, east, north];
+    const seen = new Set<string>();
+    const features: NHLEFeature[] = [];
+
+    try {
+        await Promise.all(cells.map(async (cell) => {
+            const url = `${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`;
+            const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+            try {
+                // cachedFetchAny serves from any open offline pack before network
+                const res = await cachedFetchAny(url, { signal: timed.signal });
+                if (!res.ok) {
+                    // Non-200 from the worker = genuine error (worker turns empty
+                    // cells into 200 [], so 4xx/5xx here means service failure)
+                    throw new Error(`SM shard HTTP ${res.status}`);
+                }
+                const entries: SMShardEntry[] = await res.json();
+                for (const entry of entries) {
+                    if (seen.has(entry.listEntry)) continue;
+                    if (!_smBboxIntersects(entry.bbox, query)) continue;
+                    if (!entry.geometry) {
+                        throw new Error('SM shard is old format; rebuild index with full geometry');
+                    }
+                    if (!_smGeometryIntersectsBbox(entry.geometry, query)) continue;
+                    seen.add(entry.listEntry);
+                    features.push({
+                        type: 'Feature',
+                        geometry: entry.geometry,
+                        properties: { Name: entry.name, ListEntry: entry.listEntry },
+                    });
+                }
+            } finally {
+                timed.clear();
+            }
+        }));
+        return { features, available: true };
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        const msg = e instanceof Error ? e.message : 'SM R2 fetch failed';
+        return { features: [], available: false, error: msg };
+    }
+}
+
+type AIMShardEntry = { monumentType: string; period: string; evidence: string; bbox: [number, number, number, number] };
+
+/**
+ * Fetch AIM data from R2 static index (geohash-sharded GeoJSON, same pattern as SM).
+ * Returns AIMResponse. Failure is currently fail-silent (no available flag) — W2 adds it.
+ */
+async function _fetchAIMFromR2(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal,
+): Promise<AIMResponse> {
+    const cells = bboxToGeohash6Cells(west, south, east, north);
+    const query: [number, number, number, number] = [west, south, east, north];
+    const features: AIMFeature[] = [];
+
+    try {
+        await Promise.all(cells.map(async (cell) => {
+            const url = `${FINDSPOT_STATIC_BASE_URL}/aim-index/${cell}.json`;
+            const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+            try {
+                const res = await cachedFetchAny(url, { signal: timed.signal });
+                if (!res.ok) return; // fail-silent in W1 (W2 adds available flag)
+                const entries: AIMShardEntry[] = await res.json();
+                for (const entry of entries) {
+                    if (!_smBboxIntersects(entry.bbox, query)) continue;
+                    const [w, s, e, n] = entry.bbox;
+                    features.push({
+                        type: 'Feature',
+                        geometry: {
+                            type: 'Polygon',
+                            coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+                        },
+                        properties: {
+                            MONUMENT_TYPE: entry.monumentType,
+                            PERIOD: entry.period,
+                            EVIDENCE_1: entry.evidence,
+                        },
+                    });
+                }
+            } finally {
+                timed.clear();
+            }
+        }));
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        // fail-silent in W1; W2 will add available flag
+    }
+
+    return { features };
+}
+
+async function _fetchScheduledMonumentsLive(
     west: number,
     south: number,
     east: number,
     north: number,
     signal?: AbortSignal
 ): Promise<NHLEResponse> {
+    // Legacy live ArcGIS path — REMOVE_AFTER_RELEASE: v4.3.0
     const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
     let lastError = 'Scheduled monument service unavailable';
 
@@ -347,7 +566,33 @@ export async function fetchScheduledMonuments(
 }
 
 /**
- * HE AIM aerial archaeology polygons via ArcGIS FeatureServer.
+ * NHLE scheduled monuments — R2 static index or live ArcGIS FeatureServer.
+ * When USE_R2_DESIGNATIONS is true, R2 is preferred so offline packs can satisfy
+ * the read path. If R2 is unavailable while online, fall back to live ArcGIS so
+ * scans still draw current NHLE geometry instead of silently losing the layer.
+ */
+export async function fetchScheduledMonuments(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal
+): Promise<NHLEResponse> {
+    if (USE_R2_DESIGNATIONS) {
+        const r2Result = await _fetchSMFromR2(west, south, east, north, signal);
+        if (r2Result.available !== false) return r2Result;
+
+        const liveResult = await _fetchScheduledMonumentsLive(west, south, east, north, signal);
+        if (liveResult.available !== false) return liveResult;
+        return r2Result;
+    }
+
+    return _fetchScheduledMonumentsLive(west, south, east, north, signal);
+}
+
+/**
+ * HE AIM aerial archaeology polygons — R2 static index or live ArcGIS FeatureServer.
+ * When USE_R2_DESIGNATIONS is true, reads geohash-sharded JSON from R2.
  */
 export async function fetchAIMData(
     west: number,
@@ -356,6 +601,11 @@ export async function fetchAIMData(
     north: number,
     signal?: AbortSignal
 ): Promise<AIMResponse> {
+    if (USE_R2_DESIGNATIONS) {
+        return _fetchAIMFromR2(west, south, east, north, signal);
+    }
+
+    // Legacy live ArcGIS path — REMOVE_AFTER_RELEASE: v4.3.0
     const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;

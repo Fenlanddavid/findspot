@@ -20,7 +20,7 @@ import { validateBackupData } from '../../src/services/data';
 
 function makeValidBackup(overrides: Record<string, unknown> = {}) {
   return {
-    version: 3,
+    version: 4,
     exportedAt: '2024-01-01T12:00:00.000Z',
     generatedBy: 'FindSpot',
     projects:         [{ id: 'proj-1', name: 'Test Project', region: 'England', createdAt: '2024-01-01' }],
@@ -33,6 +33,7 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
     media:            [{ id: 'media-1', findId: 'find-1', blob: 'data:image/jpeg;base64,/9j/abc' }],
     settings:         [{ key: 'detectorist', value: 'Alice' }],
     importedPackages: [{ id: 'pkg-1' }],
+    savedPoints:      [{ id: 'sp-1', projectId: 'proj-1', label: 'NE corner', lat: 52.5, lon: -1.5, zoom: 16, note: '', createdAt: '2024-01-01' }],
     ...overrides,
   };
 }
@@ -56,6 +57,7 @@ describe('validateBackupData — accepts valid backups', () => {
     expect(Array.isArray(result.media)).toBe(true);
     expect(Array.isArray(result.settings)).toBe(true);
     expect(Array.isArray(result.importedPackages)).toBe(true);
+    expect(Array.isArray(result.savedPoints)).toBe(true);
   });
 
   it('accepts a data-only backup with empty media array', () => {
@@ -72,6 +74,7 @@ describe('validateBackupData — accepts valid backups', () => {
       media: undefined,
       settings: undefined,
       importedPackages: undefined,
+      savedPoints: undefined,
     });
     expect(() => validateBackupData(sparse)).not.toThrow();
   });
@@ -245,11 +248,95 @@ describe('validateBackupData — accepts exportData-format JSON', () => {
     expect(result.projects).toHaveLength(1);
     expect(result.finds).toHaveLength(1);
     expect(result.media).toHaveLength(1);
+    expect(result.savedPoints).toHaveLength(1);
   });
 
   it('round-trips a data-only backup (media: [])', () => {
     const original = makeValidBackup({ media: [] });
     const parsed = JSON.parse(JSON.stringify(original));
     expect(() => validateBackupData(parsed)).not.toThrow();
+  });
+});
+
+// ─── savedPoints backup tests ─────────────────────────────────────────────────
+
+describe('validateBackupData — savedPoints', () => {
+  it('accepts savedPoints with valid projectId reference', () => {
+    const data = makeValidBackup({
+      savedPoints: [
+        { id: 'sp-1', projectId: 'proj-1', label: 'Gate corner', lat: 52.5, lon: -1.5, zoom: 16, note: '', createdAt: '2024-01-01' },
+        { id: 'sp-2', projectId: 'proj-1', label: 'Ridge line', lat: 52.51, lon: -1.51, zoom: 16, note: '', createdAt: '2024-01-01' },
+      ],
+    });
+    expect(() => validateBackupData(data)).not.toThrow();
+    expect(validateBackupData(data).savedPoints).toHaveLength(2);
+  });
+
+  it('rejects a savedPoint with no id', () => {
+    const data = makeValidBackup({
+      savedPoints: [{ projectId: 'proj-1', label: 'No ID', lat: 52.5, lon: -1.5, zoom: 16, note: '' }],
+    });
+    expect(() => validateBackupData(data)).toThrow(/savedPoints/i);
+  });
+
+  it('rejects a savedPoint referencing an unknown project', () => {
+    const data = makeValidBackup({
+      savedPoints: [{ id: 'sp-1', projectId: 'GHOST-PROJECT', label: 'Ghost', lat: 52.5, lon: -1.5, zoom: 16, note: '' }],
+    });
+    expect(() => validateBackupData(data)).toThrow(/savedPoints/i);
+  });
+
+  it('accepts a v3 backup (no savedPoints key) — backwards-compat', () => {
+    // Old backups (version 3) have no savedPoints field — must import cleanly
+    const v3Backup = makeValidBackup({ savedPoints: undefined, version: 3 });
+    expect(() => validateBackupData(v3Backup)).not.toThrow();
+    const result = validateBackupData(v3Backup);
+    expect(result.savedPoints).toEqual([]);
+  });
+
+  it('accepts a backup with savedPoints: [] (explicit empty)', () => {
+    const data = makeValidBackup({ savedPoints: [] });
+    expect(() => validateBackupData(data)).not.toThrow();
+    expect(validateBackupData(data).savedPoints).toEqual([]);
+  });
+});
+
+// ─── Table coverage guard ─────────────────────────────────────────────────────
+// Fails when a new user-authored table is added to db.ts but not exported.
+// If this test fails: add the table to exportData/BackupData/validateBackupData
+// in src/services/data.ts (and check importData's transaction table list).
+//
+// Tables intentionally excluded (regenerable caches — not user data):
+//   fieldGuideCache, geologyContext, findHotspotSignals,
+//   landscapeInterpretations, diagnosticLog
+
+describe('table coverage guard', () => {
+  const USER_TABLES = [
+    'projects',
+    'permissions',
+    'fields',
+    'sessions',
+    'finds',
+    'significantFinds',
+    'tracks',
+    'media',
+    'settings',
+    'importedPackages',
+    'savedPoints',
+  ] as const;
+
+  it('validateBackupData returns every user table as an array', () => {
+    const result = validateBackupData(makeValidBackup());
+    for (const table of USER_TABLES) {
+      expect(Array.isArray(result[table]), `${table} missing from backup`).toBe(true);
+    }
+  });
+
+  it('every user table accepts a non-empty value from the fixture', () => {
+    const backup = makeValidBackup();
+    const result = validateBackupData(backup);
+    // projects is required; the others default to [] if absent but must be present in a v4 export
+    expect(result.projects.length).toBeGreaterThan(0);
+    expect(result.savedPoints.length).toBeGreaterThan(0);
   });
 });

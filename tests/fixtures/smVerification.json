@@ -1,0 +1,32 @@
+{
+  "_note": "PLACEHOLDER — run scripts/build-sm-verification.mjs to generate from live FeatureServer/6",
+  "capturedAt": "",
+  "source": "FeatureServer/6 live",
+  "points": [
+    { "lat": 51.1789, "lon": -1.8262, "label": "Stonehenge", "expected": "flag", "listEntry": null, "note": "stone circle complex — run script to populate listEntry" },
+    { "lat": 51.4285, "lon": -1.8544, "label": "Avebury", "expected": "flag", "listEntry": null, "note": "henge complex" },
+    { "lat": 55.0147, "lon": -2.3268, "label": "Hadrian's Wall — Housesteads", "expected": "flag", "listEntry": null, "note": "linear earthwork" },
+    { "lat": 50.6965, "lon": -2.4700, "label": "Maiden Castle", "expected": "flag", "listEntry": null, "note": "hillfort" },
+    { "lat": 50.1093, "lon": -5.6132, "label": "Carn Euny", "expected": "flag", "listEntry": null, "note": "courtyard house" },
+    { "lat": 51.5675, "lon": -1.5948, "label": "Wayland's Smithy", "expected": "flag", "listEntry": null, "note": "long barrow" },
+    { "lat": 51.4155, "lon": -1.8574, "label": "Silbury Hill", "expected": "flag", "listEntry": null, "note": "mound" },
+    { "lat": 52.0922, "lon":  1.3485, "label": "Sutton Hoo", "expected": "flag", "listEntry": null, "note": "burial ground" },
+    { "lat": 52.3556, "lon": -3.0447, "label": "Offa's Dyke — Knighton", "expected": "flag", "listEntry": null, "note": "linear earthwork" },
+    { "lat": 52.4793, "lon":  0.6767, "label": "Grimes Graves", "expected": "flag", "listEntry": null, "note": "flint mines" },
+    { "lat": 54.1857, "lon": -1.5693, "label": "Thornborough Henges", "expected": "flag", "listEntry": null, "note": "henge" },
+    { "lat": 50.8134, "lon": -2.5076, "label": "Cerne Abbas Giant", "expected": "flag", "listEntry": null, "note": "hill figure" },
+    { "lat": 52.5728, "lon": -0.1893, "label": "Flag Fen", "expected": "flag", "listEntry": null, "note": "wetland platform" },
+    { "lat": 51.0936, "lon": -1.7997, "label": "Old Sarum", "expected": "flag", "listEntry": null, "note": "hillfort" },
+    { "lat": 51.9393, "lon": -1.9296, "label": "Belas Knap", "expected": "flag", "listEntry": null, "note": "long barrow" },
+    { "lat": 52.5678, "lon": -1.2345, "label": "Clear — Leicestershire arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 53.4567, "lon": -1.5678, "label": "Clear — South Yorkshire arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 51.2345, "lon":  0.5678, "label": "Clear — Kent arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 52.1234, "lon": -2.3456, "label": "Clear — Worcestershire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 50.9876, "lon": -3.4567, "label": "Clear — Devon arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 54.3210, "lon": -0.9876, "label": "Clear — North Yorkshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 51.8765, "lon": -0.4321, "label": "Clear — Hertfordshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 53.1234, "lon": -2.7654, "label": "Clear — Cheshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 53.9876, "lon": -1.7654, "label": "Clear — North Yorkshire open field", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
+    { "lat": 50.5678, "lon": -1.3456, "label": "Clear — Hampshire coastal plain", "expected": "clear", "listEntry": null, "note": "known-clear rural point" }
+  ]
+}

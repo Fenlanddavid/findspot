@@ -4,6 +4,7 @@ import { cogProtocol } from '@geomatico/maplibre-cog-protocol';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
 import { Find, SavedPoint, db } from '../db';
+import { deletePack } from '../services/offlinePack';
 import { DevAnnotation } from '../utils/devAnnotation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1033,6 +1034,7 @@ export function useFieldGuideMap({
                 deleteBtn.addEventListener('click', async () => {
                     if (deleteConfirmPending) {
                         if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
+                        await deletePack({ ownerType: 'savedPoint', ownerId: sp.id }).catch(() => {});
                         await db.savedPoints.delete(sp.id);
                     } else {
                         deleteConfirmPending = true;

@@ -52,6 +52,25 @@ export function prefetchRomanRoads(): void {
  * Adds 2km padding so roads just outside the visible viewport are included.
  * Multi-ring segments are split into individual HistoricRoute entries.
  */
+/**
+ * W2 wrapper: returns routes with an explicit available flag so callers can
+ * surface an honest layer status when the GeoJSON asset fails to load.
+ * Existing callers can continue using fetchRomanRoads (thin wrapper below).
+ */
+export async function fetchRomanRoadsResult(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+): Promise<{ routes: HistoricRoute[]; available: boolean }> {
+    try {
+        const routes = await fetchRomanRoads(west, south, east, north);
+        return { routes, available: true };
+    } catch {
+        return { routes: [], available: false };
+    }
+}
+
 export async function fetchRomanRoads(
     west: number,
     south: number,

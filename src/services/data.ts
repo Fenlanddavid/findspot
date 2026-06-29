@@ -36,6 +36,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const importedPackages = await db.importedPackages.toArray();
   const fields = await db.fields.toArray();
   const significantFinds = await db.significantFinds.toArray();
+  const savedPoints = await db.savedPoints.toArray();
 
   let mediaExport: any[] = [];
   if (includeMedia) {
@@ -47,7 +48,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   }
 
   const data = {
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     generatedBy: "FindSpot",
     termsVersion: TERMS_OF_USE_VERSION,
@@ -62,7 +63,8 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     tracks,
     media: mediaExport,
     settings,
-    importedPackages
+    importedPackages,
+    savedPoints,
   };
 
   return JSON.stringify(data, null, 2);
@@ -124,6 +126,7 @@ type BackupData = {
   media: any[];
   settings: any[];
   importedPackages: any[];
+  savedPoints: any[];
 };
 
 function requireArray(data: any, key: keyof BackupData, required = false): any[] {
@@ -160,6 +163,7 @@ export function validateBackupData(data: any): BackupData {
     media: requireArray(data, "media"),
     settings: requireArray(data, "settings"),
     importedPackages: requireArray(data, "importedPackages"),
+    savedPoints: requireArray(data, "savedPoints"),
   };
 
   assertRowsHaveId(backup.projects, "projects");
@@ -171,6 +175,7 @@ export function validateBackupData(data: any): BackupData {
   assertRowsHaveId(backup.tracks, "tracks");
   assertRowsHaveId(backup.media, "media");
   assertRowsHaveId(backup.importedPackages, "importedPackages");
+  assertRowsHaveId(backup.savedPoints, "savedPoints");
 
   const projectIds = new Set(backup.projects.map(p => p.id));
   const permissionIds = new Set(backup.permissions.map(p => p.id));
@@ -244,6 +249,12 @@ export function validateBackupData(data: any): BackupData {
     }
   });
 
+  backup.savedPoints.forEach((sp, index) => {
+    if (!projectIds.has(sp.projectId)) {
+      throw new Error(`Invalid format: savedPoints[${index}] references an unknown project`);
+    }
+  });
+
   return backup;
 }
 
@@ -267,7 +278,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -281,6 +292,7 @@ export async function importData(json: string) {
     await db.settings.clear();
     await db.media.clear();
     await db.importedPackages.clear();
+    await db.savedPoints.clear();
 
     await db.projects.bulkPut(backup.projects);
     if (backup.permissions.length) await db.permissions.bulkPut(backup.permissions);
@@ -292,6 +304,7 @@ export async function importData(json: string) {
     if (backup.settings.length) await db.settings.bulkPut(backup.settings);
     if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
+    if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
   });
 }
 
