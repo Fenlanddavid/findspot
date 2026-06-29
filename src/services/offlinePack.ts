@@ -17,6 +17,7 @@ import { SCAN_CONFIG } from '../utils/scanConfig';
 import { FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { LayerFetchStatus } from '../pages/fieldGuideTypes';
+import type { NHLEFeature, NHLEGeometry } from './historicScanService';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,10 @@ const AIM_PACK_MAX_SHARDS = 500;
 const TILE_SOURCES_PER_CELL = 4; // DTM2025, DTM2022, Slope, WorldHillshade (+ 2 Wayback if available)
 /** Staleness threshold in ms — 90 days. */
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
+const DESIGNATION_BBOX_PAD_M = 50;
+const NHLE_FEATURE_SERVER =
+    'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
+    'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +99,18 @@ function bboxTiles(bbox: [number, number, number, number], zoom: number): Array<
     return tiles;
 }
 
+function padBboxByMetres(
+    bbox: [number, number, number, number],
+    metres: number,
+): [number, number, number, number] {
+    const [west, south, east, north] = bbox;
+    const centerLat = (south + north) / 2;
+    const latPad = metres / 111_320;
+    const cosLat = Math.max(0.2, Math.abs(Math.cos(centerLat * Math.PI / 180)));
+    const lonPad = metres / (111_320 * cosLat);
+    return [west - lonPad, south - latPad, east + lonPad, north + latPad];
+}
+
 /** Tile URLs for a single tile cell. Mirrors useTilePrewarm.ts tile sources. */
 function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: WaybackIds | null): string[] {
     const urls = [
@@ -109,6 +126,132 @@ function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: Wayba
         );
     }
     return urls;
+}
+
+// ─── Scheduled Monument shard helpers ────────────────────────────────────────
+
+type SMShardEntry = {
+    listEntry: string;
+    name: string;
+    bbox: [number, number, number, number];
+    geometry: NHLEGeometry;
+};
+
+function flatGeometryCoordinates(geometry: NHLEGeometry): Array<[number, number]> {
+    if (geometry.type === 'Point') return [geometry.coordinates as [number, number]];
+    if (geometry.type === 'Polygon') return (geometry.coordinates as number[][][]).flat() as Array<[number, number]>;
+    return (geometry.coordinates as number[][][][]).flat(2) as Array<[number, number]>;
+}
+
+function bboxFromNHLEGeometry(geometry: NHLEGeometry): [number, number, number, number] | null {
+    const coords = flatGeometryCoordinates(geometry);
+    if (!coords.length) return null;
+    const lons = coords.map(c => c[0]);
+    const lats = coords.map(c => c[1]);
+    return [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+}
+
+function isValidSMShardEntry(entry: unknown): entry is SMShardEntry {
+    const candidate = entry as Partial<SMShardEntry>;
+    return typeof candidate?.listEntry === 'string' &&
+        typeof candidate.name === 'string' &&
+        Array.isArray(candidate.bbox) &&
+        candidate.bbox.length === 4 &&
+        !!candidate.geometry &&
+        (candidate.geometry.type === 'Point' || candidate.geometry.type === 'Polygon' || candidate.geometry.type === 'MultiPolygon');
+}
+
+async function cacheSMIndexFromR2(cache: Cache, cells: string[]): Promise<boolean> {
+    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`;
+    const metaRes = await fetch(metaUrl);
+    if (!metaRes.ok) return false;
+    const meta = await metaRes.clone().json().catch(() => null);
+    if (!meta || meta.schemaVersion !== 2 || meta.geometryMode !== 'full-geojson') return false;
+    await cache.put(metaUrl, metaRes);
+
+    let ok = 0;
+    for (const cell of cells) {
+        const url = `${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const entries = await res.json();
+            if (!Array.isArray(entries) || !entries.every(isValidSMShardEntry)) continue;
+            await cache.put(url, new Response(JSON.stringify(entries), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }));
+            ok++;
+        } catch { /* try live fallback below */ }
+    }
+    return ok === cells.length;
+}
+
+async function fetchLiveScheduledMonumentsForBbox(
+    bbox: [number, number, number, number],
+): Promise<NHLEFeature[]> {
+    const [west, south, east, north] = bbox;
+    const url = `${NHLE_FEATURE_SERVER}?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=Name,ListEntry`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`NHLE live HTTP ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data.features) ? data.features as NHLEFeature[] : [];
+}
+
+async function cacheSMIndexFromLive(
+    cache: Cache,
+    packBbox: [number, number, number, number],
+    cells: string[],
+): Promise<boolean> {
+    try {
+        const cellSet = new Set(cells);
+        const shards = new Map<string, SMShardEntry[]>(cells.map(cell => [cell, []]));
+        const features = await fetchLiveScheduledMonumentsForBbox(packBbox);
+
+        for (const feature of features) {
+            const listEntry = String(feature.properties?.ListEntry ?? '').trim();
+            if (!listEntry || !feature.geometry) continue;
+            const bbox = bboxFromNHLEGeometry(feature.geometry);
+            if (!bbox) continue;
+
+            const entry: SMShardEntry = {
+                listEntry,
+                name: String(feature.properties?.Name ?? '').trim(),
+                bbox,
+                geometry: feature.geometry,
+            };
+
+            for (const cell of bboxToGeohash6Cells(...bbox)) {
+                if (!cellSet.has(cell)) continue;
+                const entries = shards.get(cell);
+                if (!entries || entries.some(existing => existing.listEntry === listEntry)) continue;
+                entries.push(entry);
+            }
+        }
+
+        await cache.put(`${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`, new Response(JSON.stringify({
+            builtAt: new Date().toISOString(),
+            schemaVersion: 2,
+            geometryMode: 'full-geojson',
+            featureCount: features.length,
+            cellCount: cells.length,
+            source: 'FeatureServer/6 live offline-pack fallback',
+        }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        }));
+
+        for (const [cell, entries] of shards) {
+            await cache.put(`${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`, new Response(JSON.stringify(entries), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            }));
+        }
+
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 
@@ -319,30 +462,11 @@ export async function buildPack(
     // 4 — Cache SM index shards for the bbox
     onProgress?.({ phase: 'shards', done: 0, total: 1 });
 
-    // Cache the SM _meta.json sentinel so offline scans can confirm the index
-    // was built (fetchSMFromR2 checks for it before trusting shard 200-[] responses)
-    try {
-        const metaRes = await fetch(`${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`);
-        if (metaRes.ok) await cache.put(`${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`, metaRes);
-    } catch { /* non-fatal: SM gate will go amber offline if meta missing */ }
-
-    const smCells = bboxToGeohash6Cells(...bbox);
-    let smOk = 0;
-    for (const cell of smCells) {
-        const url = `${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`;
-        try {
-            const res = await fetch(url);
-            // 404 = empty cell = valid; cache a 200 [] to avoid future fetch
-            if (res.status === 404) {
-                await cache.put(url, new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
-                smOk++;
-            } else if (res.ok) {
-                await cache.put(url, res);
-                smOk++;
-            }
-        } catch { /* record unavailable below */ }
-    }
-    layers['sm'] = smOk === smCells.length ? 'cached' : smOk > 0 ? 'partial' : 'unavailable';
+    const designationBbox = padBboxByMetres(bbox, DESIGNATION_BBOX_PAD_M);
+    const smCells = bboxToGeohash6Cells(...designationBbox);
+    const smCachedFromR2 = await cacheSMIndexFromR2(cache, smCells).catch(() => false);
+    const smCachedFromLive = smCachedFromR2 ? false : await cacheSMIndexFromLive(cache, designationBbox, smCells);
+    layers['sm'] = smCachedFromR2 || smCachedFromLive ? 'cached' : 'unavailable';
 
     // 5 — Cache AIM index shards for the bbox (same geohash cells as SM)
     const aimCells = smCells;
