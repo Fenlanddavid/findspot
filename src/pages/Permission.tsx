@@ -31,7 +31,9 @@ import {
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
 function formatMB(bytes: number): string {
-    return `${(bytes / 1_000_000).toFixed(0)} MB`;
+    if (bytes < 1_000_000) return `${Math.max(1, Math.ceil(bytes / 1_000))} KB`;
+    if (bytes < 10_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+    return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
 type PermPackStatus =
@@ -1104,40 +1106,40 @@ export default function PermissionPage(props: {
                             </div>
                         )}
 
-	                        {significantFindInstructions && (
-	                            <div className="mb-4 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl">
-	                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Significant find</div>
-	                                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">{significantFindInstructions}</p>
-	                            </div>
-	                        )}
+                        {significantFindInstructions && (
+                            <div className="mb-4 px-3 py-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-700 rounded-xl">
+                                <div className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-1">Significant find</div>
+                                <p className="text-xs text-amber-800 dark:text-amber-300 font-medium leading-relaxed">{significantFindInstructions}</p>
+                            </div>
+                        )}
 
-	                        {finds && finds.length > 0 && (
-	                            <div className="mb-4 bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-800 rounded-2xl p-3">
-	                                <div className="flex items-center justify-between gap-3 mb-2">
-	                                    <div className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400">Finds recorded</div>
-	                                    <div className="text-[10px] font-black text-teal-700 dark:text-teal-300">{finds.length}</div>
-	                                </div>
-	                                <div className={`grid gap-2 ${finds.length > 5 ? "max-h-56 overflow-y-auto pr-1" : ""}`}>
-	                                    {finds.map((find: any) => (
-	                                        <button
-	                                            key={find.id}
-	                                            type="button"
-	                                            onClick={() => setOpenFindId(find.id)}
-	                                            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 hover:border-teal-400 transition-colors"
-	                                        >
-	                                            <div className="min-w-0">
-	                                                <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{find.objectType || find.findCategory || "Unknown find"}</div>
-	                                                <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{find.notes || find.findCode}</div>
-	                                            </div>
-	                                            <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(find.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
-	                                        </button>
-	                                    ))}
-	                                </div>
-	                            </div>
-	                        )}
+                        {finds && finds.length > 0 && (
+                            <div className="mb-4 bg-white dark:bg-gray-900 border border-teal-100 dark:border-teal-800 rounded-2xl p-3">
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-teal-600 dark:text-teal-400">Finds recorded</div>
+                                    <div className="text-[10px] font-black text-teal-700 dark:text-teal-300">{finds.length}</div>
+                                </div>
+                                <div className={`grid gap-2 ${finds.length > 5 ? "max-h-56 overflow-y-auto pr-1" : ""}`}>
+                                    {finds.map((find: any) => (
+                                        <button
+                                            key={find.id}
+                                            type="button"
+                                            onClick={() => setOpenFindId(find.id)}
+                                            className="w-full text-left flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 px-3 py-2 hover:border-teal-400 transition-colors"
+                                        >
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{find.objectType || find.findCategory || "Unknown find"}</div>
+                                                <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{find.notes || find.findCode}</div>
+                                            </div>
+                                            <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(find.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
-	                        <div className="grid gap-2">
-	                            <button
+                        <div className="grid gap-2">
+                            <button
                                 onClick={() => goRecordFind(attendeeDefaultFieldId)}
                                 className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3.5 rounded-xl font-black shadow-sm transition-all uppercase tracking-widest text-xs"
                             >
@@ -1384,26 +1386,26 @@ export default function PermissionPage(props: {
                         <div>
                             <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2 text-gray-500 dark:text-gray-400">Finds</div>
                             <div className={`grid gap-1.5 ${finds.length > 6 ? 'max-h-64 overflow-y-auto' : ''}`}>
-	                                {finds.map((f: any) => (
-	                                    <button
-	                                        key={f.id}
-	                                        onClick={() => setOpenFindId(f.id)}
-	                                        className="w-full text-left flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-400 transition-all group"
-	                                    >
-	                                        <div className="min-w-0 flex-1">
-	                                            <div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-emerald-600 transition-colors">{f.objectType || f.findCategory || "Unknown find"}</div>
-	                                            {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{f.notes}</div>}
-	                                        </div>
-	                                        <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(f.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
-	                                    </button>
-	                                ))}
+                                {finds.map((f: any) => (
+                                    <button
+                                        key={f.id}
+                                        onClick={() => setOpenFindId(f.id)}
+                                        className="w-full text-left flex items-center gap-3 p-2.5 bg-gray-50 dark:bg-gray-900/40 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-emerald-400 transition-all group"
+                                    >
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-emerald-600 transition-colors">{f.objectType || f.findCategory || "Unknown find"}</div>
+                                            {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{f.notes}</div>}
+                                        </div>
+                                        <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(f.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                                    </button>
+                                ))}
                             </div>
                         </div>
-	                    ) : (
-	                        <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-xl text-sm text-gray-400 italic">
-	                            {isSharedPermission ? "No finds imported yet — use Import Member Data to bring in detectorist records." : "No finds recorded for this rally yet."}
-	                        </div>
-	                    )}
+                    ) : (
+                        <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-700 rounded-xl text-sm text-gray-400 italic">
+                            {isSharedPermission ? "No finds imported yet — use Import Member Data to bring in detectorist records." : "No finds recorded for this rally yet."}
+                        </div>
+                    )}
                 </div>
             </div>
             )}
@@ -1489,6 +1491,90 @@ export default function PermissionPage(props: {
                 onShowExportClubDay={() => setShowExportClubDay(true)}
             />
 
+            {/* Offline Access card — regular permissions with a mapped boundary */}
+            {isEdit && !isClubDayMember && !isEditing && !!boundary && (
+                <div className="lg:col-span-3">
+                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Offline Access</div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so FieldGuide works without a signal.</p>
+
+                        {permPackStatus.kind === 'checking' && (
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                                <div className="w-3 h-3 rounded-full border border-gray-300 border-t-transparent animate-spin" />
+                                Checking…
+                            </div>
+                        )}
+
+                        {permPackStatus.kind === 'none' && (
+                            <button
+                                onClick={handlePackPrepare}
+                                className="flex items-center gap-2 text-sm font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                Prepare for Offline (~{permPackStatus.estMB})
+                            </button>
+                        )}
+
+                        {permPackStatus.kind === 'building' && (
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 max-w-xs h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${permPackStatus.pct}%` }} />
+                                </div>
+                                <span className="text-xs text-gray-400 shrink-0">{permPackStatus.pct}%</span>
+                                <div className="w-3 h-3 rounded-full border border-emerald-400/40 border-t-emerald-500 animate-spin shrink-0" />
+                            </div>
+                        )}
+
+                        {permPackStatus.kind === 'done' && (
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={permPackStatus.stale ? '#f59e0b' : '#10b981'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+                                    <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                        {formatMB(permPackStatus.meta.sizeBytesApprox)} downloaded
+                                        {permPackStatus.stale && <span className="ml-1 text-amber-500"> · pack is old</span>}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 ml-auto">
+                                    {permPackStatus.stale && (
+                                        <button
+                                            onClick={handlePackPrepare}
+                                            className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                                        >
+                                            Re-prepare
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            if (pendingEvictPerm) {
+                                                handlePackEvict();
+                                            } else {
+                                                setPendingEvictPerm(true);
+                                                setTimeout(() => setPendingEvictPerm(false), 3000);
+                                            }
+                                        }}
+                                        className={`text-xs font-bold transition-colors ${pendingEvictPerm ? 'text-amber-500' : 'text-gray-400 hover:text-red-500'}`}
+                                    >
+                                        {pendingEvictPerm ? 'Tap again to remove' : 'Remove offline data'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {permPackStatus.kind === 'error' && (
+                            <div className="flex items-center gap-3">
+                                <span className="text-xs text-red-500">Download failed.</span>
+                                <button
+                                    onClick={handlePackPrepare}
+                                    className="text-xs font-black text-red-500 hover:text-red-400 transition-colors"
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             <PermissionActivityColumn
                 isEdit={isEdit}
                 permissionId={id}
@@ -1515,93 +1601,10 @@ export default function PermissionPage(props: {
                 confirmAction={confirmAction}
             />
             </React.Fragment>
-                )}
-
-            {/* Offline Access card — regular permissions with a mapped boundary */}
-            {isEdit && !isClubDayMember && !isEditing && !!boundary && (
-            <div className="lg:col-span-3">
-                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Offline Access</div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so FieldGuide works without a signal.</p>
-
-                    {permPackStatus.kind === 'checking' && (
-                        <div className="flex items-center gap-2 text-xs text-gray-400">
-                            <div className="w-3 h-3 rounded-full border border-gray-300 border-t-transparent animate-spin" />
-                            Checking…
-                        </div>
-                    )}
-
-                    {permPackStatus.kind === 'none' && (
-                        <button
-                            onClick={handlePackPrepare}
-                            className="flex items-center gap-2 text-sm font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
-                        >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
-                            Prepare for Offline (~{permPackStatus.estMB})
-                        </button>
-                    )}
-
-                    {permPackStatus.kind === 'building' && (
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1 max-w-xs h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${permPackStatus.pct}%` }} />
-                            </div>
-                            <span className="text-xs text-gray-400 shrink-0">{permPackStatus.pct}%</span>
-                            <div className="w-3 h-3 rounded-full border border-emerald-400/40 border-t-emerald-500 animate-spin shrink-0" />
-                        </div>
-                    )}
-
-                    {permPackStatus.kind === 'done' && (
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={permPackStatus.stale ? '#f59e0b' : '#10b981'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
-                                <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                    {formatMB(permPackStatus.meta.sizeBytesApprox)} downloaded
-                                    {permPackStatus.stale && <span className="ml-1 text-amber-500"> · pack is old</span>}
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2 ml-auto">
-                                {permPackStatus.stale && (
-                                    <button
-                                        onClick={handlePackPrepare}
-                                        className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
-                                    >
-                                        Re-prepare
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => {
-                                        if (pendingEvictPerm) {
-                                            handlePackEvict();
-                                        } else {
-                                            setPendingEvictPerm(true);
-                                            setTimeout(() => setPendingEvictPerm(false), 3000);
-                                        }
-                                    }}
-                                    className={`text-xs font-bold transition-colors ${pendingEvictPerm ? 'text-amber-500' : 'text-gray-400 hover:text-red-500'}`}
-                                >
-                                    {pendingEvictPerm ? 'Tap again to remove' : 'Remove offline data'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {permPackStatus.kind === 'error' && (
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs text-red-500">Download failed.</span>
-                            <button
-                                onClick={handlePackPrepare}
-                                className="text-xs font-black text-red-500 hover:text-red-400 transition-colors"
-                            >
-                                Retry
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
             )}
+
+            </div>
         </div>
-      </div>
 
       {isEdit && id && reportTarget !== null && (
         <PermissionReportModal

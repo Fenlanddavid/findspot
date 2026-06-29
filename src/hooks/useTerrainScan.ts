@@ -24,6 +24,7 @@ import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoads } from '../services/romanRoadService';
+import { findPackCoveringBbox } from '../services/offlinePack';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -202,17 +203,6 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             scanWest, scanSouth, scanEast, scanNorth, center.lat, MONUMENT_BOUNDARY_BUFFER_M + 5,
         );
 
-        // ── Fire route + ways fetches before cache check ──────────────────────
-        // Both requests are fired here so they run in parallel with the DB cache
-        // lookup and NHLE/AIM fetches. On a cache hit the routes fetch will have
-        // had several seconds to resolve before the Promise.race timeout is tested,
-        // matching the behaviour of a fresh scan (where tile processing gives routes
-        // the same head-start). On a cache miss, the fresh scan path reuses these
-        // same promises — no duplicate requests are made.
-        const routePromise      = fetchScanRoutes(center.lat, center.lng, signal);
-        const modernWaysPromise = fetchModernWaysForBoundsResult(scanWest, scanSouth, scanEast, scanNorth, signal)
-            .catch(() => ({ ways: [], available: false }));
-
         // ── Cache check ───────────────────────────────────────────────────────
         // If the same viewport was scanned within the last 24 hours, skip the
         // expensive tile processing and return the cached raw clusters.
@@ -228,6 +218,24 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 rescuedModernWays = stale.modernWays as import('../pages/fieldGuideTypes').ModernWay[];
             }
         } catch { /* non-fatal */ }
+
+        const offlinePackMeta = await findPackCoveringBbox([scanWest, scanSouth, scanEast, scanNorth], zoom).catch(() => null);
+        if (offlinePackMeta) {
+            onLog('> Offline pack: downloaded terrain pack covers this scan; live route lookups skipped.', 'terrain');
+        }
+
+        // ── Fire route + ways fetches before cache check ──────────────────────
+        // When a prepared pack covers the 3x3 tile footprint, avoid live Overpass
+        // route/road requests. Those are not part of the pack and can dominate
+        // online scan time; airplane mode merely made them fail fast.
+        const routePromise = offlinePackMeta
+            ? Promise.resolve(null)
+            : fetchScanRoutes(center.lat, center.lng, signal);
+        const modernWaysPromise = offlinePackMeta
+            ? Promise.resolve({ ways: rescuedModernWays ?? [], available: false })
+            : fetchModernWaysForBoundsResult(scanWest, scanSouth, scanEast, scanNorth, signal)
+                .catch(() => ({ ways: [], available: false }));
+
         try {
             const cached = await db.fieldGuideCache.get(tileKey);
             if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
@@ -285,15 +293,20 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 let modernWaysAvailable = hadStoredModernWayResult;
                 try {
                     if (!hadStoredModernWayResult) {
-                        const modernWayResult = await fetchModernWaysForBoundsResult(
-                            scanWest, scanSouth, scanEast, scanNorth, signal,
-                        );
-                        cachedModernWays = modernWayResult.ways;
-                        modernWaysAvailable = modernWayResult.available;
-                        if (modernWaysAvailable) {
-                            try {
-                                await db.fieldGuideCache.update(tileKey, { modernWays: cachedModernWays, modernWaysFetchedAt: Date.now() });
-                            } catch { /* cache update failure is non-fatal */ }
+                        if (offlinePackMeta) {
+                            cachedModernWays = rescuedModernWays ?? [];
+                            modernWaysAvailable = false;
+                        } else {
+                            const modernWayResult = await fetchModernWaysForBoundsResult(
+                                scanWest, scanSouth, scanEast, scanNorth, signal,
+                            );
+                            cachedModernWays = modernWayResult.ways;
+                            modernWaysAvailable = modernWayResult.available;
+                            if (modernWaysAvailable) {
+                                try {
+                                    await db.fieldGuideCache.update(tileKey, { modernWays: cachedModernWays, modernWaysFetchedAt: Date.now() });
+                                } catch { /* cache update failure is non-fatal */ }
+                            }
                         }
                     }
                     if (cachedModernWays.length > 0) {

@@ -28,8 +28,8 @@ export const PACK_TILE_CAP = 2000;
 const BYTES_PER_TILE_EST = 25_000;
 /** AIM index shards: if total aim-index is within this budget, cache whole set. */
 const AIM_PACK_MAX_SHARDS = 500;
-/** Tile sources per tile cell — must match useTilePrewarm.ts and terrainScanWorker.ts. */
-const TILE_SOURCES_PER_CELL = 4; // DTM2025, DTM2022, Slope, WorldHillshade (+ 2 Wayback if available)
+/** Tile URLs per cell before optional Wayback imagery. Must match tileUrlsForCell(). */
+const BASE_TILE_URLS_PER_CELL = 7;
 /** Staleness threshold in ms — 90 days. */
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
 const DESIGNATION_BBOX_PAD_M = 50;
@@ -99,6 +99,20 @@ function bboxTiles(bbox: [number, number, number, number], zoom: number): Array<
     return tiles;
 }
 
+function tileKey(tx: number, ty: number): string {
+    return `${tx}:${ty}`;
+}
+
+function packCoversBboxTiles(
+    packBbox: [number, number, number, number],
+    queryBbox: [number, number, number, number],
+    zoom: number,
+): boolean {
+    const packTiles = new Set(bboxTiles(packBbox, zoom).map(([tx, ty]) => tileKey(tx, ty)));
+    const queryTiles = bboxTiles(queryBbox, zoom);
+    return queryTiles.length > 0 && queryTiles.every(([tx, ty]) => packTiles.has(tileKey(tx, ty)));
+}
+
 function padBboxByMetres(
     bbox: [number, number, number, number],
     metres: number,
@@ -118,6 +132,8 @@ function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: Wayba
         `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2022_Multi_Directional_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
         `https://environment.data.gov.uk/image/rest/services/SURVEY/LIDAR_Composite_DTM_1m_2022_Slope/ImageServer/tile/${zoom}/${ty}/${tx}`,
         `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
+        `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/${zoom}/${ty}/${tx}`,
+        `https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/${zoom}/${ty}/${tx}`,
     ];
     if (waybackIds) {
         urls.push(
@@ -125,6 +141,7 @@ function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: Wayba
             waybackTileUrl(waybackIds.summer, zoom, ty, tx),
         );
     }
+    urls.push(`https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`);
     return urls;
 }
 
@@ -314,8 +331,8 @@ export interface PackEstimate {
 export async function estimatePack(owner: PackOwner): Promise<PackEstimate> {
     const { bbox } = await resolveBbox(owner);
     const tiles = bboxTiles(bbox, ZOOM);
-    // Each tile cell has up to TILE_SOURCES_PER_CELL + 2 Wayback sources
-    const tileCount = tiles.length * (TILE_SOURCES_PER_CELL + 2);
+    // Each tile cell has base terrain/fallback URLs plus up to 2 Wayback sources.
+    const tileCount = tiles.length * (BASE_TILE_URLS_PER_CELL + 2);
     return { tileCount, estBytes: tileCount * BYTES_PER_TILE_EST };
 }
 
@@ -351,6 +368,25 @@ export async function listPacks(): Promise<PackMeta[]> {
         }
     }
     return metas;
+}
+
+/**
+ * Return the newest prepared pack whose downloaded tile cells cover a scan bbox.
+ * This checks tile coverage rather than raw bbox containment because permission
+ * packs may have narrow polygon bounds but still cache whole intersecting tiles.
+ */
+export async function findPackCoveringBbox(
+    bbox: [number, number, number, number],
+    zoom = ZOOM,
+): Promise<PackMeta | null> {
+    const metas = await listPacks();
+    return metas
+        .filter(meta =>
+            meta.zoom === zoom &&
+            (meta.layers.terrain === 'cached' || meta.layers.terrain === 'partial') &&
+            packCoversBboxTiles(meta.bbox, bbox, zoom)
+        )
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] ?? null;
 }
 
 /** Delete a pack and all its cached tiles. */

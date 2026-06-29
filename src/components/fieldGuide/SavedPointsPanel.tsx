@@ -21,7 +21,9 @@ function formatRelativeDate(isoStr: string): string {
 }
 
 function formatMB(bytes: number): string {
-    return `${(bytes / 1_000_000).toFixed(0)} MB`;
+    if (bytes < 1_000_000) return `${Math.max(1, Math.ceil(bytes / 1_000))} KB`;
+    if (bytes < 10_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+    return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
 type PointPackStatus =
