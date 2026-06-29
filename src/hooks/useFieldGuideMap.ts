@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import maplibregl, { addProtocol } from 'maplibre-gl';
 import { cogProtocol } from '@geomatico/maplibre-cog-protocol';
 import * as turf from '@turf/turf';
@@ -218,6 +218,7 @@ export function useFieldGuideMap({
     const targetLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
     const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
     const savedPointMarkersRef = useRef<maplibregl.Marker[]>([]);
+    const [mapReadyVersion, setMapReadyVersion] = useState(0);
 
     // Keep callbacks and annotation mode ref current on every render
     useEffect(() => { callbacksRef.current = callbacks; });
@@ -406,6 +407,7 @@ export function useFieldGuideMap({
                 id: 'dev-annotations-circle', type: 'circle', source: 'dev-annotations',
                 paint: { 'circle-radius': 6, 'circle-color': '#f97316', 'circle-opacity': 1, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': 0.9 },
             });
+            setMapReadyVersion(v => v + 1);
 
             // ── Event handlers — all use callbacksRef so they never go stale ──
             map.on('click', 'targets-circle', (e) => {
@@ -543,7 +545,7 @@ export function useFieldGuideMap({
                     properties: { id: h.id, type: h.type, score: h.score },
                 })),
         } as GeoJSON.FeatureCollection);
-    }, [hotspots, selectedHotspotId]);
+    }, [hotspots, selectedHotspotId, mapReadyVersion]);
 
     // ── Detected features (targets) source ───────────────────────────────────
     useEffect(() => {
@@ -566,7 +568,7 @@ export function useFieldGuideMap({
                 },
             })),
         } as GeoJSON.FeatureCollection);
-    }, [detectedFeatures, primaryTargetId]);
+    }, [detectedFeatures, primaryTargetId, mapReadyVersion]);
 
     // ── Selected target highlight ────────────────────────────────────────────
     useEffect(() => {
@@ -575,7 +577,7 @@ export function useFieldGuideMap({
         const layer = map.getLayer('targets-selected');
         if (!layer) return;
         map.setFilter('targets-selected', ['==', ['get', 'id'], selectedTargetId ?? '']);
-    }, [selectedTargetId]);
+    }, [selectedTargetId, mapReadyVersion]);
 
     // ── Target pin labels ────────────────────────────────────────────────────
     useEffect(() => {
@@ -596,7 +598,7 @@ export function useFieldGuideMap({
                     .addTo(map);
                 targetLabelMarkersRef.current.push(marker);
             });
-    }, [detectedFeatures, primaryTargetId]);
+    }, [detectedFeatures, primaryTargetId, mapReadyVersion]);
 
     // ── Trace Signals source ──────────────────────────────────────────────────
     useEffect(() => {
@@ -612,7 +614,7 @@ export function useFieldGuideMap({
                 properties: { id: t.id, traceLabel: t.traceLabel, traceScore: t.traceScore },
             })),
         } as GeoJSON.FeatureCollection);
-    }, [traceTargets]);
+    }, [traceTargets, mapReadyVersion]);
 
     // ── Trace selected highlight filter ──────────────────────────────────────
     useEffect(() => {
@@ -621,7 +623,7 @@ export function useFieldGuideMap({
         const layer = map.getLayer('trace-targets-selected');
         if (!layer) return;
         map.setFilter('trace-targets-selected', ['==', ['get', 'id'], selectedTraceId ?? '']);
-    }, [selectedTraceId]);
+    }, [selectedTraceId, mapReadyVersion]);
 
     // ── Cluster link lines ────────────────────────────────────────────────────
     useEffect(() => {
@@ -649,7 +651,7 @@ export function useFieldGuideMap({
             }
         }
         source.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
-    }, [detectedFeatures]);
+    }, [detectedFeatures, mapReadyVersion]);
 
     // ── PAS finds source ──────────────────────────────────────────────────────
     useEffect(() => {
@@ -752,7 +754,7 @@ export function useFieldGuideMap({
             }
         };
         doUpdate();
-    }, [historicRoutes]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [historicRoutes, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Landscape context layer ─────────────────────────────────────────────────
     useEffect(() => {
@@ -806,7 +808,7 @@ export function useFieldGuideMap({
         };
         if (map.loaded()) doUpdate();
         else map.once('load', doUpdate);
-    }, [historicRoutes, pasFinds]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [historicRoutes, pasFinds, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Config-driven layer visibility ────────────────────────────────────────
     useEffect(() => {
@@ -816,7 +818,7 @@ export function useFieldGuideMap({
         LAYER_VISIBILITY_CONFIG.forEach(({ id, visibleWhen }) => {
             if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibleWhen(layerState) ? 'visible' : 'none');
         });
-    }, [historicMode, devMode, historicLayerVisibility]);
+    }, [historicMode, devMode, historicLayerVisibility, mapReadyVersion]);
 
     // ── Overlay raster toggles ────────────────────────────────────────────────
     useEffect(() => {
@@ -838,7 +840,7 @@ export function useFieldGuideMap({
             map.setLayoutProperty('overlay-os1880', 'visibility', historicLayerToggles.os1880 ? 'visible' : 'none');
             map.setPaintProperty('overlay-os1880', 'raster-opacity', historicLayerOpacity.os1880);
         }
-    }, [historicLayerToggles, historicLayerOpacity]);
+    }, [historicLayerToggles, historicLayerOpacity, mapReadyVersion]);
 
     // ── Field boundaries data ─────────────────────────────────────────────────
     useEffect(() => {
@@ -969,7 +971,7 @@ export function useFieldGuideMap({
         if (map.loaded()) doUpdate();
         else map.once('load', doUpdate);
         return () => { canceled = true; };
-    }, [devAnnotations]);
+    }, [devAnnotations, mapReadyVersion]);
 
     // ── Saved point markers ───────────────────────────────────────────────────
     useEffect(() => {
