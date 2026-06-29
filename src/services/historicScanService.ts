@@ -146,6 +146,10 @@ export type OverpassFetchOptions = {
     onAttempt?: (timing: OverpassAttemptTiming) => void;
 };
 
+export type DesignationFetchOptions = {
+    cacheOnly?: boolean;
+};
+
 function isAbortError(e: unknown): boolean {
     return e instanceof DOMException && e.name === 'AbortError';
 }
@@ -411,13 +415,14 @@ async function _fetchSMFromR2(
     east: number,
     north: number,
     signal?: AbortSignal,
+    options: DesignationFetchOptions = {},
 ): Promise<NHLEResponse> {
     // ── 1. Coverage sentinel ──────────────────────────────────────────────────
     const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`;
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
-            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal });
+            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: options.cacheOnly });
             if (!metaRes.ok) {
                 return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
             }
@@ -445,7 +450,7 @@ async function _fetchSMFromR2(
             const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
             try {
                 // cachedFetchAny serves from any open offline pack before network
-                const res = await cachedFetchAny(url, { signal: timed.signal });
+                const res = await cachedFetchAny(url, { signal: timed.signal }, { cacheOnly: options.cacheOnly });
                 if (!res.ok) {
                     // Non-200 from the worker = genuine error (worker turns empty
                     // cells into 200 [], so 4xx/5xx here means service failure)
@@ -490,6 +495,7 @@ async function _fetchAIMFromR2(
     east: number,
     north: number,
     signal?: AbortSignal,
+    options: DesignationFetchOptions = {},
 ): Promise<AIMResponse> {
     const cells = bboxToGeohash6Cells(west, south, east, north);
     const query: [number, number, number, number] = [west, south, east, north];
@@ -500,7 +506,7 @@ async function _fetchAIMFromR2(
             const url = `${FINDSPOT_STATIC_BASE_URL}/aim-index/${cell}.json`;
             const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
             try {
-                const res = await cachedFetchAny(url, { signal: timed.signal });
+                const res = await cachedFetchAny(url, { signal: timed.signal }, { cacheOnly: options.cacheOnly });
                 if (!res.ok) return; // fail-silent in W1 (W2 adds available flag)
                 const entries: AIMShardEntry[] = await res.json();
                 for (const entry of entries) {
@@ -576,11 +582,13 @@ export async function fetchScheduledMonuments(
     south: number,
     east: number,
     north: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: DesignationFetchOptions = {},
 ): Promise<NHLEResponse> {
     if (USE_R2_DESIGNATIONS) {
-        const r2Result = await _fetchSMFromR2(west, south, east, north, signal);
+        const r2Result = await _fetchSMFromR2(west, south, east, north, signal, options);
         if (r2Result.available !== false) return r2Result;
+        if (options.cacheOnly) return r2Result;
 
         const liveResult = await _fetchScheduledMonumentsLive(west, south, east, north, signal);
         if (liveResult.available !== false) return liveResult;
@@ -599,10 +607,11 @@ export async function fetchAIMData(
     south: number,
     east: number,
     north: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: DesignationFetchOptions = {},
 ): Promise<AIMResponse> {
     if (USE_R2_DESIGNATIONS) {
-        return _fetchAIMFromR2(west, south, east, north, signal);
+        return _fetchAIMFromR2(west, south, east, north, signal, options);
     }
 
     // Legacy live ArcGIS path — REMOVE_AFTER_RELEASE: v4.3.0

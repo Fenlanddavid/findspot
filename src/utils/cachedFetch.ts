@@ -61,6 +61,7 @@ export async function cachedFetch(
 export async function cachedFetchAny(
     url: string,
     opts?: RequestInit,
+    options?: { cacheOnly?: boolean },
 ): Promise<Response> {
     if (typeof caches !== 'undefined') {
         try {
@@ -69,6 +70,9 @@ export async function cachedFetchAny(
         } catch {
             // caches not available or permission denied — fall through
         }
+    }
+    if (options?.cacheOnly) {
+        return new Response(null, { status: 504, statusText: 'Cache miss' });
     }
     return fetch(url, opts);
 }

@@ -24,7 +24,7 @@ import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoads } from '../services/romanRoadService';
-import { findPackCoveringBbox } from '../services/offlinePack';
+import { findPackCoveringBbox, PackMeta } from '../services/offlinePack';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -123,6 +123,24 @@ function collapseByProximity(features: Cluster[]): Cluster[] {
     return result;
 }
 
+function applyOfflinePackAvailability(
+    availability: Record<string, boolean>,
+    packMeta: PackMeta | null,
+): Record<string, boolean> {
+    if (!packMeta) return availability;
+    const hasTerrainPack = packMeta.layers.terrain === 'cached' || packMeta.layers.terrain === 'partial';
+    const hasSatellitePack = packMeta.layers.satellite === 'cached' || packMeta.layers.satellite === 'partial';
+    return {
+        ...availability,
+        terrain:          availability.terrain || hasTerrainPack,
+        terrain_global:   availability.terrain_global || hasTerrainPack,
+        slope:            availability.slope || hasTerrainPack,
+        hydrology:        availability.hydrology || hasTerrainPack,
+        satellite_spring: availability.satellite_spring || hasSatellitePack,
+        satellite_summer: availability.satellite_summer || hasSatellitePack,
+    };
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions) {
@@ -170,7 +188,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.06.15a';
+        const ENGINE_VERSION = 'FG-2026.06.29a';
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -243,9 +261,10 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
                 onStatusChange('Checking protected archaeology...');
                 // Still run NHLE/AIM/routes so the historic phase has fresh data.
+                const designationOptions = { cacheOnly: !!offlinePackMeta };
                 const [nhleData, aimData] = await Promise.all([
-                    fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal),
-                    fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal),
+                    fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal, designationOptions),
+                    fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal, designationOptions),
                 ]);
                 if (tokenRef.current !== token || signal.aborted || !mountedRef.current) { setIsScanning(false); return null; }
 
@@ -328,7 +347,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount,
-                    sourceAvailability: cached.sourceAvailability, fromCache: true, noSignal: false, scanStartCenter, scanStartBounds,
+                    sourceAvailability: applyOfflinePackAvailability(cached.sourceAvailability, offlinePackMeta),
+                    fromCache: true, noSignal: false, scanStartCenter, scanStartBounds,
                 };
             }
         } catch {
@@ -339,12 +359,15 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         // routePromise and modernWaysPromise were already fired before the cache
         // check — reuse them here. Fire remaining requests now.
         const waybackStart = performance.now();
-        const waybackPromise = resolveWaybackIds();
+        const waybackPromise = offlinePackMeta
+            ? Promise.resolve(offlinePackMeta.waybackIds)
+            : resolveWaybackIds();
 
         const nhleStart = performance.now();
-        const nhlePromise = fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
+        const designationOptions = { cacheOnly: !!offlinePackMeta };
+        const nhlePromise = fetchScheduledMonuments(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal, designationOptions);
         const aimStart = performance.now();
-        const aimPromise  = fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal);
+        const aimPromise  = fetchAIMData(contextQueryBounds.west, contextQueryBounds.south, contextQueryBounds.east, contextQueryBounds.north, signal, designationOptions);
 
         onStatusChange('Reading terrain...');
 
@@ -446,14 +469,14 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
 
             // ── Source availability ──────────────────────────────────────────
-            const sourceAvailability: Record<string, boolean> = {
+            const sourceAvailability: Record<string, boolean> = applyOfflinePackAvailability({
                 terrain:          terrainResult.tilesLoaded > 0,
                 terrain_global:   terrainGlobalResult.tilesLoaded > 0,
                 slope:            slopeResult.tilesLoaded > 0,
                 hydrology:        hydroResult.tilesLoaded > 0,
                 satellite_spring: springResult.tilesLoaded > 0,
                 satellite_summer: summerResult.tilesLoaded > 0,
-            };
+            }, offlinePackMeta);
 
             // If every tile source failed to load, the device has no signal.
             // Don't cache this result — it will resolve correctly once connectivity returns.
