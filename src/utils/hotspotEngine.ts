@@ -6,6 +6,7 @@
 // generateHotspots is the combined entry point kept for call-site compatibility.
 
 import { Cluster, Hotspot, HotspotClassification, SoilMechanics, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
+import type { PASCellLookup } from '../services/pasDensityService';
 import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from './fieldGuideAnalysis';
 import { computeLandscapeReading } from './landscapeReadingEngine';
 import type { GeologyContext } from '../engines/geologyContext/geologyContextTypes';
@@ -1393,6 +1394,78 @@ export function applyGeologyModifiers(
         .map((h, i) => ({ ...h, number: i + 1 }));
 
     return { hotspots: sorted, appliedCount, suppressedCount, netScore: clampedNet };
+}
+
+// ─── PAS density modifier application ────────────────────────────────────────
+// Applied after geology modifiers. PAS is supporting evidence only — it never
+// creates hotspots, only adds a small additive modifier to existing ones.
+// Max contribution: +0.08 confidence modifier (≈10% of total weight budget).
+// A null pasCell means the index failed to load: no modification applied.
+
+const PAS_DENSITY_THRESHOLDS = {
+    low:      15,   // c >= 15:  +1 score, note "few records"
+    moderate: 60,   // c >= 60:  +2 score, note "moderate density"
+    high:     200,  // c >= 200: +4 score
+    veryHigh: 500,  // c >= 500 + period match: +6 score
+} as const;
+
+export function applyPASDensityModifiers(
+    hotspots:  Hotspot[],
+    pasCell:   PASCellLookup | null,
+    targetPeriod?: string,
+): Hotspot[] {
+    if (!pasCell || pasCell.c === 0) return hotspots;
+
+    const { c, p } = pasCell;
+
+    // Period match: target period appears in the cell's top recorded periods
+    const normalised = (targetPeriod ?? '').toUpperCase();
+    const periodMatch = normalised.length > 0 &&
+        p.some(period => period.toUpperCase().includes(normalised) || normalised.includes(period.toUpperCase()));
+
+    let scoreBoost = 0;
+    let explanation = '';
+
+    if (c >= PAS_DENSITY_THRESHOLDS.veryHigh && periodMatch) {
+        scoreBoost = 6;
+        explanation = 'Numerous PAS finds recorded in this landscape, including period-matching types';
+    } else if (c >= PAS_DENSITY_THRESHOLDS.high) {
+        scoreBoost = 4;
+        explanation = 'Numerous PAS finds recorded in this landscape';
+    } else if (c >= PAS_DENSITY_THRESHOLDS.moderate) {
+        scoreBoost = 2;
+        explanation = 'Moderate PAS find density recorded nearby';
+    } else if (c >= PAS_DENSITY_THRESHOLDS.low) {
+        scoreBoost = 1;
+        explanation = 'Few PAS records nearby — may reflect access or reporting';
+    }
+
+    if (scoreBoost === 0) return hotspots;
+
+    const updated = hotspots.map(h => {
+        // Only boost hotspots with a primary signal — PAS must not be the sole basis
+        const hasPrimarySignal = h.metrics.anomaly > 0 || h.metrics.context > 0;
+        if (!hasPrimarySignal) return h;
+
+        const score = Math.min(98, Math.max(0, h.score + scoreBoost));
+        const confidence = evaluateHotspotConfidence({
+            score,
+            signalCount: h.metrics.signalCount,
+            behaviour:   h.metrics.behaviour,
+            context:     h.metrics.context,
+            convergence: h.metrics.convergence,
+        });
+        return {
+            ...h,
+            score,
+            confidence,
+            explanation: [...(h.explanation ?? []), explanation],
+        };
+    });
+
+    return updated
+        .sort((a, b) => b.score - a.score)
+        .map((h, i) => ({ ...h, number: i + 1 }));
 }
 
 // ─── Combined entry point ─────────────────────────────────────────────────────

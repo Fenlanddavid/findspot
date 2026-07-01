@@ -12,6 +12,7 @@ import { buildLandscapeEvidence } from '../../services/fieldguide/landscapeEvide
 import type { LandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
 import { buildFieldStrategy } from '../../services/fieldguide/fieldStrategy';
 import { deriveTerrainSignals } from '../../services/fieldguide/terrainSignals';
+import { pasPeriodEntries, pasTypeEntries } from '../../services/pasDensityService';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
 import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
@@ -111,6 +112,7 @@ export function HistoricLayerManager() {
         nhleDataRef,
         aimDataRef,
         geologyContext,
+        pasDensityCell,
         landscapeIntelligenceMap,
     } = useFieldGuideContext();
 
@@ -175,6 +177,37 @@ export function HistoricLayerManager() {
                     <p className="text-[0.625rem] font-bold text-amber-100/75 leading-snug">Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear.</p>
                 </div>
             )}
+            {/* PAS Record Density — shows after scan completes, sourced from git-bundled density index */}
+            {historicScanComplete && pasDensityCell !== null && (() => {
+                const c = pasDensityCell.c;
+                const tier = c >= 500 ? 'very-high' : c >= 200 ? 'high' : c >= 60 ? 'moderate' : c >= 15 ? 'low' : 'none';
+                const tierLabel = tier === 'very-high' ? 'Very high density' : tier === 'high' ? 'High density' : tier === 'moderate' ? 'Moderate density' : tier === 'low' ? 'Low density' : null;
+                const tierColour = tier === 'very-high' ? 'bg-violet-500/15 border-violet-500/30 text-violet-300' : tier === 'high' ? 'bg-blue-500/15 border-blue-500/30 text-blue-300' : tier === 'moderate' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300' : 'bg-white/8 border-white/18 text-white/55';
+                const toTitle = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+                const periodEntries = pasPeriodEntries(pasDensityCell).slice(0, 3);
+                return (
+                    <div className="border border-blue-500/20 bg-blue-500/[0.06] rounded-xl px-3 py-2.5 space-y-2">
+                        <p className="text-[0.5rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">PAS Record Density</p>
+                        {c > 0 && tierLabel ? (
+                            <>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-[0.5625rem] font-black px-2 py-0.5 rounded-full border ${tierColour}`}>
+                                        {tierLabel} · {c.toLocaleString()} records
+                                    </span>
+                                    {periodEntries.map(([period, count]) => (
+                                        <span key={period} className="text-[0.5rem] font-bold text-blue-200/65 bg-blue-500/10 border border-blue-500/15 px-1.5 py-0.5 rounded-full">
+                                            {toTitle(period)}{count > 0 ? ` · ${count.toLocaleString()}` : ''}
+                                        </span>
+                                    ))}
+                                </div>
+                                <p className="text-[0.5625rem] font-bold text-white/45 leading-snug">Public PAS records within the wider landscape cell (~36 km²). Density reflects recording activity and does not directly map the full archaeological resource.</p>
+                            </>
+                        ) : (
+                            <p className="text-[0.5625rem] font-bold text-white/45 leading-snug">No public PAS records in this landscape cell. May reflect low recording or detecting activity rather than archaeological absence.</p>
+                        )}
+                    </div>
+                );
+            })()}
             <div>
                 <p className="text-[0.5rem] font-black text-white/62 uppercase tracking-[0.2em] mb-1">Supporting Context</p>
                 <h3 className="text-sm font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
@@ -302,17 +335,35 @@ export function HistoricLayerManager() {
                                         osmType: 'way' as const,
                                     })),
                                 ];
-                                return augmentedFinds.length > 0 && (
+                                const pasLandscapePeriods = pasDensityCell && pasDensityCell.c >= 15
+                                    ? pasPeriodEntries(pasDensityCell).filter(([, count]) => count > 0)
+                                    : [];
+                                return (augmentedFinds.length > 0 || pasLandscapePeriods.length > 0) && (
                                 <div className="space-y-2">
                                     <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Period Signals</p>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        {Object.entries(augmentedFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
-                                            <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl flex justify-between items-center">
-                                                <span className="text-[0.5625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
-                                                <span className="text-sm font-black text-blue-400">{count}</span>
+                                    {augmentedFinds.length > 0 && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {Object.entries(augmentedFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
+                                                <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl flex justify-between items-center">
+                                                    <span className="text-[0.5625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                                    <span className="text-sm font-black text-blue-400">{count}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {pasLandscapePeriods.length > 0 && (
+                                        <div className="space-y-1.5 pt-1">
+                                            <p className="text-[0.4375rem] font-black text-blue-300/40 uppercase tracking-widest">PAS landscape periods</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {pasLandscapePeriods.map(([period, count]) => (
+                                                    <div key={period} className="bg-cyan-500/5 border border-cyan-500/10 p-3 rounded-xl flex justify-between items-center">
+                                                        <span className="text-[0.5625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
+                                                        <span className="text-sm font-black text-cyan-400">{count.toLocaleString()}</span>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                                 );
                             })()}
@@ -346,6 +397,50 @@ export function HistoricLayerManager() {
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+                            {pasDensityCell !== null && (
+                                <div className="space-y-2">
+                                    <p className="text-[0.5rem] font-black text-blue-400/60 uppercase tracking-widest">Portable Antiquities (Landscape)</p>
+                                    {pasDensityCell.c > 0 ? (
+                                        <>
+                                            <div className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl space-y-2">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-[0.5625rem] font-black text-slate-300 uppercase">Public PAS records</span>
+                                                    <span className="text-sm font-black text-blue-400">{pasDensityCell.c.toLocaleString()}</span>
+                                                </div>
+                                                {pasPeriodEntries(pasDensityCell).length > 0 && (
+                                                    <div>
+                                                        <p className="text-[0.4375rem] font-black text-blue-300/50 uppercase tracking-widest mb-1">Top periods</p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {pasPeriodEntries(pasDensityCell).map(([period, count]) => (
+                                                                <span key={period} className="text-[0.5rem] font-bold text-blue-200/70 bg-blue-500/10 border border-blue-500/15 px-1.5 py-0.5 rounded-full uppercase">
+                                                                    {period}{count > 0 ? ` · ${count.toLocaleString()}` : ''}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {pasTypeEntries(pasDensityCell).length > 0 && (
+                                                    <div>
+                                                        <p className="text-[0.4375rem] font-black text-blue-300/50 uppercase tracking-widest mb-1">Top object types</p>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            {pasTypeEntries(pasDensityCell).map(([type, count]) => (
+                                                                <span key={type} className="text-[0.5rem] font-bold text-slate-400 bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-full uppercase">
+                                                                    {type}{count > 0 ? ` · ${count.toLocaleString()}` : ''}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <p className="text-[0.5rem] font-bold text-white/35 leading-snug px-1">Records in the wider ~36 km² landscape cell. Reflects reporting activity — not a complete record of archaeology.</p>
+                                        </>
+                                    ) : (
+                                        <div className="bg-white/[0.03] border border-white/8 p-3 rounded-xl">
+                                            <p className="text-[0.5625rem] font-bold text-white/40 leading-snug">No public PAS records in this landscape cell. May reflect low recording or detecting activity.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             {sortedHotspots.some(h => h.isHighConfidenceCrossing) && (

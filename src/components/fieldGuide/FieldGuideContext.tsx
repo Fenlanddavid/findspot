@@ -17,13 +17,14 @@ import type { WorkflowState } from '../../types/significantFind';
 export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
 
 export const HISTORIC_LAYER_OPTIONS = [
-    { key: 'context',   label: 'Recorded Heritage' },
-    { key: 'routes',    label: 'Roman Roads & Trackways' },
-    { key: 'corridors', label: 'Movement Corridors' },
-    { key: 'crossings', label: 'Crossing Points' },
-    { key: 'monuments', label: 'Scheduled Monuments' },
-    { key: 'aim',       label: 'Aerial Archaeology' },
-    { key: 'userFinds', label: 'Your Finds' },
+    { key: 'context',    label: 'Recorded Heritage' },
+    { key: 'routes',     label: 'Roman Roads & Trackways' },
+    { key: 'corridors',  label: 'Movement Corridors' },
+    { key: 'crossings',  label: 'Crossing Points' },
+    { key: 'monuments',  label: 'Scheduled Monuments' },
+    { key: 'aim',        label: 'Aerial Archaeology' },
+    { key: 'pasDensity', label: 'PAS Record Density' },
+    { key: 'userFinds',  label: 'Your Finds' },
 ] as const;
 
 export const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
@@ -127,8 +128,8 @@ export interface FieldGuideContextValue {
     historicLayerOpacity: Record<RasterOverlayKey, number>;
     activeOpacityLayer: RasterOverlayKey | null;
     setActiveOpacityLayer: React.Dispatch<React.SetStateAction<RasterOverlayKey | null>>;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
-    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean }>>;
+    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
+    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean }>>;
     showFields: false | 'all' | string;
     setShowFields: React.Dispatch<React.SetStateAction<false | 'all' | string>>;
     showFieldsPicker: boolean;
@@ -255,6 +256,9 @@ export interface FieldGuideContextValue {
     geologyContext: GeologyContext | null;
     geologyContextLoading: boolean;
 
+    // PAS density cell for current scan area
+    pasDensityCell: import('../../services/pasDensityService').PASCellLookup | null;
+
     // Landscape Intelligence
     landscapeIntelligenceMap: Map<string, LandscapeIntelligence>;
     landscapeSummary: LandscapeSummary | null;
@@ -271,4 +275,3 @@ export function useFieldGuideContext(): FieldGuideContextValue {
 }
 
 export { FieldGuideContext };
-

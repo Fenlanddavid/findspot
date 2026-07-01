@@ -107,13 +107,14 @@ const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
 };
 
 const HISTORIC_LAYER_OPTIONS = [
-    { key: 'context',   label: 'Recorded Heritage' },
-    { key: 'routes',    label: 'Roman Roads & Trackways' },
-    { key: 'corridors', label: 'Movement Corridors' },
-    { key: 'crossings', label: 'Crossing Points' },
-    { key: 'monuments', label: 'Scheduled Monuments' },
-    { key: 'aim',       label: 'Aerial Archaeology' },
-    { key: 'userFinds', label: 'Your Finds' },
+    { key: 'context',    label: 'Recorded Heritage' },
+    { key: 'routes',     label: 'Roman Roads & Trackways' },
+    { key: 'corridors',  label: 'Movement Corridors' },
+    { key: 'crossings',  label: 'Crossing Points' },
+    { key: 'monuments',  label: 'Scheduled Monuments' },
+    { key: 'aim',        label: 'Aerial Archaeology' },
+    { key: 'pasDensity', label: 'PAS Record Density' },
+    { key: 'userFinds',  label: 'Your Finds' },
 ] as const;
 
 type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
@@ -430,7 +431,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
     const [historicLayerOpacity,   setHistoricLayerOpacity]   = useState<RasterOverlayOpacity>(readRasterOverlayOpacity);
     const [activeOpacityLayer,     setActiveOpacityLayer]     = useState<RasterOverlayKey | null>(null);
-    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: false });
+    const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: false });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
     const [showFieldsPicker,       setShowFieldsPicker]       = useState(false);
     const [showLayerPicker,        setShowLayerPicker]        = useState(false);
@@ -482,6 +483,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // Geology context (Phase 1: display only, no scoring changes)
     const [geologyContext,        setGeologyContext]        = useState<GeologyContext | null>(null);
     const [geologyContextLoading, setGeologyContextLoading] = useState(false);
+    const [pasDensityCell,        setPasDensityCell]        = useState<import('../services/pasDensityService').PASCellLookup | null>(null);
     const geologyEnabledRef = useRef<boolean | null>(null);
     const geologyRequestSeqRef = useRef(0);
     const geologyAppliedRef = useRef<string | null>(null); // tileKey of last applied geology
@@ -906,7 +908,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setHistoricScanCompleted(false);
         setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
         setActiveOpacityLayer(null);
-        setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, userFinds: prev.userFinds }));
+        setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
         setMapClickLabel(null);
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
@@ -924,6 +926,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         geologyRequestSeqRef.current++;
         setGeologyContext(null);
         setGeologyContextLoading(false);
+        setPasDensityCell(null);
         clearMapSources();
     }, [cancelTerrain, cancelHistoric, clearMapSources, setPotentialScore, setScanConfidence]);
 
@@ -1013,6 +1016,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
+        setPasDensityCell(result.pasCell ?? null);
         setHistoricScanCompleted(true);
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
@@ -1486,6 +1490,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         handleLabExport, handleAnnotationConfirm, buildSuggestedLabel,
         rawClusters, userGpsPos, setUserGpsPos,
         geologyContext, geologyContextLoading,
+        pasDensityCell,
         landscapeIntelligenceMap, landscapeSummary,
     };
 

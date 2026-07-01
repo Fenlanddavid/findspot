@@ -80,6 +80,7 @@ export interface AIMFeature {
 export interface AIMResponse {
     features: AIMFeature[];
     available?: boolean;
+    error?: string;
 }
 
 export interface NominatimAddress {
@@ -499,8 +500,11 @@ async function _fetchSMFromR2(
 type AIMShardEntry = { monumentType: string; period: string; evidence: string; bbox: [number, number, number, number] };
 
 /**
- * Fetch AIM data from R2 static index (geohash-sharded GeoJSON, same pattern as SM).
- * Returns AIMResponse. Failure is currently fail-silent (no available flag) — W2 adds it.
+ * Fetch AIM data from R2 static index (geohash-sharded JSON, same pattern as SM).
+ * Requires aim-index/_meta.json to be present before shard results are trusted —
+ * prevents a missing/un-deployed index from returning an empty false-clear.
+ * AIM is not a legal gate (unlike SM) so failures are amber-state only: the
+ * caller receives available:false and silently omits AIM from confidence scoring.
  */
 async function _fetchAIMFromR2(
     west: number,
@@ -510,9 +514,34 @@ async function _fetchAIMFromR2(
     signal?: AbortSignal,
     options: DesignationFetchOptions = {},
 ): Promise<AIMResponse> {
+    // ── 1. Coverage sentinel ──────────────────────────────────────────────────
+    // aim-index/_meta.json must exist before shard arrays are trusted.
+    // A missing meta means the index has not been built/deployed yet.
+    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    try {
+        const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+        try {
+            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: options.cacheOnly });
+            if (!metaRes.ok) {
+                return { features: [], available: false, error: `AIM index not built (${metaRes.status})` };
+            }
+            const meta = await metaRes.json().catch(() => null);
+            if (!meta || typeof meta.schemaVersion !== 'number') {
+                return { features: [], available: false, error: 'AIM index meta invalid' };
+            }
+        } finally {
+            metaTimed.clear();
+        }
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        return { features: [], available: false, error: 'AIM index unreachable' };
+    }
+
+    // ── 2. Shard reads ────────────────────────────────────────────────────────
     const cells = bboxToGeohash6Cells(west, south, east, north);
     const query: [number, number, number, number] = [west, south, east, north];
     const features: AIMFeature[] = [];
+    let missingCacheShards = 0;
 
     try {
         await Promise.all(cells.map(async (cell) => {
@@ -520,7 +549,10 @@ async function _fetchAIMFromR2(
             const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
             try {
                 const res = await cachedFetchAny(url, { signal: timed.signal }, { cacheOnly: options.cacheOnly });
-                if (!res.ok) return; // fail-silent in W1 (W2 adds available flag)
+                if (!res.ok) {
+                    missingCacheShards++;
+                    return;
+                }
                 const entries: AIMShardEntry[] = await res.json();
                 for (const entry of entries) {
                     if (!_smBboxIntersects(entry.bbox, query)) continue;
@@ -538,16 +570,29 @@ async function _fetchAIMFromR2(
                         },
                     });
                 }
+            } catch (e) {
+                if (!(signal && isAbortError(e) && signal.aborted)) {
+                    missingCacheShards++;
+                    return;
+                }
+                throw e;
             } finally {
                 timed.clear();
             }
         }));
+        if (missingCacheShards > 0) {
+            return {
+                features,
+                available: false,
+                error: `AIM offline pack missing ${missingCacheShards}/${cells.length} shard${missingCacheShards !== 1 ? 's' : ''}`,
+            };
+        }
+        return { features, available: true };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
-        // fail-silent in W1; W2 will add available flag
+        const msg = e instanceof Error ? e.message : 'AIM R2 fetch failed';
+        return { features, available: false, error: msg };
     }
-
-    return { features };
 }
 
 async function _fetchScheduledMonumentsLive(

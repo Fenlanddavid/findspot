@@ -261,7 +261,29 @@ export function computeHotspotLandscapeIntelligence(
     const transitionType     = classifyTransition(h, f);
     const visibilityContext  = classifyVisibility(h, f);
     const wetlandContext     = classifyWetlandContext(f, landformType, transitionType, h);
-    const narrative          = buildHotspotNarrative(crossingType, landformType, occupationPotential, transitionType, wetlandContext);
+    let narrative = buildHotspotNarrative(crossingType, landformType, occupationPotential, transitionType, wetlandContext);
+
+    // Append PAS density sentence when the hotspot carries a PAS explanation.
+    // Match the density language from hotspot scoring so the narrative does
+    // not overstate moderate PAS density as numerous records.
+    const explanations = h.explanation ?? [];
+    const hasManyPAS   = explanations.some(e => e.startsWith('Numerous PAS'));
+    const hasSomePAS   = explanations.some(e => e.startsWith('Moderate PAS'));
+    const hasFewPAS    = explanations.some(e => e.startsWith('Few PAS'));
+
+    if (hasManyPAS) {
+        narrative = narrative
+            ? `${narrative} Numerous Portable Antiquities Scheme finds have been recorded within the wider landscape, broadly supporting this interpretation.`
+            : 'Numerous Portable Antiquities Scheme finds have been recorded within the wider landscape, broadly supporting this interpretation.';
+    } else if (hasSomePAS) {
+        narrative = narrative
+            ? `${narrative} A moderate density of Portable Antiquities Scheme finds has been recorded within the wider landscape, providing supporting context for this interpretation.`
+            : 'A moderate density of Portable Antiquities Scheme finds has been recorded within the wider landscape, providing supporting context for this interpretation.';
+    } else if (hasFewPAS) {
+        narrative = narrative
+            ? `${narrative} Few PAS records are present nearby, although this may reflect recording or detecting activity rather than archaeological absence.`
+            : 'Few PAS records are present nearby, although this may reflect recording or detecting activity rather than archaeological absence.';
+    }
 
     return { crossingType, landformType, occupationPotential, transitionType, visibilityContext, wetlandContext, narrative };
 }

@@ -19,6 +19,7 @@ import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { LayerFetchStatus } from '../pages/fieldGuideTypes';
 import type { NHLEFeature, NHLEGeometry } from './historicScanService';
 import { romanRoadsAssetUrl } from './romanRoadService';
+import { pasDensityAssetUrl } from './pasDensityService';
 import { osmTileUrl, worldImageryTileUrl } from '../utils/mapTileCache';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -641,6 +642,20 @@ export async function buildPack(
         }
     } catch {
         layers['romanRoads'] = 'unavailable';
+    }
+
+    // 7 — Cache PAS density index alongside Roman roads.
+    try {
+        const url = pasDensityAssetUrl();
+        const res = await fetch(url);
+        if (res.ok) {
+            await cache.put(url, res);
+            layers['pasDensity'] = 'cached';
+        } else {
+            layers['pasDensity'] = 'unavailable';
+        }
+    } catch {
+        layers['pasDensity'] = 'unavailable';
     }
 
     onProgress?.({ phase: 'meta', done: 0, total: 1 });

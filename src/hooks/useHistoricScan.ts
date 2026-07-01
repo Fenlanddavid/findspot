@@ -25,6 +25,8 @@ import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoads, prefetchRomanRoads } from '../services/romanRoadService';
+import { prefetchPASDensity, getPASDensityNear, pasPeriodLabels } from '../services/pasDensityService';
+import { applyPASDensityModifiers } from '../utils/hotspotEngine';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ export interface HistoricScanResult {
     aimData:         AIMResponse  | null;  // non-null only if freshly fetched
     drifted:         boolean;
     center:          { lat: number; lng: number };
+    pasCell:         import('../services/pasDensityService').PASCellLookup | null;
 }
 
 interface UseHistoricScanOptions {
@@ -168,7 +171,8 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         if (mountedRef.current) setIsScanning(true);
         const perfStart = performance.now();
         onStatusChange('Reading historic layers...');
-        prefetchRomanRoads(); // prime GeoJSON cache in parallel with NHLE/AIM/Overpass
+        prefetchRomanRoads();   // prime GeoJSON cache in parallel with NHLE/AIM/Overpass
+        prefetchPASDensity();   // prime PAS density cache in parallel
 
         const center = map.getCenter();
         const bounds = map.getBounds();
@@ -538,6 +542,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
 
             // ── Hotspot enhancement ───────────────────────────────────────────
             let enhancedHotspots: Hotspot[] = [];
+            let pasCellResult: import('../services/pasDensityService').PASCellLookup | null = null;
             const enhanceStart = performance.now();
             if (!drifted) {
                 onLog('> Historic layers integrated — refining hotspots...', 'historic');
@@ -575,6 +580,18 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                     terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod, aimFeatures,
                 );
 
+                // PAS density modifier — supporting evidence only, never creates hotspots
+                const mapCenter = map.getCenter();
+                pasCellResult = await getPASDensityNear(mapCenter.lat, mapCenter.lng);
+                const pasCell = pasCellResult;
+                if (pasCell !== null) {
+                    enhancedHotspots = applyPASDensityModifiers(enhancedHotspots, pasCell, opts.targetPeriod);
+                    const topPeriods = pasPeriodLabels(pasCell).slice(0, 3).join(', ');
+                    onLog(`> PAS density: ${pasCell.c} public records in cell (res 6). ${pasCell.c > 0 ? `Top periods: ${topPeriods}` : 'No records in this cell.'}`, 'historic');
+                } else {
+                    onLog('> PAS density: index unavailable (will apply no modifier).', 'historic', 'warn');
+                }
+
                 const sourceCount = pasFinds.length + placeSignals.length + monumentPoints.length;
                 onLog(`> Historic scan complete — ${sourceCount} source${sourceCount !== 1 ? 's' : ''} integrated.`, 'historic');
             } else {
@@ -591,6 +608,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 aimData:  aimRaw  ?? null,
                 drifted,
                 center: { lat: center.lat, lng: center.lng },
+                pasCell: pasCellResult,
             };
 
         } catch (e) {

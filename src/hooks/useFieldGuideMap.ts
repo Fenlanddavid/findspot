@@ -7,13 +7,14 @@ import { Find, SavedPoint, db } from '../db';
 import { deletePack } from '../services/offlinePack';
 import { DevAnnotation } from '../utils/devAnnotation';
 import { cacheBackedTileUrl, loadCacheBackedTile, MAP_TILE_CACHE_PROTOCOL } from '../utils/mapTileCache';
+import { getPASDensityGeoJSON } from '../services/pasDensityService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LayerState {
     historicMode: boolean;
     devMode:      boolean;
-    visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean };
+    visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean };
 }
 
 const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) => boolean }> = [
@@ -24,6 +25,8 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'historic-routes-trackway',        visibleWhen: s => s.historicMode && s.visibility.routes },
     { id: 'aim-fill',                        visibleWhen: s => s.historicMode && s.visibility.aim },
     { id: 'aim-outline',                     visibleWhen: s => s.historicMode && s.visibility.aim },
+    { id: 'pas-density-fill',               visibleWhen: s => s.historicMode && s.visibility.pasDensity },
+    { id: 'pas-density-outline',            visibleWhen: s => s.historicMode && s.visibility.pasDensity },
     { id: 'corridors-fill',                  visibleWhen: s => s.historicMode && s.visibility.corridors },
     { id: 'corridors-outline',               visibleWhen: s => s.historicMode && s.visibility.corridors },
     { id: 'landscape-context-fill',          visibleWhen: s => s.historicMode && s.visibility.context },
@@ -173,7 +176,7 @@ export type UseFieldGuideMapOptions = {
     isSatellite: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; userFinds: boolean };
+    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
     historicLayerOpacity: { lidar: number; 'lidar-wales': number; os1930: number; os1880: number };
@@ -279,6 +282,38 @@ export function useFieldGuideMap({
             map.addSource('aim-monuments', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({ id: 'aim-fill',    type: 'fill', source: 'aim-monuments', layout: { visibility: 'none' }, paint: { 'fill-color': '#f97316', 'fill-opacity': 0.2 } });
             map.addLayer({ id: 'aim-outline', type: 'line', source: 'aim-monuments', layout: { visibility: 'none' }, paint: { 'line-color': '#f97316', 'line-width': 2, 'line-opacity': 0.8 } });
+
+            // PAS public-record density — H3 res-6 hexagon grid coloured by count tier
+            map.addSource('pas-density', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: 'pas-density-fill', type: 'fill', source: 'pas-density',
+                layout: { visibility: 'none' },
+                paint: {
+                    'fill-color': [
+                        'match', ['get', 'tier'],
+                        'very-high', '#7c3aed',
+                        'high',      '#2563eb',
+                        'moderate',  '#0891b2',
+                        /* low */    '#a3e7fc',
+                    ],
+                    'fill-opacity': 0.22,
+                },
+            });
+            map.addLayer({
+                id: 'pas-density-outline', type: 'line', source: 'pas-density',
+                layout: { visibility: 'none' },
+                paint: {
+                    'line-color': [
+                        'match', ['get', 'tier'],
+                        'very-high', '#7c3aed',
+                        'high',      '#2563eb',
+                        'moderate',  '#0891b2',
+                        '#a3e7fc',
+                    ],
+                    'line-width': 0.8,
+                    'line-opacity': 0.5,
+                },
+            });
 
             map.addSource('hotspots-overlay', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
             map.addLayer({
@@ -690,6 +725,20 @@ export function useFieldGuideMap({
         updateSource();
         return () => { canceled = true; };
     }, [pasFinds]);
+
+    // ── PAS density hexagons ──────────────────────────────────────────────────
+    // Loaded once after the map is ready; the index is cached at module level
+    // so subsequent renders (e.g. visibility toggle) don't re-fetch.
+    useEffect(() => {
+        if (!mapReadyVersion) return;
+        let canceled = false;
+        getPASDensityGeoJSON().then(geojson => {
+            if (canceled) return;
+            const source = mapRef.current?.getSource('pas-density') as maplibregl.GeoJSONSource;
+            if (source) source.setData(geojson);
+        }).catch(() => { /* index unavailable — layer stays empty */ });
+        return () => { canceled = true; };
+    }, [mapReadyVersion]);
 
     // ── Historic routes → route lines, corridors, crossings ──────────────────
     useEffect(() => {

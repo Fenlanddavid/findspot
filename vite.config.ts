@@ -36,6 +36,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,geojson}'],
+        // Explicitly precache the PAS density index (not covered by glob above
+        // which excludes .json to avoid caching clubs.json / events.json).
+        // revision: null means the SW re-fetches when the file content changes.
+        additionalManifestEntries: [
+          { url: '/findspot/pas-density-gb.json', revision: null },
+        ],
         // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
         // so the app works fully offline after installation.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
