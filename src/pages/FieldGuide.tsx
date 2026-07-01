@@ -744,10 +744,27 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
+    const openSavedPointsParam = searchParams.get('savedPoints') === '1';
 
-    // Clear lat/lng from the URL after the map uses them
+    // Clear one-shot URL actions after the map/sheet uses them.
     useEffect(() => {
-        if (!isNaN(initLat) && !isNaN(initLng)) setSearchParams({}, { replace: true });
+        const nextParams = new URLSearchParams(searchParams);
+        let changed = false;
+
+        if (!isNaN(initLat) && !isNaN(initLng)) {
+            nextParams.delete('lat');
+            nextParams.delete('lng');
+            changed = true;
+        }
+
+        if (openSavedPointsParam) {
+            setShowSavedPoints(true);
+            persistSheetExpanded(true);
+            nextParams.delete('savedPoints');
+            changed = true;
+        }
+
+        if (changed) setSearchParams(nextParams, { replace: true });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Load geology enabled setting and run initial DB maintenance

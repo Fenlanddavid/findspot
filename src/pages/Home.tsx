@@ -9,12 +9,18 @@ import { enrichPermissions, EnrichedPermission } from "../services/permissions";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
+import { getPackMeta, isPackStale } from "../services/offlinePack";
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
 );
 
 const CLUB_RALLY_HOME_CARD_DISMISSED_KEY = "fs_club_rally_home_card_dismissed";
+
+type FieldGuidePackPrompt =
+  | { kind: "permission"; id: string; name: string; stale: boolean }
+  | { kind: "savedPoint"; id: string; name: string; stale: boolean }
+  | null;
 
 export default function Home(props: {
   projectId: string;
@@ -179,6 +185,37 @@ export default function Home(props: {
     };
   });
 
+  const fieldGuidePackPrompt = useLiveQuery<FieldGuidePackPrompt>(async () => {
+    const [permissionRows, savedPointRows] = await Promise.all([
+      db.permissions.where("projectId").equals(props.projectId).toArray(),
+      db.savedPoints.where("projectId").equals(props.projectId).toArray(),
+    ]);
+
+    const mappedPermissions = permissionRows
+      .filter(p => !p.isDefault && !p.isClubDayMember && !!p.boundary)
+      .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
+
+    for (const permission of mappedPermissions.slice(0, 8)) {
+      const meta = await getPackMeta({ ownerType: "permission", ownerId: permission.id }).catch(() => null);
+      if (!meta || isPackStale(meta)) {
+        return { kind: "permission", id: permission.id, name: permission.name || "Unnamed permission", stale: !!meta };
+      }
+    }
+
+    const savedPoints = savedPointRows
+      .slice()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    for (const point of savedPoints.slice(0, 8)) {
+      const meta = await getPackMeta({ ownerType: "savedPoint", ownerId: point.id }).catch(() => null);
+      if (!meta || isPackStale(meta)) {
+        return { kind: "savedPoint", id: point.id, name: point.label || "Saved point", stale: !!meta };
+      }
+    }
+
+    return null;
+  }, [props.projectId, realPermissions.length]);
+
   const nextMoveItems = useMemo(() => {
     const items: Array<{
       type: string;
@@ -249,6 +286,22 @@ export default function Home(props: {
         action: () => props.goFindsWithFilter("filter=pending"),
       });
     }
+    if (fieldGuidePackPrompt) {
+      items.push({
+        type: `fieldguide_pack_${fieldGuidePackPrompt.kind}`,
+        dismissKey: `fieldguide_pack:${fieldGuidePackPrompt.kind}:${fieldGuidePackPrompt.id}:${fieldGuidePackPrompt.stale ? 'stale' : 'missing'}`,
+        message: fieldGuidePackPrompt.stale
+          ? 'Refresh your offline FieldGuide data'
+          : 'Download FieldGuide data for offline use',
+        detail: fieldGuidePackPrompt.kind === 'permission'
+          ? `${fieldGuidePackPrompt.name}: terrain, heritage layers and PAS density for use before you lose signal.`
+          : `${fieldGuidePackPrompt.name}: save the nearby FieldGuide layers for a return visit.`,
+        cta: fieldGuidePackPrompt.kind === 'permission' ? 'Prepare Data' : 'Open Points',
+        action: fieldGuidePackPrompt.kind === 'permission'
+          ? () => props.goPermissionEdit(fieldGuidePackPrompt.id)
+          : () => nav('/fieldguide?savedPoints=1'),
+      });
+    }
     if (permissions && permissions.length > 0) {
       const real = permissions.filter(p => !p.isDefault);
       const now = Date.now();
@@ -298,7 +351,7 @@ export default function Home(props: {
       }
     }
     return items;
-  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed]);
+  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed, fieldGuidePackPrompt]);
 
   const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
 
