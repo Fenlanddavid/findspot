@@ -18,7 +18,7 @@ export default function GlobalActions({ projectId, onSignificantFind }: { projec
     return () => window.removeEventListener("scroll", update);
   }, [location.pathname]);
 
-  const hideOn = ["/settings", "/finds-box", "/fieldguide"];
+  const hideOn = ["/settings", "/finds-box", "/fieldguide", "/discover"];
   if (hideOn.includes(location.pathname)) return null;
   if (location.pathname.startsWith("/find")) return null;
   if (location.pathname === "/permission" || location.pathname.startsWith("/permission/")) return null;

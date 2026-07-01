@@ -34,7 +34,7 @@ export default function AllPermissions(props: { projectId: string }) {
   );
 
   const filteredByMode = permissions
-    ?.filter(p => viewMode === "rallies" ? p.type === "rally" : p.type !== "rally")
+    ?.filter(p => viewMode === "rallies" ? p.type === "rally" : p.type !== "rally" && !p.isDefault)
     .sort((a, b) => {
       if (!!a.isPinned !== !!b.isPinned) return a.isPinned ? -1 : 1;
       if (!!a.isDefault !== !!b.isDefault) return a.isDefault ? 1 : -1;
@@ -50,7 +50,7 @@ export default function AllPermissions(props: { projectId: string }) {
               {viewMode === "rallies" ? "Rallies & Club Digs" : "All Permissions"}
             </h2>
             <p className="text-gray-500 text-sm">
-              {viewMode === "rallies" ? "Events you've recorded or plan to attend." : "Browse and search your land permissions."}
+              {viewMode === "rallies" ? "Events you've recorded or plan to attend." : "Browse and search your saved land permissions."}
             </p>
           </div>
 

@@ -479,7 +479,7 @@ export default function Home(props: {
   }, [findIds]);
 
   return (
-    <div className="grid gap-6 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
+    <div className="grid gap-5 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
       <button
         onClick={() => setPrivacyExpanded(v => !v)}
         className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
@@ -501,7 +501,44 @@ export default function Home(props: {
         </div>
       </section>
 
-      {nextMove ? (
+      {isFirstRun ? (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/70 dark:bg-emerald-950/20">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Start here</p>
+              <h3 className="mt-1 text-base font-black text-gray-900 dark:text-gray-100">Build your first field record</h3>
+            </div>
+            <button
+              onClick={props.goFieldGuide}
+              className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-emerald-500"
+            >
+              Scan land
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: "Scan land", detail: "Read the area first.", action: props.goFieldGuide, active: true },
+              { label: "Save permission", detail: "Add land details.", action: props.goPermission, active: false },
+              { label: "Record find", detail: "Start a find record.", action: () => props.goFind(), active: false },
+              { label: "Back up", detail: "Protect local data.", action: () => nav('/settings'), active: false },
+            ].map((item, index) => (
+              <button
+                key={item.label}
+                onClick={item.action}
+                className={`min-h-14 rounded-xl border px-3 py-2 text-left transition-colors ${
+                  item.active
+                    ? "border-emerald-500 bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100"
+                    : "border-emerald-200/80 bg-white/60 text-gray-700 hover:border-emerald-400 dark:border-emerald-900/70 dark:bg-gray-900/40 dark:text-gray-200"
+                }`}
+              >
+                <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Step {index + 1}</span>
+                <span className="mt-0.5 block text-sm font-black leading-tight">{item.label}</span>
+                <span className="mt-0.5 block text-[11px] leading-tight text-gray-500 dark:text-gray-400">{item.detail}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : nextMove ? (
         <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
           {nextMove.type !== 'active_session' && (
             <button
@@ -548,30 +585,6 @@ export default function Home(props: {
             </button>
           </div>
         </div>
-      ) : isFirstRun ? (
-        <section className="grid gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Start here</p>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Choose the task that matches where you are now.</p>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {[
-              { label: "Scan Land", detail: "Read the landscape before setting up a permission.", action: props.goFieldGuide },
-              { label: "Add Permission", detail: "Save a farm, field or event you can detect on.", action: props.goPermission },
-              { label: "Record Find", detail: "Log a quick find now and finish details later.", action: () => props.goFind() },
-              { label: "Discover Rallies", detail: "Browse clubs, rallies and club digs.", action: () => nav('/discover') },
-            ].map(item => (
-              <button
-                key={item.label}
-                onClick={item.action}
-                className="min-h-20 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-emerald-400 hover:shadow-sm dark:border-gray-700 dark:bg-gray-900"
-              >
-                <span className="block text-sm font-black text-gray-900 dark:text-gray-100">{item.label}</span>
-                <span className="mt-1 block text-xs leading-snug text-gray-500 dark:text-gray-400">{item.detail}</span>
-              </button>
-            ))}
-          </div>
-        </section>
       ) : (
         <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
@@ -741,16 +754,20 @@ export default function Home(props: {
         </div>
         
         {(!filteredPermissions || filteredPermissions.length === 0) && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-8 rounded-2xl border-2 border-dashed border-emerald-200 dark:border-emerald-800 text-center animate-in zoom-in-95 duration-500">
+            <div className={`rounded-2xl border border-dashed text-center animate-in zoom-in-95 duration-500 ${
+              isFirstRun
+                ? "bg-gray-50 p-4 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700"
+                : "bg-emerald-50 p-8 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800"
+            }`}>
                 {searchQuery ? (
                     <p className="text-sm text-emerald-700 dark:text-emerald-400">No results found matching your search.</p>
                 ) : (
-                    <div className="flex flex-col items-center gap-3">
-                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-bold">No saved permissions yet.</p>
-                        <p className="text-sm text-emerald-700/70 dark:text-emerald-400/80 max-w-md">
+                    <div className="flex flex-col items-center gap-2">
+                        <p className={`text-sm font-bold ${isFirstRun ? "text-gray-700 dark:text-gray-200" : "text-emerald-800 dark:text-emerald-300"}`}>No saved permissions yet.</p>
+                        <p className={`text-sm max-w-md ${isFirstRun ? "text-gray-500 dark:text-gray-400" : "text-emerald-700/70 dark:text-emerald-400/80"}`}>
                           {isFirstRun ? "Add one when you are ready to keep landowner, field and session records together." : "Add a permission if you already have access to the land."}
                         </p>
-                        <button onClick={props.goPermission} className="min-h-11 bg-emerald-600 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest shadow-lg active:translate-y-1 transition-all text-sm">
+                        <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-all`}>
                             Add Permission
                         </button>
                     </div>
@@ -854,10 +871,10 @@ export default function Home(props: {
         </div>
 
         {(!recentFinds || recentFinds.length === 0) && (
-          <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center">
+          <div className={`${isFirstRun ? "p-4" : "p-8"} bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center`}>
             <p className="text-sm font-bold text-gray-700 dark:text-gray-200">No finds recorded yet.</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When you record your first find, it will appear here.</p>
-            <button onClick={() => props.goFind()} className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-black transition-colors">Record First Find</button>
+            <button onClick={() => props.goFind()} className={`${isFirstRun ? "mt-3 px-4 py-2 text-xs" : "mt-4 px-5 py-2.5 text-sm"} bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black transition-colors`}>Record First Find</button>
           </div>
         )}
         

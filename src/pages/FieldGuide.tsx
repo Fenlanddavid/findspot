@@ -1433,12 +1433,12 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const helperTips: CoachTip[] = [
         {
             title: 'Map layers',
-            body: 'Tap the layers button to toggle satellite, LiDAR, old OS maps and your finds.',
+            body: 'Toggle satellite, LiDAR, old OS maps and your finds.',
             accent: 'text-emerald-300',
             border: 'border-emerald-400/35',
-            button: 'Show layers',
+            button: 'Layers',
             action: () => setShowLayerPicker(true),
-            position: 'top-[72px] right-4 left-4 sm:left-auto sm:right-[68px] sm:max-w-[240px]',
+            position: 'top-[76px] right-3 w-[min(15.5rem,calc(100vw-1.5rem))] sm:right-[68px] sm:max-w-[240px]',
         },
         {
             title: 'Scan panel',
@@ -1447,7 +1447,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             border: 'border-blue-400/35',
             button: 'Expand panel',
             action: () => persistSheetExpanded(true),
-            position: 'bottom-[152px] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[280px]',
+            position: 'bottom-[152px] left-3 w-[min(18rem,calc(100vw-1.5rem))] sm:left-6 sm:max-w-[280px]',
         },
         {
             title: 'Targets and hotspots',
@@ -1455,7 +1455,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             accent: 'text-amber-300',
             border: 'border-amber-400/35',
             button: 'Got it',
-            position: 'top-[34%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[280px]',
+            position: 'top-[34%] left-3 w-[min(18rem,calc(100vw-1.5rem))] sm:left-6 sm:max-w-[280px]',
         },
     ];
 

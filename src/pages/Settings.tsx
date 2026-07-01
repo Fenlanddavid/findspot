@@ -509,25 +509,21 @@ export default function Settings() {
       </div>
       {settingsTab === "data" && (
       <>
-      <div className="mb-6 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 p-4">
+      <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/20">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-black text-emerald-900 dark:text-emerald-100 m-0">Backup & Restore</h2>
             <p className="text-sm text-emerald-800/70 dark:text-emerald-300/80 mt-1">
               FindSpot is local-only. Backups are the safety net for this device.
             </p>
+            <p className="mt-2 text-xs leading-relaxed text-emerald-800/65 dark:text-emerald-300/70">
+              Saved finds, permissions, landowner details, photos and backups stay on this device unless you export or share them.
+            </p>
           </div>
           <span className={`hidden sm:inline-flex text-xs font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-600 text-white" : "bg-amber-100 text-amber-800"}`}>
             {lastBackup ? "Backup saved" : "Save backup"}
           </span>
         </div>
-      </div>
-
-      <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="mb-1 text-sm font-black text-gray-900 dark:text-gray-100">Privacy Guarantee</h2>
-        <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-          Saved finds, permissions, landowner details, photos and backups stay on this device unless you export or share them.
-        </p>
       </div>
 
       {dataError && (
@@ -617,29 +613,35 @@ export default function Settings() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1fr] gap-3">
-        <button
-          onClick={handleExport}
-          disabled={exporting}
-          className="col-span-2 sm:col-span-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-black uppercase tracking-widest py-3 rounded-xl transition-colors shadow-sm"
-        >
-          {exporting ? "Saving…" : "Backup JSON"}
-        </button>
-        <label className={`flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 transition-colors shadow-sm ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
-          {importing ? "Restoring…" : "Restore Backup"}
-          {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
-        </label>
-        <button
-          onClick={handleCSVExport}
-          disabled={exportingCSV}
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest py-3 rounded-xl hover:border-emerald-400 disabled:opacity-60 transition-colors shadow-sm"
-        >
-          {exportingCSV ? "Exporting…" : "Export CSV"}
-        </button>
-      </div>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div className="mb-3">
+          <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">Data actions</h3>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Save a backup first. Restore only when replacing this device’s local archive.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1.5fr_1fr_1fr]">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="col-span-2 rounded-xl bg-emerald-600 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-60 sm:col-span-1"
+          >
+            {exporting ? "Saving…" : "Backup JSON"}
+          </button>
+          <label className={`flex items-center justify-center rounded-xl border border-gray-200 bg-white py-3 text-xs font-black uppercase tracking-widest text-gray-700 shadow-sm transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
+            {importing ? "Restoring…" : "Restore"}
+            {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
+          </label>
+          <button
+            onClick={handleCSVExport}
+            disabled={exportingCSV}
+            className="rounded-xl border border-gray-200 bg-white py-3 text-xs font-black uppercase tracking-widest text-gray-700 shadow-sm transition-colors hover:border-emerald-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+          >
+            {exportingCSV ? "Exporting…" : "CSV"}
+          </button>
+        </div>
+      </section>
 
       {/* Media size info + full backup */}
-      <div className="mt-3 mb-8 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mt-3 mb-6 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-gray-500 dark:text-gray-400">
           <span className="font-bold">Backup JSON</span> saves records only (no photos).
           {mediaPhotoCount !== null && mediaPhotoCount > 0 && mediaSizeBytes !== null && (
@@ -660,19 +662,22 @@ export default function Settings() {
       </div>
 
       {/* Diagnostic log export */}
-      <div className="mb-8 flex items-center justify-between gap-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
-        <div>
-          <p className="text-xs font-black text-gray-700 dark:text-gray-200">Diagnostic Log</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">On-device error log for field troubleshooting. Never sent anywhere.</p>
+      <details className="mb-8 rounded-xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+        <summary className="cursor-pointer text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Advanced tools</summary>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black text-gray-700 dark:text-gray-200">Diagnostic Log</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">On-device error log for field troubleshooting. Never sent anywhere.</p>
+          </div>
+          <button
+            onClick={handleExportDiagLog}
+            disabled={exportingDiagLog}
+            className="shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-gray-400 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400"
+          >
+            {exportingDiagLog ? "Exporting…" : "Export Log"}
+          </button>
         </div>
-        <button
-          onClick={handleExportDiagLog}
-          disabled={exportingDiagLog}
-          className="shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 text-xs font-black uppercase tracking-widest px-3 py-2 rounded-lg hover:border-gray-400 disabled:opacity-60 transition-colors"
-        >
-          {exportingDiagLog ? "Exporting…" : "Export Log"}
-        </button>
-      </div>
+      </details>
       </>
       )}
 

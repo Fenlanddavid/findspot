@@ -325,9 +325,8 @@ export default function FindsBox(props: { projectId: string }) {
             </div>
           )}
           {significantFinds && significantFinds.length === 0 && (
-            <div className="mt-4 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/40 px-5 py-16 text-center">
-              <div className="text-4xl mb-3">SF</div>
-              <h2 className="mb-2 text-xl font-black text-gray-900 dark:text-gray-100">No significant finds yet</h2>
+            <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center dark:border-gray-700 dark:bg-gray-800/40">
+              <h2 className="mb-2 text-lg font-black text-gray-900 dark:text-gray-100">No significant finds yet</h2>
               <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">
                 When you use the significant finds workflow (Stop &amp; Secure, Map Scatter, or Notable Find), records appear here.
               </p>
@@ -407,10 +406,10 @@ export default function FindsBox(props: { projectId: string }) {
       )}
 
       {mainTab === "finds" && emptyMain && (
-        <div className="mt-6 rounded-3xl border-2 border-dashed border-gray-200 bg-white px-5 py-16 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800/40">
-          <h2 className="mb-2 text-xl font-black text-gray-900 dark:text-gray-100">No finds yet</h2>
+        <div className="mt-6 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center dark:border-gray-700 dark:bg-gray-800/40">
+          <h2 className="mb-2 text-lg font-black text-gray-900 dark:text-gray-100">No finds yet</h2>
           <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">Start a record manually, or use quick capture while detecting.</p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
               type="button"
               onClick={() => navigate("/find?manual=true")}

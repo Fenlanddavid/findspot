@@ -509,18 +509,18 @@ function ClubCard({
   const hasPublicLink = hasClubPublicLink(club);
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="font-black text-sm text-gray-900 dark:text-gray-100">{club.name}</div>
+          <div className="font-black text-sm leading-tight text-gray-900 dark:text-gray-100">{club.name}</div>
           {meta && <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{meta}</div>}
         </div>
-        <span className={`shrink-0 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${verificationStyle(club.verificationStatus)}`}>
+        <span className={`shrink-0 text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${verificationStyle(club.verificationStatus)}`}>
           {verificationLabel(club.verificationStatus)}
         </span>
       </div>
       {club.description && (
-        <p className="text-xs text-gray-600 dark:text-gray-300 mt-2 leading-relaxed">{club.description}</p>
+        <p className="mt-1.5 overflow-hidden text-xs leading-snug text-gray-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] dark:text-gray-300">{club.description}</p>
       )}
       {club.digDays && (
         <div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
@@ -534,14 +534,14 @@ function ClubCard({
         </div>
       )}
       {hasPublicLink ? (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-2 flex gap-2">
           {club.facebookUrl && (
             <a
               href={club.facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open Facebook page for ${club.name}`}
-              className="inline-flex min-h-11 items-center text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              className="inline-flex min-h-9 items-center text-[9px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
             >
               Facebook
             </a>
@@ -552,7 +552,7 @@ function ClubCard({
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open website for ${club.name}`}
-              className="inline-flex min-h-11 items-center text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              className="inline-flex min-h-9 items-center text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
             >
               Website
             </a>
@@ -1329,6 +1329,9 @@ export default function Discover({ projectId }: { projectId: string }) {
   });
   const [distanceBand, setDistanceBand] = useState<DistanceBand>("all");
   const [goingIds, setGoingIds] = useState<Set<string>>(() => loadGoingIds());
+  const [discoverTab, setDiscoverTab] = useState<"events" | "clubs">(() =>
+    localStorage.getItem("fs_discover_tab") === "clubs" ? "clubs" : "events"
+  );
 
   const [remoteEvents, setRemoteEvents] = useState<DetectingEvent[]>([]);
   const [remoteClubs, setRemoteClubs] = useState<ClubListing[]>([]);
@@ -1530,8 +1533,35 @@ export default function Discover({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800">
+        {[
+          { key: "events", label: "Events", count: processedEvents.length },
+          { key: "clubs", label: "Clubs", count: processedClubs.length },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => {
+              const next = tab.key as "events" | "clubs";
+              setDiscoverTab(next);
+              localStorage.setItem("fs_discover_tab", next);
+            }}
+            className={`min-h-11 rounded-lg px-3 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+              discoverTab === tab.key
+                ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-emerald-300"
+                : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+            }`}
+          >
+            {tab.label}
+            <span className="ml-2 rounded-full bg-gray-200 px-1.5 py-0.5 text-[9px] text-gray-500 dark:bg-gray-700 dark:text-gray-300">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+
       {/* ── CLUBS ────────────────────────────────────────────── */}
 
+      {discoverTab === "clubs" && (
+      <>
       <div className="bg-gradient-to-br from-blue-950/10 to-indigo-950/10 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Local club directory</p>
@@ -1555,7 +1585,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         {loadingRemote ? (
           <div className="text-center py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Loading…</div>
         ) : processedClubs.length === 0 ? (
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-6 text-center">
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center dark:border-gray-700 dark:bg-gray-800/50">
             <p className="text-sm font-bold text-gray-500 dark:text-gray-400">No clubs found within {radius} miles</p>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Try a larger radius, or list yours above</p>
           </div>
@@ -1574,9 +1604,13 @@ export default function Discover({ projectId }: { projectId: string }) {
           </>
         )}
       </section>
+      </>
+      )}
 
       {/* ── EVENTS ───────────────────────────────────────────── */}
 
+      {discoverTab === "events" && (
+      <>
       <div className="bg-gradient-to-br from-emerald-950/10 to-teal-950/10 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800/50 rounded-2xl p-5 flex items-center justify-between gap-4 mb-4">
         <div>
           <p className="text-sm font-black text-gray-900 dark:text-gray-100">Rallies and club digs</p>
@@ -1624,7 +1658,7 @@ export default function Discover({ projectId }: { projectId: string }) {
       {loadingRemote ? (
         <div className="text-center py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest animate-pulse">Loading…</div>
       ) : processedEvents.length === 0 ? (
-        <div className="bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl p-8 text-center mb-8">
+        <div className="mb-8 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center dark:border-gray-700 dark:bg-gray-800/50">
           <p className="text-sm font-bold text-gray-500 dark:text-gray-400">
             {distanceBand !== "all" ? "Nothing in that distance range" : "No upcoming events"}
           </p>
@@ -1637,7 +1671,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           {weekendEvents.length > 0 ? (
             <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
           ) : (
-            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl text-center">
+            <div className="mb-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-center dark:border-gray-700 dark:bg-gray-800/50">
               <p className="text-xs font-bold text-gray-400 dark:text-gray-500">Nothing nearby this weekend</p>
               <p className="text-[10px] text-gray-400 dark:text-gray-600 mt-0.5">Check what's coming up below</p>
             </div>
@@ -1649,6 +1683,8 @@ export default function Discover({ projectId }: { projectId: string }) {
             <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
           )}
         </>
+      )}
+      </>
       )}
 
       <p className="text-[9px] text-gray-400 dark:text-gray-600 text-center mt-2 mb-8 leading-relaxed">
