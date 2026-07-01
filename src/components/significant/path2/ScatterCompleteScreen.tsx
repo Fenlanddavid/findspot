@@ -77,6 +77,7 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
           treasureActResult: null,
           treasureActDraft: "",
           landownerSummary: "",
+          workflowStep: null,
           createdAt: now,
           updatedAt: now,
         });

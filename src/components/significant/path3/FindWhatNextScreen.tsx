@@ -99,7 +99,14 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
       });
       await db.significantFinds.update(workflowState.significantFindId, {
         linkedFindId: newFindId,
+        workflowStep: null,
         updatedAt: now,
+      });
+    } else if (workflowState.significantFindId) {
+      // linked find already set (e.g. resumed from an existing record); still clear
+      await db.significantFinds.update(workflowState.significantFindId, {
+        workflowStep: null,
+        updatedAt: new Date().toISOString(),
       });
     }
     onClose();

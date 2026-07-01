@@ -25,6 +25,7 @@ export default function WhatNextScreen({ workflowState, onClose }: Props) {
     if (workflowState.significantFindId) {
       db.significantFinds.update(workflowState.significantFindId, {
         status: "awaiting_excavation",
+        workflowStep: null,
         updatedAt: new Date().toISOString(),
       });
       db.significantFinds.get(workflowState.significantFindId).then(sf => {

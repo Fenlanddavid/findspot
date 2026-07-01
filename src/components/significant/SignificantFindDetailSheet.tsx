@@ -766,7 +766,11 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
   }, [photoUrl]);
 
   async function setStatus(status: SignificantFind["status"]) {
-    await db.significantFinds.update(sfId, { status, updatedAt: new Date().toISOString() });
+    await db.significantFinds.update(sfId, {
+      status,
+      updatedAt: new Date().toISOString(),
+      ...(status !== "in_progress" ? { workflowStep: null } : {}),
+    });
   }
 
   async function save(patch: Partial<SignificantFind>) {

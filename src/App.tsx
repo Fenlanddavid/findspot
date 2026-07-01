@@ -19,9 +19,12 @@ import { Logo } from "./components/Logo";
 import { FINDSPOT_COPYRIGHT_NOTICE } from "./utils/legalCopy";
 import SignificantFindWorkflow from "./components/SignificantFindWorkflow";
 import { useSignificantFindWorkflow } from "./hooks/useSignificantFindWorkflow";
-import type { WorkflowState } from "./types/significantFind";
+import type { WorkflowState, WorkflowPath, WorkflowStep } from "./types/significantFind";
 import { detectJurisdiction } from "./utils/jurisdictionDetect";
 import { toOSGridRef } from "./services/gps";
+import { findResumable, buildResumeContext, PATH_STEP_ORDER } from "./services/significantFindResume";
+import { PATH_LABELS } from "./components/significant/significantFindDisplay";
+import type { SignificantFind } from "./db";
 
 export { Logo } from "./components/Logo";
 
@@ -57,6 +60,14 @@ function Shell() {
   const nav = useNavigate();
   const location = useLocation();
   const sfWorkflow = useSignificantFindWorkflow(projectId ?? "");
+  const [resumableSf, setResumableSf] = React.useState<SignificantFind | null>(null);
+  const [resumeDismissed, setResumeDismissed] = React.useState(false);
+
+  // Check for a resumable wizard on mount and whenever the workflow closes
+  React.useEffect(() => {
+    if (!projectId || sfWorkflow.isOpen) return;
+    findResumable(projectId).then(setResumableSf).catch(() => setResumableSf(null));
+  }, [projectId, sfWorkflow.isOpen]);
 
   const checkBackupStatus = useCallback(async () => {
     // Check if there is any data worth backing up
@@ -426,6 +437,13 @@ function Shell() {
             </div>
           </div>
         )}
+        {resumableSf && !sfWorkflow.isOpen && !resumeDismissed && (
+          <ResumeSignificantFindBanner
+            sf={resumableSf}
+            onResume={() => void openSignificantFind("manual", buildResumeContext(resumableSf))}
+            onDismiss={() => setResumeDismissed(true)}
+          />
+        )}
         <PageErrorBoundary>
         <Suspense fallback={<div className="p-8 text-center text-emerald-600 font-bold animate-pulse">Loading…</div>}>
         <Routes>
@@ -503,6 +521,64 @@ function Shell() {
   );
 }
 
+
+function ResumeSignificantFindBanner({
+  sf,
+  onResume,
+  onDismiss,
+}: {
+  sf: SignificantFind;
+  onResume: () => void;
+  onDismiss: () => void;
+}) {
+  const path = sf.path as NonNullable<WorkflowPath>;
+  const pathLabel = PATH_LABELS[sf.path];
+  const stepOrder = PATH_STEP_ORDER[path] ?? [];
+  const stepIdx = sf.workflowStep ? stepOrder.indexOf(sf.workflowStep as WorkflowStep) : -1;
+  const totalSteps = stepOrder.length;
+
+  const age = React.useMemo(() => {
+    const diffMs = Date.now() - new Date(sf.updatedAt).getTime();
+    const diffMin = Math.floor(diffMs / 60_000);
+    if (diffMin < 2) return "just now";
+    if (diffMin < 60) return `${diffMin} minutes ago`;
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return `${diffH} hour${diffH !== 1 ? "s" : ""} ago`;
+    const diffD = Math.floor(diffH / 24);
+    return `${diffD} day${diffD !== 1 ? "s" : ""} ago`;
+  }, [sf.updatedAt]);
+
+  return (
+    <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4">
+      <div className="flex items-start gap-3 min-w-0">
+        <span className="text-xl shrink-0" aria-hidden="true">⏸</span>
+        <div className="min-w-0">
+          <p className="text-sm font-black text-amber-900 dark:text-amber-100">
+            Resume {pathLabel}
+            {stepIdx >= 0 ? ` — step ${stepIdx + 1} of ${totalSteps}` : ""}
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+            {sf.findDescription || "Significant find"} · Interrupted {age}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 shrink-0">
+        <button
+          onClick={onResume}
+          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-4 py-2 rounded-lg transition-colors"
+        >
+          Resume
+        </button>
+        <button
+          onClick={onDismiss}
+          className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function HomeRouter({ projectId, isStandalone, promptInstall }: { projectId: string; isStandalone: boolean; promptInstall: () => Promise<boolean> }) {
   const nav = useNavigate();

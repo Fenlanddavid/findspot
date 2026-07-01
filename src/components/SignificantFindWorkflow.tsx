@@ -1,5 +1,6 @@
 import React from "react";
 import { WorkflowState, WorkflowStep, WorkflowPath } from "../types/significantFind";
+import { persistWorkflowProgress } from "../services/significantFindResume";
 import BranchScreen from "./significant/BranchScreen";
 
 // Path 1 — Secure Find
@@ -49,6 +50,16 @@ function getStepIndex(path: WorkflowPath, step: WorkflowStep): number {
 }
 
 export default function SignificantFindWorkflow({ isOpen, workflowState, onClose, updateState, goToStep, setPath }: Props) {
+  // Persist wizard position so a resume can be offered after an app kill.
+  // Fire-and-forget: progress persistence must never break the flow.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    const { significantFindId, currentStep } = workflowState;
+    if (significantFindId && currentStep !== "branch") {
+      persistWorkflowProgress(significantFindId, currentStep);
+    }
+  }, [workflowState.significantFindId, workflowState.currentStep]);
+
   if (!isOpen) return null;
 
   const { currentStep, path } = workflowState;

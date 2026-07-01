@@ -213,6 +213,10 @@ export type SignificantFind = {
   preliminaryId?: string;         // FLO's preliminary identification
   pasRecordUrl?: string;          // finds.org.uk URL once PAS-recorded
 
+  // Resume support — persisted while the wizard is active, cleared on clean exit.
+  // Non-indexed: no .stores() change required.
+  workflowStep?: string | null;
+
   createdAt: string;
   updatedAt: string;
 };
