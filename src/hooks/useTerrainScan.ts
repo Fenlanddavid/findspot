@@ -23,7 +23,7 @@ import { buildTerrainHotspots } from '../utils/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
-import { fetchRomanRoads } from '../services/romanRoadService';
+import { fetchRomanRoadsResult } from '../services/romanRoadService';
 import { findPackMatchForBbox, PackMeta } from '../services/offlinePack';
 
 /**
@@ -297,10 +297,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 // Itiner-e Roman roads — static asset, always available; must be
                 // included here as it is in the fresh scan path, otherwise cached
                 // scans miss Roman road context and produce no corridor link lines.
-                try {
-                    const romanRoads = await fetchRomanRoads(scanWest, scanSouth, scanEast, scanNorth);
-                    if (romanRoads.length > 0) routes = [...routes, ...romanRoads];
-                } catch { /* asset unavailable */ }
+                const romanRoadResult = await fetchRomanRoadsResult(scanWest, scanSouth, scanEast, scanNorth);
+                if (romanRoadResult.routes.length > 0) {
+                    routes = [...routes, ...romanRoadResult.routes];
+                } else if (!romanRoadResult.available) {
+                    onLog('> Routes: Roman road asset unavailable, continuing without Itiner-e context.', 'terrain', 'warn');
+                }
                 onStatusChange('Building hotspot model...');
                 const contextualized = analyzeContext(suppressed, routes)
                     .sort((a, b) => b.findPotential - a.findPotential)
@@ -451,13 +453,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             }
 
             // Itiner-e Roman roads — independent of OSM timeout; loads from static GeoJSON asset
-            try {
-                const romanRoads = await fetchRomanRoads(scanWest, scanSouth, scanEast, scanNorth);
-                if (romanRoads.length > 0) {
-                    routes = [...routes, ...romanRoads];
-                    onLog(`> Routes: ${romanRoads.length} Roman road alignment${romanRoads.length !== 1 ? 's' : ''} detected.`, 'terrain');
-                }
-            } catch { /* Itiner-e asset unavailable */ }
+            const romanRoadResult = await fetchRomanRoadsResult(scanWest, scanSouth, scanEast, scanNorth);
+            if (romanRoadResult.routes.length > 0) {
+                routes = [...routes, ...romanRoadResult.routes];
+                onLog(`> Routes: ${romanRoadResult.routes.length} Roman road alignment${romanRoadResult.routes.length !== 1 ? 's' : ''} detected.`, 'terrain');
+            } else if (!romanRoadResult.available) {
+                onLog('> Routes: Roman road asset unavailable, continuing without Itiner-e context.', 'terrain', 'warn');
+            }
             const routeSeconds = seconds(routeStart);
 
             if (tokenRef.current !== token || signal.aborted || !mountedRef.current) {

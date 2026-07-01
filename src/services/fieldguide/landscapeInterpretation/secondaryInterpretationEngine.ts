@@ -301,6 +301,7 @@ export function selectPrimaryAndSecondary(
 
     const agricultural = interpretations.find(i => i.interpretationId === 'agricultural_landscape');
     const movement = interpretations.find(i => i.interpretationId === 'movement_corridor');
+    const riverine = interpretations.find(i => i.interpretationId === 'riverine_activity');
     if (
         agricultural &&
         movement &&
@@ -311,6 +312,20 @@ export function selectPrimaryAndSecondary(
         return {
             primaryId: 'movement_corridor',
             secondaryId: agricultural.derivedScore >= 35 ? 'agricultural_landscape' : null,
+        };
+    }
+    if (
+        riverine &&
+        movement &&
+        sorted[0]?.interpretationId === 'riverine_activity' &&
+        // Roman-road-strength movement should not be hidden by a close water score:
+        // present it as movement first, with riverine as the supporting context.
+        movement.derivedScore >= 40 &&
+        riverine.derivedScore - movement.derivedScore <= 25
+    ) {
+        return {
+            primaryId: 'movement_corridor',
+            secondaryId: riverine.derivedScore >= 35 ? 'riverine_activity' : null,
         };
     }
 

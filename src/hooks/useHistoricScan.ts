@@ -24,7 +24,7 @@ import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
-import { fetchRomanRoads, prefetchRomanRoads } from '../services/romanRoadService';
+import { fetchRomanRoadsResult, prefetchRomanRoads } from '../services/romanRoadService';
 import { prefetchPASDensity, getPASDensityNear, pasPeriodLabels } from '../services/pasDensityService';
 import { applyPASDensityModifiers } from '../utils/hotspotEngine';
 
@@ -502,13 +502,14 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 if (cachedLookup?.romanRoads?.length) {
                     routes = [...routes, ...cachedLookup.romanRoads];
                 } else {
-                    try {
-                        freshRomanRoads = await fetchRomanRoads(west, south, east, north);
-                        if (freshRomanRoads.length > 0) {
-                            routes = [...routes, ...freshRomanRoads];
-                            onLog(`> ROUTES: ${freshRomanRoads.length} Roman road alignment${freshRomanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
-                        }
-                    } catch { /* Itiner-e asset unavailable */ }
+                    const romanRoadResult = await fetchRomanRoadsResult(west, south, east, north);
+                    freshRomanRoads = romanRoadResult.routes;
+                    if (freshRomanRoads.length > 0) {
+                        routes = [...routes, ...freshRomanRoads];
+                        onLog(`> ROUTES: ${freshRomanRoads.length} Roman road alignment${freshRomanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
+                    } else if (!romanRoadResult.available) {
+                        onLog('> ROUTES: Roman road asset unavailable, continuing without Itiner-e context.', 'historic', 'warn');
+                    }
                 }
             }
             const romanSeconds = seconds(romanStart);
