@@ -93,7 +93,7 @@ function SessionSummary({
                   <p className={`text-lg font-black leading-tight mb-1 ${outcomeColours[outcomeResult.outcome.colour].label}`}>{outcomeResult.outcome.label}</p>
                   <p className={`text-xs font-bold leading-snug ${outcomeColours[outcomeResult.outcome.colour].sub}`}>{outcomeResult.outcome.subtitle}</p>
                   {outcomeResult.spread && outcomeResult.spread !== null && (
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mt-2">
+                    <p className="text-2xs font-black uppercase tracking-widest opacity-60 mt-2">
                       Spread: {outcomeResult.spread === 'clustered' ? 'Finds clustered' : outcomeResult.spread === 'linear' ? 'Linear pattern' : 'Spread across field'}
                     </p>
                   )}
@@ -103,18 +103,18 @@ function SessionSummary({
               {/* Stats grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                      <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Finds</span>
+                      <span className="text-2xs font-black uppercase tracking-widest opacity-60">Finds</span>
                       <span className="text-sm font-black text-emerald-600">{findsCount}</span>
                   </div>
                   {totalTime && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Duration</span>
+                        <span className="text-2xs font-black uppercase tracking-widest opacity-60">Duration</span>
                         <span className="text-sm font-black text-emerald-600">{totalTime}</span>
                     </div>
                   )}
                   {fourthStat && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest opacity-40">{fourthStat.label}</span>
+                        <span className="text-2xs font-black uppercase tracking-widest opacity-60">{fourthStat.label}</span>
                         <span className="text-sm font-black text-emerald-600">{fourthStat.value}</span>
                     </div>
                   )}
@@ -123,7 +123,7 @@ function SessionSummary({
               {/* Phase 3 — Next Move */}
               {outcomeResult?.nextMove && (
                 <div className="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 rounded-2xl p-4">
-                  <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Next move</p>
+                  <p className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Next move</p>
                   <p className="text-sm font-black text-gray-800 dark:text-gray-100 mb-1">{outcomeResult.nextMove.action}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{outcomeResult.nextMove.reason}</p>
                 </div>
@@ -132,7 +132,7 @@ function SessionSummary({
               {permissionId && isClubDayMember && sharedPermissionId && (
                 <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 flex flex-col gap-3">
                     <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Club / Rally</p>
+                        <p className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Club / Rally</p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                             {pendingCount > 0
                                 ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. Finish those before sending your data to the organiser.`
@@ -141,7 +141,7 @@ function SessionSummary({
                     </div>
                     <button
                         onClick={onExportClubDay}
-                        className="w-full bg-amber-500 hover:bg-amber-400 text-white font-black py-2 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                        className="w-full bg-amber-500 hover:bg-amber-400 text-white font-black py-2 rounded-xl transition-all uppercase tracking-widest text-2xs"
                     >
                         Send to Organiser
                     </button>
@@ -149,11 +149,11 @@ function SessionSummary({
               )}
               {permissionId && !isClubDayMember && (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
-                    <p className="text-[9px] font-black uppercase tracking-widest opacity-40">Landowner Report</p>
+                    <p className="text-2xs font-black uppercase tracking-widest opacity-60">Landowner Report</p>
                     <button
                         onClick={onShareLandownerUpdate}
                         disabled={isSharingLandowner}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-2xs flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                         {isSharingLandowner ? 'Preparing…' : 'Share with Landowner'}
                     </button>
@@ -164,7 +164,7 @@ function SessionSummary({
                     )}
                     <button
                         onClick={() => onLandownerReport(false)}
-                        className="w-full border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                        className="w-full border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-2xs"
                     >
                         Full Report (PDF)
                     </button>
@@ -174,14 +174,14 @@ function SessionSummary({
               {!isClubDayMember && (
                 <button
                     onClick={onFieldReport}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-[10px] flex items-center justify-center gap-2"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-2xs flex items-center justify-center gap-2"
                 >
                     Generate Field Report
                 </button>
               )}
               <button
                   onClick={onClose}
-                  className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 rounded-xl transition-all uppercase tracking-widest text-[10px]"
+                  className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 rounded-xl transition-all uppercase tracking-widest text-2xs"
               >
                   Close & Finish
               </button>
@@ -1048,21 +1048,21 @@ export default function SessionPage(props: {
       body: "The date is already set. Pick a field if you know it, or leave it as the whole permission.",
       accent: "text-emerald-300",
       border: "border-emerald-400/35",
-      position: "top-[136px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[136px] sm:bottom-auto sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
     },
     {
       title: "Location and ground",
       body: "GPS and ground condition help later reports, but they are optional when starting quickly.",
       accent: "text-blue-300",
       border: "border-blue-400/35",
-      position: "top-[43%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[43%] sm:bottom-auto sm:left-6 sm:right-auto sm:max-w-[320px]",
     },
     {
       title: "Start detecting",
       body: "Start the session first. Mapping and find recording are available once it is saved.",
       accent: "text-amber-300",
       border: "border-amber-400/35",
-      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:bottom-[92px] sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
     },
   ];
 
@@ -1073,6 +1073,7 @@ export default function SessionPage(props: {
         tips={sessionCoachTips}
         enabled={sessionCoachEnabled}
         forceShow={searchParams.get("tips") === "1"}
+        mobileInline
         onDismiss={() => {
           setSessionCoachActive(false);
           setSessionCoachStep(0);
@@ -1153,10 +1154,10 @@ export default function SessionPage(props: {
                                 <div className="min-w-0 flex-1">
                                   <div className="mb-3 flex flex-wrap items-center gap-2">
                                     <span className={`h-2.5 w-2.5 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
-                                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${isTracking ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
+                                    <span className={`rounded-full px-2.5 py-1 text-2xs font-black uppercase tracking-widest ${isTracking ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
                                       {isTracking ? "Mapping live" : selectedField ? "Field mode" : "Active session"}
                                     </span>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Started {new Date(date + ':00Z').toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                                    <span className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Started {new Date(date + ':00Z').toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                                   </div>
                                   <h3 className="m-0 truncate text-3xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
                                     {selectedField?.name || permission?.name || "Active Session"}
@@ -1168,23 +1169,23 @@ export default function SessionPage(props: {
                                   <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
                                       <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDurationText}</div>
-                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">Live time</div>
+                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Live time</div>
                                     </div>
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
                                       <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeFindCount}</div>
-                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">{activeFindCount === 1 ? "Find" : "Finds"}</div>
+                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">{activeFindCount === 1 ? "Find" : "Finds"}</div>
                                     </div>
                                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
                                       <div className="truncate text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDistanceText ?? "--"}</div>
-                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">Walked</div>
+                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Walked</div>
                                     </div>
                                     <button
                                       type="button"
                                       onClick={lat == null ? doGPS : undefined}
                                       className={`rounded-xl border px-3 py-2 text-left transition-colors ${lat != null && lon != null ? "border-emerald-100 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/25" : "border-gray-100 bg-gray-50 hover:border-emerald-200 hover:bg-emerald-50 dark:border-gray-800 dark:bg-gray-950/40 dark:hover:border-emerald-900"}`}
                                     >
-                                      <div className={`truncate text-base font-black leading-none ${lat != null && lon != null ? "text-emerald-700 dark:text-emerald-300" : "text-gray-400 dark:text-gray-500"}`}>{lat != null && lon != null ? (acc ? `+/-${Math.round(acc)}m` : "Saved") : "Tap to set"}</div>
-                                      <div className="mt-1 text-[9px] font-black uppercase tracking-widest text-gray-400">GPS</div>
+                                      <div className={`truncate text-base font-black leading-none ${lat != null && lon != null ? "text-emerald-700 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}>{lat != null && lon != null ? (acc ? `+/-${Math.round(acc)}m` : "Saved") : "Tap to set"}</div>
+                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">GPS</div>
                                     </button>
                                   </div>
 
@@ -1192,7 +1193,7 @@ export default function SessionPage(props: {
                                     <button
                                       type="button"
                                       onClick={() => nav("/pending")}
-                                      className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                                      className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-2xs font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
                                     >
                                       {activePendingCount} pending find{activePendingCount === 1 ? "" : "s"} to finish
                                     </button>
@@ -1210,7 +1211,7 @@ export default function SessionPage(props: {
                                     <button
                                       type="button"
                                       onClick={() => setShowTrackingOverlay(true)}
-                                      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
+                                      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3 text-2xs font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
                                     >
                                       Fullscreen
                                     </button>
@@ -1218,7 +1219,7 @@ export default function SessionPage(props: {
                                 </div>
                               </div>
                               {isTracking && (
-                                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/25 dark:text-amber-300">
+                                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-2xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/25 dark:text-amber-300">
                                   Keep screen awake while mapping. Locking the phone can stop GPS recording.
                                 </p>
                               )}
@@ -1260,12 +1261,12 @@ export default function SessionPage(props: {
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
                             <div className="mb-3 flex items-center justify-between gap-3">
-                              <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Session Data</h4>
+                              <h4 className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Session Data</h4>
                               {selectedField && (
                                 <button
                                   type="button"
                                   onClick={() => setShowFieldNotes(true)}
-                                  className={`text-[10px] font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
+                                  className={`text-2xs font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
                                 >
                                   Notes
                                 </button>
@@ -1295,33 +1296,33 @@ export default function SessionPage(props: {
                               <div className="flex items-center justify-between gap-3 py-2 last:pb-0">
                                 <span className="font-bold text-gray-400">GPS</span>
                                 {lat != null && lon != null ? (
-                                  <span className="truncate font-mono text-[10px] font-bold text-emerald-600">{lat.toFixed(5)}, {lon.toFixed(5)}</span>
+                                  <span className="truncate font-mono text-2xs font-bold text-emerald-600">{lat.toFixed(5)}, {lon.toFixed(5)}</span>
                                 ) : (
-                                  <button type="button" onClick={doGPS} className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:underline">Get GPS</button>
+                                  <button type="button" onClick={doGPS} className="text-2xs font-black uppercase tracking-widest text-emerald-600 hover:underline">Get GPS</button>
                                 )}
                               </div>
                             </div>
                             <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
-                              <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-gray-400">Ground</div>
+                              <div className="mb-2 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Ground</div>
                               <div className="flex flex-wrap gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => quickSetStubble(!isStubble)}
-                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${isStubble ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-400 hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-amber-700"}`}
+                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${isStubble ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-500 hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-amber-700"}`}
                               >
                                 Stubble
                               </button>
                               <button
                                 type="button"
                                 onClick={() => quickSetLandUse(landUse === "Ploughed" ? "" : "Ploughed")}
-                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${landUse === "Ploughed" ? "border-orange-300 bg-orange-100 text-orange-800" : "border-gray-200 bg-white text-gray-400 hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-orange-700"}`}
+                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${landUse === "Ploughed" ? "border-orange-300 bg-orange-100 text-orange-800" : "border-gray-200 bg-white text-gray-500 hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-orange-700"}`}
                               >
                                 Ploughed
                               </button>
                               <button
                                 type="button"
                                 onClick={() => quickSetLandUse(landUse === "Pasture" ? "" : "Pasture")}
-                                className={`rounded-lg border px-2 py-1 text-[9px] font-bold transition-all ${landUse === "Pasture" ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-gray-200 bg-white text-gray-400 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-emerald-700"}`}
+                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${landUse === "Pasture" ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-gray-200 bg-white text-gray-500 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-emerald-700"}`}
                               >
                                 Pasture
                               </button>
@@ -1330,16 +1331,16 @@ export default function SessionPage(props: {
                           </div>
 
                           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                            <h4 className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Mapping</h4>
+                            <h4 className="mb-3 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Mapping</h4>
                             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-center dark:border-gray-800 dark:bg-gray-950/50">
                               <div className="text-lg font-black text-gray-900 dark:text-gray-100">{activeCoveragePercent !== null ? `${Math.round(activeCoveragePercent)}%` : "--"}</div>
-                              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Area covered</div>
+                              <div className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Area covered</div>
                             </div>
                             {(selectedField?.boundary || permission?.boundary) && (
                               <button
                                 type="button"
                                 onClick={() => setShowCoverage(!showCoverage)}
-                                className={`mt-3 w-full rounded-lg border px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${showCoverage ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:border-orange-400 dark:border-orange-900 dark:bg-gray-950/50 dark:text-orange-400"}`}
+                                className={`mt-3 w-full rounded-lg border px-3 py-2 text-2xs font-black uppercase tracking-widest transition-all ${showCoverage ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:border-orange-400 dark:border-orange-900 dark:bg-gray-950/50 dark:text-orange-400"}`}
                               >
                                 {showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? "No Gaps" : "Gaps On") : "Show Gaps"}
                               </button>
@@ -1355,7 +1356,7 @@ export default function SessionPage(props: {
                             <div className="flex flex-wrap items-center gap-3">
                               <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
                               {isFinished && (
-                                <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
+                                <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-2xs font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
                               )}
                             </div>
                           </div>
@@ -1364,19 +1365,19 @@ export default function SessionPage(props: {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="bg-gray-100 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-stretch justify-center gap-2 group">
                             <div className="text-center opacity-70">
-                              <span className="text-[10px] font-black uppercase tracking-widest">Session Closed</span>
+                              <span className="text-2xs font-black uppercase tracking-widest">Session Closed</span>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <button
                                         onClick={() => setShowFieldReport(true)}
-                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-2xs font-black uppercase tracking-widest transition-all"
                                     >
                                         Field Report
                                     </button>
                                     {permission && (
                                         <button
                                             onClick={() => { setLandownerReportForField(false); setShowLandownerReport(true); }}
-                                            className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all hover:border-emerald-400"
+                                            className="flex-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 px-3 py-2 rounded-lg text-2xs font-black uppercase tracking-widest transition-all hover:border-emerald-400"
                                         >
                                             Landowner
                                         </button>
@@ -1393,19 +1394,19 @@ export default function SessionPage(props: {
                                             setIsFinished(false);
                                         }
                                     }}
-                                    className="mt-2 text-[8px] font-black uppercase tracking-widest text-emerald-600 hover:underline"
+                                    className="mt-2 text-2xs font-black uppercase tracking-widest text-emerald-600 hover:underline"
                                 >
                                     Re-open Session
                                 </button>
                             </div>
                           <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
                             <div className="flex items-center justify-between gap-3 mb-2">
-                              <h4 className="text-[10px] font-black uppercase tracking-widest opacity-50">Session Data</h4>
+                              <h4 className="text-2xs font-black uppercase tracking-widest opacity-60">Session Data</h4>
                               {selectedField && (
                                 <button
                                   type="button"
                                   onClick={() => setShowFieldNotes(true)}
-                                  className={`text-[10px] font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
+                                  className={`text-2xs font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
                                 >
                                   Notes
                                 </button>
@@ -1413,19 +1414,19 @@ export default function SessionPage(props: {
                             </div>
                             <div className="flex flex-col gap-2">
                               {selectedField && (
-                                <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 truncate">
+                                <p className="text-2xs font-bold text-gray-500 dark:text-gray-400 truncate">
                                   Field: <span className="text-gray-700 dark:text-gray-200">{selectedField.name}</span>
                                 </p>
                               )}
                               <div className="flex flex-wrap gap-1 min-h-[1.25rem]">
-                                {isStubble && <span className="bg-amber-100 text-amber-800 text-[8px] font-bold px-1.5 py-0.5 rounded">Stubble</span>}
-                                {landUse && <span className="bg-orange-100 text-orange-800 text-[8px] font-bold px-1.5 py-0.5 rounded">{landUse}</span>}
-                                {!isStubble && !landUse && <span className="text-[9px] text-gray-400 dark:text-gray-500 font-bold">No ground condition set</span>}
+                                {isStubble && <span className="bg-amber-100 text-amber-800 text-3xs font-bold px-1.5 py-0.5 rounded">Stubble</span>}
+                                {landUse && <span className="bg-orange-100 text-orange-800 text-3xs font-bold px-1.5 py-0.5 rounded">{landUse}</span>}
+                                {!isStubble && !landUse && <span className="text-2xs text-gray-500 dark:text-gray-400 font-bold">No ground condition set</span>}
                               </div>
                               {lat != null && lon != null ? (
-                                <p className="font-mono font-bold text-[10px] text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
+                                <p className="font-mono font-bold text-2xs text-emerald-600 truncate">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
                               ) : (
-                                <button onClick={doGPS} className="text-[10px] font-bold text-emerald-600 hover:underline">Get GPS</button>
+                                <button onClick={doGPS} className="text-2xs font-bold text-emerald-600 hover:underline">Get GPS</button>
                               )}
                             </div>
                           </div>
@@ -1435,7 +1436,7 @@ export default function SessionPage(props: {
 
                     {notes && (
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Notes</h4>
+                            <h4 className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Notes</h4>
                             <p className="text-sm opacity-80 whitespace-pre-wrap">{notes}</p>
                         </div>
                     )}
@@ -1539,7 +1540,7 @@ export default function SessionPage(props: {
                                         )}
                                     </>
                                 ) : (
-                                    <span className="text-[10px] opacity-40 italic">Start session to enable mapping</span>
+                                    <span className="text-2xs opacity-60 italic">Start session to enable mapping</span>
                                 )}
                             </div>
                         </div>
@@ -1576,16 +1577,16 @@ export default function SessionPage(props: {
                                     <button 
                                         type="button"
                                         onClick={() => setShowCoverage(!showCoverage)}
-                                        className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-[10px] border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
+                                        className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-2xs border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
                                     >
                                         <span>{showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? 'No Gaps' : 'Gaps On') : 'Show Gaps'}</span>
                                         {showCoverage && coverageResult && (
-                                            <span className="bg-white/20 px-1 rounded text-[8px]">
+                                            <span className="bg-white/20 px-1 rounded text-3xs">
                                                 {Math.round(100 - coverageResult.percentCovered)}%
                                             </span>
                                         )}
                                         {showCoverage && coverageError && (
-                                            <span className="text-[8px]">Failed</span>
+                                            <span className="text-3xs">Failed</span>
                                         )}
                                     </button>
                                 )}
@@ -1593,16 +1594,16 @@ export default function SessionPage(props: {
                                     <button
                                         type="button"
                                         onClick={() => setShowTrimUI(!showTrimUI)}
-                                        className={`px-3 py-1 rounded-lg font-bold text-[10px] border transition-all ${showTrimUI ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400'}`}
+                                        className={`px-3 py-1 rounded-lg font-bold text-2xs border transition-all ${showTrimUI ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400'}`}
                                     >
                                         Trim
                                     </button>
                                 )}
                                 {tracks && tracks.map(t => (
-                                    <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-[10px] font-bold">
+                                    <div key={t.id} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-2xs font-bold">
                                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
                                         <span>{t.points.length} pts</span>
-                                        {isTrackCurrentlyRecording(t.id) && <span className="ml-1 text-[8px] bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
+                                        {isTrackCurrentlyRecording(t.id) && <span className="ml-1 text-3xs bg-red-600 text-white px-1 rounded animate-pulse">LIVE</span>}
                                     </div>
                                 ))}
                             </div>
@@ -1612,7 +1613,7 @@ export default function SessionPage(props: {
                         <div className="relative h-64 w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                             <div ref={mapDivRef} className="absolute inset-0" />
                             {isTracking && (
-                                <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full animate-pulse shadow-lg">
+                                <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-3xs font-black px-2 py-1 rounded-full animate-pulse shadow-lg">
                                     RECORDING LIVE TRAIL...
                                 </div>
                             )}
@@ -1627,21 +1628,21 @@ export default function SessionPage(props: {
                               const remainMins = Math.max(0, totalMins - trimStartMins - trimEndMins);
                               return (
                                 <>
-                                  <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                                  <div className="flex items-center justify-between text-2xs text-gray-500 dark:text-gray-400 font-mono">
                                     <span>Track: {totalMins}m total</span>
                                     <span className={remainMins < 5 ? 'text-red-500 font-bold' : 'text-emerald-500 font-bold'}>→ {remainMins}m after trim</span>
                                   </div>
                                   <div className="grid gap-3">
                                     {[{ label: 'Remove from start', value: trimStartMins, set: setTrimStartMins }, { label: 'Remove from end', value: trimEndMins, set: setTrimEndMins }].map(({ label, value, set }) => (
                                       <div key={label}>
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1.5">{label} {value > 0 && <span className="text-amber-500">— {value}m</span>}</p>
+                                        <p className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-1.5">{label} {value > 0 && <span className="text-amber-500">— {value}m</span>}</p>
                                         <div className="flex gap-1.5">
                                           {[0, 5, 10, 15, 30].map(m => (
                                             <button
                                               key={m}
                                               type="button"
                                               onClick={() => set(m)}
-                                              className={`flex-1 py-1.5 rounded-lg text-[10px] font-black border transition-all ${value === m ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-400'}`}
+                                              className={`flex-1 py-1.5 rounded-lg text-2xs font-black border transition-all ${value === m ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-400'}`}
                                             >
                                               {m === 0 ? 'None' : `${m}m`}
                                             </button>
@@ -1655,14 +1656,14 @@ export default function SessionPage(props: {
                                       type="button"
                                       onClick={applyTrim}
                                       disabled={trimming || (trimStartMins === 0 && trimEndMins === 0) || remainMins < 1}
-                                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition-all"
+                                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-black text-2xs uppercase tracking-widest py-2.5 rounded-xl transition-all"
                                     >
                                       {trimming ? 'Trimming…' : 'Apply Trim'}
                                     </button>
                                     <button
                                       type="button"
                                       onClick={() => { setShowTrimUI(false); setTrimStartMins(0); setTrimEndMins(0); }}
-                                      className="px-4 bg-gray-100 dark:bg-gray-800 text-gray-500 font-black text-[10px] uppercase tracking-widest py-2.5 rounded-xl transition-all"
+                                      className="px-4 bg-gray-100 dark:bg-gray-800 text-gray-500 font-black text-2xs uppercase tracking-widest py-2.5 rounded-xl transition-all"
                                     >
                                       Cancel
                                     </button>
@@ -1680,7 +1681,7 @@ export default function SessionPage(props: {
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 m-0">Session Finds</h3>
                     {(finds?.length ?? 0) > 0 && (
-                        <div className="text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">{finds!.length} found</div>
+                        <div className="text-2xs font-black bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">{finds!.length} found</div>
                     )}
                 </div>
 

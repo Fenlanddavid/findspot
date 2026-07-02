@@ -296,6 +296,12 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
   }
 }
 
+function normalizeOutcode(postcode: string | undefined): string | null {
+  const compact = postcode?.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") ?? "";
+  const match = compact.match(/^([A-Z]{1,2}\d[A-Z\d]?)/);
+  return match ? match[1] : null;
+}
+
 // Resolve postcodes → lat/lon via postcodes.io (free, no key needed).
 async function resolveCoordinates<T extends { lat?: number; lon?: number; postcode?: string }>(
   items: T[]
@@ -304,15 +310,14 @@ async function resolveCoordinates<T extends { lat?: number; lon?: number; postco
   if (unresolved.length === 0) return items;
 
   const outcodeCache = new Map<string, { lat: number; lon: number } | null>();
+  const outcodes = [...new Set(unresolved.map((item) => normalizeOutcode(item.postcode)).filter(Boolean) as string[])];
 
   await Promise.all(
-    unresolved.map(async (item) => {
-      const outcode = item.postcode!.trim().toUpperCase().split(" ")[0];
-      if (outcodeCache.has(outcode)) return;
+    outcodes.map(async (outcode) => {
       try {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 8000);
-        const res = await fetch(`https://api.postcodes.io/outcodes/${outcode}`, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+        const res = await fetch(`https://api.postcodes.io/outcodes/${encodeURIComponent(outcode)}`, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
         if (res.ok) {
           const json = await res.json();
           outcodeCache.set(outcode, json.result ? { lat: json.result.latitude, lon: json.result.longitude } : null);
@@ -328,7 +333,8 @@ async function resolveCoordinates<T extends { lat?: number; lon?: number; postco
   return items.map((item) => {
     if (item.lat != null && item.lon != null) return item;
     if (!item.postcode) return item;
-    const outcode = item.postcode.trim().toUpperCase().split(" ")[0];
+    const outcode = normalizeOutcode(item.postcode);
+    if (!outcode) return item;
     const coords = outcodeCache.get(outcode);
     return coords ? { ...item, lat: coords.lat, lon: coords.lon } : item;
   });

@@ -611,7 +611,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Organiser & Event</div>
                         <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                       </div>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500">Record the event details so you can log finds against it later.</p>
+                      <p className="text-2xs text-gray-400 dark:text-gray-500">Record the event details so you can log finds against it later.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <label className="block">
@@ -662,7 +662,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Landowner Details</div>
                         <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                       </div>
-                      <p className="text-[11px] text-gray-400 dark:text-gray-500">Keep a clear record of who granted access to this land.</p>
+                      <p className="text-2xs text-gray-400 dark:text-gray-500">Keep a clear record of who granted access to this land.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <label className="block">
@@ -761,13 +761,13 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     </div>
 
                     {!boundary && (
-                        <div className="text-[11px] text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
+                        <div className="text-2xs text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-3 font-medium flex items-start gap-2">
                             <span className="shrink-0 mt-0.5">💡</span>
                             <span>{isRally ? "Set the event site boundary, then add the field boundaries members can detect on." : "Set the boundary, then split it into sub-fields — one per field or pasture."}</span>
                         </div>
                     )}
                     {!isEdit && boundary && (
-                        <div className={`text-[11px] rounded-xl px-4 py-3 font-medium flex items-start gap-2 border ${isRally ? "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60" : "text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/40"}`}>
+                        <div className={`text-2xs rounded-xl px-4 py-3 font-medium flex items-start gap-2 border ${isRally ? "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/60" : "text-emerald-700/70 dark:text-emerald-400/60 bg-emerald-50/80 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/40"}`}>
                             <span className="shrink-0 mt-0.5">📐</span>
                             <span>{isRally ? "Boundary set — save your rally first, then you can add the field boundaries." : "Boundary set — save your permission first, then you can divide it into sub-fields."}</span>
                         </div>
@@ -779,7 +779,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                                 <div className="min-w-0">
                                     <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">{isRally ? "Rally Fields / Detecting Areas" : "Sub-Fields / Specific Areas"}</h4>
-                                    <p className="text-[11px] text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">{isRally ? "Add the mapped field boundaries that can be shared in the Club Day QR pack." : "Break larger permissions into manageable working areas."}</p>
+                                    <p className="text-2xs text-emerald-600/60 dark:text-emerald-400/60 mt-1 font-medium leading-snug">{isRally ? "Add the mapped field boundaries that can be shared in the Club Day QR pack." : "Break larger permissions into manageable working areas."}</p>
                                 </div>
                                 <button
                                     type="button"
@@ -829,7 +829,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             ) : (
                                 <div className="bg-white/60 dark:bg-gray-800/30 border border-dashed border-emerald-200 dark:border-emerald-700/50 rounded-xl p-5 text-center grid gap-2">
                                     <p className="text-xs font-bold text-gray-500 dark:text-gray-400">{isRally ? "No rally fields added yet." : "No sub-fields added yet."}</p>
-                                    <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-snug">{isRally ? "Add each field or detecting area so members can pick the right place during the event." : "Use sub-fields to split a large permission into manageable working areas."}</p>
+                                    <p className="text-2xs text-gray-400 dark:text-gray-500 leading-snug">{isRally ? "Add each field or detecting area so members can pick the right place during the event." : "Use sub-fields to split a large permission into manageable working areas."}</p>
                                     <button
                                         type="button"
                                         onClick={() => onAddField()}
@@ -956,7 +956,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                     {noPermTooltip && (
                                         <>
                                             <div className="fixed inset-0 z-40" onClick={() => setNoPermTooltip(false)} />
-                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 z-50 bg-gray-900 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                                            <div className="absolute left-6 top-1/2 -translate-y-1/2 z-50 bg-gray-900 text-white text-2xs font-semibold px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
                                                 No permission confirmed
                                             </div>
                                         </>
@@ -1056,7 +1056,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {permissionNeedsCompletion && (
                             <button
                                 onClick={onCompletePermission}
-                                className="text-[11px] font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
+                                className="text-2xs font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
                             >
                                 Complete Permission
                             </button>
@@ -1064,7 +1064,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {lat != null && lon != null && (
                             <button
                                 onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
-                                className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
+                                className="text-2xs font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
                             >
                                 FieldGuide
                             </button>
@@ -1073,7 +1073,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         <button
                             type="button"
                             onClick={() => onOpenAgreement()}
-                            className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
+                            className="text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
                         >
                             {generateAgreementLabel}
                         </button>
@@ -1082,7 +1082,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                           <button
                             type="button"
                             onClick={() => agreementUploadRef.current?.click()}
-                            className="text-[11px] font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all flex items-center gap-1.5 shadow-sm"
+                            className="text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all flex items-center gap-1.5 shadow-sm"
                           >
                             {uploadAgreementLabel}
                           </button>
@@ -1282,7 +1282,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                             {isRally ? "Fields" : "Sub-Fields"}
                                             {fields.length > 0 && <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>}
                                         </h4>
-                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                                        <p className="text-2xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
                                             {fields.length > 0
                                               ? (isClubDayMember ? "Use Locate for bearings, or Record Find to log a find in that field" : "Tap on a field on the map or scroll to select")
                                               : (isRally ? "Add named field boundaries for the event" : "Divide your permission into named detecting areas")}
@@ -1427,7 +1427,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                     </button>
                                                     <button
                                                         onClick={() => onDeleteField(f.id)}
-                                                        className="py-1.5 px-2 text-[11px] font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
+                                                        className="py-1.5 px-2 text-2xs font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
                                                         title="Delete sub-field"
                                                     >
                                                         Delete

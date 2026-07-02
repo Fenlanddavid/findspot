@@ -339,7 +339,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
   return (
     <Modal title="Define Field Boundary" onClose={onClose}>
       <div className="flex flex-col gap-3 sm:gap-4">
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2.5 sm:p-4 rounded-xl text-[11px] sm:text-xs leading-snug font-medium text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2.5 sm:p-4 rounded-xl text-2xs sm:text-xs leading-snug font-medium text-emerald-800 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
           Tap the corners of the field to place points. Hold and drag a dot to reposition it.
         </div>
 
@@ -394,7 +394,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
               type="button"
               onClick={undo}
               disabled={points.length === 0}
-              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
+              className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-2xs sm:text-xs font-bold border border-gray-200 dark:border-gray-700 hover:bg-white transition-all disabled:opacity-50"
             >
               ↩ Undo Point
             </button>
@@ -403,7 +403,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
                 type="button"
                 onClick={() => setConfirmingClear(true)}
                 disabled={points.length === 0}
-                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-[11px] sm:text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                className="bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 sm:px-4 py-2 rounded-xl shadow-lg text-2xs sm:text-xs font-bold border border-red-100 dark:border-red-900 text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
               >
                 🗑️ Clear
               </button>

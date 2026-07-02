@@ -116,7 +116,7 @@ export default function SignificantFindWorkflow({ isOpen, workflowState, onClose
           <div className="flex-1 min-w-0">
             <h2 className="text-base font-black uppercase tracking-tight truncate">{title}</h2>
             {path && currentStep !== "branch" && totalSteps > 1 && (
-              <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
+              <div className="text-2xs text-gray-400 dark:text-gray-500 mt-0.5">
                 Step {currentIdx + 1} of {totalSteps}
               </div>
             )}

@@ -15,6 +15,7 @@ export function CoachTips({
   tips,
   enabled = true,
   forceShow = false,
+  mobileInline = false,
   onDismiss,
   onStepChange,
 }: {
@@ -22,6 +23,7 @@ export function CoachTips({
   tips: CoachTip[];
   enabled?: boolean;
   forceShow?: boolean;
+  mobileInline?: boolean;
   onDismiss?: () => void;
   onStepChange?: (index: number) => void;
 }) {
@@ -61,9 +63,8 @@ export function CoachTips({
     onDismiss?.();
   };
 
-  return (
-    <div className="fixed inset-0 z-[220] pointer-events-none">
-      <div className={`absolute ${tip.position} rounded-xl border ${tip.border} bg-black/95 p-2.5 shadow-2xl pointer-events-auto`}>
+  const card = (className: string) => (
+      <div className={`${className} rounded-xl border ${tip.border} bg-black/95 p-2.5 shadow-2xl pointer-events-auto`}>
         <div className="mb-2 flex items-start justify-between gap-2">
           <div>
             <p className={`text-[8px] font-black uppercase tracking-[0.18em] ${tip.accent}`}>{tip.title}</p>
@@ -117,6 +118,24 @@ export function CoachTips({
           </div>
         </div>
       </div>
+  );
+
+  if (mobileInline) {
+    return (
+      <>
+        <div className="relative z-20 mb-4 pointer-events-none sm:hidden">
+          {card("w-full")}
+        </div>
+        <div className="hidden sm:block fixed inset-0 z-[220] pointer-events-none">
+          {card(`absolute ${tip.position}`)}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[220] pointer-events-none">
+      {card(`absolute ${tip.position}`)}
     </div>
   );
 }

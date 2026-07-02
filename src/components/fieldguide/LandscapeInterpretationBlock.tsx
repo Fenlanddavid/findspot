@@ -77,7 +77,7 @@ const DEFENSIVE_FIND_TEXT_20C = 'Buttons, badges, ammunition components, equipme
 function ModelNotice() {
     return (
         <div className="bg-white/[0.05] border border-white/12 rounded-xl px-3 py-2">
-            <p className="text-[0.625rem] font-bold text-white/70 leading-snug">
+            <p className="text-[0.6875rem] font-bold text-white/70 leading-snug">
                 This is a model interpretation based on terrain and historic data — not a record of what's actually there.
             </p>
         </div>
@@ -92,7 +92,7 @@ function ConfidenceBadge({ tier }: { tier: ConfidenceTier }) {
         lower:     'bg-white/8 border-white/20 text-white/65',
     };
     return (
-        <span className={`text-[0.6875rem] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border ${colours[tier]}`}>
+        <span className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border ${colours[tier]}`}>
             {CONFIDENCE_LABELS[tier]}
         </span>
     );
@@ -103,8 +103,8 @@ function TierBadge({ tier, compact = false }: { tier: LikelihoodTier; compact?: 
         <span
             className={`inline-flex items-center justify-center whitespace-nowrap border font-black uppercase ${
                 compact
-                    ? 'text-[0.4375rem] tracking-[0.08em] px-1.5 py-0.5 rounded-md leading-none'
-                    : 'text-[0.5rem] tracking-widest px-2 py-0.5 rounded-lg'
+                    ? 'text-[0.5rem] tracking-[0.08em] px-1.5 py-0.5 rounded-md leading-none'
+                    : 'text-[0.5625rem] tracking-widest px-2 py-0.5 rounded-lg'
             } ${TIER_COLOURS[tier]}`}
         >
             {TIER_LABELS[tier]}
@@ -118,12 +118,12 @@ function EvidenceList({ title, items, tone }: { title: string; items: EvidenceIt
     const titleColour = tone === 'support' ? 'text-emerald-300/85' : tone === 'against' ? 'text-amber-300/85' : 'text-white/55';
     return (
         <div className="space-y-1.5">
-            <p className={`text-[0.5rem] font-black uppercase tracking-widest ${titleColour}`}>{title}</p>
+            <p className={`text-[0.5625rem] font-black uppercase tracking-widest ${titleColour}`}>{title}</p>
             <div className="space-y-1.5">
                 {items.slice(0, 5).map(item => (
                     <div key={item.id} className="flex items-start gap-2">
                         <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${dot}`} />
-                        <p className="text-[0.625rem] font-bold text-white/76 leading-snug">
+                        <p className="text-[0.6875rem] font-bold text-white/76 leading-snug">
                             {item.label}
                         </p>
                     </div>
@@ -152,7 +152,7 @@ function EvidenceMeter({ support, contradiction }: { support: number; contradict
                     style={{ width: `${displayedContradiction}%` }}
                 />
             </div>
-            <div className="flex justify-between gap-2 text-[0.5rem] font-black uppercase tracking-widest">
+            <div className="flex justify-between gap-2 text-[0.5625rem] font-black uppercase tracking-widest">
                 <span className="text-emerald-300/80">Support {displayedSupport}%</span>
                 <span className="text-amber-300/80">Against {displayedContradiction}%</span>
             </div>
@@ -168,7 +168,7 @@ function PeriodChips({ affinities }: { affinities: Array<{ period: Archaeologica
             {topPeriods.map(a => (
                 <span
                     key={a.period}
-                    className="text-[0.5rem] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
+                    className="text-[0.5625rem] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
                 >
                     {PERIOD_LABELS[a.period]}
                 </span>
@@ -183,7 +183,7 @@ function UncertaintyNote({ uncertainty }: { uncertainty: UncertaintyLevel }) {
         ? 'Multiple interpretations equally plausible'
         : 'Some uncertainty in this reading';
     return (
-        <p className="text-[0.5625rem] font-bold text-white/58 italic leading-snug">
+        <p className="text-[0.625rem] font-bold text-white/58 italic leading-snug">
             {text}
         </p>
     );
@@ -229,7 +229,7 @@ export function LandscapeInterpretationBlock({
     if (loading && !interpretation) {
         return (
             <div className="border border-blue-500/15 bg-blue-500/5 rounded-xl p-3">
-                <p className="text-[0.5rem] font-black text-blue-300/60 uppercase tracking-[0.2em] mb-2">
+                <p className="text-[0.5625rem] font-black text-blue-300/60 uppercase tracking-[0.2em] mb-2">
                     Archaeological Interpretation
                 </p>
                 <LoadingSkeleton />
@@ -286,14 +286,14 @@ export function LandscapeInterpretationBlock({
     return (
         <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
-                <p className="text-[0.5rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">
+                <p className="text-[0.5625rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">
                     Landscape Read
                 </p>
                 {onGlance && (
                     <button
                         type="button"
                         onClick={onGlance}
-                        className="text-[0.5rem] font-black text-white/40 uppercase tracking-widest hover:text-white/70 transition-colors"
+                        className="text-[0.5625rem] font-black text-white/40 uppercase tracking-widest hover:text-white/70 transition-colors"
                     >
                         ↑ At a glance
                     </button>
@@ -307,15 +307,15 @@ export function LandscapeInterpretationBlock({
                     className="w-full text-left rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2"
                 >
                     <div className="flex items-center justify-between gap-3">
-                        <p className="text-[0.5625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
+                        <p className="text-[0.625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
                             Scheduled Monument Nearby
                         </p>
-                        <span className="text-[0.75rem] font-black text-amber-300/80">
+                        <span className="text-sm font-black text-amber-300/80">
                             {scheduledOpen ? '-' : '+'}
                         </span>
                     </div>
                     {scheduledOpen && (
-                        <p className="mt-1.5 text-[0.625rem] font-bold text-amber-100/85 leading-snug">
+                        <p className="mt-1.5 text-[0.6875rem] font-bold text-amber-100/85 leading-snug">
                             A scheduled monument is returned in this scan context. It may be outside the current visible map area; check the official record and avoid protected ground before detecting.
                         </p>
                     )}
@@ -336,18 +336,18 @@ export function LandscapeInterpretationBlock({
                     {primaryInterpretationId && primaryScore ? (
                         <div className="space-y-1.5">
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-black text-white">
+                                <span className="text-sm font-black text-white">
                                     {INTERPRETATION_LABELS[primaryInterpretationId]}
                                 </span>
                                 <ConfidenceBadge tier={primaryScore.confidenceTier} />
                             </div>
                             <PeriodChips affinities={primaryScore.periodAffinity} />
-                            <p className="text-[0.625rem] font-bold text-white/84 leading-snug">
+                            <p className="text-[0.6875rem] font-bold text-white/84 leading-snug">
                                 {evidenceAssessment.archaeologicalReasoning || narrativeText}
                             </p>
                         </div>
                     ) : (
-                        <p className="text-[0.625rem] font-bold text-white/70 leading-snug italic">
+                        <p className="text-[0.6875rem] font-bold text-white/70 leading-snug italic">
                             {narrativeText || getTemplateText('mixed_indeterminate')}
                         </p>
                     )}
@@ -356,10 +356,10 @@ export function LandscapeInterpretationBlock({
                     {secondaryInterpretationId && secondaryScore && (
                         <div className="border-t border-white/8 pt-2 space-y-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[0.625rem] font-black text-white/82">
+                                <span className="text-[0.6875rem] font-black text-white/82">
                                     {INTERPRETATION_LABELS[secondaryInterpretationId]}
                                 </span>
-                                <span className="text-[0.5rem] font-black text-white/55 uppercase tracking-widest">
+                                <span className="text-[0.5625rem] font-black text-white/55 uppercase tracking-widest">
                                     also present
                                 </span>
                                 <ConfidenceBadge tier={secondaryScore.confidenceTier} />
@@ -369,13 +369,13 @@ export function LandscapeInterpretationBlock({
             </div>
 
             <div className="border-t border-white/8 pt-2">
-                <p className="text-[0.5625rem] font-bold text-white/68 leading-snug">{temporalLabel}</p>
+                <p className="text-[0.625rem] font-bold text-white/68 leading-snug">{temporalLabel}</p>
             </div>
 
             <div className="border-t border-white/8 pt-2">
                 <button
                     onClick={() => setDetailsOpen(v => !v)}
-                    className="flex items-center gap-1.5 text-[0.5625rem] font-black text-white/55 uppercase tracking-widest hover:text-white/82 transition-colors"
+                    className="flex items-center gap-1.5 text-[0.625rem] font-black text-white/55 uppercase tracking-widest hover:text-white/82 transition-colors"
                 >
                     <span>{detailsOpen ? '-' : '+'}</span>
                     Model details
@@ -387,12 +387,12 @@ export function LandscapeInterpretationBlock({
                             contradiction={evidenceAssessment.contradictingPercent}
                         />
 
-                        <p className="text-[0.5625rem] font-bold text-white/56 leading-snug">
+                        <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
                             {evidenceAssessment.confidenceSummary}
                         </p>
 
                         {depositionAffinity.convergenceMet && depositionAffinity.noteTemplateId && (
-                            <p className="text-[0.5625rem] font-bold text-white/62 italic leading-snug">
+                            <p className="text-[0.625rem] font-bold text-white/62 italic leading-snug">
                                 {getTemplateText(depositionAffinity.noteTemplateId)}
                             </p>
                         )}
@@ -401,7 +401,7 @@ export function LandscapeInterpretationBlock({
                             <div className="grid grid-cols-3 gap-1.5">
                                 {evidenceAssessment.landscapeEngines.map(engine => (
                                     <div key={engine.engineId} className="rounded-lg bg-white/[0.035] border border-white/10 px-2 py-1.5 min-w-0">
-                                        <p className="text-[0.4375rem] font-black text-white/45 uppercase tracking-[0.08em] leading-tight truncate">
+                                        <p className="text-[0.5rem] font-black text-white/45 uppercase tracking-[0.08em] leading-tight truncate">
                                             {engine.label.replace('Landscape ', '')}
                                         </p>
                                         <div className="mt-1">
@@ -418,14 +418,14 @@ export function LandscapeInterpretationBlock({
 
                         {evidenceAssessment.periodLikelihood.length > 0 && (
                             <div className="space-y-1.5 border-t border-white/8 pt-2">
-                                <p className="text-[0.5rem] font-black text-blue-300/70 uppercase tracking-widest">
+                                <p className="text-[0.5625rem] font-black text-blue-300/70 uppercase tracking-widest">
                                     Period likelihood
                                 </p>
                                 <div className="flex flex-wrap gap-1">
                                     {evidenceAssessment.periodLikelihood.slice(0, 4).map(period => (
                                         <span
                                             key={period.period}
-                                            className="text-[0.5rem] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
+                                            className="text-[0.5625rem] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/25 text-blue-200"
                                         >
                                             {PERIOD_LABELS[period.period]} · {TIER_LABELS[period.tier]}
                                         </span>
@@ -436,12 +436,12 @@ export function LandscapeInterpretationBlock({
 
                         {evidenceAssessment.behaviourInteractions.length > 0 && (
                             <div className="space-y-1.5 border-t border-white/8 pt-2">
-                                <p className="text-[0.5rem] font-black text-white/45 uppercase tracking-widest">
+                                <p className="text-[0.5625rem] font-black text-white/45 uppercase tracking-widest">
                                     Behaviour interactions
                                 </p>
                                 {evidenceAssessment.behaviourInteractions.slice(0, 3).map(interaction => (
                                     <div key={interaction.interactionId} className="flex items-start justify-between gap-2">
-                                        <p className="text-[0.625rem] font-black text-white/78 leading-tight">{interaction.label}</p>
+                                        <p className="text-[0.6875rem] font-black text-white/78 leading-tight">{interaction.label}</p>
                                         <TierBadge tier={interaction.tier} />
                                     </div>
                                 ))}
@@ -450,16 +450,16 @@ export function LandscapeInterpretationBlock({
 
                         {evidence?.hydrology.hydrologicalContext != null && (
                             <div className="space-y-1.5 border-t border-white/8 pt-2">
-                                <p className="text-[0.5rem] font-black uppercase tracking-widest text-white/50">
+                                <p className="text-[0.5625rem] font-black uppercase tracking-widest text-white/50">
                                     Hydrology
                                 </p>
                                 {evidence.hydrology.dryMarginScore != null && evidence.hydrology.dryMarginScore > 0.2 && (
-                                    <p className="text-[0.625rem] font-bold text-white/68 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/68 leading-snug">
                                         Dry margin {(evidence.hydrology.dryMarginScore * 100).toFixed(0)}% — raised usable ground beside local wet terrain.
                                     </p>
                                 )}
                                 {evidence.hydrology.flowConvergence != null && evidence.hydrology.flowConvergence > 0.2 && (
-                                    <p className="text-[0.625rem] font-bold text-white/68 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/68 leading-snug">
                                         Flow convergence {(evidence.hydrology.flowConvergence * 100).toFixed(0)}% — water routes converge here.
                                     </p>
                                 )}
@@ -468,15 +468,15 @@ export function LandscapeInterpretationBlock({
 
                         {interpretation.confidenceContributions && interpretation.confidenceContributions.length > 0 && (
                             <div className="space-y-1.5 border-t border-white/8 pt-2">
-                                <p className="text-[0.5rem] font-black uppercase tracking-widest text-white/50">
+                                <p className="text-[0.5625rem] font-black uppercase tracking-widest text-white/50">
                                     Why this confidence
                                 </p>
                                 {interpretation.confidenceContributions.map((c, i) => (
                                     <div key={i} className="flex items-center gap-2">
-                                        <span className={`text-[0.6875rem] font-black shrink-0 ${c.sign === '+' ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                        <span className={`text-xs font-black shrink-0 ${c.sign === '+' ? 'text-emerald-300' : 'text-amber-300'}`}>
                                             {c.sign}
                                         </span>
-                                        <span className="text-[0.625rem] font-bold text-white/68 leading-snug">
+                                        <span className="text-[0.6875rem] font-bold text-white/68 leading-snug">
                                             {c.label}
                                         </span>
                                     </div>
@@ -486,26 +486,26 @@ export function LandscapeInterpretationBlock({
 
                         {evidence && (evidence.historic.routes.length > 0 || evidence.historic.nhle.length > 0 || evidence.historic.aim.length > 0 || evidence.user.findPeriods.length > 0) && (
                             <div className="space-y-1 border-t border-white/8 pt-2">
-                                <p className="text-[0.5rem] font-black uppercase tracking-widest text-white/50">
+                                <p className="text-[0.5625rem] font-black uppercase tracking-widest text-white/50">
                                     Dataset counts
                                 </p>
                                 {evidence.historic.routes.length > 0 && (
-                                    <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/56 leading-snug">
                                         {evidence.historic.routes.length} historic route{evidence.historic.routes.length !== 1 ? 's' : ''} in scan
                                     </p>
                                 )}
                                 {evidence.historic.nhle.length > 0 && (
-                                    <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/56 leading-snug">
                                         {evidence.historic.nhle.length} scheduled monument{evidence.historic.nhle.length !== 1 ? 's' : ''} recorded
                                     </p>
                                 )}
                                 {evidence.historic.aim.length > 0 && (
-                                    <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/56 leading-snug">
                                         {evidence.historic.aim.length} aerial intelligence feature{evidence.historic.aim.length !== 1 ? 's' : ''}
                                     </p>
                                 )}
                                 {evidence.user.findPeriods.length > 0 && (
-                                    <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
+                                    <p className="text-[0.6875rem] font-bold text-white/56 leading-snug">
                                         Your finds: {evidence.user.findPeriods.join(', ')}
                                     </p>
                                 )}
@@ -522,10 +522,10 @@ export function LandscapeInterpretationBlock({
 
                         {findTypeText && (
                             <div className="bg-white/[0.03] border border-white/8 rounded-xl p-2">
-                                <p className="text-[0.5rem] font-black text-white/45 uppercase tracking-widest mb-1">
+                                <p className="text-[0.5625rem] font-black text-white/45 uppercase tracking-widest mb-1">
                                     Typical find types
                                 </p>
-                                <p className="text-[0.5625rem] font-bold text-white/68 leading-snug">
+                                <p className="text-[0.625rem] font-bold text-white/68 leading-snug">
                                     {findTypeText}
                                 </p>
                             </div>

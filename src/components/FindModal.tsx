@@ -237,7 +237,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
             <button
               onClick={handleShare}
               disabled={busy}
-              className="shrink-0 text-[11px] font-semibold text-white rounded-full transition-all duration-[140ms] flex items-center gap-1.5 hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
+              className="shrink-0 text-2xs font-semibold text-white rounded-full transition-all duration-[140ms] flex items-center gap-1.5 hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
               style={{
                 padding: '6px 14px',
                 background: 'linear-gradient(180deg, #10b981, #059669)',
@@ -258,7 +258,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               onClick={handleDownloadCard}
               disabled={busy}
               title="Save card image to photos"
-              className="shrink-0 text-[11px] font-semibold text-white/80 rounded-full border border-white/15 bg-white/[0.04] transition-all duration-[140ms] flex items-center gap-1.5 px-3.5 py-1.5 hover:bg-white/[0.08] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
+              className="shrink-0 text-2xs font-semibold text-white/80 rounded-full border border-white/15 bg-white/[0.04] transition-all duration-[140ms] flex items-center gap-1.5 px-3.5 py-1.5 hover:bg-white/[0.08] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
             >
               <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 16l-4-4h2.5V4h3v8H16l-4 4z"/>
@@ -350,7 +350,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.04] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
                 {/* Accent line */}
                 <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
-                <span className="text-[11px] font-semibold uppercase tracking-[1px] text-emerald-500/60 dark:text-emerald-400/60 block mb-4">Find Details</span>
+                <span className="text-2xs font-semibold uppercase tracking-[1px] text-emerald-500/60 dark:text-emerald-400/60 block mb-4">Find Details</span>
 
                 {/* PRIMARY — headline identification */}
                 <div className="mb-5">
@@ -364,7 +364,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     <p className="text-[13px] font-mono text-gray-400/60 dark:text-gray-500/60 m-0 mt-1">{draft.dateRange}</p>
                   )}
                   {draft.foundAt && (
-                    <p className="text-[11px] font-mono text-gray-400/50 dark:text-gray-500/50 m-0 mt-2">
+                    <p className="text-2xs font-mono text-gray-400/50 dark:text-gray-500/50 m-0 mt-2">
                       Found {new Date(draft.foundAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · {new Date(draft.foundAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   )}
@@ -406,7 +406,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               {draft.notes && (
                 <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.03] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
                   <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-gray-300/40 dark:via-white/[0.06] to-transparent" />
-                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-gray-400/60 dark:text-gray-500/80 block mb-2">Notes</span>
+                  <span className="text-2xs font-semibold uppercase tracking-[1px] text-gray-400/60 dark:text-gray-500/80 block mb-2">Notes</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap m-0 font-medium leading-relaxed">{draft.notes}</p>
                 </div>
               )}
@@ -415,7 +415,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               <div className="bg-gradient-to-b from-emerald-50/40 to-transparent dark:from-emerald-900/[0.12] dark:to-transparent border border-emerald-100 dark:border-emerald-900/30 rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)] grid grid-cols-2 gap-[14px]">
                 <div className="col-span-2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent mb-1" />
                 <div className="col-span-2 flex justify-between items-center">
-                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
+                  <span className="text-2xs font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
                   {draft.lat != null && draft.lon != null && (
                     <button
                       onClick={() => window.open(`https://www.google.com/maps?q=${draft.lat},${draft.lon}`, "_blank")}

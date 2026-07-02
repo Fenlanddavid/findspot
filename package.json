@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "typefloor": "node scripts/checkTypeFloor.mjs",
     "typecheck": "tsc -b --pretty false",
     "test": "npm run typecheck",
     "test:unit": "vitest run",

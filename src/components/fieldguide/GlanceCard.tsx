@@ -46,17 +46,17 @@ export function GlanceCard({
 
     return (
         <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-3 space-y-3">
-            <p className="text-[0.5rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">
+            <p className="text-[0.5625rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">
                 Landscape Read
             </p>
 
             {/* C1: SM overlap banner */}
             {showSMOverlap && (
                 <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2">
-                    <p className="text-[0.5625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
+                    <p className="text-[0.625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
                         Scheduled Monument Nearby
                     </p>
-                    <p className="mt-1 text-[0.5625rem] font-bold text-amber-100/80 leading-snug">
+                    <p className="mt-1 text-[0.625rem] font-bold text-amber-100/80 leading-snug">
                         A scheduled monument is recorded in this area. Check the official record and avoid protected ground before detecting.
                     </p>
                 </div>
@@ -65,10 +65,10 @@ export function GlanceCard({
             {/* C1: SM check failed banner — fail-safe amber when data unavailable */}
             {showSMFailed && (
                 <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2">
-                    <p className="text-[0.5625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
+                    <p className="text-[0.625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
                         Scheduled Monument Check Unavailable
                     </p>
-                    <p className="mt-1 text-[0.5625rem] font-bold text-amber-100/80 leading-snug">
+                    <p className="mt-1 text-[0.625rem] font-bold text-amber-100/80 leading-snug">
                         Protected monument data could not be confirmed for this area. Use official records before treating the area as clear.
                     </p>
                 </div>
@@ -76,31 +76,31 @@ export function GlanceCard({
 
             {/* C2 + C3: Headline + softened signal strength */}
             <div className="space-y-1.5">
-                <p className="text-xs font-black text-white leading-snug">{title}</p>
-                <span className="inline-block text-[0.6875rem] font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border bg-white/8 border-white/20 text-white/65">
+                <p className="text-sm font-black text-white leading-snug">{title}</p>
+                <span className="inline-block text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border bg-white/8 border-white/20 text-white/65">
                     {strengthLabel}
                 </span>
             </div>
 
             {/* Why? chips — up to 3 source-distinct + optional caveat */}
             {limitedEvidence ? (
-                <p className="text-[0.625rem] font-bold text-white/58 leading-snug italic">
+                <p className="text-[0.6875rem] font-bold text-white/58 leading-snug italic">
                     Limited evidence here — scan data is sparse for this area.
                 </p>
             ) : (
                 <div className="space-y-1.5">
-                    <p className="text-[0.5rem] font-black text-white/48 uppercase tracking-widest">Why?</p>
+                    <p className="text-[0.5625rem] font-black text-white/48 uppercase tracking-widest">Why?</p>
                     <div className="flex flex-wrap gap-1.5">
                         {reasons.map(r => (
                             <span
                                 key={r.source}
-                                className="text-[0.5625rem] font-bold px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-200 leading-snug"
+                                className="text-[0.625rem] font-bold px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-200 leading-snug"
                             >
                                 {r.label}
                             </span>
                         ))}
                         {showCaveat && (
-                            <span className="text-[0.5625rem] font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 leading-snug">
+                            <span className="text-[0.625rem] font-bold px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 leading-snug">
                                 Contradicting factors present
                             </span>
                         )}
@@ -109,7 +109,7 @@ export function GlanceCard({
             )}
 
             {/* C3: Hedge footnote */}
-            <p className="text-[0.5rem] font-bold text-white/42 leading-snug">
+            <p className="text-[0.5625rem] font-bold text-white/42 leading-snug">
                 Provisional landscape model — indicative only, not a prediction of finds.
             </p>
 
@@ -118,7 +118,7 @@ export function GlanceCard({
                 <button
                     type="button"
                     onClick={handleReadFull}
-                    className="w-full rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-[0.6875rem] font-black text-blue-300 uppercase tracking-widest transition-colors active:bg-blue-500/20"
+                    className="w-full rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-black text-blue-300 uppercase tracking-widest transition-colors active:bg-blue-500/20"
                 >
                     Read Full FieldGuide
                 </button>
@@ -129,7 +129,7 @@ export function GlanceCard({
                         onChange={e => setDontShowAgain(e.target.checked)}
                         className="w-3 h-3 rounded border-white/20 bg-white/5 accent-blue-400"
                     />
-                    <span className="text-[0.5rem] font-black text-white/42 uppercase tracking-widest leading-none">
+                    <span className="text-[0.5625rem] font-black text-white/42 uppercase tracking-widest leading-none">
                         Don't show this summary again
                     </span>
                 </label>

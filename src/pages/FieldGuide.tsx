@@ -1714,7 +1714,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
                             {/* Notes snippet */}
                             {selectedUserFind.notes?.trim() && (
-                                <p className="text-[11px] text-white/40 italic leading-snug line-clamp-2 mb-3">{selectedUserFind.notes.trim()}</p>
+                                <p className="text-2xs text-white/40 italic leading-snug line-clamp-2 mb-3">{selectedUserFind.notes.trim()}</p>
                             )}
 
                             {/* Footer: find code */}
@@ -1737,14 +1737,14 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex-1 min-w-0 pr-3">
                                     <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1">{selectedPASFind.objectType}</h3>
-                                    <p className="text-[11px] font-black text-emerald-400">{selectedPASFind.broadperiod}</p>
+                                    <p className="text-2xs font-black text-emerald-400">{selectedPASFind.broadperiod}</p>
                                 </div>
                                 <button onClick={() => setSelectedPASFind(null)} className="bg-black/20 hover:bg-black/40 text-white rounded-full p-2 transition-colors border border-white/10 flex-shrink-0">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                                 </button>
                             </div>
                             <div className="border-t border-white/8 pt-3 space-y-3">
-                                <p className="text-[11px] font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
+                                <p className="text-2xs font-bold text-white/70 leading-snug">Standing heritage feature recorded in the OpenStreetMap community dataset.</p>
                                 <a
                                     href={`https://www.openstreetmap.org/${selectedPASFind.osmType || 'node'}/${selectedPASFind.internalId}`}
                                     target="_blank" rel="noreferrer"

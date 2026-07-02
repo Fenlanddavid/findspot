@@ -19,7 +19,7 @@ export function LandscapeBehaviourBars({ processScores }: Props) {
 
                 return (
                     <div key={id} className="flex items-center gap-2">
-                        <span className="text-[0.5rem] font-black text-white/68 uppercase tracking-widest w-20 shrink-0">
+                        <span className="text-[0.5625rem] font-black text-white/68 uppercase tracking-widest w-20 shrink-0">
                             {PROCESS_LABELS[id]}
                         </span>
                         <div className="flex-1 h-1.5 rounded-full bg-white/8 overflow-hidden">
@@ -31,7 +31,7 @@ export function LandscapeBehaviourBars({ processScores }: Props) {
                     </div>
                 );
             })}
-            <p className="text-[0.5rem] font-bold text-white/55 leading-snug pt-1">
+            <p className="text-[0.5625rem] font-bold text-white/55 leading-snug pt-1">
                 Bar fill reflects relative weight of each behavioural signal. Scores are unvalidated provisional weights — treat as indicative only.
             </p>
         </div>

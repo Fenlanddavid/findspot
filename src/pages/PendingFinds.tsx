@@ -112,14 +112,14 @@ export default function PendingFinds(props: { projectId: string }) {
               <div className="flex gap-2">
                 <button
                   onClick={() => navigate(`/find?quickId=${f.id}`)}
-                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-sm"
+                  className="flex-1 bg-amber-600 hover:bg-amber-500 text-white py-2 rounded-xl text-2xs font-black uppercase tracking-widest transition-all shadow-sm"
                 >
                   Finish Record
                 </button>
                 <button
                   onClick={() => saveAsIs(f.id)}
                   disabled={savingId === f.id}
-                  className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                  className="flex-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 py-2 rounded-xl text-2xs font-black uppercase tracking-widest transition-all disabled:opacity-50"
                 >
                   {savingId === f.id ? "Saving…" : "Mark Complete"}
                 </button>
@@ -127,13 +127,13 @@ export default function PendingFinds(props: { projectId: string }) {
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => deletePendingFind(f.id)}
-                      className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                      className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-2xs font-black uppercase tracking-widest transition-all"
                     >
                       Yes
                     </button>
                     <button
                       onClick={() => setConfirmingDeleteId(null)}
-                      className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                      className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded-xl text-2xs font-black uppercase tracking-widest transition-all"
                     >
                       No
                     </button>
@@ -141,7 +141,7 @@ export default function PendingFinds(props: { projectId: string }) {
                 ) : (
                   <button
                     onClick={() => setConfirmingDeleteId(f.id)}
-                    className="px-3 py-2 border border-red-200 dark:border-red-800 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all"
+                    className="px-3 py-2 border border-red-200 dark:border-red-800 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl text-2xs font-black uppercase tracking-widest transition-all"
                   >
                     Delete
                   </button>

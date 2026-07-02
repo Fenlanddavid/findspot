@@ -765,7 +765,7 @@ export default function PermissionPage(props: {
       body: "Add the farm or field name. That is all you need to create your first permission.",
       accent: "text-emerald-300",
       border: "border-emerald-400/35",
-      position: "top-[128px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[128px] sm:bottom-auto sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
     },
     {
       title: "Optional details",
@@ -774,14 +774,14 @@ export default function PermissionPage(props: {
       border: "border-blue-400/35",
       button: "Show details",
       action: () => setShowNewPermissionDetails(true),
-      position: "top-[42%] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[42%] sm:bottom-auto sm:left-6 sm:right-auto sm:max-w-[320px]",
     },
     {
       title: "Create record",
       body: "Save now. You can add sessions, finds, agreements and reports from the permission page.",
       accent: "text-amber-300",
       border: "border-amber-400/35",
-      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:bottom-[92px] sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
     },
   ];
 
@@ -815,6 +815,7 @@ export default function PermissionPage(props: {
         tips={permissionCoachTips}
         enabled={permissionCoachEnabled}
         forceShow={searchParams.get("tips") === "1"}
+        mobileInline
         onDismiss={() => {
           setPermissionCoachActive(false);
           setPermissionCoachStep(0);
@@ -881,7 +882,7 @@ export default function PermissionPage(props: {
                                     >
                                         <div>
                                             <div>All Finds</div>
-                                            <div className="text-[11px] font-normal text-gray-400">Entire permission</div>
+                                            <div className="text-2xs font-normal text-gray-400">Entire permission</div>
                                         </div>
                                     </button>
                                     {fields && fields.length > 0 && (

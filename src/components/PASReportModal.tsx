@@ -326,7 +326,7 @@ Recorded via FindSpot
                     <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">To improve the record:</p>
                     <ul className="list-none p-0 m-0 flex flex-col gap-1">
                         {score.reasons.map((r, i) => (
-                            <li key={i} className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">{r}</li>
+                            <li key={i} className="text-2xs text-gray-500 dark:text-gray-400 font-medium">{r}</li>
                         ))}
                     </ul>
                 </div>

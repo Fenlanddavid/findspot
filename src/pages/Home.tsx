@@ -533,7 +533,7 @@ export default function Home(props: {
               >
                 <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Step {index + 1}</span>
                 <span className="mt-0.5 block text-sm font-black leading-tight">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] leading-tight text-gray-500 dark:text-gray-400">{item.detail}</span>
+                <span className="mt-0.5 block text-2xs leading-tight text-gray-500 dark:text-gray-400">{item.detail}</span>
               </button>
             ))}
           </div>
@@ -684,7 +684,7 @@ export default function Home(props: {
           </svg>
           <div className="flex-1 min-w-0">
             <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
-            <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
+            <div className="text-2xs text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); props.goFieldGuide(); }}
@@ -718,7 +718,7 @@ export default function Home(props: {
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors">Run a club dig or rally</div>
-            <div className="text-[11px] text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Set up a club day pack, join with a link, or log rally finds.</div>
+            <div className="text-2xs text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Set up a club day pack, join with a link, or log rally finds.</div>
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); setShowClubRallyModal(true); }}
@@ -733,7 +733,7 @@ export default function Home(props: {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
-                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All</button>
+                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All</button>
             </div>
             <div className="flex items-center gap-3 w-full md:max-w-md">
                 <div className="relative flex-1">
@@ -864,7 +864,7 @@ export default function Home(props: {
       <section>
         <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
-            <button onClick={props.goAllFinds} className="shrink-0 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">
+            <button onClick={props.goAllFinds} className="shrink-0 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">
               <span className="sm:hidden">Finds</span>
               <span className="hidden sm:inline">Open All Finds</span>
             </button>

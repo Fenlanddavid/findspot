@@ -851,14 +851,14 @@ export default function FindPage(props: {
       body: "Quick is for recording in the field. Full Record adds catalogue detail when you have time.",
       accent: "text-emerald-300",
       border: "border-emerald-400/35",
-      position: "top-[118px] left-4 right-4 sm:left-6 sm:right-auto sm:max-w-[320px]",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[118px] sm:bottom-auto sm:left-6 sm:right-auto sm:max-w-[320px]",
     },
     {
       title: "Location and object",
       body: "Set the permission or location, then give the find a simple title such as coin, buckle or button.",
       accent: "text-blue-300",
       border: "border-blue-400/35",
-      position: "top-[40%] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[40%] sm:bottom-auto sm:left-1/2 sm:right-auto sm:w-[320px] sm:-translate-x-1/2",
     },
     {
       title: "Photos",
@@ -867,14 +867,14 @@ export default function FindPage(props: {
       border: "border-amber-400/35",
       button: "Add photo",
       action: () => stickyPhotoRef.current?.click(),
-      position: "top-[52%] left-4 right-4 sm:left-auto sm:right-6 sm:max-w-[300px]",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[52%] sm:bottom-auto sm:left-auto sm:right-6 sm:max-w-[300px]",
     },
     {
       title: "Save or finish later",
       body: "Save completes the record. Finish Later keeps a pending find you can clean up afterwards.",
       accent: "text-purple-300",
       border: "border-purple-400/35",
-      position: "bottom-[92px] left-4 right-4 sm:left-1/2 sm:right-auto sm:w-[340px] sm:-translate-x-1/2",
+      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:bottom-[92px] sm:left-1/2 sm:right-auto sm:w-[340px] sm:-translate-x-1/2",
     },
   ];
 
@@ -999,6 +999,7 @@ export default function FindPage(props: {
         tips={findCoachTips}
         enabled={findCoachEnabled}
         forceShow={searchParams.get("tips") === "1"}
+        mobileInline
         onDismiss={() => {
           setFindCoachActive(false);
           setFindCoachStep(0);

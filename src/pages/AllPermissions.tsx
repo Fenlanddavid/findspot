@@ -68,13 +68,13 @@ export default function AllPermissions(props: { projectId: string }) {
           <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1 self-start">
             <button
               onClick={() => setViewMode("permissions")}
-              className={`px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${viewMode === "permissions" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+              className={`px-4 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest transition-all ${viewMode === "permissions" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
             >
               Permissions
             </button>
             <button
               onClick={() => setViewMode("rallies")}
-              className={`px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${viewMode === "rallies" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
+              className={`px-4 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest transition-all ${viewMode === "rallies" ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}
             >
               Rallies
             </button>

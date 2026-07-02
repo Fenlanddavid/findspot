@@ -288,7 +288,7 @@ export function QuickFindFab({
           {onSignificantFind && (
             confirmSignificant ? (
               <div className="rounded-xl border border-amber-500/30 bg-amber-950/30 p-2">
-                <p className="text-[11px] leading-snug text-amber-100">
+                <p className="text-2xs leading-snug text-amber-100">
                   Use this for suspected Treasure, in-situ groups, scatters, or an exceptional find that needs a fuller record.
                 </p>
                 <div className="mt-2 flex gap-1.5">

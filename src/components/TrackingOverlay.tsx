@@ -25,8 +25,8 @@ interface TrackingOverlayProps {
 function SoftStat({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
   return (
     <div className="min-w-0 rounded-xl border border-white/[0.06] bg-white/[0.035] px-3 py-2">
-      <div className={`truncate text-sm font-black leading-none ${muted ? "text-white/25" : "text-white/72"}`}>{value}</div>
-      <div className="mt-1 truncate text-[8px] font-black uppercase tracking-widest text-white/20">{label}</div>
+      <div className={`truncate text-sm font-black leading-none ${muted ? "text-white/60" : "text-white/80"}`}>{value}</div>
+      <div className="mt-1 truncate text-2xs font-black uppercase tracking-widest text-white/60">{label}</div>
     </div>
   );
 }
@@ -57,16 +57,16 @@ export function TrackingOverlay({
         </div>
       </div>
 
-      <p className="absolute top-[8.75rem] text-[10px] font-bold text-amber-400/70 tracking-widest min-[420px]:top-[5.75rem]">
+      <p className="absolute left-6 right-6 top-[9.75rem] text-2xs font-bold leading-snug text-amber-300 tracking-widest min-[420px]:top-[6.25rem]">
         ⚠️ Keep your screen on — locking it will stop GPS recording
       </p>
 
-      <div className="max-w-xs opacity-40">
+      <div className="max-w-xs text-gray-400">
         <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-800">
           <span className="text-xl grayscale opacity-50">👣</span>
         </div>
         <h2 className="text-lg font-bold mb-2 uppercase tracking-widest text-gray-400">Tracking Active</h2>
-        <p className="text-[10px] opacity-40 mb-8 font-medium">
+        <p className="text-2xs mb-8 font-medium">
           {wakeLockSupported
             ? "Screen will stay awake for high-precision GPS tracking."
             : "GPS is recording your trail in the background."}
@@ -76,7 +76,7 @@ export function TrackingOverlay({
       <button
         onClick={onClose}
         type="button"
-        className="mt-2 px-4 py-2 bg-gray-900 text-gray-500 border border-gray-800 rounded-lg font-bold text-[10px] uppercase tracking-widest active:bg-gray-800 transition-colors"
+        className="mt-2 px-4 py-2 bg-gray-900 text-gray-500 border border-gray-800 rounded-lg font-bold text-2xs uppercase tracking-widest active:bg-gray-800 transition-colors"
       >
         Return to FindSpot
       </button>
@@ -91,7 +91,7 @@ export function TrackingOverlay({
         />
       )}
 
-      <div className="absolute bottom-6 left-6 opacity-10 text-left text-[8px] font-black uppercase tracking-[0.3em]">
+      <div className="absolute bottom-6 left-6 opacity-10 text-left text-3xs font-black uppercase tracking-[0.3em]">
         Low Distraction Mode
       </div>
     </div>

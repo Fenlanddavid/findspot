@@ -257,7 +257,7 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
           <div>
             <div className="text-[18px] font-black text-[#13201c]">FindShare by FindSpot</div>
             <div className="mt-1 text-[14px] font-bold text-[#66736f]">Private by default. Shared only when you choose.</div>
-            <div className="mt-2 text-[11px] font-bold text-[#8a9893]">{FINDSPOT_COPYRIGHT_NOTICE} Share-card format protected.</div>
+            <div className="mt-2 text-2xs font-bold text-[#8a9893]">{FINDSPOT_COPYRIGHT_NOTICE} Share-card format protected.</div>
           </div>
           <div className="text-[16px] font-black text-[#0f766e]">findspot.uk</div>
         </footer>

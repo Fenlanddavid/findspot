@@ -218,14 +218,14 @@ export default function OnboardingFlow() {
                                     <span className="text-2xl">🏕️</span>
                                     <div>
                                         <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Club / rally dig</p>
-                                        <p className="text-[11px] text-white/40 mt-0.5">Attending or organising a club event</p>
+                                        <p className="text-2xs text-white/40 mt-0.5">Attending or organising a club event</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
                             </button>
                         </div>
 
-                        <button onClick={() => setStep('welcome')} className="mt-6 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('welcome')} className="mt-6 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -245,11 +245,11 @@ export default function OnboardingFlow() {
                             <div className="space-y-2.5 mb-4">
                                 <div className="bg-white/5 rounded-2xl px-4 py-3">
                                     <p className="text-[12px] font-black text-white mb-1">iPhone / iPad</p>
-                                    <p className="text-[11px] text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Safari</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">Share button</span> (the box with an arrow pointing up), then tap <span className="text-white/70 font-bold">Add to Home Screen</span>. Must be Safari — Chrome on iOS won't work.</p>
+                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Safari</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">Share button</span> (the box with an arrow pointing up), then tap <span className="text-white/70 font-bold">Add to Home Screen</span>. Must be Safari — Chrome on iOS won't work.</p>
                                 </div>
                                 <div className="bg-white/5 rounded-2xl px-4 py-3">
                                     <p className="text-[12px] font-black text-white mb-1">Android</p>
-                                    <p className="text-[11px] text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">three-dot menu</span>, then tap <span className="text-white/70 font-bold">Add to Home Screen</span> or <span className="text-white/70 font-bold">Install App</span>. A prompt may also appear automatically at the bottom of the screen.</p>
+                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">three-dot menu</span>, then tap <span className="text-white/70 font-bold">Add to Home Screen</span> or <span className="text-white/70 font-bold">Install App</span>. A prompt may also appear automatically at the bottom of the screen.</p>
                                 </div>
 
                             </div>
@@ -268,7 +268,7 @@ export default function OnboardingFlow() {
                             Got it — what's next?
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -292,7 +292,7 @@ export default function OnboardingFlow() {
                                 ].map((item, i, arr) => (
                                     <React.Fragment key={item.label}>
                                         <div className="flex-1 bg-white/5 rounded-xl px-3 py-2.5 text-center">
-                                            <p className="text-[11px] font-black text-white">{item.label}</p>
+                                            <p className="text-2xs font-black text-white">{item.label}</p>
                                             <p className="text-[9px] text-white/40 mt-0.5">{item.sub}</p>
                                         </div>
                                         {i < arr.length - 1 && (
@@ -307,33 +307,33 @@ export default function OnboardingFlow() {
                                     <span className="text-base mt-0.5">📍</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">GPS location</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Capture your exact location when you dig. The app converts it to an OS grid reference automatically — no typing needed.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Capture your exact location when you dig. The app converts it to an OS grid reference automatically — no typing needed.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">🔍</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Object details</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Log object type, period, material, weight, and dimensions. Coin finds have extra fields for denomination and ruler.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Log object type, period, material, weight, and dimensions. Coin finds have extra fields for denomination and ruler.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">📸</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Photos</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Attach in-situ and cleaned photos. The app can generate a PAS recording sheet from your photos and details with one tap.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Attach in-situ and cleaned photos. The app can generate a PAS recording sheet from your photos and details with one tap.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">⭐</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Favourites &amp; sharing</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Star your best finds to build a highlights gallery. Share any find as an image card directly from the find record.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Star your best finds to build a highlights gallery. Share any find as an image card directly from the find record.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <p className="text-[11px] text-white/30 leading-relaxed">
+                            <p className="text-2xs text-white/30 leading-relaxed">
                                 You don't have to follow the full workflow — finds can be recorded directly without a session. But linking everything up makes your records much more useful over time.
                             </p>
                         </div>
@@ -357,7 +357,7 @@ export default function OnboardingFlow() {
                             Create my first permission
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -382,7 +382,7 @@ export default function OnboardingFlow() {
                                     <div>
                                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Demo FieldGuide scan</p>
                                         <p className="mt-1 text-base font-black text-white">Settlement Edge Candidate</p>
-                                        <p className="mt-0.5 text-[11px] font-black uppercase tracking-widest text-amber-300">Strong Zone</p>
+                                        <p className="mt-0.5 text-2xs font-black uppercase tracking-widest text-amber-300">Strong Zone</p>
                                     </div>
                                     <span className="shrink-0 rounded-lg border border-emerald-400/30 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-200">
                                         {demoExpanded ? 'Hide' : 'Why'}
@@ -436,7 +436,7 @@ export default function OnboardingFlow() {
                             Try your first scan
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -458,21 +458,21 @@ export default function OnboardingFlow() {
                                     <span className="text-base mt-0.5">👤</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Your name</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Used as the default collector on every find and permission, and printed on your field reports.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Used as the default collector on every find and permission, and printed on your field reports.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">🔍</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Your detector</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Set your default detector model and it will be pre-filled on every find — no need to type it each time.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Set your default detector model and it will be pre-filled on every find — no need to type it each time.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">🪪</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">NCMD details</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Your membership number and insurance expiry — included on permission records as proof of cover for landowners.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Your membership number and insurance expiry — included on permission records as proof of cover for landowners.</p>
                                     </div>
                                 </div>
                             </div>
@@ -491,7 +491,7 @@ export default function OnboardingFlow() {
                             Open Settings
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -512,28 +512,28 @@ export default function OnboardingFlow() {
                                     <span className="text-base mt-0.5">👤</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Landowner details</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Store the landowner's name, phone, and address so you always have their contact details to hand in the field.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Store the landowner's name, phone, and address so you always have their contact details to hand in the field.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">✍️</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Signed agreement</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Generate an agreement right there in the field and have the landowner sign it on your screen. No paper needed — it's stored against the permission record instantly.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Generate an agreement right there in the field and have the landowner sign it on your screen. No paper needed — it's stored against the permission record instantly.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">🗺️</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Draw your boundary</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Mark the exact area you have permission to detect on a satellite map. Add sub-fields if the land is split into separate areas.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Mark the exact area you have permission to detect on a satellite map. Add sub-fields if the land is split into separate areas.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-2xl px-4 py-3">
                                     <span className="text-base mt-0.5">📊</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Coverage &amp; sessions</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Each visit is logged as a session. Over time you can see what ground you've covered and what's still undetected.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Each visit is logged as a session. Over time you can see what ground you've covered and what's still undetected.</p>
                                     </div>
                                 </div>
                             </div>
@@ -551,7 +551,7 @@ export default function OnboardingFlow() {
                             Create my first permission
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
@@ -568,45 +568,45 @@ export default function OnboardingFlow() {
                                 FindSpot supports organised club digs and rallies — both for members attending and organisers running the event.
                             </p>
 
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Attending a dig?</p>
+                            <p className="text-2xs font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Attending a dig?</p>
                             <div className="space-y-2 mb-5">
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">📷</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Scan the QR code</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">The organiser will share a QR code before or on the day. Tap the QR icon on the FindSpot home screen and scan it — the event permission loads automatically.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">The organiser will share a QR code before or on the day. Tap the QR icon on the FindSpot home screen and scan it — the event permission loads automatically.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">📍</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Record your finds</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Log finds as normal against the event permission. At the end of the day, export your session data and send it to the organiser — there's a button on the session card to do this.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Log finds as normal against the event permission. At the end of the day, export your session data and send it to the organiser — there's a button on the session card to do this.</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <p className="text-[11px] font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Organising a dig?</p>
+                            <p className="text-2xs font-black text-white/30 uppercase tracking-[0.15em] mb-2.5">Organising a dig?</p>
                             <div className="space-y-2 mb-4">
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">🏟️</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Tap Club Day / Rally</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">From the home screen tap the <span className="text-white/80 font-bold">Club Day / Rally</span> button, choose <span className="text-white/80 font-bold">Organise</span>, then either create a new event permission or select an existing one.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">From the home screen tap the <span className="text-white/80 font-bold">Club Day / Rally</span> button, choose <span className="text-white/80 font-bold">Organise</span>, then either create a new event permission or select an existing one.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">🔗</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Generate the QR code</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Follow the setup steps to create your Club Day Pack. This produces a QR code to share with members — they scan it to load the event into their own app instantly.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Follow the setup steps to create your Club Day Pack. This produces a QR code to share with members — they scan it to load the event into their own app instantly.</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3 bg-white/5 rounded-xl px-3.5 py-3">
                                     <span className="text-base shrink-0">📥</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Collect member data</p>
-                                        <p className="text-[11px] text-white/45 leading-snug">Members send you their session exports at the end of the day. Import each one from the permission screen to merge their finds into your record.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Members send you their session exports at the end of the day. Import each one from the permission screen to merge their finds into your record.</p>
                                     </div>
                                 </div>
                             </div>
@@ -619,7 +619,7 @@ export default function OnboardingFlow() {
                             Got it — take me to the app
                         </button>
 
-                        <button onClick={() => setStep('choose')} className="mt-5 text-[11px] text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
                             Back
                         </button>
                         {skipBtn}
