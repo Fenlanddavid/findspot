@@ -7,6 +7,7 @@ import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
 import { setSetting, getSetting } from "./services/data";
 import { ensureProtectionOnStartup } from "./services/storagePersistence";
 import { closeStaleActiveTracks } from "./services/tracking";
+import { healAimMeta } from "./services/offlinePack";
 import { UPDATE_NOTES } from "./version";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -105,6 +106,7 @@ function Shell() {
     });
     void ensureProtectionOnStartup();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
+    healAimMeta().catch(() => {}); // silently backfill AIM meta into pre-A packs
 
     // Track unique installation (one-time per device).
     // Flag lives in IndexedDB (durable) with a one-time migration from localStorage.

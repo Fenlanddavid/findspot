@@ -931,6 +931,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setSelectedUserFind(null);
         terrainScanCenterRef.current = null;
         terrainScanBoundsRef.current = null;
+        nhleDataRef.current = null;
+        aimDataRef.current = null;
         setSourceAvailability(null);
         setScanFromCache(false);
         setScanNoSignal(false);
@@ -1201,13 +1203,19 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         // so re-trigger geology for the current map centre.
         const center = mapRef.current.getCenter();
         runGeologyContextPhase({ lat: center.lat, lng: center.lng });
-        // Standalone: re-fetch NHLE/AIM, reuse any routes already loaded
+        // Standalone: re-fetch NHLE/AIM if not already available.
+        // Pass existing aimData ref rather than null so that a seconds-old amber
+        // result (e.g. from a scan where meta was offline) is reused instead of
+        // triggering a fresh 2 s timeout. Bbox affinity is guaranteed: clearScan()
+        // nulls aimDataRef, so a ref from a previous scan area cannot survive into
+        // a new standalone load. nhleData: null forces a fresh SM fetch (legal gate
+        // must stay current).
         await runHistoricPhase({
             terrainClusters,
             monumentPoints,
             routes:     historicRoutes,
             nhleData:   null,
-            aimData:    null,
+            aimData:    aimDataRef.current,
             scanCenter: terrainScanCenterRef.current,
         });
         setIntelDetailsOpen(false);

@@ -608,9 +608,25 @@ export async function buildPack(
     layers['sm'] = smCachedFromR2 || smCachedFromLive ? 'cached' : 'unavailable';
 
     // 5 — Cache AIM index shards for the bbox (same geohash cells as SM)
+    // Meta must be cached first: the runtime refuses to trust shards without a
+    // valid _meta.json sentinel (typeof schemaVersion === 'number'). Caching
+    // shards the reader would reject wastes quota and still leaves AIM amber.
     const aimCells = smCells;
     let aimOk = 0;
-    if (aimCells.length <= AIM_PACK_MAX_SHARDS) {
+    let aimMetaOk = false;
+    const aimMetaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    try {
+        const metaRes = await fetch(aimMetaUrl);
+        if (metaRes.ok) {
+            const meta = await metaRes.clone().json().catch(() => null);
+            if (meta && typeof meta.schemaVersion === 'number') {
+                await cache.put(aimMetaUrl, metaRes);
+                aimMetaOk = true;
+            }
+        }
+    } catch { /* aim meta unavailable */ }
+
+    if (aimMetaOk && aimCells.length <= AIM_PACK_MAX_SHARDS) {
         for (const cell of aimCells) {
             const url = `${FINDSPOT_STATIC_BASE_URL}/aim-index/${cell}.json`;
             try {
@@ -624,9 +640,9 @@ export async function buildPack(
                 }
             } catch { /* unavailable */ }
         }
-        layers['aim'] = aimOk === aimCells.length ? 'cached' : aimOk > 0 ? 'partial' : 'unavailable';
+        layers['aim'] = aimOk === aimCells.length ? 'cached'
+                      : aimOk > 0 ? 'partial' : 'unavailable';
     } else {
-        // Too many shards to cache inline — will fetch live on scan
         layers['aim'] = 'unavailable';
     }
 
@@ -701,4 +717,45 @@ async function _writeMeta(
 /** Is this pack older than PACK_STALE_MS? */
 export function isPackStale(meta: PackMeta): boolean {
     return Date.now() - new Date(meta.createdAt).getTime() > PACK_STALE_MS;
+}
+
+// ─── Fleet heal: backfill AIM meta into pre-A packs ──────────────────────────
+
+/**
+ * Startup one-shot: packs built before SPINE-CLOSEOUT-A (Jul 2026) do not
+ * contain aim-index/_meta.json. Without it, _fetchAIMFromR2 returns
+ * available:false, leaving all AIM enrichment amber on offline scans.
+ *
+ * If online and any pack exists, fetch the ~200-byte meta and store it in a
+ * shared heal cache. caches.match() searches all open caches, so this single
+ * entry is found by cachedFetchAny on the next scan without any pack rebuild.
+ *
+ * Runs silently at startup; any error is swallowed — the result is only a
+ * performance improvement (2 s timeout vs green AIM), never a data risk.
+ */
+const AIM_META_HEAL_CACHE = 'findspot-aim-meta-heal';
+
+export async function healAimMeta(): Promise<void> {
+    if (!navigator.onLine) return;
+    const packs = await listPacks();
+    if (packs.length === 0) return;
+
+    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    const alreadyCached = await caches.match(metaUrl).catch(() => null);
+    if (alreadyCached) return;
+
+    try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 5000);
+        try {
+            const res = await fetch(metaUrl, { signal: controller.signal });
+            if (!res.ok) return;
+            const meta = await res.clone().json().catch(() => null);
+            if (!meta || typeof meta.schemaVersion !== 'number') return;
+            const healCache = await caches.open(AIM_META_HEAL_CACHE);
+            await healCache.put(metaUrl, res);
+        } finally {
+            clearTimeout(timer);
+        }
+    } catch { /* silent — will retry on next launch */ }
 }
