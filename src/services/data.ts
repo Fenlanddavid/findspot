@@ -323,27 +323,6 @@ async function base64ToBlob(base64: string): Promise<Blob> {
 }
 
 /**
- * Checks if storage is already persistent
- */
-export async function isStoragePersistent() {
-  if (navigator.storage && navigator.storage.persisted) {
-    return await navigator.storage.persisted();
-  }
-  return false;
-}
-
-/**
- * Requests persistent storage from the browser
- */
-export async function requestPersistentStorage() {
-  if (navigator.storage && navigator.storage.persist) {
-    const isPersisted = await navigator.storage.persist();
-    return isPersisted;
-  }
-  return false;
-}
-
-/**
  * Gets a setting value
  */
 export async function getSetting<T>(key: string, defaultValue: T): Promise<T> {

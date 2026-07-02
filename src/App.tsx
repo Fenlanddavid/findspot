@@ -4,7 +4,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
 import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
-import { requestPersistentStorage, setSetting, getSetting } from "./services/data";
+import { setSetting, getSetting } from "./services/data";
+import { ensureProtectionOnStartup } from "./services/storagePersistence";
 import { closeStaleActiveTracks } from "./services/tracking";
 import { UPDATE_NOTES } from "./version";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -102,7 +103,7 @@ function Shell() {
       await ensureDefaultPermission(id);
       setProjectId(id);
     });
-    requestPersistentStorage();
+    void ensureProtectionOnStartup();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
 
     // Track unique installation (one-time per device).

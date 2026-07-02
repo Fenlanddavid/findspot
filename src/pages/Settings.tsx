@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  isStoragePersistent,
-  requestPersistentStorage,
+  getProtectionState,
+  requestProtection,
+  type StorageProtection,
+} from "../services/storagePersistence";
+import {
   getSetting,
   setSetting,
   exportData,
@@ -135,7 +138,7 @@ export default function Settings() {
     searchParams.get("section") === "terms" ||
     localStorage.getItem("fs_settings_tab") === "legal"
   ));
-  const [persistent, setPersistent] = useState<boolean | null>(null);
+  const [storageProtection, setStorageProtection] = useState<StorageProtection | null>(null);
   const [detectorist, setDetectorist] = useState("");
   const [recorderName, setRecorderName] = useState("");
   const [email, setEmail] = useState("");
@@ -150,7 +153,6 @@ export default function Settings() {
   const [selectedModel, setSelectedModel] = useState("");
   const [customModel, setCustomModel] = useState("");
   const [saved, setSaved] = useState(false);
-  const [persistenceMsg, setPersistenceMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [importPendingFile, setImportPendingFile] = useState<File | null>(null);
   const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
   const [restorePreviewError, setRestorePreviewError] = useState<string | null>(null);
@@ -171,7 +173,7 @@ export default function Settings() {
   const [geologyEnabled, setGeologyEnabled] = useState(true);
 
   useEffect(() => {
-    isStoragePersistent().then(setPersistent);
+    getProtectionState().then(setStorageProtection);
 
     // Fetch community install count — non-critical, abort after 5s
     const controller = new AbortController();
@@ -261,14 +263,8 @@ export default function Settings() {
   }
 
   async function handleRequestPersistence() {
-    const success = await requestPersistentStorage();
-    setPersistent(success);
-    setPersistenceMsg(
-      success
-        ? { ok: true, text: "Storage is now persistent. Your browser will prioritise keeping this data safe." }
-        : { ok: false, text: "Persistence could not be granted. This usually depends on browser settings or available disk space." }
-    );
-    setTimeout(() => setPersistenceMsg(null), 5000);
+    const state = await requestProtection();
+    setStorageProtection(state);
   }
 
   async function toggleTheme() {
@@ -915,33 +911,30 @@ export default function Settings() {
           </h2>
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
-              <div>
-                <h3 className="font-bold text-gray-800 dark:text-gray-100">Storage Persistence</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {persistent 
-                    ? "Your browser has granted persistent storage. Data will not be deleted unless you clear it manually."
-                    : "Storage is currently 'best-effort'. The browser might delete it if the device runs low on space."}
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-800 dark:text-gray-100">Storage protection</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {storageProtection === "protected"
+                    ? "Storage protected. The browser has committed to keeping FindSpot's data through storage cleanup."
+                    : storageProtection === "best_effort"
+                    ? "Best-effort storage. In rare cases the browser can clear local data to free space. Regular backups are your safety net."
+                    : "Protection status unavailable on this browser. Regular backups are your safety net."}
                 </p>
               </div>
-              <div className="flex flex-col items-end gap-2">
-                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${persistent ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                  {persistent ? "Persistent" : "Standard"}
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${storageProtection === "protected" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                  {storageProtection === "protected" ? "Protected" : storageProtection === "best_effort" ? "Best effort" : "Unknown"}
                 </span>
-                {!persistent && (
+                {storageProtection === "best_effort" && (
                   <button
                     onClick={handleRequestPersistence}
                     className="text-xs font-bold text-emerald-600 hover:underline"
                   >
-                    Request Persistence
+                    Enable protection
                   </button>
                 )}
               </div>
             </div>
-            {persistenceMsg && (
-              <div className={`px-4 py-3 rounded-xl text-sm font-medium ${persistenceMsg.ok ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300" : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"}`}>
-                {persistenceMsg.text}
-              </div>
-            )}
 
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
               <div>
