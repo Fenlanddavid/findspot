@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Find, Media, Permission, SignificantFind } from "../db";
+import { db, Find, Media, Permission, SignificantFind, UndugSignal } from "../db";
 import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
 import SignificantFindCard from "../components/significant/SignificantFindCard";
 import SignificantFindDetailSheet from "../components/significant/SignificantFindDetailSheet";
+import { UndugSignalDetailSheet } from "../components/UndugSignalLog";
 
 type FindsFilter = "all" | "top" | "pending";
 
@@ -39,6 +40,14 @@ function formatFindDate(find: Find) {
   }
 }
 
+function formatSignalDate(epochMs: number) {
+  try {
+    return new Date(epochMs).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return "Undated";
+  }
+}
+
 function getFilter(value: string | null): FindsFilter {
   return value === "top" || value === "pending" ? value : "all";
 }
@@ -57,19 +66,32 @@ function searchText(find: Find, permission?: Permission) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+function signalSummary(signal: UndugSignal) {
+  const parts: string[] = [];
+  if (signal.vdi) parts.push(`VDI ${signal.vdi}`);
+  if (signal.direction) parts.push(signal.direction === "one-way" ? "One-way" : "Two-way");
+  if (signal.stability) parts.push(signal.stability.charAt(0).toUpperCase() + signal.stability.slice(1));
+  if (signal.conditions) parts.push(signal.conditions.charAt(0).toUpperCase() + signal.conditions.slice(1));
+  return parts.join(" · ") || "Signal logged";
+}
+
 export default function FindsBox(props: { projectId: string }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [openSfId, setOpenSfId] = useState<string | null>(null);
+  const [openSignalId, setOpenSignalId] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const mainTab: "finds" | "significant" = searchParams.get("tab") === "significant" ? "significant" : "finds";
+  const tabParam = searchParams.get("tab");
+  const mainTab: "finds" | "significant" | "signals" =
+    tabParam === "significant" || tabParam === "signals" ? tabParam : "finds";
 
-  function setMainTab(tab: "finds" | "significant") {
+  function setMainTab(tab: "finds" | "significant" | "signals") {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (tab === "significant") next.set("tab", "significant");
+      else if (tab === "signals") next.set("tab", "signals");
       else next.delete("tab");
       return next;
     }, { replace: true });
@@ -100,6 +122,26 @@ export default function FindsBox(props: { projectId: string }) {
     async () => {
       const rows = await db.significantFinds.where("projectId").equals(props.projectId).toArray();
       return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    [props.projectId]
+  );
+
+  const undugSignals = useLiveQuery<UndugSignal[]>(
+    async () => {
+      const [rows, projectPermissions, projectSessions] = await Promise.all([
+        db.undugSignals.where("status").equals("open").toArray(),
+        db.permissions.where("projectId").equals(props.projectId).toArray(),
+        db.sessions.where("projectId").equals(props.projectId).toArray(),
+      ]);
+      const permissionIds = new Set(projectPermissions.map(p => p.id));
+      const sessionIds = new Set(projectSessions.map(s => s.id));
+      return rows
+        .filter(signal => {
+          if (signal.permissionId) return permissionIds.has(signal.permissionId);
+          if (signal.sessionId) return sessionIds.has(signal.sessionId);
+          return true;
+        })
+        .sort((a, b) => b.createdAt - a.createdAt);
     },
     [props.projectId]
   );
@@ -216,11 +258,22 @@ export default function FindsBox(props: { projectId: string }) {
     navigate(`/finds?${next.toString()}`);
   }
 
+  function convertSignalToFind(signal: UndugSignal) {
+    const params = new URLSearchParams();
+    params.set("sourceSignalId", signal.id);
+    if (signal.permissionId) params.set("permissionId", signal.permissionId);
+    if (signal.sessionId) params.set("sessionId", signal.sessionId);
+    if (signal.lat != null) params.set("lat", String(signal.lat));
+    if (signal.lng != null) params.set("lon", String(signal.lng));
+    navigate(`/find?${params.toString()}`);
+  }
+
   const isLoading = finds === undefined || permissions === undefined;
   const hasAnyFinds = (stats?.total ?? 0) > 0;
   const noMatches = !isLoading && hasAnyFinds && (filteredFinds?.length ?? 0) === 0;
   const emptyMain = !isLoading && !hasAnyFinds;
   const hasFilters = !!searchQuery || activeFilter !== "all" || !!filterPeriod || !!filterMaterial || !!filterType;
+  const openSignal = openSignalId ? undugSignals?.find(signal => signal.id === openSignalId) ?? null : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24">
@@ -228,7 +281,7 @@ export default function FindsBox(props: { projectId: string }) {
         <div>
           <h1 className="m-0 text-3xl font-black tracking-tight text-gray-950 dark:text-gray-50">Finds</h1>
 
-          <div className="mt-3 flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
+          <div className="mt-3 flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
             <button
               type="button"
               onClick={() => setMainTab("finds")}
@@ -253,6 +306,22 @@ export default function FindsBox(props: { projectId: string }) {
               {(significantFinds?.length ?? 0) > 0 && (
                 <span className="rounded-full bg-red-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center leading-none">
                   {significantFinds!.length}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMainTab("signals")}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${
+                mainTab === "signals"
+                  ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                  : "text-gray-500 dark:text-gray-400"
+              }`}
+            >
+              Un-dug
+              {(undugSignals?.length ?? 0) > 0 && (
+                <span className="rounded-full bg-emerald-600 text-white text-3xs font-black min-w-4 h-4 px-1 flex items-center justify-center leading-none">
+                  {undugSignals!.length}
                 </span>
               )}
             </button>
@@ -340,6 +409,82 @@ export default function FindsBox(props: { projectId: string }) {
               onOpen={() => setOpenSfId(sf.id)}
             />
           ))}
+        </div>
+      )}
+
+      {mainTab === "signals" && (
+        <div className="mt-6 flex flex-col gap-3">
+          {!undugSignals && (
+            <div className="flex flex-col gap-3">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 animate-pulse">
+                  <div className="h-4 w-1/3 rounded bg-gray-100 dark:bg-gray-700 mb-2" />
+                  <div className="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-700" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {undugSignals && undugSignals.length === 0 && (
+            <div className="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-5 py-8 text-center dark:border-gray-700 dark:bg-gray-800/40">
+              <h2 className="mb-2 text-lg font-black text-gray-900 dark:text-gray-100">No un-dug signals</h2>
+              <p className="mx-auto max-w-sm text-sm text-gray-500 dark:text-gray-400">
+                Signals you log without digging will appear here until they are resolved or dismissed.
+              </p>
+            </div>
+          )}
+
+          {undugSignals?.map(signal => {
+            const permission = signal.permissionId ? permissionMap.get(signal.permissionId) : undefined;
+            const metadata = [
+              permission?.name || "No permission linked",
+              formatSignalDate(signal.createdAt),
+              signal.gpsAccuracy != null ? `GPS +/-${Math.round(signal.gpsAccuracy)}m` : null,
+            ].filter(Boolean);
+            return (
+              <button
+                key={signal.id}
+                type="button"
+                onClick={() => setOpenSignalId(signal.id)}
+                className="group w-full rounded-2xl border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:hover:border-emerald-800"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M10 2.25c-2.42 0-4.4 1.9-4.4 4.25 0 3.15 3.35 6.35 4.05 6.98.2.18.5.18.7 0 .7-.63 4.05-3.83 4.05-6.98 0-2.35-1.98-4.25-4.4-4.25Z" stroke="currentColor" strokeWidth="1.6" />
+                      <circle cx="10" cy="6.6" r="1.35" fill="currentColor" />
+                      <path d="M5.1 14.5c1.22.78 2.9 1.25 4.9 1.25s3.68-.47 4.9-1.25M7.65 12.85c.68.26 1.48.4 2.35.4s1.67-.14 2.35-.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="m-0 text-sm font-black text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-gray-100 dark:group-hover:text-emerald-400">
+                        {signalSummary(signal)}
+                      </h2>
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                        Open
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                      {metadata.map(item => (
+                        <span key={item} className="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-900/40">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                    {signal.notes && (
+                      <p className="mt-2 line-clamp-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {signal.notes}
+                      </p>
+                    )}
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 12 12" fill="none" aria-hidden="true" className="mt-3 shrink-0 text-gray-300 transition-colors group-hover:text-emerald-500 dark:text-gray-600">
+                    <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -531,6 +676,17 @@ export default function FindsBox(props: { projectId: string }) {
 
       {openSfId && (
         <SignificantFindDetailSheet sfId={openSfId} onClose={() => setOpenSfId(null)} />
+      )}
+
+      {openSignal && (
+        <UndugSignalDetailSheet
+          signal={openSignal}
+          onClose={() => setOpenSignalId(null)}
+          onConvertToFind={(signal) => {
+            setOpenSignalId(null);
+            convertSignalToFind(signal);
+          }}
+        />
       )}
     </div>
   );
