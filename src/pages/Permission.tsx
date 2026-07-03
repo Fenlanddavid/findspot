@@ -798,6 +798,16 @@ export default function PermissionPage(props: {
     nav(`/find?${params.toString()}`);
   }
 
+  function handleConvertSignalToFind(signal: import("../db").UndugSignal) {
+    if (!id) return;
+    const params = new URLSearchParams();
+    params.set("permissionId", id);
+    params.set("sourceSignalId", signal.id);
+    if (signal.lat != null) params.set("lat", String(signal.lat));
+    if (signal.lng != null) params.set("lon", String(signal.lng));
+    nav(`/find?${params.toString()}`);
+  }
+
   const currentPermission: Permission | null = id ? {
     id, projectId: props.projectId, name, type, lat, lon, gpsAccuracyM: acc, collector,
     landownerName, landownerPhone, landownerEmail, landownerAddress,
@@ -994,7 +1004,7 @@ export default function PermissionPage(props: {
             </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
             {!isEditing && isClubDayMember && (
                 <div className="lg:col-span-3">
                     <div className="bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-2xl p-5 sm:p-6 shadow-sm">
@@ -1600,6 +1610,7 @@ export default function PermissionPage(props: {
                 onKeepClubDayAsPersonalRecord={handleKeepClubDayAsPersonalRecord}
                 onShowExportClubDay={() => setShowExportClubDay(true)}
                 confirmAction={confirmAction}
+                onConvertSignalToFind={handleConvertSignalToFind}
             />
             </React.Fragment>
             )}

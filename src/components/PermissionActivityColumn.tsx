@@ -1,8 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../db";
-import type { Find, Media } from "../db";
+import type { Find, Media, UndugSignal } from "../db";
 import { ScaledImage } from "./ScaledImage";
+import { UndugSignalLogSection } from "./UndugSignalLog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ interface ActivityColumnProps {
     onKeepClubDayAsPersonalRecord:  () => void;
     onShowExportClubDay:            () => void;
     confirmAction:                  (opts: ConfirmOptions) => Promise<boolean>;
+    onConvertSignalToFind?:         (signal: UndugSignal) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ export function PermissionActivityColumn({
     onKeepClubDayAsPersonalRecord,
     onShowExportClubDay,
     confirmAction,
+    onConvertSignalToFind,
 }: ActivityColumnProps) {
     const nav = useNavigate();
 
@@ -398,6 +401,12 @@ export function PermissionActivityColumn({
             )}
         </div>
             )}
+
+            {/* Signal log — open un-dug signals for this permission */}
+            <UndugSignalLogSection
+                permissionId={permissionId}
+                onConvertToFind={onConvertSignalToFind}
+            />
         </div>
     );
 }

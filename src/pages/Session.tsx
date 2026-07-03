@@ -16,6 +16,7 @@ import { Modal } from "../components/Modal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
+import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { LandownerUpdateCard } from "../components/LandownerUpdateCard";
 import { shareElementAsImage } from "../services/share";
@@ -46,6 +47,7 @@ function SessionSummary({
   isSharingLandowner,
   landownerShareError,
   onExportClubDay,
+  openSignalCount,
 }: {
   coverage: number,
   findsCount: number,
@@ -63,6 +65,7 @@ function SessionSummary({
   isSharingLandowner: boolean,
   landownerShareError: string | null,
   onExportClubDay: () => void,
+  openSignalCount: number,
 }) {
   // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
   let fourthStat: { label: string; value: string } | null = null;
@@ -126,6 +129,19 @@ function SessionSummary({
                   <p className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Next move</p>
                   <p className="text-sm font-black text-gray-800 dark:text-gray-100 mb-1">{outcomeResult.nextMove.action}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{outcomeResult.nextMove.reason}</p>
+                </div>
+              )}
+
+              {openSignalCount > 0 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="text-sky-500 shrink-0">
+                    <circle cx="8" cy="12" r="1.5" fill="currentColor" />
+                    <path d="M4.5 8.5 A5 5 0 0 1 11.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    <path d="M1.5 5.5 A9 9 0 0 1 14.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    {openSignalCount} {openSignalCount === 1 ? 'signal' : 'signals'} left for revisit
+                  </span>
                 </div>
               )}
 
@@ -260,6 +276,7 @@ export default function SessionPage(props: {
   const [sessionCoachActive, setSessionCoachActive] = useState(false);
   const [sessionCoachStep, setSessionCoachStep] = useState(0);
   const [showFieldNotes, setShowFieldNotes] = useState(false);
+  const [showSignalSheet, setShowSignalSheet] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const [showTrimUI, setShowTrimUI] = useState(false);
@@ -268,7 +285,7 @@ export default function SessionPage(props: {
   const [trimming, setTrimming] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [showExportClubDay, setShowExportClubDay] = useState(false);
-  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null, outcomeResult: SessionOutcomeResult | null }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null, outcomeResult: null });
+  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null, outcomeResult: SessionOutcomeResult | null, openSignalCount: number }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null, outcomeResult: null, openSignalCount: 0 });
   const [showFieldReport, setShowFieldReport] = useState(false);
   const [showLandownerReport, setShowLandownerReport] = useState(false);
   const [landownerReportForField, setLandownerReportForField] = useState(false);
@@ -954,12 +971,17 @@ export default function SessionPage(props: {
 
     const outcomeResult = computeSessionOutcomeResult(count, finalCoverage, durationMins, findPoints, prevSessionSummaries);
 
+    const openSignalCount = sessionId
+        ? await db.undugSignals.where('sessionId').equals(sessionId).filter(s => s.status === 'open').count()
+        : 0;
+
     setSummaryData({
         coverage: finalCoverage,
         findsCount: count,
         durationMins,
         totalTime: durationStr,
         outcomeResult,
+        openSignalCount,
     });
     setLandownerShareError(null);
     
@@ -1140,8 +1162,8 @@ export default function SessionPage(props: {
             </div>
         )}
 
-        <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
+            <div className="lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
                 {!isEditing && (
                   <div className="flex flex-col gap-6">
                     {isActiveSessionMode ? (
@@ -1159,7 +1181,7 @@ export default function SessionPage(props: {
                                     </span>
                                     <span className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Started {new Date(date + ':00Z').toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                                   </div>
-                                  <h3 className="m-0 truncate text-3xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
+                                  <h3 className="m-0 truncate text-2xl min-[420px]:text-3xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
                                     {selectedField?.name || permission?.name || "Active Session"}
                                   </h3>
                                   {selectedField && (
@@ -1235,6 +1257,13 @@ export default function SessionPage(props: {
                             className="flex min-h-[5.5rem] w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-center text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
                           >
                             <span className="text-xl font-black">Add Find</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowSignalSheet(true)}
+                            className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-100 active:scale-[0.99] dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-300 dark:hover:border-emerald-700"
+                          >
+                            Un-dug Signal
                           </button>
                           <button
                             type="button"
@@ -1777,6 +1806,7 @@ export default function SessionPage(props: {
           isSharingLandowner={isSharingLandowner}
           landownerShareError={landownerShareError}
           onExportClubDay={() => { setShowSummary(false); setShowExportClubDay(true); }}
+          openSignalCount={summaryData.openSignalCount}
         />
       )}
       {showFieldReport && (
@@ -1806,6 +1836,14 @@ export default function SessionPage(props: {
           field={selectedField}
           readOnly={!!permission?.isClubDayMember}
           onClose={() => setShowFieldNotes(false)}
+        />
+      )}
+      {showSignalSheet && (
+        <UndugSignalSheet
+          sessionId={sessionId}
+          permissionId={permission?.id ?? permissionId}
+          onSaved={() => setShowSignalSheet(false)}
+          onClose={() => setShowSignalSheet(false)}
         />
       )}
       <TrackingOverlay

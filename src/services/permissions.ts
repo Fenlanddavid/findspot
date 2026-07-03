@@ -10,6 +10,7 @@ export type EnrichedPermission = Permission & {
   sessionCount: number;
   lastSessionDate: string | null;
   findCount: number;
+  openSignalCount: number;
 };
 
 /**
@@ -25,11 +26,21 @@ export async function enrichPermissions(
 
   const permissionIds = rows.map(p => p.id);
 
-  const [allFields, allSessions, allFinds] = await Promise.all([
+  const [allFields, allSessions, allFinds, allOpenSignals] = await Promise.all([
     db.fields.where("permissionId").anyOf(permissionIds).toArray(),
     db.sessions.where("permissionId").anyOf(permissionIds).toArray(),
     db.finds.where("permissionId").anyOf(permissionIds).toArray(),
+    db.undugSignals.where("status").equals("open").toArray(),
   ]);
+
+  // Count open signals per permission (filter in memory — single query for all)
+  const openSignalCountByPermission = new Map<string, number>();
+  const permIdSet = new Set(permissionIds);
+  for (const s of allOpenSignals) {
+    if (s.permissionId && permIdSet.has(s.permissionId)) {
+      openSignalCountByPermission.set(s.permissionId, (openSignalCountByPermission.get(s.permissionId) ?? 0) + 1);
+    }
+  }
 
   const allSessionIds = allSessions.map(s => s.id);
   const allTracks = allSessionIds.length > 0
@@ -156,7 +167,8 @@ export async function enrichPermissions(
       tracks: permissionTracks,
       sessionCount: sessions.length,
       lastSessionDate,
-      findCount
+      findCount,
+      openSignalCount: openSignalCountByPermission.get(p.id) ?? 0,
     };
   });
 }

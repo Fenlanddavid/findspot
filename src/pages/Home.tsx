@@ -10,10 +10,21 @@ import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { getPackMeta, isPackStale } from "../services/offlinePack";
+import { UndugSignalSheet } from "../components/UndugSignalSheet";
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
 );
+
+function SignalMarkerIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10 2.25c-2.42 0-4.4 1.9-4.4 4.25 0 3.15 3.35 6.35 4.05 6.98.2.18.5.18.7 0 .7-.63 4.05-3.83 4.05-6.98 0-2.35-1.98-4.25-4.4-4.25Z" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="10" cy="6.6" r="1.35" fill="currentColor" />
+      <path d="M5.1 14.5c1.22.78 2.9 1.25 4.9 1.25s3.68-.47 4.9-1.25M7.65 12.85c.68.26 1.48.4 2.35.4s1.67-.14 2.35-.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 const CLUB_RALLY_HOME_CARD_DISMISSED_KEY = "fs_club_rally_home_card_dismissed";
 
@@ -57,6 +68,13 @@ export default function Home(props: {
     } catch { return new Set(); }
   });
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
+  const [showHomeSignalSheet, setShowHomeSignalSheet] = useState(false);
+  const [homeSignalToast, setHomeSignalToast] = useState<{ openCount: number } | null>(null);
+  const homeSignalToastTimerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => { if (homeSignalToastTimerRef.current !== null) window.clearTimeout(homeSignalToastTimerRef.current); };
+  }, []);
   const [dismissedNextMoves, setDismissedNextMoves] = useState<Record<string, number>>(() => {
     try {
       const stored = localStorage.getItem('fs_nextmove_dismissed');
@@ -480,6 +498,31 @@ export default function Home(props: {
 
   return (
     <div className="grid gap-5 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
+      {showHomeSignalSheet && activeSession && (
+        <UndugSignalSheet
+          sessionId={activeSession.id}
+          permissionId={activeSession.permissionId}
+          onSaved={(_id, openCount) => {
+            setShowHomeSignalSheet(false);
+            setHomeSignalToast({ openCount });
+            if (homeSignalToastTimerRef.current !== null) window.clearTimeout(homeSignalToastTimerRef.current);
+            homeSignalToastTimerRef.current = window.setTimeout(() => setHomeSignalToast(null), 4000);
+          }}
+          onClose={() => setShowHomeSignalSheet(false)}
+        />
+      )}
+      {homeSignalToast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[120] bg-gray-950/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2 border border-emerald-500/30 animate-in slide-in-from-top-2">
+          <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-300">
+            <SignalMarkerIcon className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-xs text-emerald-100">
+            {homeSignalToast.openCount > 0
+              ? `Signal logged · ${homeSignalToast.openCount} open on this permission`
+              : 'Signal logged'}
+          </span>
+        </div>
+      )}
       <button
         onClick={() => setPrivacyExpanded(v => !v)}
         className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
@@ -570,12 +613,22 @@ export default function Home(props: {
           </div>
           <div className="flex shrink-0 flex-col sm:flex-row gap-2">
             {nextMove.type === 'active_session' && activeSession && (
-              <button
-                onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}&mode=quick${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
-                className="min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
-              >
-                Quick Find
-              </button>
+              <>
+                <button
+                  onClick={() => setShowHomeSignalSheet(true)}
+                  className="min-h-11 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm"
+                  title="Log a signal you chose not to dig"
+                >
+                  <SignalMarkerIcon className="w-3.5 h-3.5 shrink-0" />
+                  Log Signal
+                </button>
+                <button
+                  onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}&mode=quick${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
+                  className="min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
+                >
+                  Quick Find
+                </button>
+              </>
             )}
             <button
               onClick={nextMove.action}

@@ -619,6 +619,7 @@ function FindRouter({ projectId, onSignificantFind }: { projectId: string; onSig
   const lon = params.get("lon");
   const manual = params.get("manual") === "true";
   const mode = params.get("mode");
+  const sourceSignalId = params.get("sourceSignalId");
   return <FindPage
     projectId={projectId}
     permissionId={permissionId ?? null}
@@ -629,6 +630,7 @@ function FindRouter({ projectId, onSignificantFind }: { projectId: string; onSig
     initialLon={lon ? parseFloat(lon) : null}
     initialMode={mode === "quick" || mode === "full" ? mode : null}
     manual={manual}
+    sourceSignalId={sourceSignalId ?? null}
     onSignificantFind={onSignificantFind}
   />;
 }

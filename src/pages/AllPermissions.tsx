@@ -178,6 +178,16 @@ export default function AllPermissions(props: { projectId: string }) {
                 </div>
 
                 <div className="grid gap-2 mb-4 flex-1">
+                  {l.openSignalCount > 0 && (
+                    <div className="flex items-center gap-1.5 text-2xs text-sky-500 dark:text-sky-400 font-semibold">
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <circle cx="8" cy="12" r="1.5" fill="currentColor" />
+                        <path d="M4.5 8.5 A5 5 0 0 1 11.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        <path d="M1.5 5.5 A9 9 0 0 1 14.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                      {l.openSignalCount} {l.openSignalCount === 1 ? 'signal' : 'signals'} to revisit
+                    </div>
+                  )}
                   {l.landownerName && (
                     <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">
                       {l.landownerName}

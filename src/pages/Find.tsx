@@ -156,6 +156,7 @@ export default function FindPage(props: {
   initialLon?: number | null;
   initialMode?: "quick" | "full" | null;
   manual?: boolean;
+  sourceSignalId?: string | null;
   onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
 }) {
   const navigate = useNavigate();
@@ -554,12 +555,22 @@ export default function FindPage(props: {
         isPending: false,
         foundAt,
         updatedAt: now,
+        sourceSignalId: props.sourceSignalId ?? undefined,
       };
 
       if (props.quickId || isEditMode) {
         await db.finds.update(id, s);
       } else {
         await db.finds.add({ ...s, createdAt: now });
+      }
+
+      // If this find originated from an un-dug signal, close the signal with bidirectional link
+      if (props.sourceSignalId) {
+        await db.undugSignals.update(props.sourceSignalId, {
+          status: 'dug-find',
+          resolvedAt: Date.now(),
+          resolvedFindId: id,
+        }).catch(() => {}); // non-critical — find is saved regardless
       }
 
       setSetting("lastPeriod", form.period);

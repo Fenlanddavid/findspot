@@ -305,6 +305,9 @@ export type Find = {
   recorderId?: string;
   recorderName?: string;
 
+  // Undug signal link — set when this find was created from the dug-find resolution flow
+  sourceSignalId?: string;
+
   createdAt: string;
   updatedAt: string;
 };
@@ -451,6 +454,38 @@ export type LandscapeInterpretationRecord = {
     interpretation: any;    // LandscapeInterpretation
 };
 
+// ─── Undug Signals ────────────────────────────────────────────────────────────
+// One-tap logging of detector signals the user chose not to dig.
+// Local-first, Dexie-only — no network dependency.
+// Seed data for the future on-device yield engine.
+
+export type UndugSignalStatus = 'open' | 'dug-find' | 'dug-nothing' | 'dismissed';
+
+export type UndugSignalDirection = 'one-way' | 'two-way';
+export type UndugSignalStability = 'repeatable' | 'inconsistent' | 'broken';
+export type UndugSignalConditions = 'dry' | 'wet' | 'ploughed';
+export type UndugSignalDugNothingCause = 'iron' | 'ground-noise' | 'could-not-locate' | 'other';
+
+export type UndugSignal = {
+  id: string;
+  createdAt: number;          // epoch ms
+  lat: number;
+  lng: number;
+  gpsAccuracy?: number;       // metres, from position if available
+  sessionId?: string;         // link to active session if one exists
+  permissionId?: string;      // resolved from active session/permission context
+  direction?: UndugSignalDirection;
+  stability?: UndugSignalStability;
+  vdi?: string;               // free text/number — detector-agnostic
+  depthEstimate?: string;     // free text ("6-8in") — don't over-structure
+  conditions?: UndugSignalConditions;
+  notes?: string;
+  status: UndugSignalStatus;  // defaults 'open'
+  resolvedAt?: number;
+  resolvedFindId?: string;    // set when converted to a find (dug-find path)
+  dugNothingCause?: UndugSignalDugNothingCause;
+};
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -468,6 +503,7 @@ export class FindSpotDB extends Dexie {
   findHotspotSignals!: Table<FindHotspotSignal, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
+  undugSignals!: Table<UndugSignal, string>;
 
   constructor() {
     super("findspot_uk");
@@ -688,6 +724,16 @@ export class FindSpotDB extends Dexie {
     // Privacy: never transmitted; user-exportable from Settings.
     this.version(32).stores({
       diagnosticLog: 'id, ts, level, scope',
+    });
+
+    // v33: undug signals table.
+    // One-tap logging of detector signals the user chose not to dig.
+    // Additive — no user data migration. Existing records untouched.
+    // Compound index [permissionId+status] supports the permission-scoped
+    // revisit list query. sourceSignalId on finds is a TypeScript-only
+    // additive field — no index change needed there.
+    this.version(33).stores({
+      undugSignals: 'id, [permissionId+status], sessionId, status, createdAt',
     });
   }
 }

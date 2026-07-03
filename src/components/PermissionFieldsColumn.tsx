@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { area as turfArea } from "@turf/turf";
+import { useLiveQuery } from "dexie-react-hooks";
 import { db, GeoJSONPolygon, Field } from "../db";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import {
@@ -171,6 +172,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const mapDivRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const fieldLabelMarkersRef = useRef<Array<{ id: string; marker: maplibregl.Marker; el: HTMLButtonElement }>>([]);
+    const signalMarkersRef = useRef<maplibregl.Marker[]>([]);
     const fieldRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const fieldScrollRef = useRef<HTMLDivElement | null>(null);
     const agreementUploadRef = useRef<HTMLInputElement | null>(null);
@@ -474,6 +476,42 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
         if (m && m.isStyleLoaded()) applyBasemap(m, mapStyle);
     }, [mapStyle]);
 
+    // Open un-dug signals for this permission — live query so markers update on resolve/dismiss
+    const openSignals = useLiveQuery(
+        () => permissionId
+            ? db.undugSignals.where('[permissionId+status]').equals([permissionId, 'open']).toArray()
+            : Promise.resolve([] as import('../db').UndugSignal[]),
+        [permissionId],
+    );
+
+    // Signal markers effect — hollow circle dots, muted sky tone, distinct from find pins
+    // Runs after the map init effect (same dep set + openSignals) so mapRef.current is available
+    useEffect(() => {
+        signalMarkersRef.current.forEach(m => m.remove());
+        signalMarkersRef.current = [];
+
+        const map = mapRef.current;
+        if (!map || !openSignals) return;
+
+        openSignals.forEach(signal => {
+            if (signal.lat == null || signal.lng == null) return;
+            const el = document.createElement('div');
+            el.style.cssText = 'width:14px;height:14px;display:flex;align-items:center;justify-content:center;';
+            el.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="5" stroke="#7dd3fc" stroke-width="1.5" fill="none" opacity="0.9"/><circle cx="7" cy="7" r="2" fill="#7dd3fc" opacity="0.5"/></svg>';
+            el.title = 'Un-dug signal';
+            const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+                .setLngLat([signal.lng, signal.lat])
+                .addTo(map);
+            signalMarkersRef.current.push(marker);
+        });
+
+        return () => {
+            signalMarkersRef.current.forEach(m => m.remove());
+            signalMarkersRef.current = [];
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openSignals, boundary, fields, permissionId, isEditing]);
+
     // MapLibre needs an explicit resize after CSS expands or collapses its container.
     useEffect(() => {
         const map = mapRef.current;
@@ -540,7 +578,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     }, [selectedFieldId]);
 
     return (
-        <div className={`lg:col-span-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
+        <div className={`lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
             {isEditing ? (
               <>
                 <div className="flex items-center gap-3">
@@ -937,12 +975,12 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                 </div>
               </>
             ) : (
-              <div className="grid gap-8">
+                <div className="grid gap-8 min-w-0">
                 <div className="grid gap-3">
                     {/* Row 1 — type badge left, finds count right (always same line) */}
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
                         {/* Type badge with optional no-permission dot to its left */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                             {!permissionGranted && !isRally && (
                                 <div className="relative flex items-center">
                                     <button
@@ -963,7 +1001,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                     )}
                                 </div>
                             )}
-                            <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${type === 'rally' ? 'bg-teal-100 text-teal-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            <span className={`min-w-0 truncate text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded ${type === 'rally' ? 'bg-teal-100 text-teal-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                 {type === 'rally' ? 'Club/Rally Dig' : 'Individual Permission'}
                             </span>
                         </div>
@@ -974,7 +1012,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     </div>
 
                     {/* Row 2 — permission name */}
-                    <h3 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words">{name}</h3>
+                    <h3 className="min-w-0 max-w-full whitespace-normal text-xl min-[420px]:text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words leading-tight">{name}</h3>
 
                     {/* Club Day member banners */}
                     {isClubDayMember && (
@@ -1043,7 +1081,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     )}
 
                     {/* Row 3 — action buttons */}
-                    <div className="flex flex-wrap gap-2 items-center">
+                    <div className="grid grid-cols-1 gap-2 min-w-0 min-[420px]:flex min-[420px]:flex-wrap min-[420px]:items-center">
                         {canUseAgreement && (
                           <input
                             ref={agreementUploadRef}
@@ -1056,35 +1094,35 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {permissionNeedsCompletion && (
                             <button
                                 onClick={onCompletePermission}
-                                className="text-2xs font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
+                                className="min-w-0 justify-center text-2xs font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all inline-flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
                             >
-                                Complete Permission
+                                <span className="truncate">Complete Permission</span>
                             </button>
                         )}
                         {lat != null && lon != null && (
                             <button
                                 onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
-                                className="text-2xs font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all flex items-center gap-1.5 shadow-sm"
+                                className="min-w-0 justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all inline-flex items-center gap-1.5 shadow-sm"
                             >
-                                FieldGuide
+                                <span className="truncate">FieldGuide</span>
                             </button>
                         )}
                         {canUseAgreement && (
                         <button
                             type="button"
                             onClick={() => onOpenAgreement()}
-                            className="text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all flex items-center gap-1.5 shadow-sm"
+                            className="min-w-0 max-w-full justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all inline-flex items-center gap-1.5 shadow-sm"
                         >
-                            {generateAgreementLabel}
+                            <span className="truncate">{generateAgreementLabel}</span>
                         </button>
                         )}
                         {canUseAgreement && (
                           <button
                             type="button"
                             onClick={() => agreementUploadRef.current?.click()}
-                            className="text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all flex items-center gap-1.5 shadow-sm"
+                            className="min-w-0 max-w-full justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all inline-flex items-center gap-1.5 shadow-sm"
                           >
-                            {uploadAgreementLabel}
+                            <span className="truncate">{uploadAgreementLabel}</span>
                           </button>
                         )}
                     </div>
@@ -1157,22 +1195,26 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                 <p className="text-sm opacity-40 italic">Coordinates not set</p>
                             )}
                         </div>
-                        <div className="relative">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Default Detectorist</h4>
-                            <p className="font-bold text-gray-700 dark:text-gray-300">{collector || "Not set"}</p>
+                        <div>
+                            <div className="flex items-end justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Default Detectorist</h4>
+                                    <p className="font-bold text-gray-700 dark:text-gray-300 truncate">{collector || "Not set"}</p>
+                                </div>
+                                {!isRally && (
+                                <button
+                                    onClick={() => onOpenProof()}
+                                    className="shrink-0 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border-2 border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100 transition-all flex items-center gap-1 shadow-sm"
+                                >
+                                    Proof
+                                </button>
+                                )}
+                            </div>
                             {(ncmdNumber || ncmdExpiry) && (
                                 <div className="mt-1 text-[10px] font-bold text-emerald-600 flex flex-wrap gap-x-3">
                                     {ncmdNumber && <span>{insuranceProvider || 'Insurance'}: {ncmdNumber}</span>}
                                     {ncmdExpiry && <span>Exp: {new Date(ncmdExpiry).toLocaleDateString()}</span>}
                                 </div>
-                            )}
-                            {!isRally && (
-                            <button
-                                onClick={() => onOpenProof()}
-                                className="absolute bottom-0 right-0 text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 rounded-lg border-2 border-emerald-100 dark:border-emerald-800 hover:bg-emerald-100 transition-all flex items-center gap-1 shadow-sm"
-                            >
-                                Proof
-                            </button>
                             )}
                         </div>
                     </div>

@@ -6,6 +6,7 @@ import { captureGPS } from "../services/gps";
 import { fileToBlob } from "../services/photos";
 import { v4 as uuid } from "uuid";
 import type { WorkflowState } from "../types/significantFind";
+import { UndugSignalSheet } from "./UndugSignalSheet";
 
 export type QuickFindLocation = {
   lat: number;
@@ -20,17 +21,29 @@ type QuickFindFabProps = {
   activeSession?: QuickFindSessionContext | null;
   allowPermissionFallback?: boolean;
   showPendingBadge?: boolean;
+  showSignalButton?: boolean;
   containerClassName?: string;
   getPreferredLocation?: () => QuickFindLocation | null;
   onRecorded?: (findId: string) => void;
   onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
 };
 
+function SignalMarkerIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
+      <path d="M10 2.25c-2.42 0-4.4 1.9-4.4 4.25 0 3.15 3.35 6.35 4.05 6.98.2.18.5.18.7 0 .7-.63 4.05-3.83 4.05-6.98 0-2.35-1.98-4.25-4.4-4.25Z" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="10" cy="6.6" r="1.35" fill="currentColor" />
+      <path d="M5.1 14.5c1.22.78 2.9 1.25 4.9 1.25s3.68-.47 4.9-1.25M7.65 12.85c.68.26 1.48.4 2.35.4s1.67-.14 2.35-.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function QuickFindFab({
   projectId,
   activeSession: activeSessionOverride,
   allowPermissionFallback = true,
   showPendingBadge = false,
+  showSignalButton = true,
   containerClassName = "fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] right-4 z-40 flex flex-col items-end gap-3 pointer-events-none sm:bottom-6 sm:right-6",
   getPreferredLocation,
   onRecorded,
@@ -51,11 +64,15 @@ export function QuickFindFab({
       return false;
     }
   });
+  const [showSignalSheet, setShowSignalSheet] = React.useState(false);
+  const [signalToast, setSignalToast] = React.useState<{ openCount: number } | null>(null);
+  const signalToastTimerRef = React.useRef<number | null>(null);
   const successTimerRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
     return () => {
       if (successTimerRef.current !== null) window.clearTimeout(successTimerRef.current);
+      if (signalToastTimerRef.current !== null) window.clearTimeout(signalToastTimerRef.current);
     };
   }, []);
 
@@ -242,8 +259,36 @@ export function QuickFindFab({
     } : undefined);
   }
 
+  function handleSignalSaved(_signalId: string, openCount: number) {
+    setShowSignalSheet(false);
+    setSignalToast({ openCount });
+    if (signalToastTimerRef.current !== null) window.clearTimeout(signalToastTimerRef.current);
+    signalToastTimerRef.current = window.setTimeout(() => setSignalToast(null), 4000);
+  }
+
   return (
+    <>
+    {showSignalSheet && (
+      <UndugSignalSheet
+        sessionId={activeSession?.id ?? null}
+        permissionId={activeSession?.permissionId ?? null}
+        onSaved={handleSignalSaved}
+        onClose={() => setShowSignalSheet(false)}
+      />
+    )}
     <div className={containerClassName}>
+      {signalToast && (
+        <div className="pointer-events-auto bg-gray-950/95 backdrop-blur-md text-white px-3 py-2 rounded-2xl shadow-2xl flex items-center gap-2 border border-emerald-500/30 animate-in slide-in-from-right-4">
+          <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-300">
+            <SignalMarkerIcon className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-xs text-emerald-100">
+            {signalToast.openCount > 0
+              ? `Signal logged · ${signalToast.openCount} open on this permission`
+              : 'Signal logged'}
+          </span>
+        </div>
+      )}
       {fabError && (
         <div className="pointer-events-auto bg-red-900/95 backdrop-blur-md text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-red-500/50 min-w-[200px]">
           <span className="text-xs">{fabError}</span>
@@ -336,6 +381,20 @@ export function QuickFindFab({
         </div>
       )}
 
+      {showSignalButton && (
+        <button
+          type="button"
+          onClick={() => setShowSignalSheet(true)}
+          className="pointer-events-auto w-9 h-9 rounded-full border-2 border-gray-400/40 bg-gray-900/70 text-emerald-300 hover:border-emerald-400/60 hover:text-emerald-200 flex items-center justify-center transition-all active:scale-95 backdrop-blur-sm shadow-md"
+          aria-label="Log un-dug signal"
+          title="Log un-dug signal"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" className="opacity-65">
+            <path d="M4.2 4.2l5.6 5.6M9.8 4.2L4.2 9.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        </button>
+      )}
+
       <div className="flex gap-3 pointer-events-auto relative">
         {showPendingBadge && !!pendingCount && pendingCount > 0 && (
           <button
@@ -369,6 +428,7 @@ export function QuickFindFab({
         </button>
       </div>
     </div>
+    </>
   );
 }
 
