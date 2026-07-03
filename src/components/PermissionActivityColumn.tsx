@@ -4,6 +4,7 @@ import { db } from "../db";
 import type { Find, Media, UndugSignal } from "../db";
 import { ScaledImage } from "./ScaledImage";
 import { UndugSignalLogSection } from "./UndugSignalLog";
+import { UndugSignalMapSheet } from "./UndugSignalMapSheet";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -81,8 +82,10 @@ export function PermissionActivityColumn({
     onConvertSignalToFind,
 }: ActivityColumnProps) {
     const nav = useNavigate();
+    const [mapSignal, setMapSignal] = React.useState<UndugSignal | null>(null);
 
     return (
+        <>
         <div className="lg:col-span-1 grid gap-6 h-fit">
             {/* Pending Finds Section */}
             {isEdit && pendingFinds && pendingFinds.length > 0 && (
@@ -408,13 +411,25 @@ export function PermissionActivityColumn({
                 onConvertToFind={onConvertSignalToFind}
                 onShowOnMap={(signal) => {
                     if (signal.lat == null || signal.lng == null) return;
-                    const params = new URLSearchParams();
-                    params.set("lat", String(signal.lat));
-                    params.set("lng", String(signal.lng));
-                    params.set("pin", "signal");
-                    nav(`/fieldguide?${params.toString()}`);
+                    setMapSignal(signal);
                 }}
             />
         </div>
+
+        {mapSignal && (
+            <UndugSignalMapSheet
+                signal={mapSignal}
+                onClose={() => setMapSignal(null)}
+                onConvertToFind={
+                    onConvertSignalToFind
+                        ? (s) => {
+                              setMapSignal(null);
+                              onConvertSignalToFind(s);
+                          }
+                        : undefined
+                }
+            />
+        )}
+        </>
     );
 }

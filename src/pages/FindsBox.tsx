@@ -7,6 +7,7 @@ import { ScaledImage } from "../components/ScaledImage";
 import SignificantFindCard from "../components/significant/SignificantFindCard";
 import SignificantFindDetailSheet from "../components/significant/SignificantFindDetailSheet";
 import { UndugSignalDetailSheet } from "../components/UndugSignalLog";
+import { UndugSignalMapSheet } from "../components/UndugSignalMapSheet";
 
 type FindsFilter = "all" | "top" | "pending";
 
@@ -81,6 +82,7 @@ export default function FindsBox(props: { projectId: string }) {
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [openSfId, setOpenSfId] = useState<string | null>(null);
   const [openSignalId, setOpenSignalId] = useState<string | null>(null);
+  const [mapSignal, setMapSignal] = useState<UndugSignal | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const tabParam = searchParams.get("tab");
@@ -270,11 +272,7 @@ export default function FindsBox(props: { projectId: string }) {
 
   function showSignalOnMap(signal: UndugSignal) {
     if (signal.lat == null || signal.lng == null) return;
-    const params = new URLSearchParams();
-    params.set("lat", String(signal.lat));
-    params.set("lng", String(signal.lng));
-    params.set("pin", "signal");
-    navigate(`/fieldguide?${params.toString()}`);
+    setMapSignal(signal);
   }
 
   const isLoading = finds === undefined || permissions === undefined;
@@ -698,6 +696,17 @@ export default function FindsBox(props: { projectId: string }) {
           onShowOnMap={(signal) => {
             setOpenSignalId(null);
             showSignalOnMap(signal);
+          }}
+        />
+      )}
+
+      {mapSignal && (
+        <UndugSignalMapSheet
+          signal={mapSignal}
+          onClose={() => setMapSignal(null)}
+          onConvertToFind={(signal) => {
+            setMapSignal(null);
+            convertSignalToFind(signal);
           }}
         />
       )}
