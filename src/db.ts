@@ -477,7 +477,6 @@ export type UndugSignal = {
   direction?: UndugSignalDirection;
   stability?: UndugSignalStability;
   vdi?: string;               // free text/number — detector-agnostic
-  depthEstimate?: string;     // free text ("6-8in") — don't over-structure
   conditions?: UndugSignalConditions;
   notes?: string;
   status: UndugSignalStatus;  // defaults 'open'

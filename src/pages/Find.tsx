@@ -320,7 +320,7 @@ export default function FindPage(props: {
 
   // #14 — restore draft on mount (silent, no prompt)
   useEffect(() => {
-    if (props.quickId || props.permissionId) return;
+    if (props.quickId || props.permissionId || props.sourceSignalId) return;
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return;
     try {

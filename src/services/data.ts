@@ -37,6 +37,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const fields = await db.fields.toArray();
   const significantFinds = await db.significantFinds.toArray();
   const savedPoints = await db.savedPoints.toArray();
+  const undugSignals = await db.undugSignals.toArray();
 
   let mediaExport: any[] = [];
   if (includeMedia) {
@@ -65,6 +66,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     settings,
     importedPackages,
     savedPoints,
+    undugSignals,
   };
 
   return JSON.stringify(data, null, 2);
@@ -127,6 +129,7 @@ type BackupData = {
   settings: any[];
   importedPackages: any[];
   savedPoints: any[];
+  undugSignals: any[];
 };
 
 function requireArray(data: any, key: keyof BackupData, required = false): any[] {
@@ -164,6 +167,7 @@ export function validateBackupData(data: any): BackupData {
     settings: requireArray(data, "settings"),
     importedPackages: requireArray(data, "importedPackages"),
     savedPoints: requireArray(data, "savedPoints"),
+    undugSignals: requireArray(data, "undugSignals"),
   };
 
   assertRowsHaveId(backup.projects, "projects");
@@ -176,6 +180,7 @@ export function validateBackupData(data: any): BackupData {
   assertRowsHaveId(backup.media, "media");
   assertRowsHaveId(backup.importedPackages, "importedPackages");
   assertRowsHaveId(backup.savedPoints, "savedPoints");
+  assertRowsHaveId(backup.undugSignals, "undugSignals");
 
   const projectIds = new Set(backup.projects.map(p => p.id));
   const permissionIds = new Set(backup.permissions.map(p => p.id));
@@ -278,7 +283,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -293,6 +298,7 @@ export async function importData(json: string) {
     await db.media.clear();
     await db.importedPackages.clear();
     await db.savedPoints.clear();
+    await db.undugSignals.clear();
 
     await db.projects.bulkPut(backup.projects);
     if (backup.permissions.length) await db.permissions.bulkPut(backup.permissions);
@@ -305,6 +311,7 @@ export async function importData(json: string) {
     if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
+    if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
   });
 }
 

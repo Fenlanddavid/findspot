@@ -34,6 +34,7 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
     settings:         [{ key: 'detectorist', value: 'Alice' }],
     importedPackages: [{ id: 'pkg-1' }],
     savedPoints:      [{ id: 'sp-1', projectId: 'proj-1', label: 'NE corner', lat: 52.5, lon: -1.5, zoom: 16, note: '', createdAt: '2024-01-01' }],
+    undugSignals:     [{ id: 'us-1', createdAt: 1_700_000_000_000, lat: 51.5, lng: -1.2, status: 'open' }],
     ...overrides,
   };
 }
@@ -301,6 +302,30 @@ describe('validateBackupData — savedPoints', () => {
   });
 });
 
+// ─── undugSignals backup tests ────────────────────────────────────────────────
+
+describe('validateBackupData — undugSignals', () => {
+  it('accepts a pre-v33 backup without an undugSignals key and yields []', () => {
+    const preV33 = makeValidBackup({ undugSignals: undefined });
+    expect(() => validateBackupData(preV33)).not.toThrow();
+    expect(validateBackupData(preV33).undugSignals).toEqual([]);
+  });
+
+  it('rejects undugSignals rows missing an id', () => {
+    const data = makeValidBackup({
+      undugSignals: [{ createdAt: 1_700_000_000_000, lat: 51.5, lng: -1.2, status: 'open' }],
+    });
+    expect(() => validateBackupData(data)).toThrow(/undugSignals/i);
+  });
+
+  it('export payload includes undugSignals array', () => {
+    const result = validateBackupData(makeValidBackup());
+    expect(Array.isArray(result.undugSignals)).toBe(true);
+    expect(result.undugSignals).toHaveLength(1);
+    expect(result.undugSignals[0].id).toBe('us-1');
+  });
+});
+
 // ─── Table coverage guard ─────────────────────────────────────────────────────
 // Fails when a new user-authored table is added to db.ts but not exported.
 // If this test fails: add the table to exportData/BackupData/validateBackupData
@@ -323,6 +348,7 @@ describe('table coverage guard', () => {
     'settings',
     'importedPackages',
     'savedPoints',
+    'undugSignals',
   ] as const;
 
   it('validateBackupData returns every user table as an array', () => {

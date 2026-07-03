@@ -127,9 +127,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function del() {
     if (!draft) return;
     setBusy(true);
-    await db.transaction("rw", [db.finds, db.media], async () => {
+    await db.transaction("rw", [db.finds, db.media, db.undugSignals], async () => {
       await db.media.where("findId").equals(draft.id).delete();
       await db.finds.delete(draft.id);
+      // Reopen the source un-dug signal — target is still in the ground
+      if (draft.sourceSignalId) {
+        await db.undugSignals
+          .where("id").equals(draft.sourceSignalId)
+          .modify(s => {
+            s.status = "open";
+            delete s.resolvedAt;
+            delete s.resolvedFindId;
+          });
+      }
     });
     setBusy(false);
     props.onClose();

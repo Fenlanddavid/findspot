@@ -6,7 +6,7 @@ import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../p
 import { Find, SavedPoint, db } from '../db';
 import { deletePack } from '../services/offlinePack';
 import { DevAnnotation } from '../utils/devAnnotation';
-import { cacheBackedTileUrl, loadCacheBackedTile, MAP_TILE_CACHE_PROTOCOL } from '../utils/mapTileCache';
+import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../utils/mapTileCache';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -203,9 +203,7 @@ let cogProtocolRegistered = false;
 function ensureCogProtocolRegistered() {
     if (cogProtocolRegistered) return;
     addProtocol('cog', cogProtocol);
-    addProtocol(MAP_TILE_CACHE_PROTOCOL, (params, abortController) =>
-        loadCacheBackedTile(params.url, abortController.signal)
-    );
+    ensureTileCacheProtocolRegistered();
     cogProtocolRegistered = true;
 }
 

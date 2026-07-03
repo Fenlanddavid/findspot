@@ -1,3 +1,4 @@
+import { addProtocol } from 'maplibre-gl';
 import { cachedFetchAny } from './cachedFetch';
 
 export const MAP_TILE_CACHE_PROTOCOL = 'findspot-cache';
@@ -12,6 +13,15 @@ export function osmTileUrl(zoom: number, tx: number, ty: number): string {
 
 export function worldImageryTileUrl(zoom: number, tx: number, ty: number): string {
     return `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
+}
+
+let tileCacheProtocolRegistered = false;
+export function ensureTileCacheProtocolRegistered(): void {
+    if (tileCacheProtocolRegistered) return;
+    addProtocol(MAP_TILE_CACHE_PROTOCOL, (params, abortController) =>
+        loadCacheBackedTile(params.url, abortController.signal)
+    );
+    tileCacheProtocolRegistered = true;
 }
 
 export async function loadCacheBackedTile(

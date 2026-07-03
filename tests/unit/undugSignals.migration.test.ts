@@ -52,7 +52,6 @@ function makeFullSignal(): UndugSignal {
     direction: 'two-way',
     stability: 'repeatable',
     vdi: '78',
-    depthEstimate: '6-8in',
     conditions: 'dry',
     notes: 'Strong signal near hedge line',
     resolvedAt: 1_700_001_000_000,
@@ -87,7 +86,6 @@ describe('UndugSignal — schema shape', () => {
     expect(s.direction).toBeUndefined();
     expect(s.stability).toBeUndefined();
     expect(s.vdi).toBeUndefined();
-    expect(s.depthEstimate).toBeUndefined();
     expect(s.conditions).toBeUndefined();
     expect(s.notes).toBeUndefined();
     expect(s.resolvedAt).toBeUndefined();
@@ -103,7 +101,6 @@ describe('UndugSignal — schema shape', () => {
     expect(s.direction).toBe('two-way');
     expect(s.stability).toBe('repeatable');
     expect(s.vdi).toBe('78');
-    expect(s.depthEstimate).toBe('6-8in');
     expect(s.conditions).toBe('dry');
     expect(s.notes).toBe('Strong signal near hedge line');
     expect(s.resolvedAt).toBe(1_700_001_000_000);

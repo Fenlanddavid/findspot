@@ -8,6 +8,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { UndugSignal } from '../db';
 import { UndugSignalDetailSheet } from './UndugSignalLog';
+import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../utils/mapTileCache';
 
 type Props = {
   signal: UndugSignal;
@@ -51,6 +52,7 @@ export function UndugSignalMapSheet({ signal, onClose, onConvertToFind }: Props)
   React.useEffect(() => {
     if (!mapContainerRef.current || signal.lat == null || signal.lng == null) return;
 
+    ensureTileCacheProtocolRegistered();
     const map = new maplibregl.Map({
       container: mapContainerRef.current,
       style: {
@@ -58,7 +60,7 @@ export function UndugSignalMapSheet({ signal, onClose, onConvertToFind }: Props)
         sources: {
           osm: {
             type: 'raster',
-            tiles: ['https://a.tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tiles: [cacheBackedTileUrl('https://a.tile.openstreetmap.org/{z}/{x}/{y}.png')],
             tileSize: 256,
             maxzoom: 19,
             attribution: '© OpenStreetMap contributors',
