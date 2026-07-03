@@ -406,6 +406,14 @@ export function PermissionActivityColumn({
             <UndugSignalLogSection
                 permissionId={permissionId}
                 onConvertToFind={onConvertSignalToFind}
+                onShowOnMap={(signal) => {
+                    if (signal.lat == null || signal.lng == null) return;
+                    const params = new URLSearchParams();
+                    params.set("lat", String(signal.lat));
+                    params.set("lng", String(signal.lng));
+                    params.set("pin", "signal");
+                    nav(`/fieldguide?${params.toString()}`);
+                }}
             />
         </div>
     );

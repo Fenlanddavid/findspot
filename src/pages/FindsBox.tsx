@@ -268,6 +268,15 @@ export default function FindsBox(props: { projectId: string }) {
     navigate(`/find?${params.toString()}`);
   }
 
+  function showSignalOnMap(signal: UndugSignal) {
+    if (signal.lat == null || signal.lng == null) return;
+    const params = new URLSearchParams();
+    params.set("lat", String(signal.lat));
+    params.set("lng", String(signal.lng));
+    params.set("pin", "signal");
+    navigate(`/fieldguide?${params.toString()}`);
+  }
+
   const isLoading = finds === undefined || permissions === undefined;
   const hasAnyFinds = (stats?.total ?? 0) > 0;
   const noMatches = !isLoading && hasAnyFinds && (filteredFinds?.length ?? 0) === 0;
@@ -685,6 +694,10 @@ export default function FindsBox(props: { projectId: string }) {
           onConvertToFind={(signal) => {
             setOpenSignalId(null);
             convertSignalToFind(signal);
+          }}
+          onShowOnMap={(signal) => {
+            setOpenSignalId(null);
+            showSignalOnMap(signal);
           }}
         />
       )}

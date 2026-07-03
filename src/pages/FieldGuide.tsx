@@ -744,6 +744,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
+    const initPinLabel = searchParams.get('pin') === 'signal' ? 'Un-dug signal' : undefined;
     const openSavedPointsParam = searchParams.get('savedPoints') === '1';
 
     // Clear one-shot URL actions after the map/sheet uses them.
@@ -754,6 +755,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         if (!isNaN(initLat) && !isNaN(initLng)) {
             nextParams.delete('lat');
             nextParams.delete('lng');
+            nextParams.delete('pin');
             changed = true;
         }
 
@@ -822,7 +824,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity,
         userFinds: projectFinds,
         savedPoints, showSavedPoints,
-        initLat, initLng,
+        initLat, initLng, initPinLabel,
         devMode, annotationMode, devAnnotations,
         callbacks: {
             onFeatureClick:  (id)  => {

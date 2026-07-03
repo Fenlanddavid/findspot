@@ -139,11 +139,13 @@ export function UndugSignalDetailSheet({
   signal,
   onClose,
   onConvertToFind,
+  onShowOnMap,
 }: {
   signal: UndugSignal;
   onClose: () => void;
   /** Called by step-5 resolution: navigate to find-recording flow */
   onConvertToFind?: (signal: UndugSignal) => void;
+  onShowOnMap?: (signal: UndugSignal) => void;
 }) {
   const [mode, setMode] = React.useState<'view' | 'edit' | 'dug-nothing'>('view');
   const [isSaving, setIsSaving] = React.useState(false);
@@ -247,6 +249,15 @@ export function UndugSignalDetailSheet({
 
               {/* Action buttons */}
               <div className="space-y-2 pt-1">
+                {onShowOnMap && signal.lat != null && signal.lng != null && (
+                  <button
+                    type="button"
+                    onClick={() => onShowOnMap(signal)}
+                    className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-lg shadow-slate-900/15 dark:bg-white dark:text-gray-950 dark:hover:bg-gray-100"
+                  >
+                    Show on map
+                  </button>
+                )}
                 {onConvertToFind && (
                   <button
                     type="button"
@@ -400,10 +411,12 @@ export function UndugSignalDetailSheet({
 export function UndugSignalLogSection({
   permissionId,
   onConvertToFind,
+  onShowOnMap,
 }: {
   permissionId: string | undefined;
   /** Wired in step 5: opens the find-recording flow pre-populated with signal data */
   onConvertToFind?: (signal: UndugSignal) => void;
+  onShowOnMap?: (signal: UndugSignal) => void;
 }) {
   const [selectedSignal, setSelectedSignal] = React.useState<UndugSignal | null>(null);
   const [currentPos, setCurrentPos] = React.useState<{ lat: number; lng: number } | null>(null);
@@ -469,6 +482,7 @@ export function UndugSignalLogSection({
           signal={selectedSignal}
           onClose={() => setSelectedSignal(null)}
           onConvertToFind={onConvertToFind ? sig => { setSelectedSignal(null); onConvertToFind(sig); } : undefined}
+          onShowOnMap={onShowOnMap ? sig => { setSelectedSignal(null); onShowOnMap(sig); } : undefined}
         />
       )}
     </div>

@@ -185,6 +185,7 @@ export type UseFieldGuideMapOptions = {
     // Initial fly-to coordinates
     initLat?: number;
     initLng?: number;
+    initPinLabel?: string;
     // Dev annotation support
     devMode:        boolean;
     annotationMode: boolean;
@@ -214,7 +215,7 @@ export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
     savedPoints, showSavedPoints,
-    initLat, initLng, devMode, annotationMode, devAnnotations, callbacks,
+    initLat, initLng, initPinLabel, devMode, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
     const mapContainerRef    = useRef<HTMLDivElement>(null);
     const mapRef             = useRef<maplibregl.Map | null>(null);
@@ -225,6 +226,7 @@ export function useFieldGuideMap({
     const targetLabelMarkersRef = useRef<maplibregl.Marker[]>([]);
     const devAnnotationMarkersRef = useRef<maplibregl.Marker[]>([]);
     const savedPointMarkersRef = useRef<maplibregl.Marker[]>([]);
+    const initialPinMarkerRef = useRef<maplibregl.Marker | null>(null);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
 
     // Keep callbacks and annotation mode ref current on every render
@@ -541,7 +543,42 @@ export function useFieldGuideMap({
             });
 
             if (initLat !== undefined && initLng !== undefined && !isNaN(initLat) && !isNaN(initLng)) {
-                map.flyTo({ center: [initLng, initLat], zoom: 14 });
+                map.flyTo({ center: [initLng, initLat], zoom: initPinLabel ? 18 : 14 });
+                if (initPinLabel) {
+                    initialPinMarkerRef.current?.remove();
+                    const marker = document.createElement('div');
+                    marker.style.alignItems = 'center';
+                    marker.style.display = 'flex';
+                    marker.style.flexDirection = 'column';
+                    marker.style.gap = '0.25rem';
+                    marker.style.pointerEvents = 'none';
+
+                    const dot = document.createElement('div');
+                    dot.style.width = '1.1rem';
+                    dot.style.height = '1.1rem';
+                    dot.style.borderRadius = '999px';
+                    dot.style.background = '#10b981';
+                    dot.style.border = '3px solid #ecfdf5';
+                    dot.style.boxShadow = '0 0 0 6px rgba(16,185,129,0.22), 0 10px 24px rgba(0,0,0,0.38)';
+
+                    const label = document.createElement('div');
+                    label.textContent = initPinLabel;
+                    label.style.background = 'rgba(2, 6, 23, 0.94)';
+                    label.style.border = '1px solid rgba(16, 185, 129, 0.55)';
+                    label.style.borderRadius = '999px';
+                    label.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.35)';
+                    label.style.color = '#a7f3d0';
+                    label.style.font = "900 9px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+                    label.style.letterSpacing = '0.08em';
+                    label.style.padding = '0.18rem 0.5rem';
+                    label.style.textTransform = 'uppercase';
+                    label.style.whiteSpace = 'nowrap';
+
+                    marker.append(dot, label);
+                    initialPinMarkerRef.current = new maplibregl.Marker({ element: marker, anchor: 'bottom', offset: [0, -6] })
+                        .setLngLat([initLng, initLat])
+                        .addTo(map);
+                }
             }
             setTimeout(() => map.resize(), 300);
         };
@@ -561,6 +598,8 @@ export function useFieldGuideMap({
             devAnnotationMarkersRef.current = [];
             savedPointMarkersRef.current.forEach(marker => marker.remove());
             savedPointMarkersRef.current = [];
+            initialPinMarkerRef.current?.remove();
+            initialPinMarkerRef.current = null;
             if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
