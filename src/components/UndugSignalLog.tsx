@@ -111,7 +111,7 @@ function SignalRow({
               {summary || 'Signal logged'}
             </div>
             {dist !== null && (
-              <span className="shrink-0 text-[9px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-full px-1.5 py-0.5">
+              <span className="shrink-0 text-3xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 rounded-full px-1.5 py-0.5">
                 {formatDistanceM(dist)}
               </span>
             )}
@@ -119,7 +119,7 @@ function SignalRow({
           <div className="flex items-center gap-2 mt-1">
             <span className="text-2xs text-gray-400 dark:text-gray-500">{relativeTime(signal.createdAt)}</span>
             {chips.slice(0, 3).map(chip => (
-              <span key={chip} className="hidden sm:inline text-[9px] font-bold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded px-1.5 py-0.5">
+              <span key={chip} className="hidden sm:inline text-3xs font-bold text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800 rounded px-1.5 py-0.5">
                 {chip}
               </span>
             ))}
@@ -444,7 +444,7 @@ export function UndugSignalLogSection({
             <p className="text-2xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">Targets marked for a later pass.</p>
           </div>
         </div>
-        <div className="shrink-0 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+        <div className="shrink-0 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900 px-2.5 py-1 text-3xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
           {signals.length} open
         </div>
       </div>
@@ -459,7 +459,7 @@ export function UndugSignalLogSection({
           />
         ))}
       </div>
-      <p className="text-[9px] text-gray-400 dark:text-gray-500 text-center italic mt-3 font-medium px-2 leading-tight">
+      <p className="text-3xs text-gray-400 dark:text-gray-500 text-center italic mt-3 font-medium px-2 leading-tight">
         Open signals stay here until they are converted, dismissed, or marked as nothing found.
       </p>
 

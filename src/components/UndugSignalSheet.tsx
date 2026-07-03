@@ -157,7 +157,7 @@ export function UndugSignalSheet({ sessionId, permissionId, onSaved, onClose }: 
           <div className="mx-4 mt-4 rounded-2xl border border-gray-200 bg-gray-50/80 p-3 dark:border-gray-800 dark:bg-gray-900/45">
             <div className="mb-3 flex items-center justify-between gap-3">
               <span className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Signal reading</span>
-              <span className="text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">Optional</span>
+              <span className="text-3xs font-bold uppercase tracking-widest text-gray-400 dark:text-gray-600">Optional</span>
             </div>
 
             {/* VDI */}
@@ -203,7 +203,7 @@ export function UndugSignalSheet({ sessionId, permissionId, onSaved, onClose }: 
                     key={s}
                     type="button"
                     onClick={() => setStability(v => toggle(v, s))}
-                    className={`min-h-10 rounded-xl px-1 text-[11px] font-black border transition-all ${
+                    className={`min-h-10 rounded-xl px-1 text-2xs font-black border transition-all ${
                       stability === s
                         ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
                         : 'bg-white dark:bg-gray-950 border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-300 hover:border-emerald-300 dark:hover:border-emerald-700'
