@@ -340,6 +340,7 @@ export type Track = {
   color: string;
   createdAt: string;
   updatedAt: string;
+  gaps?: { start: number; end: number }[];
 };
 
 export type Setting = {

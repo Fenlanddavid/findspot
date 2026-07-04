@@ -10,7 +10,7 @@ import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";
 import PermissionReportModal from "../components/PermissionReportModal";
-import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording, isWakeLockSupported } from "../services/tracking";
+import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording } from "../services/tracking";
 import { calculateCoverage, CoverageResult } from "../services/coverage";
 import { Modal } from "../components/Modal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
@@ -1849,7 +1849,6 @@ export default function SessionPage(props: {
       <TrackingOverlay
         isVisible={showTrackingOverlay}
         onClose={() => setShowTrackingOverlay(false)}
-        wakeLockSupported={isWakeLockSupported()}
         projectId={props.projectId}
         sessionContext={fullscreenQuickFindSession}
         stats={{
