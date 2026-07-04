@@ -1134,7 +1134,7 @@ export default function Settings() {
                 </div>
               )
             ) : (
-              <span className="text-[9px] font-black text-emerald-800 dark:text-emerald-300 opacity-60">Trusted by 4,000+ detectorists</span>
+              <span className="text-[9px] font-black text-emerald-800 dark:text-emerald-300 opacity-60">Trusted by 5,000+ detectorists</span>
             )}
           </div>
         </div>
