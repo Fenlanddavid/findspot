@@ -68,8 +68,8 @@ export function FindRow(props: {
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs text-gray-500 dark:text-gray-400 truncate">
+        <div className="flex items-start justify-between gap-2">
+          <span className="min-w-0 flex-1 break-words text-xs leading-snug text-gray-500 dark:text-gray-400">
             {s.objectType || "Object TBD"}{s.coinType ? ` (${s.coinType})` : ""}
           </span>
           {timeStr && (

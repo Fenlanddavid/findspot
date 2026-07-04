@@ -37,12 +37,6 @@ function formatDimension(width?: number | null, height?: number | null): string 
   return null;
 }
 
-function titleCase(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
-}
-
 function LogoMark() {
   return (
     <div className="flex items-center gap-4">
@@ -139,7 +133,6 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
 
   const periodLabel = clean(find.period);
   const dateLabel = formatDateRange(find.dateRange);
-  const periodTitlePrefix = find.period && find.period !== 'Unknown' ? find.period : null;
   const frontImage = photoUrlFront || photoUrl;
   const backImage = photoUrlBack;
   const hasBack = !!backImage;
@@ -148,12 +141,9 @@ export const ShareCard = React.forwardRef<HTMLDivElement, ShareCardProps>((props
 
   const coinTitleParts = [clean(find.coinType), clean(find.coinDenomination)].filter(Boolean) as string[];
   const coinTitle = coinTitleParts.length > 0 ? coinTitleParts.join(' ') : null;
-  const objectTitle = titleCase(clean(find.objectType) || clean(find.findCategory) || 'Recorded find');
-  const nonCoinTitle = periodTitlePrefix && !objectTitle.toLowerCase().includes(periodTitlePrefix.toLowerCase())
-    ? `${periodTitlePrefix} ${objectTitle}`
-    : objectTitle;
-  const title = isCoin ? coinTitle || objectTitle || 'Recorded coin' : nonCoinTitle;
-  const titleSize = title.length > 42 ? '48px' : title.length > 30 ? '54px' : '62px';
+  const objectTitle = clean(find.objectType) || clean(find.findCategory) || 'Recorded find';
+  const title = isCoin ? coinTitle || objectTitle || 'Recorded coin' : objectTitle;
+  const titleSize = title.length > 76 ? '38px' : title.length > 58 ? '42px' : title.length > 42 ? '48px' : title.length > 30 ? '54px' : '62px';
 
   const reference = isCoin
     ? clean(find.coinSpink ? `Spink ${find.coinSpink}` : null) || clean(find.ruler)

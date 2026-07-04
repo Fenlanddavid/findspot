@@ -365,7 +365,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 {/* PRIMARY — headline identification */}
                 <div className="mb-5">
                   {draft.objectType && (
-                    <p className="text-[22px] font-semibold text-gray-900 dark:text-gray-50 leading-[1.1] m-0">{draft.objectType}</p>
+                    <p className="break-words text-[22px] font-semibold text-gray-900 dark:text-gray-50 leading-[1.1] m-0">{draft.objectType}</p>
                   )}
                   {draft.period && (
                     <p className="text-base font-medium text-gray-500/75 dark:text-gray-400/75 m-0 mt-1.5">{draft.period}</p>

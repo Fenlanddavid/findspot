@@ -638,7 +638,7 @@ export default function FindsBox(props: { projectId: string }) {
                   </div>
                   <div className="grid gap-3 p-4">
                     <div className="min-w-0">
-                      <h2 className="truncate text-base font-black text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-gray-100 dark:group-hover:text-emerald-400">
+                      <h2 className="break-words text-base font-black leading-tight text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-gray-100 dark:group-hover:text-emerald-400">
                         {find.objectType || (find.isPending ? "Pending find" : "Unidentified")}
                       </h2>
                       <div className="mt-1 flex items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
