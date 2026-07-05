@@ -79,21 +79,21 @@ export function ClubRallyChoiceModal({
           )}
         </div>
 
-        <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-6 leading-relaxed">
+        <p className="text-3xs text-gray-400 dark:text-gray-500 mb-6 leading-relaxed">
           Tip: scan the QR code with your phone camera — it will open the link automatically.
         </p>
 
         <div className="flex gap-3">
           <button
             onClick={() => { setStep("choice"); setUrlError(null); setPastedUrl(""); }}
-            className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
+            className="px-5 py-3 text-3xs font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
           >
             Back
           </button>
           <button
             onClick={handleGoLink}
             disabled={!pastedUrl.trim()}
-            className="flex-1 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+            className="flex-1 bg-teal-600 hover:bg-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-3 rounded-xl text-3xs font-black uppercase tracking-widest transition-colors"
           >
             Join Event
           </button>
@@ -111,7 +111,7 @@ export function ClubRallyChoiceModal({
 
         {permissions.length > 0 && (
           <>
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
+            <div className="text-3xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-2">
               Choose existing
             </div>
             <div className="max-h-52 overflow-y-auto space-y-1.5 mb-4 -mx-1 px-1">
@@ -136,7 +136,7 @@ export function ClubRallyChoiceModal({
 
             <div className="relative flex items-center gap-3 mb-4">
               <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">or</span>
+              <span className="text-3xs font-black uppercase tracking-widest text-gray-400">or</span>
               <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
             </div>
           </>
@@ -144,14 +144,14 @@ export function ClubRallyChoiceModal({
 
         <button
           onClick={onOrganiseNew}
-          className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors mb-3"
+          className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-3xs font-black uppercase tracking-widest transition-colors mb-3"
         >
           Create New Rally
         </button>
 
         <button
           onClick={() => setStep("choice")}
-          className="w-full px-5 py-3 text-[10px] font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
+          className="w-full px-5 py-3 text-3xs font-black uppercase tracking-widest text-gray-500 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-xl transition-colors"
         >
           Back
         </button>
@@ -166,44 +166,44 @@ export function ClubRallyChoiceModal({
 
       {/* Option 1 — Join organiser event */}
       <div className="mb-3 p-4 bg-teal-50 dark:bg-teal-950/30 border-2 border-teal-200 dark:border-teal-800 rounded-2xl">
-        <div className="text-[9px] font-black uppercase tracking-widest text-teal-500 mb-1">Organiser-led event</div>
+        <div className="text-3xs font-black uppercase tracking-widest text-teal-500 mb-1">Organiser-led event</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Join a club/rally dig</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
           Scan a QR code or open a link from your organiser.
         </p>
         <button
           onClick={() => setStep("join")}
-          className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+          className="w-full bg-teal-600 hover:bg-teal-500 text-white py-3 rounded-xl text-3xs font-black uppercase tracking-widest transition-colors"
         >
           Scan / Paste Link
         </button>
       </div>
 
-      {/* Option 2 — Solo */}
+      {/* Option 2 — Personal record */}
       <div className="mb-3 p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
-        <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Solo</div>
-        <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Going solo</h3>
+        <div className="text-3xs font-black uppercase tracking-widest text-gray-400 mb-1">Personal record</div>
+        <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Just recording my own day</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-          Log your own finds at a rally or event.
+          Club land or a rally — track your own visits and finds. No organiser needed, nothing is shared.
         </p>
         <button
           onClick={onSolo}
-          className="w-full bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+          className="w-full bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 py-3 rounded-xl text-3xs font-black uppercase tracking-widest transition-colors"
         >
-          Create Rally Permission
+          Start My Rally Record
         </button>
       </div>
 
       {/* Option 3 — Organise */}
       <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl">
-        <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-1">Organiser</div>
+        <div className="text-3xs font-black uppercase tracking-widest text-amber-500 mb-1">Organiser</div>
         <h3 className="font-black text-gray-900 dark:text-gray-100 text-base mb-1">Organising a club/rally dig</h3>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-          Set up the land once, then share a QR code or link with members.
+          Set up the land once, then share a QR code or link with members and collect their finds.
         </p>
         <button
           onClick={() => setStep("organise")}
-          className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+          className="w-full bg-amber-500 hover:bg-amber-400 text-white py-3 rounded-xl text-3xs font-black uppercase tracking-widest transition-colors"
         >
           Set Up Club Day
         </button>

@@ -21,6 +21,9 @@ import { FieldNotesModal } from "../components/FieldNotesModal";
 import PermissionProofModal from "../components/PermissionProofModal";
 import { PermissionActivityColumn } from "../components/PermissionActivityColumn";
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
+import { PermissionPulseCard } from "../components/PermissionPulseCard";
+import { RallyPersonaChip } from "../components/RallyPersonaChip";
+import { rallyPersona } from "../utils/rallyPersona";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { CoachTip, CoachTips } from "../components/CoachTips";
 import {
@@ -535,7 +538,7 @@ export default function PermissionPage(props: {
       setLandownerPhone(landownerPhone || perm?.organiserContactNumber || "");
       setLandownerEmail(landownerEmail || perm?.organiserEmail || "");
       setNotes(perm?.notes || perm?.clubDayPublicNotes || "");
-      setMilestoneMsg("Saved as a personal rally record");
+      setMilestoneMsg("Saved as your own dig record");
       setTimeout(() => setMilestoneMsg(null), 4000);
       setSaving(false);
     } catch (e: any) {
@@ -737,7 +740,8 @@ export default function PermissionPage(props: {
   const agreementKindLabel = isRally || isSharedPermission ? "Club/Rally Agreement" : "Agreement";
   const generateAgreementLabel = agreementId ? `Update ${agreementKindLabel}` : `Generate ${agreementKindLabel}`;
   const uploadAgreementLabel = agreementId ? "Replace Agreement File" : "Upload Signed Agreement";
-  const showOrganiserHub = isEdit && isRally && !isEditing && !isClubDayMember && !isPersonalRallyRecord;
+  const persona = rallyPersona({ type, isClubDayMember, isPersonalRallyRecord, isSharedPermission, sharedPermissionId });
+  const showOrganiserHub = isEdit && !isEditing && persona === 'organiser';
   const organiserMemberCount = submittedMembers?.length ?? 0;
   const organiserFieldCount = fields?.length ?? 0;
   const organiserFindCount = finds?.length ?? 0;
@@ -856,6 +860,7 @@ export default function PermissionPage(props: {
                     </button>
                   )}
                 </div>
+                {persona !== 'not_rally' && <RallyPersonaChip persona={persona} />}
                 {isEdit && !isEditing && !isClubDayMember && (
                   <button
                     onClick={() => setIsEditing(true)}
@@ -1182,6 +1187,18 @@ export default function PermissionPage(props: {
                 </div>
             )}
 
+            {isEdit && !isEditing && persona === 'personal' && (
+                <div className="lg:col-span-3 flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-2xl">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Running this dig for others?</span>
+                    <button
+                        onClick={() => setShowCreatePack(true)}
+                        className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                    >
+                        Create a join pack →
+                    </button>
+                </div>
+            )}
+
             {showOrganiserHub && (
                 <div className="lg:col-span-3" role="region" aria-label="Organiser Hub">
                     <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 sm:p-6 shadow-sm">
@@ -1421,7 +1438,7 @@ export default function PermissionPage(props: {
             </div>
             )}
 
-            {(!isClubDayMember || isEditing) && (!isRally || isEditing || !isEdit) && (
+            {(!isClubDayMember || isEditing) && (!isRally || isEditing || !isEdit || persona === 'personal' || persona === 'kept_record') && (
             <React.Fragment>
             <PermissionFieldsColumn
                 permissionId={id}
@@ -1586,6 +1603,10 @@ export default function PermissionPage(props: {
                 </div>
             )}
 
+            {isEdit && id && (
+              <PermissionPulseCard permissionId={id} />
+            )}
+
             <PermissionActivityColumn
                 isEdit={isEdit}
                 permissionId={id}
@@ -1597,6 +1618,7 @@ export default function PermissionPage(props: {
                 allMedia={allMedia}
                 isClubDayMember={isClubDayMember}
                 isRally={isRally}
+                persona={persona}
                 name={name}
                 landownerName={landownerName}
                 landownerPhone={landownerPhone}

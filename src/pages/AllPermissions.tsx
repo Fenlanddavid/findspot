@@ -4,6 +4,8 @@ import { db } from "../db";
 import { useNavigate } from "react-router-dom";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions } from "../services/permissions";
+import { rallyPersona } from "../utils/rallyPersona";
+import { RallyPersonaChip } from "../components/RallyPersonaChip";
 
 export default function AllPermissions(props: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -131,7 +133,10 @@ export default function AllPermissions(props: { projectId: string }) {
             const isRally = l.type === "rally";
             return (
               <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => navigate(`/permission/${l.id}`)}>
-                {isRally && !l.submittedAt && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
+                {isRally && !l.submittedAt && (() => {
+                  const p = rallyPersona(l);
+                  return p !== 'not_rally' ? <div className="absolute top-0 right-0 z-10 rounded-bl overflow-hidden"><RallyPersonaChip persona={p} /></div> : null;
+                })()}
                 {l.submittedAt && <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Data Sent ✓</div>}
                 {l.isDefault && <div className="absolute top-0 right-0 bg-gray-400 dark:bg-gray-600 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">General</div>}
 

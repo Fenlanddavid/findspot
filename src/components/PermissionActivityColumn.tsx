@@ -5,6 +5,8 @@ import type { Find, Media, UndugSignal } from "../db";
 import { ScaledImage } from "./ScaledImage";
 import { UndugSignalLogSection } from "./UndugSignalLog";
 import { UndugSignalMapSheet } from "./UndugSignalMapSheet";
+import type { RallyPersona } from "../utils/rallyPersona";
+import { RallyPersonaChip } from "./RallyPersonaChip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,7 @@ interface ActivityColumnProps {
     allMedia:                       Media[] | undefined;
     isClubDayMember:                boolean;
     isRally:                        boolean;
+    persona:                        RallyPersona;
     name:                           string;
     landownerName:                  string;
     landownerPhone:                 string;
@@ -53,6 +56,95 @@ function formatDuration(ms: number): string | null {
     return `${mins}m`;
 }
 
+// ─── Sessions subcomponent (shared by individual + rally branches) ───────────
+
+function SessionsPanel({ isEdit, permissionId, sessions, nav }: {
+    isEdit: boolean;
+    permissionId: string | undefined;
+    sessions: any[] | undefined;
+    nav: ReturnType<typeof useNavigate>;
+}) {
+    return (
+        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
+                <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{sessions?.length ?? 0} total</div>
+            </div>
+
+            {!isEdit && (
+                <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm px-4">
+                    Create the record first to start adding sessions!
+                </div>
+            )}
+
+            {isEdit && (
+                <div className="grid gap-3">
+                    <button
+                        onClick={() => nav(`/session/new?permissionId=${permissionId}`)}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-4"
+                    >
+                        + Start New Session (Visit)
+                    </button>
+
+                    {sessions && sessions.length > 0 ? (
+                        <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
+                            <div className="grid gap-3">
+                                {sessions.map((s: any) => (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => nav(`/session/${s.id}`)}
+                                        className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group overflow-hidden relative"
+                                    >
+                                        {s.hasTracking && (
+                                            <div className="absolute top-0 right-0 bg-sky-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-bl uppercase tracking-widest">
+                                                GPS TRAIL
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-between items-start mb-1">
+                                            <div className="flex flex-col gap-0.5 min-w-0">
+                                                {s.recorderName && (
+                                                    <div className="text-3xs font-black text-teal-600 dark:text-teal-400 truncate">
+                                                        {s.recorderName}
+                                                    </div>
+                                                )}
+                                                <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
+                                                    {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className={`text-3xs font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
+                                                        {s.fieldName || "No specific field"}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {s.findCount > 0 && (
+                                                <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg text-center min-w-[40px]">
+                                                    <div className="text-3xs font-black text-emerald-700 dark:text-emerald-400 leading-none">{s.findCount}</div>
+                                                    <div className="text-[7px] font-bold text-emerald-600 dark:text-emerald-500 uppercase leading-none mt-0.5">Finds</div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="text-3xs opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
+                                            <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
+                                            {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">{formatDuration(s.durationMs)}</span>}
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm">
+                            No sessions recorded yet.
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function PermissionActivityColumn({
@@ -66,6 +158,7 @@ export function PermissionActivityColumn({
     allMedia,
     isClubDayMember,
     isRally,
+    persona,
     name,
     landownerName,
     landownerPhone,
@@ -286,126 +379,70 @@ export function PermissionActivityColumn({
                 </p>
             </div>
             ) : isRally ? (
+            <>
+            {/* Slim event card */}
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm">
-                <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">Rally</div>
+                <div className="mb-1"><RallyPersonaChip persona={persona} /></div>
                 <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0 mb-5">{name || "Unnamed Rally"}</h3>
                 <div className="grid gap-4">
                     {landownerName && (
                         <div>
-                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Organiser / Club</div>
+                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Organiser / Club</div>
                             <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName}</p>
                             {landownerPhone && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">📞 {landownerPhone}</p>}
                             {landownerEmail && <p className="text-sm text-gray-500 dark:text-gray-400">✉️ {landownerEmail}</p>}
                         </div>
                     )}
-                    {validFrom && (
+                    {validFrom && (!sessions || sessions.length === 0) && (
                         <div>
-                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Event Date</div>
+                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">First dig</div>
                             <p className="font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
                     )}
-                    <div>
-                        <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Total Finds</div>
-                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{finds?.length ?? 0}</p>
-                    </div>
                     {lat != null && lon != null && (
                         <div>
-                            <div className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1.5 text-gray-500 dark:text-gray-400">Location</div>
+                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-1.5 text-gray-500 dark:text-gray-400">Location</div>
                             <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/70 px-3 py-3 mb-2">
                                 <p className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Map opens only when you choose to view it.</p>
+                                <p className="text-3xs text-gray-400 dark:text-gray-500 mt-1">Map opens only when you choose to view it.</p>
                             </div>
                             <button
                                 onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank")}
-                                className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                className="text-3xs font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
                             >
                                 View on Google Maps ↗
                             </button>
                         </div>
                     )}
                 </div>
-            </div>
-            ) : (
-            <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
-                    <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{sessions?.length ?? 0} total</div>
-                </div>
-
-            {!isEdit && (
-                <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm px-4">
-                    Create the record first to start adding sessions!
-                </div>
-            )}
-
-            {isEdit && (
-                <div className="grid gap-3">
+                {isEdit && (
                     <button
-                        onClick={() => nav(`/session/new?permissionId=${permissionId}`)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-4"
+                        onClick={() => nav(`/find?permissionId=${permissionId}`)}
+                        className="w-full mt-5 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2"
                     >
-                        + Start New Session (Visit)
+                        + Log Find
                     </button>
-
-                    {sessions && sessions.length > 0 ? (
-                        <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
-                            <div className="grid gap-3">
-                                {sessions.map((s: any) => (
-                                    <button
-                                        key={s.id}
-                                        onClick={() => nav(`/session/${s.id}`)}
-                                        className="w-full text-left bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-4 rounded-xl shadow-sm hover:border-emerald-500 transition-all group overflow-hidden relative"
-                                    >
-                                        {s.hasTracking && (
-                                            <div className="absolute top-0 right-0 bg-sky-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-bl uppercase tracking-widest">
-                                                GPS TRAIL
-                                            </div>
-                                        )}
-
-                                        <div className="flex justify-between items-start mb-1">
-                                            <div className="flex flex-col gap-0.5 min-w-0">
-                                                {s.recorderName && (
-                                                    <div className="text-[10px] font-black text-teal-600 dark:text-teal-400 truncate">
-                                                        {s.recorderName}
-                                                    </div>
-                                                )}
-                                                <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
-                                                    {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className={`text-[10px] font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
-                                                        {s.fieldName || "No specific field"}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {s.findCount > 0 && (
-                                                <div className="bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg text-center min-w-[40px]">
-                                                    <div className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 leading-none">{s.findCount}</div>
-                                                    <div className="text-[7px] font-bold text-emerald-600 dark:text-emerald-500 uppercase leading-none mt-0.5">Finds</div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="text-[10px] opacity-60 flex items-center justify-between border-t border-gray-50 dark:border-gray-700/50 pt-2 mt-2">
-                                            <span className="truncate pr-2">{s.cropType || s.landUse || "General detecting"}</span>
-                                            {s.durationMs > 0 && <span className="font-mono font-bold opacity-80 whitespace-nowrap">{formatDuration(s.durationMs)}</span>}
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-center py-10 opacity-50 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl italic text-sm">
-                            No sessions recorded yet.
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
+                )}
+            </div>
+            {/* Sessions panel — shared with individual permissions */}
+            <SessionsPanel
+                isEdit={isEdit}
+                permissionId={permissionId}
+                sessions={sessions}
+                nav={nav}
+            />
+            </>
+            ) : (
+            <SessionsPanel
+                isEdit={isEdit}
+                permissionId={permissionId}
+                sessions={sessions}
+                nav={nav}
+            />
             )}
 
             {/* Signal log — open un-dug signals for this permission */}
+            <div id="undug-signal-section">
             <UndugSignalLogSection
                 permissionId={permissionId}
                 onConvertToFind={onConvertSignalToFind}
@@ -414,6 +451,7 @@ export function PermissionActivityColumn({
                     setMapSignal(signal);
                 }}
             />
+            </div>
         </div>
 
         {mapSignal && (
