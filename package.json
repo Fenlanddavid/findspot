@@ -10,7 +10,7 @@
     "dev": "vite",
     "typefloor": "node scripts/checkTypeFloor.mjs",
     "typecheck": "tsc -b --pretty false",
-    "test": "npm run typecheck",
+    "test": "npm run typecheck && npm run typefloor",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "smoke": "playwright test tests/smoke.spec.ts",
