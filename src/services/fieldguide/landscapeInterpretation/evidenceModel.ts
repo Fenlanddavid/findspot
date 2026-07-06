@@ -6,6 +6,7 @@
 import type {
     AdaptedSignals,
 } from './signalAdapters';
+import type { PASAdapterOutput } from './signalAdapters';
 import type {
     ArchaeologicalEvidenceAssessment,
     ArchaeologicalPeriod,
@@ -429,6 +430,7 @@ export function computeEvidenceAssessment(
     aspectDegrees: number,
     potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
     temporalPersistence: TemporalPersistenceLabel,
+    pasOutput?: PASAdapterOutput | null,
 ): ArchaeologicalEvidenceAssessment {
     const signalEvidence = buildSignalEvidence(processScores);
 
@@ -448,6 +450,45 @@ export function computeEvidenceAssessment(
             p.finalScore * 0.18,
         ));
 
+    // ── PAS evidence (Phase B) — supporting-only, never contradicting (P2) ──
+    const pasEvidence: EvidenceItem[] = [];
+    if (pasOutput && pasOutput.densityTier !== 'none') {
+        // pas_regional_density: weight depends on tier
+        const densityWeight = pasOutput.densityTier === 'notable' ? 10 : 6;
+        // cellCount is not directly on pasOutput — we derive from the tier
+        // label template uses {count} but we don't have the raw count here,
+        // so we store a generic label. The caller fills in count via the
+        // worker's input.pas.cellCount if needed. For now, use the density
+        // tier wording directly.
+        const countStr = pasOutput.cellCount.toLocaleString();
+        pasEvidence.push(evidence(
+            'pas_regional_density',
+            pasOutput.densityTier === 'notable'
+                ? `Recorded finds are notably dense in the wider landscape (${countStr} PAS records within the surrounding area)`
+                : `Recorded finds are present in the wider landscape (${countStr} PAS records within the surrounding area)`,
+            'historic_records',
+            densityWeight,
+        ));
+
+        // pas_period_alignment: only when top PAS period matches an existing
+        // monument/AIM period signal (P1 — PAS corroborates, never introduces).
+        // Monument-derived aggregates have recordCount > 0; PAS-injected ones
+        // have recordCount 0, so we filter on recordCount to avoid self-corroboration.
+        if (pasOutput.topMappedPeriod) {
+            const monumentPeriods = new Set(
+                signals.periodAggregates.filter(a => a.recordCount > 0).map(a => a.period),
+            );
+            if (monumentPeriods.has(pasOutput.topMappedPeriod)) {
+                pasEvidence.push(evidence(
+                    'pas_period_alignment',
+                    `Recorded finds in the wider landscape are predominantly ${PERIOD_LABELS[pasOutput.topMappedPeriod]}, consistent with other evidence here`,
+                    'historic_records',
+                    8,
+                ));
+            }
+        }
+    }
+
     const contradictionAndMissing = buildContradictingEvidence(
         signals,
         geologyContext,
@@ -456,7 +497,7 @@ export function computeEvidenceAssessment(
         potentialBreakdown,
     );
 
-    const supportingEvidence = dedupeEvidence([...signalEvidence, ...processEvidence]).slice(0, 10);
+    const supportingEvidence = dedupeEvidence([...signalEvidence, ...processEvidence, ...pasEvidence]).slice(0, 10);
     const contradictingEvidence = contradictionAndMissing.filter(e => e.polarity === 'contradicting');
     const missingEvidence = contradictionAndMissing.filter(e => e.polarity === 'missing');
 

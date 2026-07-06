@@ -4,7 +4,7 @@
 
 import type { NHLEFeature, AIMFeature } from '../../../services/historicScanService';
 import type { HistoricRoute } from '../../../pages/fieldGuideTypes';
-import type { ArchaeologicalPeriod, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
+import type { ArchaeologicalPeriod, PASInterpretationInput, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
 
 // ─── Adapted signals output ───────────────────────────────────────────────────
 
@@ -229,4 +229,87 @@ export function extractSignals(
         aimPeriods,
         aimTypes,
     };
+}
+
+// ─── PAS interpretation adapter (Phase B) ────────────────────────────────────
+// Regional context only — PAS never dominates or contradicts. See P1-P4.
+
+// Density tier threshold: p75 of the real pas-density-gb.json distribution.
+// 4 456 cells, p75 = 133.  Rounded to 130 for a clean boundary.
+export const TIER_NOTABLE = 130;
+
+// Maximum summed PAS certaintyWeightedCount contribution per period.
+// Weakest existing monument-derived signal = 0.5 (single NHLE/AIM record).
+// Cap = 0.5 × 0.5 = 0.25 — PAS can never match even one monument record.
+export const PAS_PERIOD_CAP = 0.25;
+
+// Minimum per-period find count to emit a period signal.
+// Single stray finds are noise at H3-res-6 scale (~36 km²).
+const PAS_PERIOD_MIN_COUNT = 3;
+
+/** Map PAS broad-period labels to the 7-period enum.
+ *  Deliberately unmapped: PALAEOLITHIC, MESOLITHIC, NEOLITHIC (no honest
+ *  bucket — do NOT fold early prehistory into prehistoric_bronze_age),
+ *  UNKNOWN, and any unrecognised label. */
+const PAS_PERIOD_MAP: Record<string, ArchaeologicalPeriod> = {
+    'BRONZE AGE':     'prehistoric_bronze_age',
+    'IRON AGE':       'iron_age',
+    'ROMAN':          'romano_british',
+    'EARLY MEDIEVAL': 'early_medieval',
+    'MEDIEVAL':       'medieval',
+    'POST MEDIEVAL':  'post_medieval',
+    'MODERN':         'modern_industrial',
+};
+
+export type PASDensityTier = 'none' | 'present' | 'notable';
+
+export interface PASAdapterOutput {
+    periodSignals: PeriodSignalAggregate[];
+    densityTier: PASDensityTier;
+    cellCount: number;
+    topMappedPeriod: ArchaeologicalPeriod | null;
+}
+
+export function extractPASSignals(
+    pas: PASInterpretationInput | null | undefined,
+): PASAdapterOutput {
+    const EMPTY: PASAdapterOutput = { periodSignals: [], densityTier: 'none', cellCount: 0, topMappedPeriod: null };
+    if (!pas || pas.cellCount === 0) return EMPTY;
+
+    // ── Density tier ──────────────────────────────────────────────────────────
+    const densityTier: PASDensityTier =
+        pas.cellCount >= TIER_NOTABLE ? 'notable' : 'present';
+
+    // ── Period signals ────────────────────────────────────────────────────────
+    // Map labels case-insensitively, trimmed; skip unmapped.
+    const mapped: { period: ArchaeologicalPeriod; count: number }[] = [];
+    for (const [rawLabel, count] of pas.periodCounts) {
+        const key = rawLabel.trim().toUpperCase();
+        const period = PAS_PERIOD_MAP[key];
+        if (period && count >= PAS_PERIOD_MIN_COUNT) {
+            mapped.push({ period, count });
+        }
+    }
+
+    const mappedTotal = mapped.reduce((sum, m) => sum + m.count, 0);
+    if (mappedTotal === 0) return { periodSignals: [], densityTier, cellCount: pas.cellCount, topMappedPeriod: null };
+
+    // Cap total PAS contribution per period to PAS_PERIOD_CAP
+    const periodSignals: PeriodSignalAggregate[] = mapped.map(m => {
+        const share = m.count / mappedTotal;
+        const raw = share * PAS_PERIOD_CAP;
+        return {
+            period: m.period,
+            recordCount: 0,           // PAS does not add to monument record count
+            certaintyWeightedCount: Math.min(raw, PAS_PERIOD_CAP),
+        };
+    });
+
+    // Top mapped period: highest count, ties broken alphabetically for determinism
+    const sorted = [...mapped].sort((a, b) =>
+        b.count - a.count || a.period.localeCompare(b.period),
+    );
+    const topMappedPeriod = sorted[0]?.period ?? null;
+
+    return { periodSignals, densityTier, cellCount: pas.cellCount, topMappedPeriod };
 }

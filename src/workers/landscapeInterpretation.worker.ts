@@ -8,7 +8,7 @@ import type {
     LandscapeInterpretation,
 } from '../types/landscapeInterpretation';
 
-import { extractSignals }                                              from '../services/fieldguide/landscapeInterpretation/signalAdapters';
+import { extractSignals, extractPASSignals }                            from '../services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../services/fieldguide/landscapeInterpretation/regionalCalibration';
 import { computePrimaryProcesses }                                     from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
 import type { LIEHints, MeasuredTerrain }                              from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
@@ -44,6 +44,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             relativeReliefNorm,
             slopeGradient,
             terrainMeasured,
+            pas,
         } = input;
 
         // ── 1. Extract adapted signals ────────────────────────────────────────
@@ -56,6 +57,27 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             // so they are trustworthy corroboration even when historic records are sparse.
             wetlandPresent: extractedSignals.wetlandPresent || hotspotContext?.hasWetlandContext === true,
         };
+
+        // ── 1b. Extract PAS signals (Phase B — additive only) ─────────────────
+        const pasOutput = extractPASSignals(pas);
+
+        // Merge PAS period signals into adapted signals' periodAggregates.
+        // PAS signals have recordCount 0 and capped certaintyWeightedCount,
+        // so they contribute to temporal persistence and period likelihood
+        // without inflating monument record counts.
+        if (pasOutput.periodSignals.length > 0) {
+            for (const ps of pasOutput.periodSignals) {
+                const existing = signals.periodAggregates.find(a => a.period === ps.period);
+                if (existing) {
+                    existing.certaintyWeightedCount += ps.certaintyWeightedCount;
+                } else {
+                    // PAS introduces a new period only into the aggregate — but P1
+                    // guarantees pas_period_alignment won't fire without monument
+                    // corroboration. The period signal is still capped at PAS_PERIOD_CAP.
+                    signals.periodAggregates.push({ ...ps });
+                }
+            }
+        }
 
         // ── 2. Derive terrain region + regional multiplier ────────────────────
         const region = deriveTerrainRegion(geologyContext);
@@ -128,6 +150,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             aspectDegrees,
             potentialBreakdown,
             temporalPersistence,
+            pasOutput,
         );
 
         // ── 11. Confidence model ──────────────────────────────────────────────

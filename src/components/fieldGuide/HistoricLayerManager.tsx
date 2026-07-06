@@ -168,6 +168,7 @@ export function HistoricLayerManager() {
                 landscapeIntelligenceMap={landscapeIntelligenceMap}
                 projectFinds={projectFinds}
                 pasFinds={pasFinds}
+                pasDensityCell={pasDensityCell}
                 focusTarget={focusTarget}
                 scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
             />
@@ -529,6 +530,7 @@ interface AlieSectionProps {
     projectFinds: Find[];
     pasFinds: HistoricFind[];
     focusTarget: (target: Cluster) => void;
+    pasDensityCell: import('../../services/pasDensityService').PASCellLookup | null;
     scheduledMonumentCheckFailed: boolean;
 }
 
@@ -552,6 +554,7 @@ function AlieSection({
     landscapeIntelligenceMap,
     projectFinds,
     pasFinds,
+    pasDensityCell,
     focusTarget,
     scheduledMonumentCheckFailed,
 }: AlieSectionProps) {
@@ -742,6 +745,14 @@ function AlieSection({
         );
         setLandscapeEvidence(evidence);
 
+        // ── PAS interpretation input (Phase B — additive, null-neutral) ────
+        const pas = pasDensityCell && pasDensityCell.c > 0
+            ? {
+                cellCount: pasDensityCell.c,
+                periodCounts: Array.isArray(pasDensityCell.pc) ? pasDensityCell.pc : [],
+            }
+            : null;
+
         const input: LandscapeInterpretationWorkerInput = {
             geohash6,
             nhleFeatures,
@@ -753,6 +764,7 @@ function AlieSection({
             centerLat: center.lat,
             centerLon: center.lng,
             potentialBreakdown: potentialScoreBreakdown,
+            pas,
             ...terrainSignals,
         };
 

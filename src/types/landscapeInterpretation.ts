@@ -228,6 +228,15 @@ export interface LandscapeInterpretation {
     generatedAt: number;
 }
 
+// ─── PAS interpretation input ────────────────────────────────────────────────
+// Optional PAS density cell data for the ALIE pipeline.
+// undefined and null are equivalent: "no PAS effect".
+
+export interface PASInterpretationInput {
+    cellCount: number;                   // cell.c
+    periodCounts: [string, number][];    // cell.pc verbatim
+}
+
 // ─── Worker boundary types ────────────────────────────────────────────────────
 
 export interface LandscapeInterpretationWorkerInput {
@@ -277,6 +286,9 @@ export interface LandscapeInterpretationWorkerInput {
         historic: number;
         signals: number;
     } | null;
+    // PAS density cell — optional, additive-only (Phase B).
+    // undefined / null = no PAS effect (P3 null-neutral).
+    pas?: PASInterpretationInput | null;
 }
 
 export interface LandscapeInterpretationWorkerOutput {

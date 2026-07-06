@@ -530,6 +530,17 @@ export function LandscapeInterpretationBlock({
                                 </p>
                             </div>
                         )}
+
+                        {/* PAS attribution — CC-BY required when PAS-derived evidence renders (P4) */}
+                        {[
+                            ...evidenceAssessment.supportingEvidence,
+                            ...evidenceAssessment.contradictingEvidence,
+                            ...evidenceAssessment.missingEvidence,
+                        ].some(e => e.id.startsWith('pas_')) && (
+                            <p className="text-[0.5rem] font-bold text-white/35 leading-snug">
+                                Includes Portable Antiquities Scheme data (CC-BY).
+                            </p>
+                        )}
                     </div>
                 )}
             </div>
