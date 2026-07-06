@@ -1191,6 +1191,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         addLog('> Terrain result ready — historic landscape context continues in the background.', 'terrain');
         void runHistoricPhase(context).then(() => {
+            clearMapItemSelections();
             setSelectedHotspotId(null);
             persistSheetExpanded(true);
         });

@@ -512,7 +512,9 @@ export function useFieldGuideMap({
             });
             map.on('click', 'landscape-context-fill', (e) => {
                 if (annotationModeRef.current) return;
-                const label = e.features?.[0]?.properties?.label;
+                const props = e.features?.[0]?.properties;
+                if (props?.kind === 'route_context') return;
+                const label = props?.label;
                 showLabel(String(label || 'Landscape Context'));
             });
             map.on('click', 'crossings-circle', (e) => {
@@ -883,27 +885,14 @@ export function useFieldGuideMap({
                 } catch { /* skip malformed geometry */ }
             }
 
-            if (pasFinds.length >= 3) {
-                try {
-                    const points = turf.featureCollection(pasFinds.map(f => turf.point([f.lon, f.lat])));
-                    const center = turf.center(points);
-                    const buffered = turf.buffer(center, 0.5, { units: 'kilometers' });
-                    if (buffered) {
-                        buffered.properties = {
-                            kind: 'historic_density',
-                            label: 'Historic record density',
-                            color: '#f59e0b',
-                        };
-                        features.push(buffered as GeoJSON.Feature);
-                    }
-                } catch { /* skip malformed density context */ }
-            }
+            // PAS density blob removed — it overlapped route corridors and
+            // produced a misleading "Historic record density" label on click.
 
             src.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
         };
         if (map.getSource('landscape-context')) doUpdate();
         else map.once('style.load', doUpdate);
-    }, [historicRoutes, pasFinds, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [historicRoutes, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Config-driven layer visibility ────────────────────────────────────────
     useEffect(() => {
