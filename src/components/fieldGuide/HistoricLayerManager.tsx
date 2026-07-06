@@ -600,9 +600,24 @@ function AlieSection({
             setShowPreferDetailPrompt(true);
         }
         setViewMode('detail');
-        requestAnimationFrame(() =>
-            detailRootRef.current?.scrollIntoView({ block: 'start' }),
-        );
+        requestAnimationFrame(() => {
+            const el = detailRootRef.current;
+            if (!el) return;
+            // Nearest scrollable ancestor — the bottom sheet's inner
+            // scroller on mobile, a side panel on desktop.
+            let scroller: HTMLElement | null = el.parentElement;
+            while (scroller && scroller !== document.body) {
+                const oy = getComputedStyle(scroller).overflowY;
+                if ((oy === 'auto' || oy === 'scroll') &&
+                    scroller.scrollHeight > scroller.clientHeight) break;
+                scroller = scroller.parentElement;
+            }
+            if (!scroller || scroller === document.body) return;
+            const top = el.getBoundingClientRect().top
+                      - scroller.getBoundingClientRect().top
+                      + scroller.scrollTop;
+            scroller.scrollTo({ top: Math.max(0, top - 8) });
+        });
     }
 
     function handlePersistDetail() {
@@ -864,7 +879,7 @@ function AlieSection({
 
     // Detail view (loading skeleton + full block)
     return (
-        <div ref={detailRootRef} className="space-y-3 scroll-mt-2">
+        <div ref={detailRootRef} className="space-y-3">
             {showPreferDetailPrompt && (
                 <div className="rounded-xl border border-blue-500/25 bg-blue-500/[0.07] px-3 py-2.5 space-y-2">
                     <p className="text-[0.625rem] font-black text-blue-200 leading-snug">
