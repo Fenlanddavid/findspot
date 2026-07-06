@@ -570,6 +570,7 @@ function AlieSection({
     const tapThroughCountRef = useRef(0);
     const hasShownPromptRef  = useRef(false);
     const expandedCurrentScanRef = useRef(false);
+    const detailRootRef = useRef<HTMLDivElement>(null);
 
     // Load stored preference once on mount
     useEffect(() => {
@@ -599,6 +600,9 @@ function AlieSection({
             setShowPreferDetailPrompt(true);
         }
         setViewMode('detail');
+        requestAnimationFrame(() =>
+            detailRootRef.current?.scrollIntoView({ block: 'start' }),
+        );
     }
 
     function handlePersistDetail() {
@@ -860,7 +864,7 @@ function AlieSection({
 
     // Detail view (loading skeleton + full block)
     return (
-        <>
+        <div ref={detailRootRef} className="space-y-3 scroll-mt-2">
             {showPreferDetailPrompt && (
                 <div className="rounded-xl border border-blue-500/25 bg-blue-500/[0.07] px-3 py-2.5 space-y-2">
                     <p className="text-[0.625rem] font-black text-blue-200 leading-snug">
@@ -893,6 +897,6 @@ function AlieSection({
                 onFocusTarget={focusTarget}
                 onGlance={handleGlance}
             />
-        </>
+        </div>
     );
 }
