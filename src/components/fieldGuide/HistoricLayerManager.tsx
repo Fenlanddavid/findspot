@@ -13,10 +13,20 @@ import type { LandscapeEvidence } from '../../services/fieldguide/landscapeEvide
 import { buildFieldStrategy } from '../../services/fieldguide/fieldStrategy';
 import { deriveTerrainSignals } from '../../services/fieldguide/terrainSignals';
 import { pasPeriodEntries, pasTypeEntries } from '../../services/pasDensityService';
-import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput } from '../../types/landscapeInterpretation';
+import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput, PersonalFindsInput } from '../../types/landscapeInterpretation';
 import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
 const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
+
+// ─── Haversine distance in metres ───────────────────────────────────────────
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6_371_000;
+    const toRad = (d: number) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 // Self-contained — avoids coupling to engine layer.
@@ -772,6 +782,37 @@ function AlieSection({
             }
             : null;
 
+        // ── Personal finds interpretation input (L3 null-neutral) ──────────
+        // Async query wrapped in .then() — failure must never fail or delay a scan.
+        const personalFindsPromise: Promise<PersonalFindsInput | null> = (async () => {
+            try {
+                const PERSONAL_RADIUS_M = 800;
+                const allFinds = await db.finds.toArray();
+                const nearby = allFinds.filter(f => {
+                    if (f.lat == null || f.lon == null) return false;
+                    if (f.gpsAccuracyM != null && f.gpsAccuracyM > 150) return false;
+                    return haversineM(center.lat, center.lng, f.lat, f.lon) <= PERSONAL_RADIUS_M;
+                });
+                if (nearby.length > 0) {
+                    const periodMap = new Map<string, number>();
+                    for (const f of nearby) {
+                        periodMap.set(f.period, (periodMap.get(f.period) ?? 0) + 1);
+                    }
+                    return {
+                        totalWithCoords: nearby.length,
+                        periodCounts: [...periodMap.entries()],
+                    };
+                }
+                return null;
+            } catch {
+                return null;
+            }
+        })();
+
+        personalFindsPromise.then(personalFinds => {
+            // Guard: bail if user panned to a different cell while query ran
+            if (alieRequestSeqRef.current !== requestSeq) return;
+
         const input: LandscapeInterpretationWorkerInput = {
             geohash6,
             nhleFeatures,
@@ -784,6 +825,7 @@ function AlieSection({
             centerLon: center.lng,
             potentialBreakdown: potentialScoreBreakdown,
             pas,
+            personalFinds,
             ...terrainSignals,
         };
 
@@ -846,6 +888,8 @@ function AlieSection({
             diagLog.error('alie', 'Failed to start worker', String(e));
             setAlieLoading(false);
         }
+
+        }).catch(() => {}); // L3: personal finds query failure is non-fatal
 
         // Cleanup on unmount
         return () => {

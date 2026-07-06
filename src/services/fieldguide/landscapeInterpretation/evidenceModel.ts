@@ -6,7 +6,7 @@
 import type {
     AdaptedSignals,
 } from './signalAdapters';
-import type { PASAdapterOutput } from './signalAdapters';
+import type { PASAdapterOutput, PersonalFindsAdapterOutput } from './signalAdapters';
 import type {
     ArchaeologicalEvidenceAssessment,
     ArchaeologicalPeriod,
@@ -431,6 +431,7 @@ export function computeEvidenceAssessment(
     potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
     temporalPersistence: TemporalPersistenceLabel,
     pasOutput?: PASAdapterOutput | null,
+    personalFindsOutput?: PersonalFindsAdapterOutput | null,
 ): ArchaeologicalEvidenceAssessment {
     const signalEvidence = buildSignalEvidence(processScores);
 
@@ -470,15 +471,25 @@ export function computeEvidenceAssessment(
             densityWeight,
         ));
 
-        // pas_period_alignment: only when top PAS period matches an existing
-        // monument/AIM period signal (P1 — PAS corroborates, never introduces).
-        // Monument-derived aggregates have recordCount > 0; PAS-injected ones
-        // have recordCount 0, so we filter on recordCount to avoid self-corroboration.
+        // pas_period_alignment: fires when top PAS period matches an existing
+        // monument/AIM period signal (P1 — PAS corroborates, never introduces),
+        // OR matches the personal finds top period (finds + PAS are genuinely
+        // independent sources). Monument-derived aggregates have recordCount > 0;
+        // personal finds top period is checked separately.
         if (pasOutput.topMappedPeriod) {
             const monumentPeriods = new Set(
                 signals.periodAggregates.filter(a => a.recordCount > 0).map(a => a.period),
             );
-            if (monumentPeriods.has(pasOutput.topMappedPeriod)) {
+            const personalCorroborates = personalFindsOutput?.topMappedPeriod === pasOutput.topMappedPeriod;
+            // Suppression: if personal_base_rate_anomaly fires for the same period,
+            // pas_period_alignment is redundant — the anomaly line already encodes the
+            // PAS comparison. Two lines from one root cause is double-counting.
+            const anomalyFired = personalFindsOutput?.evidenceDirectives.some(
+                d => d.id === 'personal_base_rate_anomaly',
+            ) ?? false;
+            const suppressForAnomaly = personalCorroborates && anomalyFired;
+
+            if (!suppressForAnomaly && (monumentPeriods.has(pasOutput.topMappedPeriod) || personalCorroborates)) {
                 pasEvidence.push(evidence(
                     'pas_period_alignment',
                     `Recorded finds in the wider landscape are predominantly ${PERIOD_LABELS[pasOutput.topMappedPeriod]}, consistent with other evidence here`,
@@ -486,6 +497,14 @@ export function computeEvidenceAssessment(
                     8,
                 ));
             }
+        }
+    }
+
+    // ── Personal finds evidence — supporting-only, never contradicting (L2) ──
+    const personalFindsEvidence: EvidenceItem[] = [];
+    if (personalFindsOutput && personalFindsOutput.evidenceDirectives.length > 0) {
+        for (const d of personalFindsOutput.evidenceDirectives) {
+            personalFindsEvidence.push(evidence(d.id, d.label, 'historic_records', d.weight));
         }
     }
 
@@ -497,7 +516,7 @@ export function computeEvidenceAssessment(
         potentialBreakdown,
     );
 
-    const supportingEvidence = dedupeEvidence([...signalEvidence, ...processEvidence, ...pasEvidence]).slice(0, 10);
+    const supportingEvidence = dedupeEvidence([...signalEvidence, ...processEvidence, ...pasEvidence, ...personalFindsEvidence]).slice(0, 10);
     const contradictingEvidence = contradictionAndMissing.filter(e => e.polarity === 'contradicting');
     const missingEvidence = contradictionAndMissing.filter(e => e.polarity === 'missing');
 

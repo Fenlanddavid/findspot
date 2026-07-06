@@ -8,7 +8,7 @@ import type {
     LandscapeInterpretation,
 } from '../types/landscapeInterpretation';
 
-import { extractSignals, extractPASSignals }                            from '../services/fieldguide/landscapeInterpretation/signalAdapters';
+import { extractSignals, extractPASSignals, extractPersonalFindsSignals } from '../services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../services/fieldguide/landscapeInterpretation/regionalCalibration';
 import { computePrimaryProcesses }                                     from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
 import type { LIEHints, MeasuredTerrain }                              from '../services/fieldguide/landscapeInterpretation/primaryProcessEngine';
@@ -45,6 +45,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             slopeGradient,
             terrainMeasured,
             pas,
+            personalFinds,
         } = input;
 
         // ── 1. Extract adapted signals ────────────────────────────────────────
@@ -74,6 +75,23 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
                     // PAS introduces a new period only into the aggregate — but P1
                     // guarantees pas_period_alignment won't fire without monument
                     // corroboration. The period signal is still capped at PAS_PERIOD_CAP.
+                    signals.periodAggregates.push({ ...ps });
+                }
+            }
+        }
+
+        // ── 1c. Extract personal finds signals ─────────────────────────────────
+        const personalFindsOutput = extractPersonalFindsSignals(personalFinds, pas);
+
+        // Merge personal finds period signals into aggregates (same pattern as PAS).
+        // Personal finds signals have recordCount 0 and capped certaintyWeightedCount.
+        if (personalFindsOutput.periodSignals.length > 0) {
+            for (const ps of personalFindsOutput.periodSignals) {
+                const existing = signals.periodAggregates.find(a => a.period === ps.period);
+                if (existing) {
+                    existing.certaintyWeightedCount += ps.certaintyWeightedCount;
+                } else {
+                    // Personal finds MAY introduce a period (L1 — no corroboration gate).
                     signals.periodAggregates.push({ ...ps });
                 }
             }
@@ -151,6 +169,7 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             potentialBreakdown,
             temporalPersistence,
             pasOutput,
+            personalFindsOutput,
         );
 
         // ── 11. Confidence model ──────────────────────────────────────────────

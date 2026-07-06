@@ -4,7 +4,7 @@
 
 import type { NHLEFeature, AIMFeature } from '../../../services/historicScanService';
 import type { HistoricRoute } from '../../../pages/fieldGuideTypes';
-import type { ArchaeologicalPeriod, PASInterpretationInput, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
+import type { ArchaeologicalPeriod, PASInterpretationInput, PersonalFindsInput, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
 
 // ─── Adapted signals output ───────────────────────────────────────────────────
 
@@ -313,3 +313,154 @@ export function extractPASSignals(
 
     return { periodSignals, densityTier, cellCount: pas.cellCount, topMappedPeriod };
 }
+
+// ─── Personal finds interpretation adapter ──────────────────────────────────
+// Primary local evidence — unlike PAS, personal finds MAY introduce a period
+// the monuments haven't signalled, but only above the n-floors below (L1).
+// Absence of finds says nothing (L2 — supporting polarity only).
+
+/** Minimum per mapped period (post-merge) to emit a presence signal. */
+export const PERSONAL_N_PRESENCE = 5;
+/** Minimum per mapped period AND share >= 0.5 for dominant. */
+export const PERSONAL_N_DOMINANT = 10;
+/** Personal share >= ANOMALY_FACTOR × PAS share to flag anomaly. */
+export const PERSONAL_ANOMALY_FACTOR = 2;
+/** Cap per-period contribution — below monument-tier 0.5, above PAS 0.25.
+ *  Primary local evidence but the landscape engines stay in charge. */
+export const PERSONAL_PERIOD_CAP = 0.4;
+
+/** Map Find.period labels to the 7-period enum.
+ *  Deliberately unmapped: 'Prehistoric' (no honest bucket — mirrors the
+ *  PAS NEOLITHIC decision), 'Unknown', and any unrecognised label.
+ *  'Celtic' + 'Iron Age' merge into one iron_age count before floors. */
+export const FIND_PERIOD_MAP: Record<string, ArchaeologicalPeriod> = {
+    'Bronze Age':     'prehistoric_bronze_age',
+    'Iron Age':       'iron_age',
+    'Celtic':         'iron_age',        // La Tène-era material
+    'Roman':          'romano_british',
+    'Anglo-Saxon':    'early_medieval',
+    'Early Medieval': 'early_medieval',
+    'Medieval':       'medieval',
+    'Post-medieval':  'post_medieval',
+    'Modern':         'modern_industrial',
+};
+
+export interface PersonalFindsEvidenceDirective {
+    id: 'personal_period_presence' | 'personal_period_dominant' | 'personal_base_rate_anomaly';
+    weight: number;
+    label: string;
+    polarity: 'supporting';
+}
+
+export interface PersonalFindsAdapterOutput {
+    periodSignals: PeriodSignalAggregate[];
+    evidenceDirectives: PersonalFindsEvidenceDirective[];
+    topMappedPeriod: ArchaeologicalPeriod | null;
+    mappedTotal: number;
+}
+
+export function extractPersonalFindsSignals(
+    input: PersonalFindsInput | null | undefined,
+    pas: PASInterpretationInput | null | undefined,
+): PersonalFindsAdapterOutput {
+    const EMPTY: PersonalFindsAdapterOutput = {
+        periodSignals: [], evidenceDirectives: [], topMappedPeriod: null, mappedTotal: 0,
+    };
+    if (!input || input.totalWithCoords === 0) return EMPTY;
+
+    // ── Map and merge periods ────────────────────────────────────────────────
+    const merged = new Map<ArchaeologicalPeriod, number>();
+    for (const [rawLabel, count] of input.periodCounts) {
+        const period = FIND_PERIOD_MAP[rawLabel];
+        if (!period) continue;
+        merged.set(period, (merged.get(period) ?? 0) + count);
+    }
+
+    const mappedTotal = [...merged.values()].reduce((s, c) => s + c, 0);
+    if (mappedTotal === 0) return EMPTY;
+
+    // ── Period signals (introduction allowed — no corroboration gate) ─────
+    const periodSignals: PeriodSignalAggregate[] = [];
+    for (const [period, count] of merged) {
+        if (count < PERSONAL_N_PRESENCE) continue;
+        const share = count / mappedTotal;
+        const raw = share * PERSONAL_PERIOD_CAP;
+        periodSignals.push({
+            period,
+            recordCount: 0, // personal finds don't add to monument record count
+            certaintyWeightedCount: Math.min(raw, PERSONAL_PERIOD_CAP),
+        });
+    }
+
+    // ── Top mapped period: highest count, ties alphabetically ────────────
+    const sorted = [...merged.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+    const topMappedPeriod = sorted[0]?.[0] ?? null;
+    const topCount = sorted[0]?.[1] ?? 0;
+
+    // ── Evidence directives ──────────────────────────────────────────────────
+    const evidenceDirectives: PersonalFindsEvidenceDirective[] = [];
+
+    if (topMappedPeriod && topCount >= PERSONAL_N_PRESENCE) {
+        const topShare = topCount / mappedTotal;
+        const isDominant = topCount >= PERSONAL_N_DOMINANT && topShare >= 0.5;
+
+        if (isDominant) {
+            // Dominant replaces presence — never both
+            evidenceDirectives.push({
+                id: 'personal_period_dominant',
+                weight: 14,
+                label: `Your own finds here are predominantly ${PERIOD_LABELS_PERSONAL[topMappedPeriod]} (${topCount} of ${mappedTotal} recorded nearby)`,
+                polarity: 'supporting',
+            });
+        } else {
+            evidenceDirectives.push({
+                id: 'personal_period_presence',
+                weight: 12,
+                label: `Your own recorded finds here include repeated ${PERIOD_LABELS_PERSONAL[topMappedPeriod]} material (${topCount} finds)`,
+                polarity: 'supporting',
+            });
+        }
+
+        // ── Anomaly: personal share >= 2× PAS share (additional) ─────────
+        if (isDominant && pas && Array.isArray(pas.periodCounts)) {
+            // Compute PAS mapped total and period share
+            const pasMerged = new Map<ArchaeologicalPeriod, number>();
+            for (const [rawLabel, count] of pas.periodCounts) {
+                const key = rawLabel.trim().toUpperCase();
+                const pasPeriod = PAS_PERIOD_MAP[key];
+                if (pasPeriod) pasMerged.set(pasPeriod, (pasMerged.get(pasPeriod) ?? 0) + count);
+            }
+            const pasMappedTotal = [...pasMerged.values()].reduce((s, c) => s + c, 0);
+
+            if (pasMappedTotal >= 20) {
+                const pasShareOfPeriod = (pasMerged.get(topMappedPeriod) ?? 0) / pasMappedTotal;
+                const personalShareOfPeriod = topCount / mappedTotal;
+
+                if (pasShareOfPeriod > 0 && personalShareOfPeriod >= PERSONAL_ANOMALY_FACTOR * pasShareOfPeriod) {
+                    evidenceDirectives.push({
+                        id: 'personal_base_rate_anomaly',
+                        weight: 8,
+                        label: `That pattern stands out against the wider landscape, where ${PERIOD_LABELS_PERSONAL[topMappedPeriod]} makes up a smaller share of recorded finds`,
+                        polarity: 'supporting',
+                    });
+                }
+            }
+        }
+    }
+
+    return { periodSignals, evidenceDirectives, topMappedPeriod, mappedTotal };
+}
+
+// Period display labels for personal finds evidence templates.
+// Reuses the same labels as the evidence model.
+const PERIOD_LABELS_PERSONAL: Record<ArchaeologicalPeriod, string> = {
+    prehistoric_bronze_age: 'Prehistoric / Bronze Age',
+    iron_age:               'Iron Age',
+    romano_british:         'Roman',
+    early_medieval:         'Early Medieval',
+    medieval:               'Medieval',
+    post_medieval:          'Post-Medieval',
+    modern_industrial:      'Modern',
+};

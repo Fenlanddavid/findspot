@@ -237,6 +237,15 @@ export interface PASInterpretationInput {
     periodCounts: [string, number][];    // cell.pc verbatim
 }
 
+// ─── Personal finds interpretation input ─────────────────────────────────────
+// Optional per-scan personal finds data for the ALIE pipeline.
+// undefined and null are equivalent: "no personal finds effect" (L3 null-neutral).
+
+export interface PersonalFindsInput {
+    totalWithCoords: number;             // finds inside radius
+    periodCounts: [string, number][];    // raw Find.period labels
+}
+
 // ─── Worker boundary types ────────────────────────────────────────────────────
 
 export interface LandscapeInterpretationWorkerInput {
@@ -289,6 +298,9 @@ export interface LandscapeInterpretationWorkerInput {
     // PAS density cell — optional, additive-only (Phase B).
     // undefined / null = no PAS effect (P3 null-neutral).
     pas?: PASInterpretationInput | null;
+    // Personal finds within scan radius — optional, additive-only.
+    // undefined / null = no personal finds effect (L3 null-neutral).
+    personalFinds?: PersonalFindsInput | null;
 }
 
 export interface LandscapeInterpretationWorkerOutput {

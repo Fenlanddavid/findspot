@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const TYPE_FLOOR_RE = /text-\[(?:[1-9]|10|11)px\]/g;
+const TYPE_FLOOR_RE = /text-\[(?:(?:[1-9]|1[01])px|0\.(?:[0-6][0-9]*|7(?:[0-4][0-9]*)?)rem)\]/g;
 
 function countMatches(dir) {
   let count = 0;

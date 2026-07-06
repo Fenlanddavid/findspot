@@ -19,6 +19,7 @@ import { getTemplateText } from '../../services/fieldguide/landscapeInterpretati
 import { LandscapeBehaviourBars } from './LandscapeBehaviourBars';
 import { FieldStrategyBlock } from './FieldStrategyBlock';
 import { INTERPRETATION_LABELS, CONFIDENCE_LABELS } from '../../utils/landscapeLabels';
+import { selectSalientEvidence } from '../../services/fieldguide/landscapeInterpretation/evidenceSalience';
 
 const PERIOD_LABELS: Record<ArchaeologicalPeriod, string> = {
     prehistoric_bronze_age: 'Prehistoric / Bronze Age',
@@ -253,6 +254,8 @@ export function LandscapeInterpretationBlock({
         evidenceAssessment,
     } = interpretation;
 
+    const salient = selectSalientEvidence(evidenceAssessment);
+
     const primaryScore = interpretationScores.find(s => s.interpretationId === primaryInterpretationId);
     const secondaryScore = interpretationScores.find(s => s.interpretationId === secondaryInterpretationId);
 
@@ -352,6 +355,26 @@ export function LandscapeInterpretationBlock({
                         </p>
                     )}
 
+                    {/* Salient evidence bullets — always visible when a primary interpretation exists */}
+                    {primaryInterpretationId && salient.bullets.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                            <p className="text-3xs font-black text-white/45 uppercase tracking-[0.2em]">Why this stands out</p>
+                            {salient.bullets.map(b => (
+                                <p key={b.id} className={`text-2xs font-bold leading-snug ${b.polarity === 'contradicting' ? 'text-amber-300/90' : 'text-white/80'}`}>
+                                    {b.polarity === 'contradicting' ? '▲ ' : '• '}{b.label}
+                                </p>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Evidence meter — always visible when a primary interpretation exists */}
+                    {primaryInterpretationId && (
+                        <EvidenceMeter
+                            support={evidenceAssessment.supportingPercent}
+                            contradiction={evidenceAssessment.contradictingPercent}
+                        />
+                    )}
+
                     {/* Secondary interpretation */}
                     {secondaryInterpretationId && secondaryScore && (
                         <div className="border-t border-white/8 pt-2 space-y-1">
@@ -382,11 +405,6 @@ export function LandscapeInterpretationBlock({
                 </button>
                 {detailsOpen && (
                     <div className="mt-2 grid gap-3 animate-in fade-in duration-200">
-                        <EvidenceMeter
-                            support={evidenceAssessment.supportingPercent}
-                            contradiction={evidenceAssessment.contradictingPercent}
-                        />
-
                         <p className="text-[0.625rem] font-bold text-white/56 leading-snug">
                             {evidenceAssessment.confidenceSummary}
                         </p>
