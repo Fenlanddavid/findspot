@@ -7,9 +7,11 @@
 //   C3: Hedged headline + provisional footnote
 //   C4: No score-based / red-green colouring
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { LandscapeInterpretation } from '../../types/landscapeInterpretation';
 import { glanceHeadline, glanceReasons } from '../../services/fieldguide/glanceReading';
+import { selectSalientEvidence } from '../../services/fieldguide/landscapeInterpretation/evidenceSalience';
+import { composeEvidenceClause } from '../../services/fieldguide/landscapeInterpretation/evidenceSlotFormatters';
 
 interface Props {
     interpretation: LandscapeInterpretation;
@@ -31,6 +33,13 @@ export function GlanceCard({
 
     const { title, strengthLabel } = glanceHeadline(interpretation);
     const reasons = glanceReasons(interpretation.evidenceAssessment);
+
+    const { clause, rider } = useMemo(() => {
+        if (!interpretation.evidenceAssessment) return { clause: null, rider: null };
+        const salient = selectSalientEvidence(interpretation.evidenceAssessment);
+        return composeEvidenceClause(salient);
+    }, [interpretation.evidenceAssessment]);
+
     const showSMOverlap = interpretation.scheduledMonumentOverlap;
     const showSMFailed  = scheduledMonumentCheckFailed && !interpretation.scheduledMonumentOverlap;
     const showCaveat    = interpretation.evidenceAssessment.contradictingPercent >= 40;
@@ -81,6 +90,14 @@ export function GlanceCard({
                     {strengthLabel}
                 </span>
             </div>
+
+            {/* Evidence clause — specific salient evidence on the glance */}
+            {clause && (
+                <p className="text-2xs font-bold text-white/55 leading-snug">{clause}</p>
+            )}
+            {rider && (
+                <p className="text-2xs font-bold text-amber-300/90 leading-snug">▲ {rider}</p>
+            )}
 
             {/* Why? chips — up to 3 source-distinct + optional caveat */}
             {limitedEvidence ? (
