@@ -13,6 +13,7 @@ import type { LandscapeEvidence } from '../../services/fieldguide/landscapeEvide
 import { buildFieldStrategy } from '../../services/fieldguide/fieldStrategy';
 import { deriveTerrainSignals } from '../../services/fieldguide/terrainSignals';
 import { pasPeriodEntries, pasTypeEntries } from '../../services/pasDensityService';
+import { heritageGatewayUrl } from '../../lib/heritageGatewayLink';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput, PersonalFindsInput } from '../../types/landscapeInterpretation';
 import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 
@@ -83,6 +84,35 @@ function getSignalSummary(breakdown: { terrain: number; hydro: number; historic:
     return lines;
 }
 
+function HeritageGatewayLink({ lat, lng }: { lat: number; lng: number }) {
+    return (
+        <a
+            href={heritageGatewayUrl({ lat, lng })}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-center text-xs font-black uppercase tracking-wider text-blue-300 transition-colors hover:border-blue-400/35 hover:bg-blue-500/10 hover:text-blue-200"
+        >
+            <span>Historic environment records near here — Heritage Gateway (beta)</span>
+            <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                className="shrink-0"
+            >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+        </a>
+    );
+}
+
 export function HistoricLayerManager() {
     const {
         showSavedPoints,
@@ -121,6 +151,7 @@ export function HistoricLayerManager() {
         setIsIntelOpen,
         nhleDataRef,
         aimDataRef,
+        terrainScanCenterRef,
         geologyContext,
         pasDensityCell,
         landscapeIntelligenceMap,
@@ -129,7 +160,24 @@ export function HistoricLayerManager() {
     // ── ALIE state ────────────────────────────────────────────────────────────
     const [landscapeInterpretation, setLandscapeInterpretation] = useState<LandscapeInterpretation | null>(null);
     const [alieLoading, setAlieLoading] = useState(false);
+    const [heritageGatewayCenter, setHeritageGatewayCenter] = useState<{ lat: number; lng: number } | null>(null);
     const workerRef = useRef<Worker | null>(null);
+
+    useEffect(() => {
+        if (!historicScanComplete) {
+            setHeritageGatewayCenter(null);
+            return;
+        }
+
+        const scanCenter = terrainScanCenterRef.current;
+        if (scanCenter) {
+            setHeritageGatewayCenter(scanCenter);
+            return;
+        }
+
+        const center = mapRef.current?.getCenter();
+        if (center) setHeritageGatewayCenter({ lat: center.lat, lng: center.lng });
+    }, [historicScanComplete, terrainScanCenterRef, mapRef]);
 
     // Only show when in historic mode and nothing else is selected
     if (showSavedPoints || selectedUserFind || selectedPASFind || (selectedId && !selectedHotspotId) || selectedMonument !== undefined || !historicMode) {
@@ -513,6 +561,9 @@ export function HistoricLayerManager() {
             <div className="px-1 text-center text-[0.625rem] font-medium leading-snug text-slate-400">
                 {FIELDGUIDE_SHORT_NOTICE}
             </div>
+            {historicScanComplete && heritageGatewayCenter && (
+                <HeritageGatewayLink lat={heritageGatewayCenter.lat} lng={heritageGatewayCenter.lng} />
+            )}
         </div>
     );
 }
