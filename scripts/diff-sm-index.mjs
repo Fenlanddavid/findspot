@@ -4,8 +4,13 @@
  * Compares the current local SM index build against the live NHLE FeatureServer/6
  * to detect newly designated or de-listed Scheduled Monuments.
  *
+ * With two directory arguments, compares an old local shard build against a new
+ * local shard build and verifies unchanged shard bytes except cells that gained
+ * Cadw alphanumeric entries.
+ *
  * Usage:
  *   node scripts/diff-sm-index.mjs
+ *   node scripts/diff-sm-index.mjs old-sm-index-dir new-sm-index-dir
  *
  * Exit codes:
  *   0  — no changes detected
@@ -16,8 +21,8 @@
  * Attribution: NHLE © Historic England, CC BY 4.0
  */
 
-import { readFile } from 'fs/promises';
-import { join, dirname } from 'path';
+import { readFile, readdir } from 'fs/promises';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +33,118 @@ const FEATURE_SERVER =
   'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
 
 const PAGE_SIZE = 1000;
+
+// ── Local build-to-build diff ─────────────────────────────────────────────────
+
+async function readShardFiles(dir) {
+  const files = await readdir(dir);
+  const shardFiles = files.filter((file) =>
+    file.endsWith('.json') &&
+    file !== '_meta.json' &&
+    file !== '_entries.json',
+  );
+  const map = new Map();
+  for (const file of shardFiles) {
+    map.set(file.replace(/\.json$/, ''), await readFile(join(dir, file), 'utf8'));
+  }
+  return map;
+}
+
+function parseShard(raw, cell, label) {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    throw new Error(`Cannot parse ${label} shard ${cell}: ${err.message}`);
+  }
+}
+
+function idsFor(entries) {
+  return entries
+    .map((entry) => String(entry?.listEntry ?? '').trim())
+    .filter(Boolean);
+}
+
+async function diffLocalBuilds(oldDirArg, newDirArg) {
+  const oldDir = resolve(oldDirArg);
+  const newDir = resolve(newDirArg);
+  const oldShards = await readShardFiles(oldDir);
+  const newShards = await readShardFiles(newDir);
+
+  let unchanged = 0;
+  const removed = [];
+  const addedCells = [];
+  const changedWithoutCadw = [];
+  const borderCells = [];
+
+  for (const cell of oldShards.keys()) {
+    if (!newShards.has(cell)) {
+      removed.push(cell);
+      continue;
+    }
+    const oldRaw = oldShards.get(cell);
+    const newRaw = newShards.get(cell);
+    if (oldRaw === newRaw) {
+      unchanged++;
+      continue;
+    }
+
+    const oldEntries = parseShard(oldRaw, cell, 'old');
+    const newEntries = parseShard(newRaw, cell, 'new');
+    const oldIds = idsFor(oldEntries);
+    const oldSet = new Set(oldIds);
+    const newIds = idsFor(newEntries);
+    const addedIds = newIds.filter((id) => !oldSet.has(id));
+    const removedIds = oldIds.filter((id) => !newIds.includes(id));
+    const cadwAdded = addedIds.filter((id) => !/^\d/.test(id));
+    const oldOrderPreserved = oldIds.every((id, index) => newIds[index] === id);
+
+    if (removedIds.length === 0 && addedIds.length === cadwAdded.length && oldOrderPreserved) {
+      borderCells.push({ cell, cadwAdded });
+    } else {
+      changedWithoutCadw.push({ cell, addedIds, removedIds });
+    }
+  }
+
+  for (const cell of newShards.keys()) {
+    if (!oldShards.has(cell)) addedCells.push(cell);
+  }
+
+  console.log('SM Index Diff — old vs new local builds');
+  console.log(`Old build: ${oldDir}`);
+  console.log(`New build: ${newDir}`);
+  console.log('');
+  console.log(`Unchanged existing shard files: ${unchanged}`);
+  console.log(`New shard files: ${addedCells.length}`);
+  console.log(`Removed old shard files: ${removed.length}`);
+  console.log(`Existing cells with Cadw additions only: ${borderCells.length}`);
+  console.log(`England-only cells changed: ${changedWithoutCadw.length}`);
+  console.log('');
+
+  if (borderCells.length === 0) {
+    console.log('Border cells that gained Cadw entries (0): none');
+  } else {
+    console.log(`Border cells that gained Cadw entries (${borderCells.length}):`);
+    for (const { cell, cadwAdded } of borderCells) {
+      console.log(`  ${cell}: ${cadwAdded.join(', ')}`);
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log('');
+    console.log(`Removed cells (${removed.length}): ${removed.join(', ')}`);
+  }
+  if (changedWithoutCadw.length > 0) {
+    console.log('');
+    console.log('Changed cells not explained by Cadw additions:');
+    for (const { cell, addedIds, removedIds } of changedWithoutCadw) {
+      console.log(`  ${cell}: added [${addedIds.join(', ')}], removed [${removedIds.join(', ')}]`);
+    }
+  }
+
+  if (removed.length > 0 || changedWithoutCadw.length > 0) process.exit(1);
+  process.exit(0);
+}
 
 // ── Local index reader ────────────────────────────────────────────────────────
 
@@ -174,6 +291,11 @@ function printSection(title, items) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  if (process.argv.length === 4) {
+    await diffLocalBuilds(process.argv[2], process.argv[3]);
+    return;
+  }
+
   // 1. Read local index
   let localIndex;
   try {

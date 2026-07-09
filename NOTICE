@@ -22,3 +22,10 @@ exports remain owned by the user. FindSpot retains ownership of the app,
 source code, branding, FieldGuide engine, report formats, template structures,
 generated interpretation structure, classification language, Club/Rally Pack
 workflows, organiser merge/member export flows and associated workflows.
+
+Third-party data notices:
+
+Scheduled Monument and AIM data are provided through public Historic England
+map services. Welsh Scheduled Ancient Monument data is Designated Historic
+Asset GIS Data from The Welsh Historic Environment Service (Cadw), licensed
+under the Open Government Licence v3.0.

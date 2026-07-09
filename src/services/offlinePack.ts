@@ -16,6 +16,7 @@ import { resolveWaybackIds, waybackTileUrl, WaybackIds } from '../utils/waybackS
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
+import { bboxIntersectsWales } from '../utils/jurisdictionDetect';
 import { LayerFetchStatus } from '../pages/fieldGuideTypes';
 import type { NHLEFeature, NHLEGeometry } from './historicScanService';
 import { romanRoadsAssetUrl } from './romanRoadService';
@@ -280,6 +281,8 @@ async function cacheSMIndexFromLive(
     packBbox: [number, number, number, number],
     cells: string[],
 ): Promise<boolean> {
+    if (bboxIntersectsWales(packBbox)) return false;
+
     try {
         const cellSet = new Set(cells);
         const shards = new Map<string, SMShardEntry[]>(cells.map(cell => [cell, []]));

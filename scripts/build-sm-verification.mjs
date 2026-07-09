@@ -1,7 +1,7 @@
 /**
  * build-sm-verification.mjs
  *
- * Queries the live NHLE FeatureServer/6 for a hardcoded set of test points
+ * Queries the live NHLE FeatureServer/6 and Cadw WFS for a hardcoded set of test points
  * and writes tests/fixtures/smVerification.json with expected SM flag/clear
  * results for each point.
  *
@@ -16,6 +16,7 @@
  *
  * Requirements: Node 18+ (global fetch, fs/promises)
  * Attribution: NHLE © Historic England, CC BY 4.0
+ * Cadw SAM data © The Welsh Historic Environment Service (Cadw), OGL v3.
  */
 
 import { writeFile, mkdir } from 'fs/promises';
@@ -29,6 +30,8 @@ const FEATURE_SERVER =
   'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
   'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
 
+const CADW_WFS = 'https://datamap.gov.wales/geoserver/inspire-wg/ows';
+
 // Bbox half-width in degrees — matches what the app scan uses
 const BBOX_HALF = 0.005;
 
@@ -36,7 +39,7 @@ const BBOX_HALF = 0.005;
 // Each point has a `label`, `lat`, `lon`, and an optional `note`.
 // `expected` and `listEntry` are derived at runtime from the live service.
 
-/** @type {Array<{ lat: number, lon: number, label: string, note?: string, _edgeCase?: boolean }>} */
+/** @type {Array<{ lat: number, lon: number, label: string, note?: string, source?: 'NHLE'|'Cadw', _edgeCase?: boolean }>} */
 const TEST_POINTS = [
   // ── Known SM points ───────────────────────────────────────────────────────
   {
@@ -128,6 +131,28 @@ const TEST_POINTS = [
     lat:   51.9393,
     lon:   -1.9296,
     note:  'Neolithic long barrow',
+  },
+  // ── Known Welsh SAM points (Cadw WFS) ──────────────────────────────────────
+  {
+    label: 'Ely Roman Villa',
+    lat:   51.47724354,
+    lon:   -3.22860589,
+    source: 'Cadw',
+    note:  'Cadw SAM GM205 — Cardiff area',
+  },
+  {
+    label: 'Knighton Mound & Bailey Castle',
+    lat:   52.34451409,
+    lon:   -3.05245037,
+    source: 'Cadw',
+    note:  'Cadw SAM RD053 — near the English border',
+  },
+  {
+    label: 'Nant y Gledrydd Standing Stone',
+    lat:   52.89871482,
+    lon:   -4.53887521,
+    source: 'Cadw',
+    note:  'Cadw SAM CN395 — north-west Wales',
   },
   // ── Edge cases (near SM polygon boundaries) ───────────────────────────────
   {
@@ -256,10 +281,54 @@ async function queryBbox(lat, lon) {
   })).filter((x) => x.listEntry);
 }
 
+/**
+ * Query Cadw WFS for SAM features within a bbox.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<Array<{ listEntry: string, name: string }>>}
+ */
+async function queryCadwBbox(lat, lon) {
+  const west  = lon - BBOX_HALF;
+  const east  = lon + BBOX_HALF;
+  const south = lat - BBOX_HALF;
+  const north = lat + BBOX_HALF;
+
+  const params = new URLSearchParams({
+    service:      'WFS',
+    version:      '2.0.0',
+    request:      'GetFeature',
+    typeNames:    'inspire-wg:Cadw_SAM',
+    outputFormat: 'application/json',
+    srsName:      'EPSG:4326',
+    count:        '50',
+    bbox:         `${west},${south},${east},${north},EPSG:4326`,
+  });
+
+  const res = await fetch(`${CADW_WFS}?${params}`, {
+    headers: { 'User-Agent': 'FindSpot-SM-Verification-Builder/1.0' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Cadw WFS returned ${res.status} for ${lat},${lon}`);
+  }
+
+  const data = await res.json();
+  if (data.exceptions || data.ExceptionReport) {
+    throw new Error(`Cadw WFS error at ${lat},${lon}: ${JSON.stringify(data.exceptions ?? data.ExceptionReport)}`);
+  }
+
+  const features = Array.isArray(data.features) ? data.features : [];
+  return features.map((f) => ({
+    listEntry: String(f.properties?.SAMNumber ?? '').trim(),
+    name:      String(f.properties?.Name      ?? '').trim(),
+  })).filter((x) => x.listEntry);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`Querying live FeatureServer/6 for ${TEST_POINTS.length} test points…`);
+  console.log(`Querying live NHLE/Cadw sources for ${TEST_POINTS.length} test points…`);
   console.log(`Bbox half-width: ±${BBOX_HALF}°\n`);
 
   const results = [];
@@ -267,13 +336,15 @@ async function main() {
   let clearCount = 0;
 
   for (const point of TEST_POINTS) {
-    const { lat, lon, label, note, _edgeCase } = point;
+    const { lat, lon, label, note, source = 'NHLE', _edgeCase } = point;
 
     process.stdout.write(`  ${label.padEnd(45)}`);
 
     let hits;
     try {
-      hits = await queryBbox(lat, lon);
+      hits = source === 'Cadw'
+        ? await queryCadwBbox(lat, lon)
+        : await queryBbox(lat, lon);
     } catch (err) {
       console.error(`\nERROR querying ${label}: ${err.message}`);
       process.exit(1);
@@ -282,12 +353,13 @@ async function main() {
     const expected  = hits.length > 0 ? 'flag' : 'clear';
     const listEntry = hits.length > 0 ? hits[0].listEntry : null;
 
-    if (expected === 'flag') { flagCount++;  process.stdout.write(`FLAG  (SM${listEntry})\n`); }
+    if (expected === 'flag') { flagCount++;  process.stdout.write(`FLAG  (${listEntry})\n`); }
     else                     { clearCount++; process.stdout.write(`clear\n`); }
 
     const entry = { lat, lon, label, expected };
     if (listEntry) entry.listEntry = listEntry;
     if (note)      entry.note      = note;
+    if (source !== 'NHLE') entry.source = source;
     if (_edgeCase) entry.edgeCase  = true;
 
     results.push(entry);
@@ -295,7 +367,7 @@ async function main() {
 
   const fixture = {
     capturedAt: new Date().toISOString(),
-    source:     'FeatureServer/6 live',
+    source:     'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live',
     bboxHalfDeg: BBOX_HALF,
     points:     results,
   };

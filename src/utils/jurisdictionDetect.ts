@@ -46,14 +46,26 @@ export function detectJurisdiction(lat: number, lon: number): Jurisdiction {
 
 // Wales bounding box — additive helper, kept separate from Jurisdiction
 // to avoid touching PAS/reporting logic.
-const WALES_LAT_MIN = 51.3;
-const WALES_LAT_MAX = 53.4;
-const WALES_LON_MIN = -5.4;
-const WALES_LON_MAX = -2.6;
+export const WALES_LAT_MIN = 51.3;
+export const WALES_LAT_MAX = 53.4;
+export const WALES_LON_MIN = -5.4;
+export const WALES_LON_MAX = -2.6;
 
 export function isInWales(lat: number, lon: number): boolean {
     return (
         lat >= WALES_LAT_MIN && lat <= WALES_LAT_MAX &&
         lon >= WALES_LON_MIN && lon <= WALES_LON_MAX
+    );
+}
+
+export function bboxIntersectsWales(
+    bbox: [number, number, number, number],
+): boolean {
+    const [west, south, east, north] = bbox;
+    return (
+        west <= WALES_LON_MAX &&
+        east >= WALES_LON_MIN &&
+        south <= WALES_LAT_MAX &&
+        north >= WALES_LAT_MIN
     );
 }

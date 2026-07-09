@@ -12,6 +12,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { bboxIntersectsWales } from '../../src/utils/jurisdictionDetect';
+import { isScheduledMonumentOverlap } from '../../src/services/fieldguide/landscapeInterpretation/scheduledMonumentGate';
 
 // ─── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +26,7 @@ type FixturePoint = {
     expected: 'flag' | 'clear';
     listEntry: string | null;
     note: string;
+    source?: 'NHLE' | 'Cadw';
 };
 
 type Fixture = {
@@ -279,6 +282,69 @@ describe('SM gate — _meta.json sentinel', () => {
     });
 });
 
+describe('bboxIntersectsWales', () => {
+    it('is true for a Cardiff-area bbox', () => {
+        expect(bboxIntersectsWales([-3.24, 51.47, -3.22, 51.49])).toBe(true);
+    });
+
+    it('is false for Norfolk', () => {
+        expect(bboxIntersectsWales([0.65, 52.45, 0.70, 52.50])).toBe(false);
+    });
+
+    it('is true for a bbox straddling the Welsh border', () => {
+        expect(bboxIntersectsWales([-2.70, 51.60, -2.55, 51.72])).toBe(true);
+    });
+
+    it('is true when the bbox crosses Wales even if no sampled point would be inside', () => {
+        expect(bboxIntersectsWales([-6.0, 52.0, -2.0, 52.1])).toBe(true);
+    });
+});
+
+describe('SM R2 path — Welsh Cadw fixtures', () => {
+    it('returns the Cadw entry at each Welsh fixture location and trips the gate', async () => {
+        const fixture = loadFixture();
+        const welshPoints = fixture!.points.filter(p => p.source === 'Cadw');
+        expect(welshPoints).toHaveLength(3);
+
+        const entries = welshPoints.map(point => ({
+            listEntry: point.listEntry!,
+            name: point.label,
+            bbox: [point.lon - 0.001, point.lat - 0.001, point.lon + 0.001, point.lat + 0.001],
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [point.lon - 0.001, point.lat - 0.001],
+                    [point.lon + 0.001, point.lat - 0.001],
+                    [point.lon + 0.001, point.lat + 0.001],
+                    [point.lon - 0.001, point.lat + 0.001],
+                    [point.lon - 0.001, point.lat - 0.001],
+                ]],
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('_meta.json')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(entries) });
+        }));
+
+        const { fetchScheduledMonuments } = await import('../../src/services/historicScanService');
+
+        for (const point of welshPoints) {
+            const result = await fetchScheduledMonuments(
+                point.lon - 0.005,
+                point.lat - 0.005,
+                point.lon + 0.005,
+                point.lat + 0.005,
+            );
+            expect(result.available).toBe(true);
+            expect(result.features.map(f => f.properties.ListEntry)).toContain(point.listEntry);
+            expect(isScheduledMonumentOverlap('', result.features)).toBe(true);
+        }
+    });
+});
+
 // ─── No live ArcGIS calls when USE_R2_DESIGNATIONS=true ──────────────────────
 
 describe('SM R2 path — no ArcGIS FeatureServer calls', () => {
@@ -349,6 +415,30 @@ describe('SM R2 path — live fallback when static worker is unavailable', () =>
         expect(result.available).toBe(true);
         expect(result.features[0].geometry).toEqual(liveGeometry);
         expect(fetchSpy.mock.calls.some(([url]) => typeof url === 'string' && url.includes('services-eu1.arcgis.com'))).toBe(true);
+    });
+
+    it('returns available:false for Wales instead of false-clearing through the England live fallback', async () => {
+        const fetchSpy = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('/sm-index/_meta.json')) {
+                return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+            }
+            if (url.includes('services-eu1.arcgis.com')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ type: 'FeatureCollection', features: [] }),
+                });
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
+        });
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const { fetchScheduledMonuments } = await import('../../src/services/historicScanService');
+        const result = await fetchScheduledMonuments(-3.235, 51.472, -3.225, 51.482);
+
+        expect(result.available).toBe(false);
+        expect(result.features).toHaveLength(0);
+        expect(fetchSpy.mock.calls.some(([url]) => typeof url === 'string' && url.includes('services-eu1.arcgis.com'))).toBe(false);
     });
 });
 

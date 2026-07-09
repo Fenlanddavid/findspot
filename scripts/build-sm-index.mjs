@@ -1,8 +1,9 @@
 /**
  * build-sm-index.mjs
  *
- * Fetches all Scheduled Monuments from the NHLE ArcGIS FeatureServer/6,
- * buckets them by geohash6 cell, and writes a sparse shard-per-cell index
+ * Fetches all Scheduled Monuments from the NHLE ArcGIS FeatureServer/6 and
+ * Cadw Scheduled Ancient Monument polygons from DataMapWales WFS, buckets them
+ * by geohash6 cell, and writes a sparse shard-per-cell index
  * to scripts/out/sm-index/.
  *
  * Requirements: Node 18+ (global fetch, fs/promises)
@@ -15,9 +16,13 @@
  *   scripts/out/sm-index/{geohash6}.json   (one per occupied cell)
  *
  * Attribution: NHLE © Historic England, CC BY 4.0
+ *
+ * Designated Historic Asset GIS Data, The Welsh Historic Environment Service
+ * (Cadw), fetch date recorded in _meta.json builtAt, licensed under the Open
+ * Government Licence v3.0.
  */
 
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, rm, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -27,6 +32,10 @@ const OUT_DIR   = join(__dirname, 'out', 'sm-index');
 const FEATURE_SERVER =
   'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
   'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
+
+// DataMapWales GeoServer WFS returns GeoJSON in lon/lat order when requested
+// with srsName=EPSG:4326. Verified against Cadw_SAM.1 / CN395 on 2026-07-09.
+const WALES_SOURCE = 'https://datamap.gov.wales/geoserver/inspire-wg/ows';
 
 const PAGE_SIZE = 1000;
 
@@ -152,7 +161,7 @@ function bboxFromGeometry(geometry) {
   return [minLon, minLat, maxLon, maxLat];
 }
 
-// ── NHLE fetcher ──────────────────────────────────────────────────────────────
+// ── Source fetchers ───────────────────────────────────────────────────────────
 
 /**
  * Fetch a single page of features from FeatureServer/6.
@@ -190,7 +199,7 @@ async function fetchPage(offset) {
  * Fetch ALL features from FeatureServer/6 using pagination.
  * @returns {Promise<object[]>}
  */
-async function fetchAllFeatures() {
+async function fetchAllEnglandFeatures() {
   const all = [];
   let   offset = 0;
 
@@ -215,42 +224,123 @@ async function fetchAllFeatures() {
   return all;
 }
 
+/**
+ * Fetch a single Cadw WFS page. Field mapping:
+ *   listEntry ← SAMNumber
+ *   name      ← Name
+ *
+ * @param {number} startIndex
+ * @returns {Promise<{features: object[], totalFeatures: number|null}>}
+ */
+async function fetchWalesPage(startIndex) {
+  const params = new URLSearchParams({
+    service:      'WFS',
+    version:      '2.0.0',
+    request:      'GetFeature',
+    typeNames:    'inspire-wg:Cadw_SAM',
+    outputFormat: 'application/json',
+    srsName:      'EPSG:4326',
+    count:        String(PAGE_SIZE),
+    startIndex:   String(startIndex),
+  });
+
+  const url = `${WALES_SOURCE}?${params}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'FindSpot-SM-Index-Builder/1.0' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Cadw WFS returned ${res.status} at startIndex ${startIndex}`);
+  }
+
+  const data = await res.json();
+  if (data.exceptions || data.ExceptionReport) {
+    throw new Error(`Cadw WFS error: ${JSON.stringify(data.exceptions ?? data.ExceptionReport)}`);
+  }
+
+  return {
+    features: Array.isArray(data.features) ? data.features : [],
+    totalFeatures: Number.isFinite(data.totalFeatures) ? data.totalFeatures : null,
+  };
+}
+
+/**
+ * Fetch ALL Cadw SAM features from DataMapWales WFS using pagination.
+ * @returns {Promise<object[]>}
+ */
+async function fetchAllWalesFeatures() {
+  const all = [];
+  let startIndex = 0;
+  let totalFeatures = null;
+
+  console.log('Fetching Cadw Scheduled Ancient Monuments from DataMapWales WFS…');
+
+  while (true) {
+    const page = await fetchWalesPage(startIndex);
+    if (totalFeatures === null && page.totalFeatures !== null) {
+      totalFeatures = page.totalFeatures;
+    }
+    if (page.features.length === 0) break;
+
+    all.push(...page.features);
+    console.log(`  …fetched ${all.length} Cadw features so far`);
+
+    if (page.features.length < PAGE_SIZE) break;
+    if (totalFeatures !== null && all.length >= totalFeatures) break;
+    startIndex += PAGE_SIZE;
+  }
+
+  console.log(`Total Cadw features fetched: ${all.length}`);
+  return all;
+}
+
 // ── Index builder ─────────────────────────────────────────────────────────────
 
 /**
- * Build the sharded index from an array of GeoJSON features.
+ * Build the sharded index from source-grouped GeoJSON features.
  *
- * @param {object[]} features
- * @returns {Map<string, Array<{listEntry:string, name:string, bbox:[number,number,number,number], geometry:object}>>}
+ * @param {Array<{source:'NHLE'|'Cadw', features: object[]}>} sourceGroups
+ * @returns {{index: Map<string, Array<{listEntry:string, name:string, bbox:[number,number,number,number], geometry:object}>>, allListEntries: string[], skipped: number, cadwDigitIds: number}}
  */
-function buildIndex(features) {
+function buildIndex(sourceGroups) {
   // cell → Map<listEntry, entry>  (deduplicate by listEntry within each cell)
   const cellMap = new Map();
+  const allListEntries = [];
   let   skipped = 0;
+  let   cadwDigitIds = 0;
 
-  for (const feature of features) {
-    const props     = feature.properties ?? {};
-    const listEntry = String(props.ListEntry ?? '').trim();
-    const name      = String(props.Name      ?? '').trim();
+  for (const { source, features } of sourceGroups) {
+    for (const feature of features) {
+      const props = feature.properties ?? {};
+      const listEntry = String(
+        source === 'Cadw' ? props.SAMNumber ?? '' : props.ListEntry ?? '',
+      ).trim();
+      const name = String(props.Name ?? '').trim();
 
-    if (!listEntry) { skipped++; continue; }
+      if (!listEntry || !name) { skipped++; continue; }
+      if (source === 'Cadw' && /^\d/.test(listEntry)) cadwDigitIds++;
 
-    const bbox = bboxFromGeometry(feature.geometry);
-    if (!bbox) { skipped++; continue; }
+      const bbox = bboxFromGeometry(feature.geometry);
+      if (!bbox) { skipped++; continue; }
 
-    const cells = geohash6CellsForBbox(bbox);
+      allListEntries.push(listEntry);
+      const cells = geohash6CellsForBbox(bbox);
 
-    for (const cell of cells) {
-      if (!cellMap.has(cell)) cellMap.set(cell, new Map());
-      const cellEntries = cellMap.get(cell);
-      if (!cellEntries.has(listEntry)) {
-        cellEntries.set(listEntry, { listEntry, name, bbox, geometry: feature.geometry });
+      for (const cell of cells) {
+        if (!cellMap.has(cell)) cellMap.set(cell, new Map());
+        const cellEntries = cellMap.get(cell);
+        if (!cellEntries.has(listEntry)) {
+          cellEntries.set(listEntry, { listEntry, name, bbox, geometry: feature.geometry });
+        }
       }
     }
   }
 
   if (skipped > 0) {
-    console.log(`  Skipped ${skipped} features (missing ListEntry or geometry)`);
+    console.log(`  Skipped ${skipped} features (missing identifier, name, or geometry)`);
+  }
+  if (cadwDigitIds > 0) {
+    console.log(`  Warning: ${cadwDigitIds} Cadw identifiers start with a digit`);
   }
 
   // Convert inner Maps to arrays
@@ -259,12 +349,18 @@ function buildIndex(features) {
     index.set(cell, Array.from(entries.values()));
   }
 
-  return index;
+  return {
+    index,
+    allListEntries: [...new Set(allListEntries)],
+    skipped,
+    cadwDigitIds,
+  };
 }
 
 // ── Writer ────────────────────────────────────────────────────────────────────
 
-async function writeIndex(index, features) {
+async function writeIndex(index, allListEntries, counts) {
+  await rm(OUT_DIR, { recursive: true, force: true });
   await mkdir(OUT_DIR, { recursive: true });
 
   let maxShardSize = 0;
@@ -277,24 +373,21 @@ async function writeIndex(index, features) {
     written++;
   }
 
-  // Collect all unique ListEntry values for diff-sm-index.mjs
-  const allListEntries = [
-    ...new Set(
-      features
-        .map((f) => String(f.properties?.ListEntry ?? '').trim())
-        .filter(Boolean),
-    ),
-  ];
-
-  const featureCount = features.length;
+  const featureCount = counts.englandFeatureCount + counts.walesFeatureCount;
 
   const meta = {
     builtAt:      new Date().toISOString(),
     schemaVersion: 2,
     geometryMode: 'full-geojson',
     featureCount,
+    englandFeatureCount: counts.englandFeatureCount,
+    walesFeatureCount:   counts.walesFeatureCount,
     cellCount:    index.size,
-    source:       'FeatureServer/6 live',
+    source:       'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live',
+    sources: [
+      { name: 'NHLE', licence: 'CC BY 4.0' },
+      { name: 'Cadw', licence: 'OGL v3' },
+    ],
   };
 
   await writeFile(join(OUT_DIR, '_meta.json'),    JSON.stringify(meta, null, 2), 'utf8');
@@ -307,17 +400,26 @@ async function writeIndex(index, features) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const features = await fetchAllFeatures();
+  const englandFeatures = await fetchAllEnglandFeatures();
+  const walesFeatures = await fetchAllWalesFeatures();
 
   console.log('Building geohash6 index…');
-  const index = buildIndex(features);
+  const { index, allListEntries } = buildIndex([
+    { source: 'NHLE', features: englandFeatures },
+    { source: 'Cadw', features: walesFeatures },
+  ]);
 
   console.log(`Writing ${index.size} shard files to ${OUT_DIR}…`);
-  const { written, maxShardSize, featureCount } = await writeIndex(index, features);
+  const { written, maxShardSize } = await writeIndex(index, allListEntries, {
+    englandFeatureCount: englandFeatures.length,
+    walesFeatureCount: walesFeatures.length,
+  });
 
   console.log('');
   console.log('Done.');
-  console.log(`  Total features : ${features.length}`);
+  console.log(`  England features : ${englandFeatures.length}`);
+  console.log(`  Wales features   : ${walesFeatures.length}`);
+  console.log(`  Total features   : ${englandFeatures.length + walesFeatures.length}`);
   console.log(`  Cells with SMs : ${written}`);
   console.log(`  Max shard size : ${maxShardSize} entries`);
   console.log(`  Output dir     : ${OUT_DIR}`);

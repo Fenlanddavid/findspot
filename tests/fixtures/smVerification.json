@@ -1,32 +1,238 @@
 {
-  "_note": "PLACEHOLDER — run scripts/build-sm-verification.mjs to generate from live FeatureServer/6",
-  "capturedAt": "",
-  "source": "FeatureServer/6 live",
+  "capturedAt": "2026-07-09T18:37:36.600Z",
+  "source": "NHLE FeatureServer/6 live + Cadw DataMapWales WFS live",
+  "bboxHalfDeg": 0.005,
   "points": [
-    { "lat": 51.1789, "lon": -1.8262, "label": "Stonehenge", "expected": "flag", "listEntry": null, "note": "stone circle complex — run script to populate listEntry" },
-    { "lat": 51.4285, "lon": -1.8544, "label": "Avebury", "expected": "flag", "listEntry": null, "note": "henge complex" },
-    { "lat": 55.0147, "lon": -2.3268, "label": "Hadrian's Wall — Housesteads", "expected": "flag", "listEntry": null, "note": "linear earthwork" },
-    { "lat": 50.6965, "lon": -2.4700, "label": "Maiden Castle", "expected": "flag", "listEntry": null, "note": "hillfort" },
-    { "lat": 50.1093, "lon": -5.6132, "label": "Carn Euny", "expected": "flag", "listEntry": null, "note": "courtyard house" },
-    { "lat": 51.5675, "lon": -1.5948, "label": "Wayland's Smithy", "expected": "flag", "listEntry": null, "note": "long barrow" },
-    { "lat": 51.4155, "lon": -1.8574, "label": "Silbury Hill", "expected": "flag", "listEntry": null, "note": "mound" },
-    { "lat": 52.0922, "lon":  1.3485, "label": "Sutton Hoo", "expected": "flag", "listEntry": null, "note": "burial ground" },
-    { "lat": 52.3556, "lon": -3.0447, "label": "Offa's Dyke — Knighton", "expected": "flag", "listEntry": null, "note": "linear earthwork" },
-    { "lat": 52.4793, "lon":  0.6767, "label": "Grimes Graves", "expected": "flag", "listEntry": null, "note": "flint mines" },
-    { "lat": 54.1857, "lon": -1.5693, "label": "Thornborough Henges", "expected": "flag", "listEntry": null, "note": "henge" },
-    { "lat": 50.8134, "lon": -2.5076, "label": "Cerne Abbas Giant", "expected": "flag", "listEntry": null, "note": "hill figure" },
-    { "lat": 52.5728, "lon": -0.1893, "label": "Flag Fen", "expected": "flag", "listEntry": null, "note": "wetland platform" },
-    { "lat": 51.0936, "lon": -1.7997, "label": "Old Sarum", "expected": "flag", "listEntry": null, "note": "hillfort" },
-    { "lat": 51.9393, "lon": -1.9296, "label": "Belas Knap", "expected": "flag", "listEntry": null, "note": "long barrow" },
-    { "lat": 52.5678, "lon": -1.2345, "label": "Clear — Leicestershire arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 53.4567, "lon": -1.5678, "label": "Clear — South Yorkshire arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 51.2345, "lon":  0.5678, "label": "Clear — Kent arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 52.1234, "lon": -2.3456, "label": "Clear — Worcestershire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 50.9876, "lon": -3.4567, "label": "Clear — Devon arable", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 54.3210, "lon": -0.9876, "label": "Clear — North Yorkshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 51.8765, "lon": -0.4321, "label": "Clear — Hertfordshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 53.1234, "lon": -2.7654, "label": "Clear — Cheshire", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 53.9876, "lon": -1.7654, "label": "Clear — North Yorkshire open field", "expected": "clear", "listEntry": null, "note": "known-clear rural point" },
-    { "lat": 50.5678, "lon": -1.3456, "label": "Clear — Hampshire coastal plain", "expected": "clear", "listEntry": null, "note": "known-clear rural point" }
+    {
+      "lat": 51.1789,
+      "lon": -1.8262,
+      "label": "Stonehenge",
+      "expected": "flag",
+      "listEntry": "1012386",
+      "note": "stone circle complex"
+    },
+    {
+      "lat": 51.4285,
+      "lon": -1.8544,
+      "label": "Avebury",
+      "expected": "flag",
+      "listEntry": "1015546",
+      "note": "henge and stone circles complex"
+    },
+    {
+      "lat": 55.0147,
+      "lon": -2.3268,
+      "label": "Hadrian's Wall near Housesteads",
+      "expected": "flag",
+      "listEntry": "1018585",
+      "note": "linear earthwork — multi-cell SM"
+    },
+    {
+      "lat": 50.6965,
+      "lon": -2.47,
+      "label": "Maiden Castle, Dorset",
+      "expected": "flag",
+      "listEntry": "1015775",
+      "note": "Iron Age hillfort"
+    },
+    {
+      "lat": 50.1093,
+      "lon": -5.6132,
+      "label": "Carn Euny",
+      "expected": "flag",
+      "listEntry": "1015626",
+      "note": "Iron Age courtyard house settlement"
+    },
+    {
+      "lat": 51.5675,
+      "lon": -1.5948,
+      "label": "Wayland's Smithy",
+      "expected": "flag",
+      "listEntry": "1008409",
+      "note": "Neolithic long barrow"
+    },
+    {
+      "lat": 51.4155,
+      "lon": -1.8574,
+      "label": "Silbury Hill",
+      "expected": "flag",
+      "listEntry": "1008445",
+      "note": "Neolithic chalk mound"
+    },
+    {
+      "lat": 52.0922,
+      "lon": 1.3485,
+      "label": "Sutton Hoo",
+      "expected": "clear",
+      "note": "Anglo-Saxon royal burial ground"
+    },
+    {
+      "lat": 52.3556,
+      "lon": -3.0447,
+      "label": "Offa's Dyke near Knighton",
+      "expected": "clear",
+      "note": "linear earthwork — multi-cell SM"
+    },
+    {
+      "lat": 52.4793,
+      "lon": 0.6767,
+      "label": "Grimes Graves",
+      "expected": "flag",
+      "listEntry": "1003619",
+      "note": "Neolithic flint mine complex"
+    },
+    {
+      "lat": 54.1857,
+      "lon": -1.5693,
+      "label": "Thornborough Henges",
+      "expected": "clear",
+      "note": "triple henge complex"
+    },
+    {
+      "lat": 50.8134,
+      "lon": -2.5076,
+      "label": "Cerne Abbas Giant",
+      "expected": "flag",
+      "listEntry": "1002416",
+      "note": "hill figure (chalk)"
+    },
+    {
+      "lat": 52.5728,
+      "lon": -0.1893,
+      "label": "Flag Fen",
+      "expected": "flag",
+      "listEntry": "1406460",
+      "note": "Bronze Age wetland platform and causeway"
+    },
+    {
+      "lat": 51.0936,
+      "lon": -1.7997,
+      "label": "Old Sarum",
+      "expected": "flag",
+      "listEntry": "1015675",
+      "note": "Iron Age hillfort and Norman castle"
+    },
+    {
+      "lat": 51.9393,
+      "lon": -1.9296,
+      "label": "Belas Knap",
+      "expected": "clear",
+      "note": "Neolithic long barrow"
+    },
+    {
+      "lat": 51.47724354,
+      "lon": -3.22860589,
+      "label": "Ely Roman Villa",
+      "expected": "flag",
+      "listEntry": "GM205",
+      "note": "Cadw SAM GM205 — Cardiff area",
+      "source": "Cadw"
+    },
+    {
+      "lat": 52.34451409,
+      "lon": -3.05245037,
+      "label": "Knighton Mound & Bailey Castle",
+      "expected": "flag",
+      "listEntry": "RD053",
+      "note": "Cadw SAM RD053 — near the English border",
+      "source": "Cadw"
+    },
+    {
+      "lat": 52.89871482,
+      "lon": -4.53887521,
+      "label": "Nant y Gledrydd Standing Stone",
+      "expected": "flag",
+      "listEntry": "CN395",
+      "note": "Cadw SAM CN395 — north-west Wales",
+      "source": "Cadw"
+    },
+    {
+      "lat": 51.1797,
+      "lon": -1.823,
+      "label": "Stonehenge outer buffer edge",
+      "expected": "flag",
+      "listEntry": "1012386",
+      "note": "edge case: near outer scheduled area boundary — result may vary with designation changes",
+      "edgeCase": true
+    },
+    {
+      "lat": 51.4279,
+      "lon": -1.8484,
+      "label": "Avebury henge eastern edge",
+      "expected": "flag",
+      "listEntry": "1015546",
+      "note": "edge case: near eastern boundary of Avebury scheduled area",
+      "edgeCase": true
+    },
+    {
+      "lat": 52.5678,
+      "lon": -1.2345,
+      "label": "Leicestershire arable",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 53.4567,
+      "lon": -1.5678,
+      "label": "South Yorkshire arable",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 51.2345,
+      "lon": 0.5678,
+      "label": "Kent arable",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 52.1234,
+      "lon": -2.3456,
+      "label": "Worcestershire",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 50.9876,
+      "lon": -3.4567,
+      "label": "Devon arable",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 54.321,
+      "lon": -0.9876,
+      "label": "North Yorkshire (east)",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 51.8765,
+      "lon": -0.4321,
+      "label": "Hertfordshire",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 53.1234,
+      "lon": -2.7654,
+      "label": "Cheshire",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    },
+    {
+      "lat": 53.9876,
+      "lon": -1.7654,
+      "label": "North Yorkshire (west)",
+      "expected": "clear",
+      "note": "rural arable, well clear of Thornborough Henges"
+    },
+    {
+      "lat": 50.5678,
+      "lon": -1.3456,
+      "label": "Hampshire coastal plain",
+      "expected": "clear",
+      "note": "rural arable — no known SMs"
+    }
   ]
 }

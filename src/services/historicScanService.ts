@@ -2,6 +2,7 @@
 import { USE_R2_DESIGNATIONS, FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { cachedFetchAny } from '../utils/cachedFetch';
+import { bboxIntersectsWales } from '../utils/jurisdictionDetect';
 
 // ─── Typed API response shapes ────────────────────────────────────────────────
 
@@ -647,6 +648,13 @@ export async function fetchScheduledMonuments(
         const r2Result = await _fetchSMFromR2(west, south, east, north, signal, options);
         if (r2Result.available !== false) return r2Result;
         if (options.cacheOnly) return r2Result;
+        if (bboxIntersectsWales([west, south, east, north])) {
+            return {
+                features: [],
+                available: false,
+                error: 'SM live fallback unavailable for Wales',
+            };
+        }
 
         const liveResult = await _fetchScheduledMonumentsLive(west, south, east, north, signal);
         if (liveResult.available !== false) return liveResult;
