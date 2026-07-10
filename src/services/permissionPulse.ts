@@ -2,6 +2,7 @@
 // Pure Dexie reads only (no fetch, no caches) so useLiveQuery tracks changes.
 
 import { db } from "../db";
+import { qualifiesForClock } from "./treasureClock";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,8 @@ const SEVERITY_ORDER: PulseSeverity[] = [
 ];
 
 export type PulseTemplateId =
+  | "sf_report_clock"
+  | "sf_report_scotland"
   | "sf_coroner_notified"
   | "sf_awaiting_excavation"
   | "sf_in_progress"
@@ -40,6 +43,10 @@ export interface PulseFact {
 // ─── Template strings ────────────────────────────────────────────────────────
 
 export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
+  sf_report_clock:
+    "Recorded {days} day{s} ago \u2014 Treasure finds must be reported within 14 days of realising they may be Treasure.",
+  sf_report_scotland:
+    "Report to the Treasure Trove Unit \u2014 significant finds in Scotland must be reported.",
   sf_coroner_notified:
     "A reported find here is awaiting coroner process.",
   sf_awaiting_excavation:
@@ -63,6 +70,8 @@ export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
 // Template ordering within each tier (fixed, deterministic)
 const TEMPLATE_ORDER: PulseTemplateId[] = [
   // obligation
+  "sf_report_clock",
+  "sf_report_scotland",
   "sf_coroner_notified",
   "sf_awaiting_excavation",
   "sf_in_progress",
@@ -104,7 +113,24 @@ export async function derivePermissionPulse(
   };
 
   for (const sf of allSFs) {
-    if (
+    // Treasure clock takes priority: emit sf_report_clock/scotland INSTEAD
+    // of the generic status fact for qualifying SFs (avoid double-fact).
+    if (qualifiesForClock(sf)) {
+      const isScotland = sf.jurisdiction === "scotland";
+      const daysElapsed = Math.floor(
+        (now.getTime() - new Date(sf.createdAt).getTime()) / 86_400_000,
+      );
+      facts.push({
+        id: `sf_report_clock:${sf.id}`,
+        permissionId,
+        severity: "obligation",
+        templateId: isScotland ? "sf_report_scotland" : "sf_report_clock",
+        slots: isScotland
+          ? {}
+          : { days: daysElapsed, s: daysElapsed === 1 ? "" : "s" },
+        link: { kind: "sf-resume", sfId: sf.id },
+      });
+    } else if (
       unresolvedStatuses.includes(
         sf.status as (typeof unresolvedStatuses)[number]
       )

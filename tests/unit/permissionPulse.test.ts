@@ -373,3 +373,67 @@ describe("permissionPulse — m1 (seasonal pattern)", () => {
     expect(f).toBeDefined();
   });
 });
+
+// ─── Treasure clock integration ─────────────────────────────────────────────
+
+describe("permissionPulse — sf_report_clock replaces generic fact", () => {
+  it("qualifying path1 SF emits sf_report_clock instead of sf_in_progress", async () => {
+    mockSignificantFinds._setData([
+      makeSF({
+        id: "sf-clock",
+        status: "in_progress",
+        path: "stop_secure",
+        jurisdiction: "england_wales",
+        createdAt: new Date(NOW.getTime() - 8 * 86_400_000).toISOString(),
+      }),
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    // Should NOT have sf_in_progress for this SF
+    expect(facts.find((f) => f.id === "sf_unresolved:sf-clock")).toBeUndefined();
+    // Should have sf_report_clock
+    const clockFact = facts.find((f) => f.id === "sf_report_clock:sf-clock");
+    expect(clockFact).toBeDefined();
+    expect(clockFact!.templateId).toBe("sf_report_clock");
+    expect(clockFact!.severity).toBe("obligation");
+    expect(clockFact!.slots.days).toBe(8);
+    expect(clockFact!.link).toEqual({ kind: "sf-resume", sfId: "sf-clock" });
+  });
+
+  it("sf_report_clock sorts before sf_coroner_notified in obligation tier", async () => {
+    mockSignificantFinds._setData([
+      makeSF({ id: "sf-notified", status: "coroner_notified" }),
+      makeSF({
+        id: "sf-clock",
+        status: "in_progress",
+        path: "stop_secure",
+        jurisdiction: "england_wales",
+        createdAt: NOW.toISOString(),
+      }),
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    const obligations = facts.filter((f) => f.severity === "obligation");
+    expect(obligations.length).toBe(2);
+    expect(obligations[0].templateId).toBe("sf_report_clock");
+    expect(obligations[1].templateId).toBe("sf_coroner_notified");
+  });
+
+  it("scotland SF emits sf_report_scotland with no day slots", async () => {
+    mockSignificantFinds._setData([
+      makeSF({
+        id: "sf-scot",
+        status: "in_progress",
+        path: "stop_secure",
+        jurisdiction: "scotland",
+        createdAt: NOW.toISOString(),
+      }),
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    const scotFact = facts.find((f) => f.id === "sf_report_clock:sf-scot");
+    expect(scotFact).toBeDefined();
+    expect(scotFact!.templateId).toBe("sf_report_scotland");
+    expect(scotFact!.slots).toEqual({});
+  });
+});

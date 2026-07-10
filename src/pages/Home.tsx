@@ -6,6 +6,7 @@ import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions, EnrichedPermission } from "../services/permissions";
+import { deriveTreasureClock, TreasureClockItem } from "../services/treasureClock";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
@@ -121,7 +122,7 @@ export default function Home(props: {
   }, [dismissInstallNextStep]);
 
   const isDismissed = useCallback((key: string, type: string): boolean => {
-    if (type === 'active_session') return false;
+    if (type === 'active_session' || type === 'treasure_clock') return false;
     const ts = dismissedNextMoves[key];
     if (!ts) return false;
     if (type === 'stale_permission') {
@@ -157,6 +158,11 @@ export default function Home(props: {
       .toArray();
     return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
   }, [props.projectId]);
+
+  const treasureClock = useLiveQuery(
+    () => deriveTreasureClock(props.projectId, new Date()),
+    [props.projectId],
+  );
 
   const realPermissions = useMemo(
     () => permissions?.filter(p => !p.isDefault) ?? [],
@@ -243,6 +249,34 @@ export default function Home(props: {
       cta: string;
       action: () => void;
     }> = [];
+
+    // ── Treasure clock — statutory reporting window (non-dismissable) ────
+    if (treasureClock && treasureClock.length > 0) {
+      const most = treasureClock[0]; // most urgent (sorted daysElapsed desc)
+      const isScotland = most.jurisdiction === "scotland";
+      const tierDetail = isScotland
+        ? "Report to the Treasure Trove Unit \u2014 significant finds in Scotland must be reported."
+        : most.tier === "overdue"
+          ? "If you haven\u2019t reported yet, contact your FLO now \u2014 report late rather than not at all."
+          : most.tier === "red"
+            ? "The 14-day reporting window is closing. Contact your FLO as soon as possible."
+            : most.tier === "amber"
+              ? "Treasure finds must be reported within 14 days of realising they may be Treasure."
+              : "Treasure finds must be reported within 14 days of realising they may be Treasure.";
+      const rider = treasureClock.length > 1
+        ? ` +${treasureClock.length - 1} more awaiting report`
+        : "";
+      items.push({
+        type: "treasure_clock",
+        dismissKey: `treasure_clock:${most.sfId}`,
+        message: isScotland
+          ? `${most.permissionName}: significant find recorded`
+          : `${most.permissionName}: significant find recorded ${most.daysElapsed} days ago`,
+        detail: tierDetail + rider,
+        cta: "Review Find",
+        action: () => nav(`/finds-box?tab=significant&sf=${most.sfId}`),
+      });
+    }
 
     if (activeSession) {
       const sessionPermName = permissions?.find(p => p.id === activeSession.permissionId)?.name;
@@ -369,7 +403,7 @@ export default function Home(props: {
       }
     }
     return items;
-  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed, fieldGuidePackPrompt]);
+  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed, fieldGuidePackPrompt, treasureClock]);
 
   const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
 
@@ -582,8 +616,18 @@ export default function Home(props: {
           </div>
         </section>
       ) : nextMove ? (
-        <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${nextMove.type === 'upcoming_rally' ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800' : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'}`}>
-          {nextMove.type !== 'active_session' && (
+        <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${
+          nextMove.type === 'treasure_clock'
+            ? (treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
+                ? 'bg-red-50 dark:bg-red-900/15 border border-red-200 dark:border-red-800'
+                : treasureClock?.[0]?.tier === 'amber'
+                  ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800'
+                  : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700')
+            : nextMove.type === 'upcoming_rally'
+              ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800'
+              : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'
+        }`}>
+          {nextMove.type !== 'active_session' && nextMove.type !== 'treasure_clock' && (
             <button
               onClick={() => {
                 if (nextMove.type === 'install_app') {
@@ -602,9 +646,16 @@ export default function Home(props: {
             <p className={`text-xs font-black mb-1 ${
               nextMove.type === 'active_session'
                 ? 'uppercase tracking-widest text-amber-600 dark:text-amber-400'
-                : 'uppercase tracking-widest ' + (nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')
+                : nextMove.type === 'treasure_clock'
+                  ? 'uppercase tracking-widest ' + (
+                      treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
+                        ? 'text-red-600 dark:text-red-400'
+                        : treasureClock?.[0]?.tier === 'amber'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-gray-600 dark:text-gray-400')
+                  : 'uppercase tracking-widest ' + (nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')
             }`}>
-              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next move'}
+              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'treasure_clock' ? 'Reporting obligation' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next move'}
             </p>
             <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
             {'detail' in nextMove && nextMove.detail && (
@@ -632,7 +683,17 @@ export default function Home(props: {
             )}
             <button
               onClick={nextMove.action}
-              className={`min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${nextMove.type === 'upcoming_rally' ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'}`}
+              className={`min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${
+                nextMove.type === 'treasure_clock'
+                  ? (treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
+                      ? 'bg-red-600 hover:bg-red-500 shadow-sm shadow-red-600/20'
+                      : treasureClock?.[0]?.tier === 'amber'
+                        ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20'
+                        : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20')
+                  : nextMove.type === 'upcoming_rally'
+                    ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20'
+                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'
+              }`}
             >
               {nextMove.cta}
             </button>

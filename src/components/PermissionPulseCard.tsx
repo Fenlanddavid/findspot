@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
   derivePermissionPulse,
+  PULSE_TEMPLATES,
   PulseFact,
   PulseSeverity,
 } from "../services/permissionPulse";
@@ -31,30 +32,8 @@ const SEVERITY_STYLE: Record<
 };
 
 function renderSlottedText(fact: PulseFact): string {
-  // Build display string from template + slots
   const { templateId, slots } = fact;
-  // We inline the resolved text rather than importing PULSE_TEMPLATES
-  // to keep the rendering self-contained.
-  const TEMPLATES: Record<string, string> = {
-    sf_coroner_notified:
-      "A reported find here is awaiting coroner process.",
-    sf_awaiting_excavation:
-      "A significant find location awaits excavation.",
-    sf_in_progress:
-      "A significant find record here is incomplete.",
-    open_signals:
-      "{count} un-dug signal{s} await{verb} investigation.",
-    last_visit: "Last detected here {gapDays} days ago.",
-    crop_change_stubble:
-      "Now in stubble — was {prevCrop} on your last visit.",
-    crop_change_crop:
-      "Crop recorded as {crop}, previously {prevCrop}.",
-    last_visit_finds:
-      "Your last session produced {count} find{s}{nameClause}.",
-    seasonal_pattern:
-      "Your visits here have historically fallen between {monthA} and {monthB}.",
-  };
-  let text = TEMPLATES[templateId] || templateId;
+  let text = PULSE_TEMPLATES[templateId];
   for (const [key, val] of Object.entries(slots)) {
     text = text.replace(`{${key}}`, String(val));
   }

@@ -104,6 +104,29 @@ export default function FindsBox(props: { projectId: string }) {
   const filterPeriod = searchParams.get("period");
   const filterMaterial = searchParams.get("material");
   const filterType = searchParams.get("type");
+  const openSfParam = searchParams.get("sf");
+
+  useEffect(() => {
+    if (!openSfParam) return;
+    setOpenSfId(openSfParam);
+    if (mainTab !== "significant") {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", "significant");
+        return next;
+      }, { replace: true });
+    }
+  }, [openSfParam, mainTab, setSearchParams]);
+
+  function closeSignificantFind() {
+    setOpenSfId(null);
+    if (!openSfParam) return;
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete("sf");
+      return next;
+    }, { replace: true });
+  }
 
   const finds = useLiveQuery(
     async () => {
@@ -682,7 +705,7 @@ export default function FindsBox(props: { projectId: string }) {
       )}
 
       {openSfId && (
-        <SignificantFindDetailSheet sfId={openSfId} onClose={() => setOpenSfId(null)} />
+        <SignificantFindDetailSheet sfId={openSfId} onClose={closeSignificantFind} />
       )}
 
       {openSignal && (
