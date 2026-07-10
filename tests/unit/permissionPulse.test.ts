@@ -14,6 +14,9 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds } =
       let data: Record<string, unknown>[] = [];
       return {
         _setData(r: Record<string, unknown>[]) { data = r; },
+        get(id: unknown) {
+          return Promise.resolve(data.find((r) => r.id === id));
+        },
         where(key: string) {
           return {
             equals(val: unknown) {
@@ -32,6 +35,13 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds } =
                 },
                 count() {
                   return this.toArray().then((a: unknown[]) => a.length);
+                },
+              };
+            },
+            anyOf(vals: unknown[]) {
+              return {
+                toArray() {
+                  return Promise.resolve(data.filter((r) => (vals as string[]).includes(r[key] as string)));
                 },
               };
             },
@@ -82,6 +92,8 @@ function makeFind(overrides: Partial<MockRow> = {}): MockRow {
     permissionId: PERM_ID,
     sessionId: "sess-001",
     objectType: "",
+    material: "Other",
+    period: "Unknown",
     createdAt: "2026-01-15T10:00:00.000Z",
     ...overrides,
   };
@@ -397,7 +409,28 @@ describe("permissionPulse — sf_report_clock replaces generic fact", () => {
     expect(clockFact!.templateId).toBe("sf_report_clock");
     expect(clockFact!.severity).toBe("obligation");
     expect(clockFact!.slots.days).toBe(8);
-    expect(clockFact!.link).toEqual({ kind: "sf-resume", sfId: "sf-clock" });
+    expect(clockFact!.link).toEqual({ kind: "route", to: "/finds-box?tab=significant&sf=sf-clock" });
+  });
+
+  it("path3 default linked find stays incomplete instead of becoming report clock", async () => {
+    mockFinds._setData([
+      makeFind({ id: "find-default", material: "Other", period: "Unknown" }),
+    ]);
+    mockSignificantFinds._setData([
+      makeSF({
+        id: "sf-default",
+        status: "in_progress",
+        path: "notable_find",
+        linkedFindId: "find-default",
+        jurisdiction: "england_wales",
+      }),
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    expect(facts.find((f) => f.id === "sf_report_clock:sf-default")).toBeUndefined();
+    const incomplete = facts.find((f) => f.id === "sf_unresolved:sf-default");
+    expect(incomplete).toBeDefined();
+    expect(incomplete!.templateId).toBe("sf_in_progress");
   });
 
   it("sf_report_clock sorts before sf_coroner_notified in obligation tier", async () => {

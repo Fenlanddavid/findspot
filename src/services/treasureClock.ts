@@ -3,7 +3,9 @@
 // s.8 Treasure Act 1996: 14 days from the day the finder believes the find
 // may be Treasure. createdAt is the on-device proxy (conservative).
 
-import { db, SignificantFind } from "../db";
+import { db } from "../db";
+import type { Find, SignificantFind } from "../db";
+import { checkTreasureAct } from "../utils/treasureActCheck";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -25,30 +27,75 @@ export interface TreasureClockItem {
 
 // ─── Qualification ───────────────────────────────────────────────────────────
 
-/** True when a SF is "on the clock" — qualifying AND not yet cleared. */
-export function qualifiesForClock(sf: SignificantFind): boolean {
+function hasText(value: string | null | undefined): boolean {
+  return (value ?? "").trim() !== "";
+}
+
+function isOpenForClock(sf: SignificantFind): boolean {
   // ── Cleared? Any of these fields means the obligation is discharged. ──
   if (
     sf.status === "coroner_notified" ||
     sf.status === "pas_recorded"
   ) return false;
-  if (sf.treasureReference) return false;
-  if (sf.floContactDate) return false;
-  if (sf.pasRecordNumber) return false;
+  if (hasText(sf.treasureReference)) return false;
+  if (hasText(sf.floContactDate)) return false;
+  if (hasText(sf.pasRecordNumber)) return false;
   if (sf.treasureOutcome) return false;
   if (sf.scatterOutcome) return false;
   if (sf.notableOutcome) return false;
+
+  return true;
+}
+
+function isUnclassified(find: Find): boolean {
+  return find.material === "Other" || find.period === "Unknown";
+}
+
+function treasureCheckSaysReportable(
+  find: Find,
+  sf: SignificantFind,
+  count: number,
+): boolean {
+  return checkTreasureAct({
+    material: find.material,
+    period: find.period,
+    count,
+    jurisdiction: sf.jurisdiction,
+  }).result === "may_be_reportable";
+}
+
+async function getFindsById(ids: string[]): Promise<Map<string, Find>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.finds.where("id").anyOf(ids).toArray();
+  return new Map(rows.map((find) => [find.id, find]));
+}
+
+/** True when a SF is "on the clock" — qualifying AND not yet cleared. */
+export async function qualifiesForClock(sf: SignificantFind): Promise<boolean> {
+  if (!isOpenForClock(sf)) return false;
 
   // ── Qualifying? ────────────────────────────────────────────────────────
   // Path 1 (stop_secure): ALWAYS qualifies — the path IS the declaration.
   if (sf.path === "stop_secure") return true;
 
-  // Paths 2/3: only when treasureActResult === "may_be_reportable".
-  // null / unknown / probably_not do NOT start the clock.
-  if (
-    (sf.path === "map_scatter" || sf.path === "notable_find") &&
-    sf.treasureActResult === "may_be_reportable"
-  ) return true;
+  if (sf.path === "map_scatter") {
+    if (sf.scatterFindIds.length === 0) return false;
+    const findsById = await getFindsById(sf.scatterFindIds);
+
+    return sf.scatterFindIds.some((findId) => {
+      const find = findsById.get(findId);
+      if (!find) return true;
+      if (isUnclassified(find)) return true;
+      return treasureCheckSaysReportable(find, sf, sf.scatterFindIds.length);
+    });
+  }
+
+  if (sf.path === "notable_find") {
+    if (!sf.linkedFindId) return false;
+    const find = await db.finds.get(sf.linkedFindId);
+    if (!find || isUnclassified(find)) return false;
+    return treasureCheckSaysReportable(find, sf, 1);
+  }
 
   return false;
 }
@@ -81,7 +128,10 @@ export async function deriveTreasureClock(
     .toArray();
 
   // Build a permission name lookup (only for qualifying SFs)
-  const qualifying = allSFs.filter(qualifiesForClock);
+  const qualifying: SignificantFind[] = [];
+  for (const sf of allSFs) {
+    if (await qualifiesForClock(sf)) qualifying.push(sf);
+  }
   if (qualifying.length === 0) return [];
 
   const permIds = [...new Set(qualifying.map((sf) => sf.permissionId))];

@@ -74,7 +74,6 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
           scatterId: workflowState.scatterId,
           scatterFindIds: workflowState.scatterFindIds,
           linkedFindId: null,
-          treasureActResult: null,
           treasureActDraft: "",
           landownerSummary: "",
           workflowStep: null,

@@ -65,7 +65,6 @@ export default function ObserveScreen({ workflowState, updateState, onNext }: Pr
         scatterId: null,
         scatterFindIds: [],
         linkedFindId: null,
-        treasureActResult: null,
         treasureActDraft: "",
         landownerSummary: "",
         createdAt: now,

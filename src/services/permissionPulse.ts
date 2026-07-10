@@ -115,7 +115,7 @@ export async function derivePermissionPulse(
   for (const sf of allSFs) {
     // Treasure clock takes priority: emit sf_report_clock/scotland INSTEAD
     // of the generic status fact for qualifying SFs (avoid double-fact).
-    if (qualifiesForClock(sf)) {
+    if (await qualifiesForClock(sf)) {
       const isScotland = sf.jurisdiction === "scotland";
       const daysElapsed = Math.floor(
         (now.getTime() - new Date(sf.createdAt).getTime()) / 86_400_000,
@@ -128,7 +128,7 @@ export async function derivePermissionPulse(
         slots: isScotland
           ? {}
           : { days: daysElapsed, s: daysElapsed === 1 ? "" : "s" },
-        link: { kind: "sf-resume", sfId: sf.id },
+        link: { kind: "route", to: `/finds-box?tab=significant&sf=${sf.id}` },
       });
     } else if (
       unresolvedStatuses.includes(

@@ -74,7 +74,6 @@ export default function PhotoCaptureScreen({ workflowState, updateState, onNext 
       scatterId: null,
       scatterFindIds: [],
       linkedFindId: workflowState.linkedFindId,
-      treasureActResult: null,
       treasureActDraft: "",
       landownerSummary: "",
       findDescription: workflowState.findDescription || undefined,

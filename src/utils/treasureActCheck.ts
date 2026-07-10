@@ -17,7 +17,6 @@ export type TreasureActCheckResult = {
 const PRECIOUS_METALS = ["Gold", "Silver", "50% Silver"];
 const PREHISTORIC_PERIODS = ["Prehistoric", "Bronze Age", "Iron Age", "Celtic"];
 const BASE_METALS = ["Copper alloy", "Copper", "Cupro-Nickel", "Lead", "Iron", "Tin", "Pewter"];
-const METALS = [...PRECIOUS_METALS, ...BASE_METALS];
 
 function isPreciousMetal(material: string): boolean {
   return PRECIOUS_METALS.includes(material);
@@ -31,19 +30,11 @@ function isBaseMetalObject(material: string): boolean {
   return BASE_METALS.includes(material);
 }
 
-function isMetal(material: string): boolean {
-  return METALS.includes(material);
-}
-
 function isOver300YearsOld(period: string): boolean {
   const modernPeriods = ["Modern", "Post-medieval"];
   // Post-medieval covers roughly 1550 onwards — items from early post-medieval could
   // still be >300 years old, but we treat it conservatively as "possibly not".
   return !modernPeriods.includes(period) && period !== "Unknown";
-}
-
-function mayBeOver200YearsOld(period: string): boolean {
-  return period !== "Modern";
 }
 
 export function checkTreasureAct(input: TreasureActInput): TreasureActCheckResult {
@@ -114,14 +105,9 @@ export function checkTreasureAct(input: TreasureActInput): TreasureActCheckResul
   // Rule 4: Any object found in association with Treasure
   // (can't check this automatically — covered in legalSummary)
 
-  // Rule 5: 2023 significance-based class.
-  // The app cannot assess legal significance, so it only flags cases where
-  // FLO/coroner advice may be needed rather than trying to decide the point.
-  if (isMetal(material) && mayBeOver200YearsOld(period)) {
-    reasons.push(
-      "Metal objects or coins over 200 years old may be Treasure if they meet the historical, archaeological, or cultural significance threshold introduced in 2023."
-    );
-  }
+  // 2023 significance-based class cannot be assessed from material/period alone.
+  // Do not turn every old base-metal singleton into a statutory clock; surface
+  // those through normal PAS/significant-find review instead.
 
   if (reasons.length > 0) {
     return {
@@ -150,11 +136,12 @@ export function checkTreasureAct(input: TreasureActInput): TreasureActCheckResul
           "However, recording it with the Portable Antiquities Scheme (PAS) is still valuable for archaeological research.",
         ]
       : [
-          "This find does not meet the Treasure Act criteria.",
+          "This find is not automatically reportable under the Treasure Act criteria.",
         ],
     legalSummary:
       "Based on the details you have provided, this find is probably not legally defined as Treasure " +
-      "under the Treasure Act 1996. You are not legally required to report it to the coroner. " +
+      "under the Treasure Act 1996. It does not start the statutory reporting clock in FindSpot. " +
+      "Exceptionally significant metal items over 200 years old can still qualify under the 2023 designation class; if in doubt, speak to your FLO. " +
       "However, recording it voluntarily with the Portable Antiquities Scheme contributes to the " +
       "national archaeological record and is strongly encouraged.",
     reportingObligation: null,

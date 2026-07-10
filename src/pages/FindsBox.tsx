@@ -108,24 +108,24 @@ export default function FindsBox(props: { projectId: string }) {
 
   useEffect(() => {
     if (!openSfParam) return;
-    setOpenSfId(openSfParam);
-    if (mainTab !== "significant") {
+    let cancelled = false;
+
+    db.significantFinds.get(openSfParam).then((sf) => {
+      if (cancelled) return;
+      if (sf?.projectId === props.projectId) setOpenSfId(openSfParam);
       setSearchParams(prev => {
         const next = new URLSearchParams(prev);
         next.set("tab", "significant");
+        next.delete("sf");
         return next;
       }, { replace: true });
-    }
-  }, [openSfParam, mainTab, setSearchParams]);
+    });
+
+    return () => { cancelled = true; };
+  }, [openSfParam, props.projectId, setSearchParams]);
 
   function closeSignificantFind() {
     setOpenSfId(null);
-    if (!openSfParam) return;
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.delete("sf");
-      return next;
-    }, { replace: true });
   }
 
   const finds = useLiveQuery(

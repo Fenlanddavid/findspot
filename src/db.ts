@@ -163,7 +163,7 @@ export type SignificantFind = {
 
   // Path 3
   linkedFindId: string | null;
-  treasureActResult: "may_be_reportable" | "probably_not" | "unknown" | null;
+  treasureActResult?: "may_be_reportable" | "probably_not" | "unknown" | null;
 
   // Generated outputs
   treasureActDraft: string;
