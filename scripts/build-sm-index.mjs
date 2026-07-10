@@ -382,6 +382,7 @@ async function writeIndex(index, allListEntries, counts) {
     featureCount,
     englandFeatureCount: counts.englandFeatureCount,
     walesFeatureCount:   counts.walesFeatureCount,
+    coverage:     ['england', 'wales'],
     cellCount:    index.size,
     source:       'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live',
     sources: [

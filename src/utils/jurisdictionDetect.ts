@@ -69,3 +69,46 @@ export function bboxIntersectsWales(
         north >= WALES_LAT_MIN
     );
 }
+
+export type SMJurisdiction =
+    | "england_wales"
+    | "scotland"
+    | "northern_ireland";
+
+function isInUkBounds(lat: number, lon: number): boolean {
+    // Exclude the near-continent corner that sits inside the broad UK bbox.
+    // Kent's east coast remains inside; Calais and adjacent French coast do not.
+    if (lat < 51.05 && lon > 1.5) return false;
+    return lat >= 49.8 && lat <= 60.9 && lon >= -8.7 && lon <= 2.0;
+}
+
+export function bboxRequiredSMJurisdictions(
+    bbox: [west: number, south: number, east: number, north: number],
+): Set<SMJurisdiction> | "outside_uk" {
+    const [west, south, east, north] = bbox;
+    const samples: Array<[number, number]> = [
+        [south, west],
+        [south, east],
+        [north, east],
+        [north, west],
+        [(south + north) / 2, (west + east) / 2],
+    ];
+    const required = new Set<SMJurisdiction>();
+
+    for (const [lat, lon] of samples) {
+        if (!isInUkBounds(lat, lon)) return "outside_uk";
+        const jurisdiction = detectJurisdiction(lat, lon);
+        if (jurisdiction === "england_wales") {
+            required.add("england_wales");
+        } else if (jurisdiction === "scotland") {
+            required.add("scotland");
+        } else if (jurisdiction === "northern_ireland") {
+            required.add("northern_ireland");
+        } else {
+            required.add("england_wales");
+            required.add("scotland");
+        }
+    }
+
+    return required;
+}

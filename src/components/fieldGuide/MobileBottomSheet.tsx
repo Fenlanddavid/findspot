@@ -14,6 +14,7 @@ import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
+import { SMUnavailableBanner } from '../fieldguide/SMUnavailableBanner';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
 import { usePersistedHotspotSignals } from '../../hooks/usePersistedHotspotSignals';
 
@@ -210,6 +211,7 @@ export function MobileBottomSheet() {
         sourceUsability,
         scanFromCache,
         scheduledMonumentCheckFailed,
+        scheduledMonumentUnavailableReason,
         projectFinds,
         setIsIntelOpen,
         intelDetailsOpen,
@@ -408,10 +410,10 @@ export function MobileBottomSheet() {
                 {!historicMode && !showSavedPoints && !selectedUserFind && !selectedPASFind && !selectedId && !selectedHotspotId && selectedMonument === undefined && (
                     <>
                         {scheduledMonumentCheckFailed && hasScanned && (
-                            <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
-                                <p className="text-[0.5625rem] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
-                                <p className="text-[0.6875rem] font-bold text-amber-100/75 leading-snug">Protected monument data could not be checked for this scan. Treat the result as incomplete and verify official records before fieldwork.</p>
-                            </div>
+                            <SMUnavailableBanner
+                                reason={scheduledMonumentUnavailableReason}
+                                fallbackBody="Protected monument data could not be checked for this scan. Treat the result as incomplete and verify official records before fieldwork."
+                            />
                         )}
                         <HotspotTray />
                     </>

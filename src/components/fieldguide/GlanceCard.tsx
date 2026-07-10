@@ -12,11 +12,14 @@ import type { LandscapeInterpretation } from '../../types/landscapeInterpretatio
 import { glanceHeadline, glanceReasons } from '../../services/fieldguide/glanceReading';
 import { selectSalientEvidence } from '../../services/fieldguide/landscapeInterpretation/evidenceSalience';
 import { composeEvidenceClause } from '../../services/fieldguide/landscapeInterpretation/evidenceSlotFormatters';
+import { SMUnavailableBanner } from './SMUnavailableBanner';
+import type { SMUnavailableReason } from '../../services/historicScanService';
 
 interface Props {
     interpretation: LandscapeInterpretation;
     /** True when the NHLE service was unreachable — cannot confirm clearance. */
     scheduledMonumentCheckFailed: boolean;
+    scheduledMonumentUnavailableReason?: SMUnavailableReason | null;
     /** Switch to detail for this session only (no DB write). */
     onReadFull: () => void;
     /** Persist 'detail' preference to db.settings (called when checkbox is ticked). */
@@ -26,6 +29,7 @@ interface Props {
 export function GlanceCard({
     interpretation,
     scheduledMonumentCheckFailed,
+    scheduledMonumentUnavailableReason,
     onReadFull,
     onPersistDetail,
 }: Props) {
@@ -73,14 +77,11 @@ export function GlanceCard({
 
             {/* C1: SM check failed banner — fail-safe amber when data unavailable */}
             {showSMFailed && (
-                <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2">
-                    <p className="text-[0.625rem] font-black text-amber-300 uppercase tracking-[0.18em]">
-                        Scheduled Monument Check Unavailable
-                    </p>
-                    <p className="mt-1 text-[0.625rem] font-bold text-amber-100/80 leading-snug">
-                        Protected monument data could not be confirmed for this area. Use official records before treating the area as clear.
-                    </p>
-                </div>
+                <SMUnavailableBanner
+                    reason={scheduledMonumentUnavailableReason}
+                    fallbackBody="Protected monument data could not be confirmed for this area. Use official records before treating the area as clear."
+                    textSize="xs"
+                />
             )}
 
             {/* C2 + C3: Headline + softened signal strength */}

@@ -38,6 +38,7 @@ import { applyGeologyModifiers } from '../utils/hotspotEngine';
 import { computeHotspotLandscapeIntelligence, computeLandscapeSummary } from '../utils/landscapeIntelligenceEngine';
 import type { LandscapeIntelligence, LandscapeSummary } from './fieldGuideTypes';
 import { getSetting } from '../services/data';
+import type { SMUnavailableReason } from '../services/historicScanService';
 import { recordFindHotspotSignals } from '../services/findHotspotService';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
@@ -463,6 +464,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [scanFromCache,          setScanFromCache]          = useState(false);
     const [scanNoSignal,           setScanNoSignal]           = useState(false);
     const [scheduledMonumentCheckFailed, setScheduledMonumentCheckFailed] = useState(false);
+    const [scheduledMonumentUnavailableReason, setScheduledMonumentUnavailableReason] = useState<SMUnavailableReason | null>(null);
     // PAS / intel state
     const [pasFinds,        setPasFinds]        = useState<HistoricFind[]>([]);
     const [selectedPASFind, setSelectedPASFind] = useState<HistoricFind | null>(null);
@@ -939,6 +941,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setScanFromCache(false);
         setScanNoSignal(false);
         setScheduledMonumentCheckFailed(false);
+        setScheduledMonumentUnavailableReason(null);
         setRawClusters([]);
         setSelectedTraceId(null);
         setAnnotationMode(false);
@@ -1033,7 +1036,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         // so the ALIE worker receives the actual feature data (not empty arrays).
         if (result.nhleData) { applyNhleToMap(result.nhleData); nhleDataRef.current = result.nhleData; }
         if (result.aimData)  { applyAimToMap(result.aimData);   aimDataRef.current  = result.aimData; }
-        if (result.nhleData) setScheduledMonumentCheckFailed(result.nhleData.available === false);
+        if (result.nhleData) {
+            setScheduledMonumentCheckFailed(result.nhleData.available === false);
+            setScheduledMonumentUnavailableReason(result.nhleData.unavailableReason ?? null);
+        }
 
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
@@ -1146,6 +1152,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setScanFromCache(result.fromCache);
         setScanNoSignal(result.noSignal ?? false);
         setScheduledMonumentCheckFailed(result.nhleData.available === false);
+        setScheduledMonumentUnavailableReason(result.nhleData.unavailableReason ?? null);
         setRawClusters(result.rawClusters ?? []);
 
         dispatch({
@@ -1503,6 +1510,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         showSavedPoints, setShowSavedPoints, savingPoint, setSavingPoint,
         savedPointLabel, setSavedPointLabel, pendingDeleteId, setPendingDeleteId,
         sourceAvailability, scanFromCache, scanNoSignal, scheduledMonumentCheckFailed,
+        scheduledMonumentUnavailableReason,
         pasFinds, selectedPASFind, setSelectedPASFind, selectedUserFind, setSelectedUserFind, placeSignals,
         permissions, realPermissions, fields, projectFinds, savedPoints,
         potentialScore, scanConfidence, selectedUserFindMedia,

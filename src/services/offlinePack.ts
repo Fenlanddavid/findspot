@@ -314,6 +314,7 @@ async function cacheSMIndexFromLive(
             schemaVersion: 2,
             geometryMode: 'full-geojson',
             featureCount: features.length,
+            coverage: ['england'],
             cellCount: cells.length,
             source: 'FeatureServer/6 live offline-pack fallback',
         }), {

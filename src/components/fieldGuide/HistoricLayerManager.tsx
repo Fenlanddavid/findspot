@@ -6,6 +6,7 @@ import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
 import { LandscapeInterpretationBlock } from '../fieldguide/LandscapeInterpretationBlock';
 import { GlanceCard } from '../fieldguide/GlanceCard';
+import { SMUnavailableBanner } from '../fieldguide/SMUnavailableBanner';
 import { db } from '../../db';
 import type { Find } from '../../db';
 import { buildLandscapeEvidence } from '../../services/fieldguide/landscapeEvidence';
@@ -145,6 +146,7 @@ export function HistoricLayerManager() {
         sourceUsability,
         scanFromCache,
         scheduledMonumentCheckFailed,
+        scheduledMonumentUnavailableReason,
         clearMapItemSelections,
         focusTarget,
         setSelectedPASFind,
@@ -229,12 +231,13 @@ export function HistoricLayerManager() {
                 pasDensityCell={pasDensityCell}
                 focusTarget={focusTarget}
                 scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
+                scheduledMonumentUnavailableReason={scheduledMonumentUnavailableReason}
             />
             {scheduledMonumentCheckFailed && (
-                <div className="rounded-xl border border-amber-400/25 bg-amber-500/[0.08] px-3 py-2">
-                    <p className="text-[0.5625rem] font-black text-amber-300 uppercase tracking-[0.18em] mb-1">Scheduled Monument Check Unavailable</p>
-                    <p className="text-[0.6875rem] font-bold text-amber-100/75 leading-snug">Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear.</p>
-                </div>
+                <SMUnavailableBanner
+                    reason={scheduledMonumentUnavailableReason}
+                    fallbackBody="Protected monument data could not be confirmed for this landscape review. Use official records before treating the area as clear."
+                />
             )}
             {/* PAS Record Density — shows after scan completes, sourced from git-bundled density index */}
             {historicScanComplete && pasDensityCell !== null && (() => {
@@ -593,6 +596,7 @@ interface AlieSectionProps {
     focusTarget: (target: Cluster) => void;
     pasDensityCell: import('../../services/pasDensityService').PASCellLookup | null;
     scheduledMonumentCheckFailed: boolean;
+    scheduledMonumentUnavailableReason: import('../../services/historicScanService').SMUnavailableReason | null;
 }
 
 function AlieSection({
@@ -618,6 +622,7 @@ function AlieSection({
     pasDensityCell,
     focusTarget,
     scheduledMonumentCheckFailed,
+    scheduledMonumentUnavailableReason,
 }: AlieSectionProps) {
     // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
     // Prevents a stale cache read or slow worker result from clobbering a
@@ -966,6 +971,7 @@ function AlieSection({
             <GlanceCard
                 interpretation={landscapeInterpretation}
                 scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
+                scheduledMonumentUnavailableReason={scheduledMonumentUnavailableReason}
                 onReadFull={handleReadFull}
                 onPersistDetail={handlePersistDetail}
             />

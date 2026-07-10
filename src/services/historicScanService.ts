@@ -2,7 +2,7 @@
 import { USE_R2_DESIGNATIONS, FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { cachedFetchAny } from '../utils/cachedFetch';
-import { bboxIntersectsWales } from '../utils/jurisdictionDetect';
+import { bboxIntersectsWales, bboxRequiredSMJurisdictions, type SMJurisdiction } from '../utils/jurisdictionDetect';
 
 // ─── Typed API response shapes ────────────────────────────────────────────────
 
@@ -63,7 +63,14 @@ export interface NHLEResponse {
     features: NHLEFeature[];
     available?: boolean;
     error?: string;
+    unavailableReason?: SMUnavailableReason;
 }
+
+export type SMUnavailableReason =
+    | 'coverage_scotland'
+    | 'coverage_ni'
+    | 'coverage_border'
+    | 'coverage_outside_uk';
 
 export interface AIMFeature {
     type: 'Feature';
@@ -329,6 +336,84 @@ type SMShardEntry = {
     geometry?: NHLEGeometry;
 };
 
+function smCoverageFailure(
+    required: Set<SMJurisdiction> | 'outside_uk',
+    coverage: string[],
+): Pick<NHLEResponse, 'available' | 'error' | 'unavailableReason'> | null {
+    if (required === 'outside_uk') {
+        return {
+            available: false,
+            error: 'Scheduled monument data does not cover this area',
+            unavailableReason: 'coverage_outside_uk',
+        };
+    }
+
+    const covered = new Set(coverage);
+    const missing = [...required].filter(jurisdiction => {
+        if (jurisdiction === 'england_wales') {
+            return !(covered.has('england') && covered.has('wales'));
+        }
+        if (jurisdiction === 'scotland') return !covered.has('scotland');
+        return !covered.has('northern_ireland');
+    });
+
+    if (missing.length === 0) return null;
+
+    const reason: SMUnavailableReason =
+        required.size === 1 && required.has('scotland')
+            ? 'coverage_scotland'
+            : required.size === 1 && required.has('northern_ireland')
+                ? 'coverage_ni'
+                : 'coverage_border';
+
+    return {
+        available: false,
+        error: 'Scheduled monument data does not cover this area',
+        unavailableReason: reason,
+    };
+}
+
+function smLiveFallbackGuard(
+    bbox: [number, number, number, number],
+): Pick<NHLEResponse, 'available' | 'error' | 'unavailableReason'> | null {
+    const required = bboxRequiredSMJurisdictions(bbox);
+    if (required === 'outside_uk') {
+        return {
+            available: false,
+            error: 'Scheduled monument data does not cover this area',
+            unavailableReason: 'coverage_outside_uk',
+        };
+    }
+    if (required.size > 1) {
+        return {
+            available: false,
+            error: 'Scheduled monument data does not cover this area',
+            unavailableReason: 'coverage_border',
+        };
+    }
+    if (required.has('scotland')) {
+        return {
+            available: false,
+            error: 'Scheduled monument data does not cover this area',
+            unavailableReason: 'coverage_scotland',
+        };
+    }
+    if (required.has('northern_ireland')) {
+        return {
+            available: false,
+            error: 'Scheduled monument data does not cover this area',
+            unavailableReason: 'coverage_ni',
+        };
+    }
+    if (bboxIntersectsWales(bbox)) {
+        return {
+            available: false,
+            error: 'SM live fallback unavailable for Wales',
+        };
+    }
+    return null;
+}
+
 function _smBboxIntersects(
     sm: [number, number, number, number],
     q:  [number, number, number, number],
@@ -432,6 +517,10 @@ async function _fetchSMFromR2(
             if (!meta || meta.schemaVersion !== 2 || meta.geometryMode !== 'full-geojson') {
                 return { features: [], available: false, error: 'SM index requires full-geometry schema v2' };
             }
+            const coverage: string[] = Array.isArray(meta.coverage) ? meta.coverage : ['england', 'wales'];
+            const required = bboxRequiredSMJurisdictions([west, south, east, north]);
+            const coverageFailure = smCoverageFailure(required, coverage);
+            if (coverageFailure) return { features: [], ...coverageFailure };
         } finally {
             metaTimed.clear();
         }
@@ -648,19 +737,16 @@ export async function fetchScheduledMonuments(
         const r2Result = await _fetchSMFromR2(west, south, east, north, signal, options);
         if (r2Result.available !== false) return r2Result;
         if (options.cacheOnly) return r2Result;
-        if (bboxIntersectsWales([west, south, east, north])) {
-            return {
-                features: [],
-                available: false,
-                error: 'SM live fallback unavailable for Wales',
-            };
-        }
+        const fallbackBlocked = smLiveFallbackGuard([west, south, east, north]);
+        if (fallbackBlocked) return { features: [], ...fallbackBlocked };
 
         const liveResult = await _fetchScheduledMonumentsLive(west, south, east, north, signal);
         if (liveResult.available !== false) return liveResult;
         return r2Result;
     }
 
+    const liveBlocked = smLiveFallbackGuard([west, south, east, north]);
+    if (liveBlocked) return { features: [], ...liveBlocked };
     return _fetchScheduledMonumentsLive(west, south, east, north, signal);
 }
 

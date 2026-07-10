@@ -11,6 +11,7 @@ import type { Find, SavedPoint, Permission, Field, Media } from '../../db';
 import type { LogEntry } from '../../utils/scanLogger';
 import type { DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence } from '../../utils/devAnnotation';
 import type { WorkflowState } from '../../types/significantFind';
+import type { SMUnavailableReason } from '../../services/historicScanService';
 
 // ─── Re-exported types used by child components ───────────────────────────────
 
@@ -188,6 +189,7 @@ export interface FieldGuideContextValue {
     scanFromCache: boolean;
     scanNoSignal: boolean;
     scheduledMonumentCheckFailed: boolean;
+    scheduledMonumentUnavailableReason: SMUnavailableReason | null;
 
     // PAS / intel state
     pasFinds: HistoricFind[];
