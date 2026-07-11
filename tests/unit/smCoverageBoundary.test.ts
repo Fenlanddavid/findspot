@@ -116,6 +116,23 @@ describe('SM coverage gate', () => {
         expect(result.unavailableReason).toBe('coverage_scotland');
     });
 
+    it('England-only coverage + Cardiff reports incomplete coverage, not Scotland border', async () => {
+        const fetchSpy = vi.fn((url: string) => {
+            if (url.includes('/sm-index/_meta.json')) {
+                return Promise.resolve(jsonResponse({ schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england'] }));
+            }
+            return Promise.resolve(jsonResponse([]));
+        });
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const { fetchScheduledMonuments } = await importService();
+        const result = await fetchScheduledMonuments(...CARDIFF);
+
+        expect(result.available).toBe(false);
+        expect(result.unavailableReason).toBe('coverage_incomplete');
+        expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/sm-index/') && !String(url).includes('_meta'))).toHaveLength(0);
+    });
+
     it('cacheOnly Scottish bbox ambers instead of returning silently empty', async () => {
         vi.stubGlobal('caches', {
             match: vi.fn((url: string) => {
@@ -142,6 +159,43 @@ describe('SM coverage gate', () => {
         expect(result.available).toBe(false);
         expect(result.unavailableReason).toBe('coverage_scotland');
         expect(fetchSpy.mock.calls.filter(([url]) => String(url).includes('/sm-index/') && !String(url).includes('_meta'))).toHaveLength(0);
+    });
+
+    it('online Scottish bbox ignores stale cached England/Wales meta', async () => {
+        vi.stubGlobal('caches', {
+            match: vi.fn((url: string) => {
+                if (url.includes('/sm-index/_meta.json')) {
+                    return Promise.resolve(new Response(JSON.stringify({
+                        schemaVersion: 2,
+                        geometryMode: 'full-geojson',
+                        coverage: ['england', 'wales'],
+                    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+                }
+                return Promise.resolve(undefined);
+            }),
+            open: vi.fn().mockResolvedValue({ match: vi.fn().mockResolvedValue(undefined) }),
+            keys: vi.fn().mockResolvedValue([]),
+            has: vi.fn().mockResolvedValue(false),
+            delete: vi.fn().mockResolvedValue(true),
+        });
+        const fetchSpy = vi.fn((url: string) => {
+            if (url.includes('/sm-index/_meta.json')) {
+                return Promise.resolve(jsonResponse({
+                    schemaVersion: 2,
+                    geometryMode: 'full-geojson',
+                    coverage: ['england', 'wales', 'scotland'],
+                }));
+            }
+            return Promise.resolve(jsonResponse([]));
+        });
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const { fetchScheduledMonuments } = await importService();
+        const result = await fetchScheduledMonuments(...EDINBURGH);
+
+        expect(result.available).toBe(true);
+        expect(result.unavailableReason).toBeUndefined();
+        expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('/sm-index/') && !String(url).includes('_meta'))).toBe(true);
     });
 });
 

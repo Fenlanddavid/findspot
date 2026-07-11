@@ -4,8 +4,8 @@ type TextSize = "xs" | "sm";
 
 const COPY: Record<SMUnavailableReason, { title: string; body: string }> = {
     coverage_scotland: {
-        title: "Scheduled Monument Data Not Yet Available Here",
-        body: "FindSpot's monument data does not yet cover Scotland. Check Historic Environment Scotland's Designations map before detecting - scheduled monuments are protected by law across the UK.",
+        title: "Scheduled Monument Check Unavailable",
+        body: "FindSpot could not confirm Scottish scheduled monument coverage for this scan. Check Historic Environment Scotland's Designations map before detecting - scheduled monuments are protected by law across the UK.",
     },
     coverage_ni: {
         title: "Scheduled Monument Data Not Yet Available Here",
@@ -14,6 +14,10 @@ const COPY: Record<SMUnavailableReason, { title: string; body: string }> = {
     coverage_border: {
         title: "Near the Scotland Border",
         body: "Monument coverage here is England and Wales only. Verify against both the NHLE map and Historic Environment Scotland before treating this area as clear.",
+    },
+    coverage_incomplete: {
+        title: "Scheduled Monument Data Incomplete Here",
+        body: "FindSpot's monument data does not fully cover this area yet. Check the official national scheduled monument record before treating it as clear.",
     },
     coverage_outside_uk: {
         title: "Scheduled Monument Check Unavailable",

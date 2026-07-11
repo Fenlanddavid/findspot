@@ -1,7 +1,8 @@
 /**
  * build-sm-verification.mjs
  *
- * Queries the live NHLE FeatureServer/6 and Cadw WFS for a hardcoded set of test points
+ * Queries the live NHLE FeatureServer/6, Cadw WFS, and HES MapServer/5
+ * for a hardcoded set of test points
  * and writes tests/fixtures/smVerification.json with expected SM flag/clear
  * results for each point.
  *
@@ -17,6 +18,8 @@
  * Requirements: Node 18+ (global fetch, fs/promises)
  * Attribution: NHLE © Historic England, CC BY 4.0
  * Cadw SAM data © The Welsh Historic Environment Service (Cadw), OGL v3.
+ * HES Scheduled Monuments data OGL v3 per HES Portal Terms "Spatial Downloads"
+ * checked 2026-07-11.
  */
 
 import { writeFile, mkdir } from 'fs/promises';
@@ -31,6 +34,9 @@ const FEATURE_SERVER =
   'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
 
 const CADW_WFS = 'https://datamap.gov.wales/geoserver/inspire-wg/ows';
+const HES_FEATURE_SERVER =
+  'https://inspire.hes.scot/arcgis/rest/services/HES/' +
+  'HES_Designations/MapServer/5/query';
 
 // Bbox half-width in degrees — matches what the app scan uses
 const BBOX_HALF = 0.005;
@@ -39,7 +45,7 @@ const BBOX_HALF = 0.005;
 // Each point has a `label`, `lat`, `lon`, and an optional `note`.
 // `expected` and `listEntry` are derived at runtime from the live service.
 
-/** @type {Array<{ lat: number, lon: number, label: string, note?: string, source?: 'NHLE'|'Cadw', _edgeCase?: boolean }>} */
+/** @type {Array<{ lat: number, lon: number, label: string, note?: string, source?: 'NHLE'|'Cadw'|'HES', _edgeCase?: boolean }>} */
 const TEST_POINTS = [
   // ── Known SM points ───────────────────────────────────────────────────────
   {
@@ -153,6 +159,28 @@ const TEST_POINTS = [
     lon:   -4.53887521,
     source: 'Cadw',
     note:  'Cadw SAM CN395 — north-west Wales',
+  },
+  // ── Known Scottish Scheduled Monuments (HES MapServer/5) ───────────────────
+  {
+    label: 'Edinburgh Town Wall',
+    lat:   55.948,
+    lon:   -3.200,
+    source: 'HES',
+    note:  'HES SM2901 — urban Edinburgh area',
+  },
+  {
+    label: 'Costerton Fort',
+    lat:   55.863,
+    lon:   -2.890,
+    source: 'HES',
+    note:  'HES SM5736 — rural East Lothian fort',
+  },
+  {
+    label: "Scots' Dike",
+    lat:   55.0554,
+    lon:   -3.0300,
+    source: 'HES',
+    note:  'HES SM660 — near the England/Scotland border',
   },
   // ── Edge cases (near SM polygon boundaries) ───────────────────────────────
   {
@@ -325,10 +353,54 @@ async function queryCadwBbox(lat, lon) {
   })).filter((x) => x.listEntry);
 }
 
+/**
+ * Query HES Scheduled Monuments for features within a bbox.
+ *
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<Array<{ listEntry: string, name: string }>>}
+ */
+async function queryHesBbox(lat, lon) {
+  const west  = lon - BBOX_HALF;
+  const east  = lon + BBOX_HALF;
+  const south = lat - BBOX_HALF;
+  const north = lat + BBOX_HALF;
+
+  const params = new URLSearchParams({
+    where:          '1=1',
+    geometry:       `${west},${south},${east},${north}`,
+    geometryType:   'esriGeometryEnvelope',
+    inSR:           '4326',
+    spatialRel:     'esriSpatialRelIntersects',
+    outFields:      'DES_REF,DES_TITLE',
+    returnGeometry: 'false',
+    f:              'json',
+  });
+
+  const res = await fetch(`${HES_FEATURE_SERVER}?${params}`, {
+    headers: { 'User-Agent': 'FindSpot-SM-Verification-Builder/1.0' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`HES MapServer returned ${res.status} for ${lat},${lon}`);
+  }
+
+  const data = await res.json();
+  if (data.error) {
+    throw new Error(`HES MapServer error at ${lat},${lon}: ${JSON.stringify(data.error)}`);
+  }
+
+  const features = Array.isArray(data.features) ? data.features : [];
+  return features.map((f) => ({
+    listEntry: String(f.attributes?.DES_REF   ?? '').trim(),
+    name:      String(f.attributes?.DES_TITLE ?? '').trim(),
+  })).filter((x) => x.listEntry);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`Querying live NHLE/Cadw sources for ${TEST_POINTS.length} test points…`);
+  console.log(`Querying live NHLE/Cadw/HES sources for ${TEST_POINTS.length} test points…`);
   console.log(`Bbox half-width: ±${BBOX_HALF}°\n`);
 
   const results = [];
@@ -344,7 +416,9 @@ async function main() {
     try {
       hits = source === 'Cadw'
         ? await queryCadwBbox(lat, lon)
-        : await queryBbox(lat, lon);
+        : source === 'HES'
+          ? await queryHesBbox(lat, lon)
+          : await queryBbox(lat, lon);
     } catch (err) {
       console.error(`\nERROR querying ${label}: ${err.message}`);
       process.exit(1);
@@ -367,7 +441,7 @@ async function main() {
 
   const fixture = {
     capturedAt: new Date().toISOString(),
-    source:     'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live',
+    source:     'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live + HES MapServer/5 live',
     bboxHalfDeg: BBOX_HALF,
     points:     results,
   };

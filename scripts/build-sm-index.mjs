@@ -1,9 +1,10 @@
 /**
  * build-sm-index.mjs
  *
- * Fetches all Scheduled Monuments from the NHLE ArcGIS FeatureServer/6 and
- * Cadw Scheduled Ancient Monument polygons from DataMapWales WFS, buckets them
- * by geohash6 cell, and writes a sparse shard-per-cell index
+ * Fetches all Scheduled Monuments from the NHLE ArcGIS FeatureServer/6,
+ * Cadw Scheduled Ancient Monument polygons from DataMapWales WFS, and
+ * Historic Environment Scotland Scheduled Monuments from HES ArcGIS
+ * MapServer/5, buckets them by geohash6 cell, and writes a sparse shard-per-cell index
  * to scripts/out/sm-index/.
  *
  * Requirements: Node 18+ (global fetch, fs/promises)
@@ -20,11 +21,22 @@
  * Designated Historic Asset GIS Data, The Welsh Historic Environment Service
  * (Cadw), fetch date recorded in _meta.json builtAt, licensed under the Open
  * Government Licence v3.0.
+ *
+ * HES Scheduled Monuments verified against MapServer/5 on 2026-07-11.
+ * Field mapping: listEntry ← DES_REF, name ← DES_TITLE. Sample: SM5755
+ * "Windy Mains,enclosures 600m SE of". Portal Terms and Conditions
+ * "Spatial Downloads" checked 2026-07-11: spatial downloads except Historic
+ * Landuse Assessment are OGL v3. Attribution:
+ * Contains Historic Environment Scotland and OS data © Historic Environment
+ * Scotland and Crown Copyright and [database right] (year), licensed under the
+ * Open Government Licence v3.0. Service fetch uses the same Scheduled
+ * Monuments dataset; sam_scotland.zip is the documented spatial-download
+ * alternative if a future audit requires download-only ingestion.
  */
 
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR   = join(__dirname, 'out', 'sm-index');
@@ -37,7 +49,17 @@ const FEATURE_SERVER =
 // with srsName=EPSG:4326. Verified against Cadw_SAM.1 / CN395 on 2026-07-09.
 const WALES_SOURCE = 'https://datamap.gov.wales/geoserver/inspire-wg/ows';
 
+const SCOTLAND_SOURCE =
+  'https://inspire.hes.scot/arcgis/rest/services/HES/' +
+  'HES_Designations/MapServer/5/query';
+
 const PAGE_SIZE = 1000;
+const SCOTLAND_PAGE_SIZE = 100;
+const SCOTLAND_EXPECTED_MIN = 7500;
+
+function hesAttribution(year = new Date().getUTCFullYear()) {
+  return `Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] ${year}, licensed under the Open Government Licence v3.0`;
+}
 
 // ── Geohash6 encoder ─────────────────────────────────────────────────────────
 // Standard geohash using Base32 alphabet (Gustavo Niemeyer encoding).
@@ -294,31 +316,128 @@ async function fetchAllWalesFeatures() {
   return all;
 }
 
+async function fetchScotlandCount() {
+  const params = new URLSearchParams({
+    where: '1=1',
+    returnCountOnly: 'true',
+    f: 'json',
+  });
+
+  const res = await fetch(`${SCOTLAND_SOURCE}?${params}`, {
+    headers: { 'User-Agent': 'FindSpot-SM-Index-Builder/1.0' },
+  });
+  if (!res.ok) throw new Error(`HES count query returned ${res.status}`);
+
+  const data = await res.json();
+  if (data.error) throw new Error(`HES count query error: ${JSON.stringify(data.error)}`);
+  if (!Number.isFinite(data.count)) throw new Error('HES count query did not return a numeric count');
+  return data.count;
+}
+
+async function fetchScotlandObjectIds() {
+  const params = new URLSearchParams({
+    where: '1=1',
+    returnIdsOnly: 'true',
+    f: 'json',
+  });
+
+  const res = await fetch(`${SCOTLAND_SOURCE}?${params}`, {
+    headers: { 'User-Agent': 'FindSpot-SM-Index-Builder/1.0' },
+  });
+  if (!res.ok) throw new Error(`HES objectIds query returned ${res.status}`);
+
+  const data = await res.json();
+  if (data.error) throw new Error(`HES objectIds query error: ${JSON.stringify(data.error)}`);
+  if (data.objectIdFieldName !== 'FID') {
+    throw new Error(`Unexpected HES objectIdFieldName: ${data.objectIdFieldName}`);
+  }
+  if (!Array.isArray(data.objectIds)) throw new Error('HES objectIds query did not return objectIds');
+  return data.objectIds.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+}
+
+async function fetchScotlandObjectIdChunk(objectIds) {
+  const params = new URLSearchParams({
+    objectIds: objectIds.join(','),
+    outFields: 'DES_REF,DES_TITLE,FID',
+    returnGeometry: 'true',
+    f: 'geojson',
+    outSR: '4326',
+  });
+
+  const res = await fetch(`${SCOTLAND_SOURCE}?${params}`, {
+    headers: { 'User-Agent': 'FindSpot-SM-Index-Builder/1.0' },
+  });
+  if (!res.ok) throw new Error(`HES feature query returned ${res.status}`);
+
+  const data = await res.json();
+  if (data.error) throw new Error(`HES feature query error: ${JSON.stringify(data.error)}`);
+  return Array.isArray(data.features) ? data.features : [];
+}
+
+/**
+ * Fetch ALL HES Scheduled Monument features from ArcGIS MapServer/5.
+ * The layer does not support resultOffset pagination, so this uses
+ * returnIdsOnly followed by objectIds chunks and verifies exact completeness.
+ * @returns {Promise<object[]>}
+ */
+async function fetchAllScotlandFeatures() {
+  console.log('Fetching HES Scheduled Monuments from MapServer/5…');
+
+  const expectedCount = await fetchScotlandCount();
+  if (expectedCount < SCOTLAND_EXPECTED_MIN) {
+    throw new Error(`HES count ${expectedCount} is below sanity floor ${SCOTLAND_EXPECTED_MIN}`);
+  }
+
+  const objectIds = await fetchScotlandObjectIds();
+  if (objectIds.length !== expectedCount) {
+    throw new Error(`HES objectIds count ${objectIds.length} did not match count query ${expectedCount}`);
+  }
+
+  const all = [];
+  for (let i = 0; i < objectIds.length; i += SCOTLAND_PAGE_SIZE) {
+    const chunkIds = objectIds.slice(i, i + SCOTLAND_PAGE_SIZE);
+    const features = await fetchScotlandObjectIdChunk(chunkIds);
+    all.push(...features);
+    console.log(`  …fetched ${all.length} HES features so far`);
+  }
+
+  if (all.length !== expectedCount) {
+    throw new Error(`HES fetched feature count ${all.length} did not match count query ${expectedCount}`);
+  }
+
+  console.log(`Total HES features fetched: ${all.length}`);
+  return all;
+}
+
 // ── Index builder ─────────────────────────────────────────────────────────────
 
 /**
  * Build the sharded index from source-grouped GeoJSON features.
  *
- * @param {Array<{source:'NHLE'|'Cadw', features: object[]}>} sourceGroups
- * @returns {{index: Map<string, Array<{listEntry:string, name:string, bbox:[number,number,number,number], geometry:object}>>, allListEntries: string[], skipped: number, cadwDigitIds: number}}
+ * @param {Array<{source:'NHLE'|'Cadw'|'HES', features: object[]}>} sourceGroups
+ * @returns {{index: Map<string, Array<{listEntry:string, name:string, bbox:[number,number,number,number], geometry:object}>>, allListEntries: string[], skipped: number, cadwDigitIds: number, hesDigitIds: number}}
  */
 function buildIndex(sourceGroups) {
-  // cell → Map<listEntry, entry>  (deduplicate by listEntry within each cell)
+  // cell → Map<source:listEntry, entry>  (deduplicate within source only)
   const cellMap = new Map();
   const allListEntries = [];
   let   skipped = 0;
   let   cadwDigitIds = 0;
+  let   hesDigitIds = 0;
 
   for (const { source, features } of sourceGroups) {
     for (const feature of features) {
       const props = feature.properties ?? {};
-      const listEntry = String(
-        source === 'Cadw' ? props.SAMNumber ?? '' : props.ListEntry ?? '',
-      ).trim();
-      const name = String(props.Name ?? '').trim();
+      const listEntry = String(source === 'Cadw'
+        ? props.SAMNumber ?? ''
+        : source === 'HES'
+          ? props.DES_REF ?? ''
+          : props.ListEntry ?? '').trim();
+      const name = String(source === 'HES' ? props.DES_TITLE ?? '' : props.Name ?? '').trim();
 
       if (!listEntry || !name) { skipped++; continue; }
       if (source === 'Cadw' && /^\d/.test(listEntry)) cadwDigitIds++;
+      if (source === 'HES' && /^\d+$/.test(listEntry)) hesDigitIds++;
 
       const bbox = bboxFromGeometry(feature.geometry);
       if (!bbox) { skipped++; continue; }
@@ -329,8 +448,9 @@ function buildIndex(sourceGroups) {
       for (const cell of cells) {
         if (!cellMap.has(cell)) cellMap.set(cell, new Map());
         const cellEntries = cellMap.get(cell);
-        if (!cellEntries.has(listEntry)) {
-          cellEntries.set(listEntry, { listEntry, name, bbox, geometry: feature.geometry });
+        const dedupeKey = `${source}:${listEntry}`;
+        if (!cellEntries.has(dedupeKey)) {
+          cellEntries.set(dedupeKey, { listEntry, name, bbox, geometry: feature.geometry });
         }
       }
     }
@@ -341,6 +461,9 @@ function buildIndex(sourceGroups) {
   }
   if (cadwDigitIds > 0) {
     console.log(`  Warning: ${cadwDigitIds} Cadw identifiers start with a digit`);
+  }
+  if (hesDigitIds > 0) {
+    console.log(`  Warning: ${hesDigitIds} HES identifiers are bare digits and may collide with NHLE ListEntry values`);
   }
 
   // Convert inner Maps to arrays
@@ -354,6 +477,7 @@ function buildIndex(sourceGroups) {
     allListEntries: [...new Set(allListEntries)],
     skipped,
     cadwDigitIds,
+    hesDigitIds,
   };
 }
 
@@ -373,21 +497,24 @@ async function writeIndex(index, allListEntries, counts) {
     written++;
   }
 
-  const featureCount = counts.englandFeatureCount + counts.walesFeatureCount;
+  const builtAt = new Date();
+  const featureCount = counts.englandFeatureCount + counts.walesFeatureCount + counts.scotlandFeatureCount;
 
   const meta = {
-    builtAt:      new Date().toISOString(),
+    builtAt:      builtAt.toISOString(),
     schemaVersion: 2,
     geometryMode: 'full-geojson',
     featureCount,
     englandFeatureCount: counts.englandFeatureCount,
     walesFeatureCount:   counts.walesFeatureCount,
-    coverage:     ['england', 'wales'],
+    scotlandFeatureCount: counts.scotlandFeatureCount,
+    coverage:     ['england', 'wales', 'scotland'],
     cellCount:    index.size,
-    source:       'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live',
+    source:       'NHLE FeatureServer/6 live + Cadw DataMapWales WFS live + HES MapServer/5 live',
     sources: [
       { name: 'NHLE', licence: 'CC BY 4.0' },
       { name: 'Cadw', licence: 'OGL v3' },
+      { name: 'HES', licence: 'OGL v3', attribution: hesAttribution(builtAt.getUTCFullYear()) },
     ],
   };
 
@@ -403,30 +530,45 @@ async function writeIndex(index, allListEntries, counts) {
 async function main() {
   const englandFeatures = await fetchAllEnglandFeatures();
   const walesFeatures = await fetchAllWalesFeatures();
+  const scotlandFeatures = await fetchAllScotlandFeatures();
 
   console.log('Building geohash6 index…');
   const { index, allListEntries } = buildIndex([
     { source: 'NHLE', features: englandFeatures },
     { source: 'Cadw', features: walesFeatures },
+    { source: 'HES', features: scotlandFeatures },
   ]);
 
   console.log(`Writing ${index.size} shard files to ${OUT_DIR}…`);
   const { written, maxShardSize } = await writeIndex(index, allListEntries, {
     englandFeatureCount: englandFeatures.length,
     walesFeatureCount: walesFeatures.length,
+    scotlandFeatureCount: scotlandFeatures.length,
   });
 
   console.log('');
   console.log('Done.');
   console.log(`  England features : ${englandFeatures.length}`);
   console.log(`  Wales features   : ${walesFeatures.length}`);
-  console.log(`  Total features   : ${englandFeatures.length + walesFeatures.length}`);
+  console.log(`  Scotland features: ${scotlandFeatures.length}`);
+  console.log(`  Total features   : ${englandFeatures.length + walesFeatures.length + scotlandFeatures.length}`);
   console.log(`  Cells with SMs : ${written}`);
   console.log(`  Max shard size : ${maxShardSize} entries`);
   console.log(`  Output dir     : ${OUT_DIR}`);
 }
 
-main().catch((err) => {
-  console.error('FATAL:', err);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch((err) => {
+    console.error('FATAL:', err);
+    process.exit(1);
+  });
+}
+
+export {
+  bboxFromGeometry,
+  buildIndex,
+  fetchAllScotlandFeatures,
+  geohash6CellsForBbox,
+  hesAttribution,
+  writeIndex,
+};

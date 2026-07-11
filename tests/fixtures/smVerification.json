@@ -1,6 +1,6 @@
 {
   "capturedAt": "2026-07-09T18:37:36.600Z",
-  "source": "NHLE FeatureServer/6 live + Cadw DataMapWales WFS live",
+  "source": "NHLE FeatureServer/6 live + Cadw DataMapWales WFS live + HES MapServer/5 live",
   "bboxHalfDeg": 0.005,
   "points": [
     {
@@ -145,6 +145,33 @@
       "listEntry": "CN395",
       "note": "Cadw SAM CN395 — north-west Wales",
       "source": "Cadw"
+    },
+    {
+      "lat": 55.948,
+      "lon": -3.2,
+      "label": "Edinburgh Town Wall",
+      "expected": "flag",
+      "listEntry": "SM2901",
+      "note": "HES SM2901 — urban Edinburgh area",
+      "source": "HES"
+    },
+    {
+      "lat": 55.863,
+      "lon": -2.89,
+      "label": "Costerton Fort",
+      "expected": "flag",
+      "listEntry": "SM5736",
+      "note": "HES SM5736 — rural East Lothian fort",
+      "source": "HES"
+    },
+    {
+      "lat": 55.0554,
+      "lon": -3.03,
+      "label": "Scots' Dike",
+      "expected": "flag",
+      "listEntry": "SM660",
+      "note": "HES SM660 — near the England/Scotland border",
+      "source": "HES"
     },
     {
       "lat": 51.1797,

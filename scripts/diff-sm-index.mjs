@@ -6,7 +6,7 @@
  *
  * With two directory arguments, compares an old local shard build against a new
  * local shard build and verifies unchanged shard bytes except cells that gained
- * Cadw alphanumeric entries.
+ * supplemental non-NHLE entries (Cadw/HES alphanumeric refs).
  *
  * Usage:
  *   node scripts/diff-sm-index.mjs
@@ -74,7 +74,7 @@ async function diffLocalBuilds(oldDirArg, newDirArg) {
   let unchanged = 0;
   const removed = [];
   const addedCells = [];
-  const changedWithoutCadw = [];
+  const changedWithoutSupplemental = [];
   const borderCells = [];
 
   for (const cell of oldShards.keys()) {
@@ -96,13 +96,13 @@ async function diffLocalBuilds(oldDirArg, newDirArg) {
     const newIds = idsFor(newEntries);
     const addedIds = newIds.filter((id) => !oldSet.has(id));
     const removedIds = oldIds.filter((id) => !newIds.includes(id));
-    const cadwAdded = addedIds.filter((id) => !/^\d/.test(id));
+    const supplementalAdded = addedIds.filter((id) => !/^\d/.test(id));
     const oldOrderPreserved = oldIds.every((id, index) => newIds[index] === id);
 
-    if (removedIds.length === 0 && addedIds.length === cadwAdded.length && oldOrderPreserved) {
-      borderCells.push({ cell, cadwAdded });
+    if (removedIds.length === 0 && addedIds.length === supplementalAdded.length && oldOrderPreserved) {
+      borderCells.push({ cell, supplementalAdded });
     } else {
-      changedWithoutCadw.push({ cell, addedIds, removedIds });
+      changedWithoutSupplemental.push({ cell, addedIds, removedIds });
     }
   }
 
@@ -117,16 +117,16 @@ async function diffLocalBuilds(oldDirArg, newDirArg) {
   console.log(`Unchanged existing shard files: ${unchanged}`);
   console.log(`New shard files: ${addedCells.length}`);
   console.log(`Removed old shard files: ${removed.length}`);
-  console.log(`Existing cells with Cadw additions only: ${borderCells.length}`);
-  console.log(`England-only cells changed: ${changedWithoutCadw.length}`);
+  console.log(`Existing cells with supplemental additions only: ${borderCells.length}`);
+  console.log(`Cells changed beyond supplemental additions: ${changedWithoutSupplemental.length}`);
   console.log('');
 
   if (borderCells.length === 0) {
-    console.log('Border cells that gained Cadw entries (0): none');
+    console.log('Cells that gained supplemental entries (0): none');
   } else {
-    console.log(`Border cells that gained Cadw entries (${borderCells.length}):`);
-    for (const { cell, cadwAdded } of borderCells) {
-      console.log(`  ${cell}: ${cadwAdded.join(', ')}`);
+    console.log(`Cells that gained supplemental entries (${borderCells.length}):`);
+    for (const { cell, supplementalAdded } of borderCells) {
+      console.log(`  ${cell}: ${supplementalAdded.join(', ')}`);
     }
   }
 
@@ -134,15 +134,15 @@ async function diffLocalBuilds(oldDirArg, newDirArg) {
     console.log('');
     console.log(`Removed cells (${removed.length}): ${removed.join(', ')}`);
   }
-  if (changedWithoutCadw.length > 0) {
+  if (changedWithoutSupplemental.length > 0) {
     console.log('');
-    console.log('Changed cells not explained by Cadw additions:');
-    for (const { cell, addedIds, removedIds } of changedWithoutCadw) {
+    console.log('Changed cells not explained by supplemental additions:');
+    for (const { cell, addedIds, removedIds } of changedWithoutSupplemental) {
       console.log(`  ${cell}: added [${addedIds.join(', ')}], removed [${removedIds.join(', ')}]`);
     }
   }
 
-  if (removed.length > 0 || changedWithoutCadw.length > 0) process.exit(1);
+  if (removed.length > 0 || changedWithoutSupplemental.length > 0) process.exit(1);
   process.exit(0);
 }
 

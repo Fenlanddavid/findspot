@@ -70,6 +70,7 @@ export type SMUnavailableReason =
     | 'coverage_scotland'
     | 'coverage_ni'
     | 'coverage_border'
+    | 'coverage_incomplete'
     | 'coverage_outside_uk';
 
 export interface AIMFeature {
@@ -364,7 +365,9 @@ function smCoverageFailure(
             ? 'coverage_scotland'
             : required.size === 1 && required.has('northern_ireland')
                 ? 'coverage_ni'
-                : 'coverage_border';
+                : required.size === 1 && required.has('england_wales')
+                    ? 'coverage_incomplete'
+                    : 'coverage_border';
 
     return {
         available: false,
@@ -509,7 +512,9 @@ async function _fetchSMFromR2(
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
-            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: options.cacheOnly });
+            const metaRes = options.cacheOnly
+                ? await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: true })
+                : await fetch(metaUrl, { signal: metaTimed.signal });
             if (!metaRes.ok) {
                 return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
             }
@@ -611,7 +616,9 @@ async function _fetchAIMFromR2(
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
-            const metaRes = await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: options.cacheOnly });
+            const metaRes = options.cacheOnly
+                ? await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: true })
+                : await fetch(metaUrl, { signal: metaTimed.signal });
             if (!metaRes.ok) {
                 return { features: [], available: false, error: `AIM index not built (${metaRes.status})` };
             }
@@ -737,6 +744,7 @@ export async function fetchScheduledMonuments(
         const r2Result = await _fetchSMFromR2(west, south, east, north, signal, options);
         if (r2Result.available !== false) return r2Result;
         if (options.cacheOnly) return r2Result;
+        if (r2Result.unavailableReason) return r2Result;
         const fallbackBlocked = smLiveFallbackGuard([west, south, east, north]);
         if (fallbackBlocked) return { features: [], ...fallbackBlocked };
 

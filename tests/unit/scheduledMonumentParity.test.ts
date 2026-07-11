@@ -15,6 +15,8 @@ import { join } from 'path';
 import { bboxIntersectsWales } from '../../src/utils/jurisdictionDetect';
 import { isScheduledMonumentOverlap } from '../../src/services/fieldguide/landscapeInterpretation/scheduledMonumentGate';
 
+const nativeFetch = typeof globalThis.fetch === 'function' ? globalThis.fetch.bind(globalThis) : undefined;
+
 // ─── Fixture ──────────────────────────────────────────────────────────────────
 
 const FIXTURE_PATH = join(__dirname, '../fixtures/smVerification.json');
@@ -26,7 +28,7 @@ type FixturePoint = {
     expected: 'flag' | 'clear';
     listEntry: string | null;
     note: string;
-    source?: 'NHLE' | 'Cadw';
+    source?: 'NHLE' | 'Cadw' | 'HES';
 };
 
 type Fixture = {
@@ -345,6 +347,60 @@ describe('SM R2 path — Welsh Cadw fixtures', () => {
     });
 });
 
+describe('SM R2 path — Scottish HES fixtures', () => {
+    it('returns the HES entry at each Scottish fixture location and trips the gate', async () => {
+        const fixture = loadFixture();
+        const scottishPoints = fixture!.points.filter(p => p.source === 'HES');
+        expect(scottishPoints).toHaveLength(3);
+
+        const entries = scottishPoints.map(point => ({
+            listEntry: point.listEntry!,
+            name: point.label,
+            bbox: [point.lon - 0.001, point.lat - 0.001, point.lon + 0.001, point.lat + 0.001],
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [point.lon - 0.001, point.lat - 0.001],
+                    [point.lon + 0.001, point.lat - 0.001],
+                    [point.lon + 0.001, point.lat + 0.001],
+                    [point.lon - 0.001, point.lat + 0.001],
+                    [point.lon - 0.001, point.lat - 0.001],
+                ]],
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('_meta.json')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({
+                        builtAt: '2026-01-01',
+                        schemaVersion: 2,
+                        geometryMode: 'full-geojson',
+                        coverage: ['england', 'wales', 'scotland'],
+                    }),
+                });
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(entries) });
+        }));
+
+        const { fetchScheduledMonuments } = await import('../../src/services/historicScanService');
+
+        for (const point of scottishPoints) {
+            const result = await fetchScheduledMonuments(
+                point.lon - 0.005,
+                point.lat - 0.005,
+                point.lon + 0.005,
+                point.lat + 0.005,
+            );
+            expect(result.available).toBe(true);
+            expect(result.features.map(f => f.properties.ListEntry)).toContain(point.listEntry);
+            expect(isScheduledMonumentOverlap('', result.features)).toBe(true);
+        }
+    });
+});
+
 // ─── No live ArcGIS calls when USE_R2_DESIGNATIONS=true ──────────────────────
 
 describe('SM R2 path — no ArcGIS FeatureServer calls', () => {
@@ -449,6 +505,9 @@ const RUN_LIVE = process.env.PARITY === 'live';
 
 describe.skipIf(!RUN_LIVE)('SM R2 parity — live check against W0 fixture', () => {
     it('R2 path matches live verdict for all fixture points', async () => {
+        expect(nativeFetch, 'Native fetch is required for PARITY=live').toBeTypeOf('function');
+        vi.stubGlobal('fetch', nativeFetch);
+
         const fixture = loadFixture();
         expect(fixture).not.toBeNull();
 
@@ -463,7 +522,10 @@ describe.skipIf(!RUN_LIVE)('SM R2 parity — live check against W0 fixture', () 
                 point.lat + HALF,
             );
             const verdict = result.features.length > 0 ? 'flag' : 'clear';
-            expect(verdict, `${point.label} (${point.lat},${point.lon}): expected ${point.expected}`).toBe(point.expected);
+            expect(
+                verdict,
+                `${point.label} (${point.lat},${point.lon}): expected ${point.expected}; available=${result.available}; error=${result.error ?? 'none'}`,
+            ).toBe(point.expected);
         }
     }, 60_000);
 });

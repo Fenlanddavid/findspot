@@ -17,7 +17,7 @@ Static datasets served from the `findspot-static` R2 bucket via the `findspot-st
 
 ## Rebuilding the SM Index
 
-The SM index is a sparse geohash6 shard index of all ~20,000 Scheduled Monuments in England from the NHLE FeatureServer/6.
+The SM index is a sparse geohash6 shard index of Scheduled Monuments in England from the NHLE FeatureServer/6, Welsh Scheduled Ancient Monuments from Cadw WFS, and Scottish Scheduled Monuments from HES MapServer/5.
 
 **Step 1 — Generate shards locally:**
 ```bash
@@ -25,19 +25,19 @@ node scripts/build-sm-index.mjs
 # Output: scripts/out/sm-index/_meta.json  +  scripts/out/sm-index/{geohash6}.json
 ```
 
-**Step 2 — Upload meta:**
+**Step 2 — Bulk-upload all shards except `_meta.json`:**
+```bash
+find scripts/out/sm-index -name '*.json' ! -name '_meta.json' | while read f; do
+  key="sm-index/$(basename $f)"
+  wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
+done
+```
+
+**Step 3 — Verify Scottish shard URLs directly, then upload `_meta.json` last:**
 ```bash
 wrangler r2 object put findspot-static/sm-index/_meta.json \
   --file scripts/out/sm-index/_meta.json \
   --content-type application/json
-```
-
-**Step 3 — Bulk-upload all shards:**
-```bash
-find scripts/out/sm-index -name '*.json' | while read f; do
-  key="sm-index/$(basename $f)"
-  wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
-done
 ```
 
 Total upload time: ~2–5 minutes for ~20,000 features across ~4,000 cells.
@@ -104,6 +104,6 @@ Run the regression suite after refreshing to confirm the app's SM lookup logic m
 
 ## Attribution
 
-- **Scheduled Monuments (SM index, AIM):** National Heritage List for England (NHLE) © Historic England, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Source: FeatureServer/6 live query.
+- **Scheduled Monuments (SM index, AIM):** National Heritage List for England (NHLE) © Historic England, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Welsh Scheduled Ancient Monument data is Designated Historic Asset GIS Data from The Welsh Historic Environment Service (Cadw), licensed under the Open Government Licence v3.0. Scottish Scheduled Monument attribution: Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] 2026, licensed under the Open Government Licence v3.0. Sources: NHLE FeatureServer/6, Cadw DataMapWales WFS, HES MapServer/5 live queries.
 - **Itiner-e Roman Roads:** © Itiner-e contributors, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - **Wales LiDAR hillshade:** © Natural Resources Wales / Welsh Government, Open Government Licence v3.0.

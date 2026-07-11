@@ -49,6 +49,10 @@ export default defineConfig({
         // These are read-only data fetches that must always go to the network.
         runtimeCaching: [
           {
+            urlPattern: /^https:\/\/findspot-static\.trials-uk\.workers\.dev\//,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^https:\/\/findspot-bgs-proxy\.trials-uk\.workers\.dev\//,
             handler: 'NetworkOnly',
           },
