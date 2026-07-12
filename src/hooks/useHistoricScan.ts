@@ -27,6 +27,7 @@ import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoadsResult, prefetchRomanRoads } from '../services/romanRoadService';
 import { prefetchPASDensity, getPASDensityNear, pasPeriodLabels } from '../services/pasDensityService';
 import { applyPASDensityModifiers } from '../utils/hotspotEngine';
+import type { QuestionSourceAvailability } from '../outstandingQuestions/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,10 +46,12 @@ export interface HistoricScanResult {
     enhancedHotspots: Hotspot[];
     routes:          HistoricRoute[];
     nhleData:        NHLEResponse | null;  // non-null only if freshly fetched
+    scheduledMonuments: NHLEResponse;      // effective data used by this scan, including pass-through/cache
     aimData:         AIMResponse  | null;  // non-null only if freshly fetched
     drifted:         boolean;
     center:          { lat: number; lng: number };
     pasCell:         import('../services/pasDensityService').PASCellLookup | null;
+    questionSourceAvailability: QuestionSourceAvailability;
 }
 
 interface UseHistoricScanOptions {
@@ -490,19 +493,26 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
 
             // 6. Routes (fresh fetch or pass-through from terrain scan)
             let routes = opts.routes;
+            let osmRoutesAvailable = opts.historicRoutesAvailable;
             if (!opts.routes.length && routeRaw?.elements?.length) {
                 routes = parseOverpassRoutes(routeRaw.elements);
+            }
+            if (!opts.routes.length && !hasTerrainRouteAttempt) {
+                osmRoutesAvailable = routeRaw !== null;
             }
 
             // 6b. Itiner-e Roman roads — serve from cache when available
             let freshRomanRoads: HistoricRoute[] = [];
             const hasRomanRoads = routes.some(r => r.source === 'itinere');
+            let romanRoadsAvailable = opts.historicRoutesAvailable && hasRomanRoads;
             const romanStart = performance.now();
             if (!hasRomanRoads) {
                 if (cachedLookup?.romanRoads?.length) {
                     routes = [...routes, ...cachedLookup.romanRoads];
+                    romanRoadsAvailable = true;
                 } else {
                     const romanRoadResult = await fetchRomanRoadsResult(west, south, east, north);
+                    romanRoadsAvailable = romanRoadResult.available;
                     freshRomanRoads = romanRoadResult.routes;
                     if (freshRomanRoads.length > 0) {
                         routes = [...routes, ...freshRomanRoads];
@@ -513,6 +523,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                 }
             }
             const romanSeconds = seconds(romanStart);
+            const historicRoutesAvailable = osmRoutesAvailable && romanRoadsAvailable;
 
             // Cache write — after Roman roads so they can be included
             try {
@@ -602,14 +613,29 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             onLog(`> TIMING historic: records ${recordsSeconds}s, roman roads ${romanSeconds}s, enrichment ${enhanceSeconds}s, total ${seconds(perfStart)}s.`, 'historic');
 
             if (mountedRef.current) setIsScanning(false);
+            const questionSourceAvailability: QuestionSourceAvailability = {
+                terrain:          opts.questionTerrainAvailability.terrain === true,
+                terrain_global:   opts.questionTerrainAvailability.terrain_global === true,
+                slope:            opts.questionTerrainAvailability.slope === true,
+                hydrology:        opts.questionTerrainAvailability.hydrology === true,
+                satellite_spring: opts.questionTerrainAvailability.satellite_spring === true,
+                satellite_summer: opts.questionTerrainAvailability.satellite_summer === true,
+                scheduled_monuments: nhleData.available !== false,
+                aim:              aimData.available === true,
+                historic_context: contextData !== null,
+                historic_routes:  historicRoutesAvailable,
+                pas_density:      pasCellResult !== null,
+            };
             return {
                 pasFinds, placeSignals, monumentPoints, heritageCount,
                 enhancedHotspots, routes,
                 nhleData: nhleRaw ?? null,  // non-null only if freshly fetched
+                scheduledMonuments: nhleData,
                 aimData:  aimRaw  ?? null,
                 drifted,
                 center: { lat: center.lat, lng: center.lng },
                 pasCell: pasCellResult,
+                questionSourceAvailability,
             };
 
         } catch (e) {

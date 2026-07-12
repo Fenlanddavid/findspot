@@ -13,19 +13,19 @@ const SEVERITY_STYLE: Record<
   { className: string; prefix: string; italic?: boolean }
 > = {
   obligation: {
-    className: "text-amber-300/90",
+    className: "text-amber-700 dark:text-amber-300",
     prefix: "▲ ",
   },
   action: {
-    className: "text-white/[0.84]",
+    className: "text-gray-800 dark:text-gray-100",
     prefix: "● ",
   },
   delta: {
-    className: "text-white/[0.72]",
+    className: "text-gray-700 dark:text-gray-300",
     prefix: "• ",
   },
   ambient: {
-    className: "text-white/[0.55]",
+    className: "text-gray-500 dark:text-gray-400",
     prefix: "• ",
     italic: true,
   },
@@ -85,8 +85,8 @@ export function PermissionPulseCard({
   }
 
   return (
-    <div className="rounded-2xl bg-gray-900 dark:bg-gray-800/80 px-4 py-3 mb-4">
-      <div className="text-3xs font-black uppercase tracking-[0.2em] text-white/40 mb-2">
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/60">
+      <div className="mb-2 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
         {header}
       </div>
       <div className="flex flex-col gap-1">
@@ -108,7 +108,7 @@ export function PermissionPulseCard({
         {hiddenCount > 0 && !expanded && (
           <button
             onClick={() => setExpanded(true)}
-            className="text-left text-xs font-bold text-white/40 hover:text-white/60 transition-colors mt-1"
+            className="mt-1 text-left text-xs font-bold text-gray-500 transition-colors hover:text-gray-700 dark:hover:text-gray-300"
           >
             + {hiddenCount} more
           </button>

@@ -24,6 +24,8 @@ import { computeTraceTargets } from '../utils/traceTargetEngine';
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
+import { updateQuestionsAfterScan } from '../outstandingQuestions/updateAfterScan';
+import { diagLog } from '../services/diagLog';
 import {
     DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence,
     EngineContextAtPoint, ANNOTATION_TYPE_LABELS, LANDSCAPE_TYPE_LABELS,
@@ -475,6 +477,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const savedPointJustClickedRef = useRef(false);
     const terrainScanCenterRef = useRef<{ lat: number; lng: number } | null>(null);
     const terrainScanBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
+    const terrainAnalysisBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
+    const terrainHistoricRoutesAvailableRef = useRef(false);
+    const questionTerrainAvailabilityRef = useRef<Record<string, boolean>>({});
 
     // Lab export: NHLE/AIM responses, modern ways, and raw clusters stored after scan
     const nhleDataRef      = useRef<{ features: any[] } | null>(null);
@@ -935,6 +940,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setSelectedUserFind(null);
         terrainScanCenterRef.current = null;
         terrainScanBoundsRef.current = null;
+        terrainAnalysisBoundsRef.current = null;
+        terrainHistoricRoutesAvailableRef.current = false;
+        questionTerrainAvailabilityRef.current = {};
         nhleDataRef.current = null;
         aimDataRef.current = null;
         setSourceAvailability(null);
@@ -1055,6 +1063,27 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
             // Non-blocking feedback signal — does not affect scan result
             recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(() => {});
+        }
+
+        if (!result.drifted && context.analysisBounds) {
+            // Non-blocking — update outstanding questions for the scanned permission.
+            updateQuestionsAfterScan({
+                scanCenter: context.scanCenter ?? result.center,
+                hotspots: result.enhancedHotspots,
+                clusters: context.terrainClusters,
+                routes: result.routes,
+                scanBounds: context.analysisBounds,
+                sourceAvailability: result.questionSourceAvailability,
+                permissions,
+                scheduledMonuments: result.scheduledMonuments,
+                pasRecordCountInScanCell: result.pasCell?.c,
+            }).catch(error => {
+                void diagLog.error(
+                    'outstanding_questions',
+                    'Post-scan question update failed',
+                    error instanceof Error ? error.message : String(error),
+                );
+            });
         }
     }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore, projectFinds]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1179,6 +1208,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         const scanCenter = result.scanStartCenter;
         terrainScanCenterRef.current = scanCenter;
         terrainScanBoundsRef.current = result.scanStartBounds;
+        terrainAnalysisBoundsRef.current = result.analysisBounds;
+        terrainHistoricRoutesAvailableRef.current = result.historicRoutesAvailable;
+        questionTerrainAvailabilityRef.current = result.questionTerrainAvailability;
 
         // Fire geology context lookup concurrently — non-blocking, updates state when ready
         runGeologyContextPhase(scanCenter);
@@ -1191,6 +1223,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             nhleData:        result.nhleData,
             aimData:         result.aimData,
             scanCenter,
+            analysisBounds:  result.analysisBounds,
+            questionTerrainAvailability: result.questionTerrainAvailability,
+            historicRoutesAvailable: result.historicRoutesAvailable,
         };
         setHistoricMode(true);
         setIntelDetailsOpen(false);
@@ -1227,6 +1262,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             nhleData:   null,
             aimData:    aimDataRef.current,
             scanCenter: terrainScanCenterRef.current,
+            analysisBounds: terrainAnalysisBoundsRef.current,
+            questionTerrainAvailability: questionTerrainAvailabilityRef.current,
+            historicRoutesAvailable: terrainHistoricRoutesAvailableRef.current,
         });
         setIntelDetailsOpen(false);
     }, [isHistoricScanning, terrainClusters, monumentPoints, historicRoutes, runHistoricPhase, runGeologyContextPhase]);

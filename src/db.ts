@@ -1,5 +1,6 @@
 import Dexie, { Table } from "dexie";
 import { v4 as uuid } from "uuid";
+import type { OutstandingQuestion } from "./outstandingQuestions/types";
 
 export type GeoJSONPolygon = {
   type: "Polygon";
@@ -420,6 +421,7 @@ export type FieldGuideScanCache = {
   createdAt: number;    // Unix ms
   rawClusters: any[];
   sourceAvailability: Record<string, boolean>;
+  sourceCompleteness?: Record<string, boolean>;
   modernWays?: any[];
   modernWaysFetchedAt?: number;
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
@@ -454,6 +456,12 @@ export type LandscapeInterpretationRecord = {
     inputSignature?: string;
     interpretation: any;    // LandscapeInterpretation
 };
+
+// ─── Outstanding Questions ───────────────────────────────────────────────────
+// Deterministic archaeological enquiries derived from FieldGuide scan output.
+// Separate table — not stored on Permission; included in user backup/restore.
+
+export type { OutstandingQuestion } from "./outstandingQuestions/types";
 
 // ─── Undug Signals ────────────────────────────────────────────────────────────
 // One-tap logging of detector signals the user chose not to dig.
@@ -504,6 +512,7 @@ export class FindSpotDB extends Dexie {
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
+  outstandingQuestions!: Table<OutstandingQuestion, string>;
 
   constructor() {
     super("findspot_uk");
@@ -734,6 +743,14 @@ export class FindSpotDB extends Dexie {
     // additive field — no index change needed there.
     this.version(33).stores({
       undugSignals: 'id, [permissionId+status], sessionId, status, createdAt',
+    });
+
+    // v34: outstanding questions table.
+    // Deterministic archaeological enquiries derived from FieldGuide scans.
+    // Additive — no user data migration. Existing records untouched.
+    // Indexed by permissionId for permission-scoped queries and deletion cascade.
+    this.version(34).stores({
+      outstandingQuestions: 'id, permissionId, ruleId, status',
     });
   }
 }

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type MockRow = Record<string, unknown>;
 
 // vi.hoisted runs before imports, so the mock tables exist when vi.mock fires.
-const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds } =
+const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOutstandingQuestions } =
   vi.hoisted(() => {
     function _makeTable() {
       let data: Record<string, unknown>[] = [];
@@ -20,21 +20,26 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds } =
         where(key: string) {
           return {
             equals(val: unknown) {
+              const matched = () => data.filter((r) => {
+                if (key.startsWith("[")) {
+                  const fields = key.replace(/[\[\]]/g, "").split("+");
+                  const vals = val as unknown[];
+                  return fields.every((f, i) => r[f] === vals[i]);
+                }
+                return r[key] === val;
+              });
               return {
                 toArray() {
-                  return Promise.resolve(
-                    data.filter((r) => {
-                      if (key.startsWith("[")) {
-                        const fields = key.replace(/[\[\]]/g, "").split("+");
-                        const vals = val as unknown[];
-                        return fields.every((f, i) => r[f] === vals[i]);
-                      }
-                      return r[key] === val;
-                    })
-                  );
+                  return Promise.resolve(matched());
                 },
                 count() {
-                  return this.toArray().then((a: unknown[]) => a.length);
+                  return Promise.resolve(matched().length);
+                },
+                filter(fn: (r: Record<string, unknown>) => boolean) {
+                  return {
+                    toArray() { return Promise.resolve(matched().filter(fn)); },
+                    count() { return Promise.resolve(matched().filter(fn).length); },
+                  };
                 },
               };
             },
@@ -54,6 +59,7 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds } =
       mockUndugSignals: _makeTable(),
       mockSessions: _makeTable(),
       mockFinds: _makeTable(),
+      mockOutstandingQuestions: _makeTable(),
     };
   });
 
@@ -63,6 +69,7 @@ vi.mock("../../src/db", () => ({
     undugSignals: mockUndugSignals,
     sessions: mockSessions,
     finds: mockFinds,
+    outstandingQuestions: mockOutstandingQuestions,
   },
 }));
 
@@ -126,6 +133,7 @@ function resetAll() {
   mockUndugSignals._setData([]);
   mockSessions._setData([]);
   mockFinds._setData([]);
+  mockOutstandingQuestions._setData([]);
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -232,6 +240,33 @@ describe("permissionPulse — a1 (open signals)", () => {
     expect(f!.slots.count).toBe(3);
     expect(f!.slots.s).toBe("s");
     expect(f!.slots.verb).toBe("");
+  });
+});
+
+describe("permissionPulse — a2 (outstanding questions)", () => {
+  it("count 0 produces no fact", async () => {
+    mockOutstandingQuestions._setData([
+      { id: "oq-resolved", permissionId: PERM_ID, status: "RESOLVED" },
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    expect(facts.find((f) => f.templateId === "questions_changed")).toBeUndefined();
+  });
+
+  it("counts active questions and links to the section", async () => {
+    mockOutstandingQuestions._setData([
+      { id: "oq-1", permissionId: PERM_ID, status: "UNRESOLVED" },
+      { id: "oq-2", permissionId: PERM_ID, status: "NEEDS_EVIDENCE" },
+      { id: "oq-3", permissionId: PERM_ID, status: "RESOLVED" },
+      { id: "oq-other", permissionId: "other", status: "UNRESOLVED" },
+    ]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    const f = facts.find((f) => f.templateId === "questions_changed");
+    expect(f).toBeDefined();
+    expect(f!.slots.count).toBe(2);
+    expect(f!.slots.s).toBe("s");
+    expect(f!.link).toEqual({ kind: "scroll", anchorId: "outstanding-questions-section" });
   });
 });
 

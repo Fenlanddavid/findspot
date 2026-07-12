@@ -22,6 +22,7 @@ import PermissionProofModal from "../components/PermissionProofModal";
 import { PermissionActivityColumn } from "../components/PermissionActivityColumn";
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
 import { PermissionPulseCard } from "../components/PermissionPulseCard";
+import { OutstandingQuestionsCard } from "../components/OutstandingQuestionsCard";
 import { RallyPersonaChip } from "../components/RallyPersonaChip";
 import { rallyPersona } from "../utils/rallyPersona";
 import { useConfirmDialog } from "../components/ConfirmModal";
@@ -398,7 +399,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.outstandingQuestions], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
@@ -407,6 +408,7 @@ export default function PermissionPage(props: {
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
+        await db.outstandingQuestions.where("permissionId").equals(id).delete();
         await db.permissions.delete(id);
       });
       nav("/");
@@ -449,7 +451,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages, db.outstandingQuestions], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
@@ -458,6 +460,7 @@ export default function PermissionPage(props: {
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
+        await db.outstandingQuestions.where("permissionId").equals(id).delete();
         await db.permissions.delete(id);
         // Remove the join record so the member can re-scan the QR if needed
         if (perm?.sharedPermissionId) {
@@ -1519,6 +1522,34 @@ export default function PermissionPage(props: {
                 onShowExportClubDay={() => setShowExportClubDay(true)}
             />
 
+            <PermissionActivityColumn
+                isEdit={isEdit}
+                permissionId={id}
+                pendingFinds={pendingFinds}
+                standaloneFinds={standaloneFinds}
+                finds={finds}
+                sessions={sessions}
+                fields={fields}
+                allMedia={allMedia}
+                isClubDayMember={isClubDayMember}
+                isRally={isRally}
+                persona={persona}
+                name={name}
+                landownerName={landownerName}
+                landownerPhone={landownerPhone}
+                landownerEmail={landownerEmail}
+                validFrom={validFrom}
+                lat={lat}
+                lon={lon}
+                saving={saving}
+                onOpenFind={setOpenFindId}
+                onRecordFind={goRecordFind}
+                onKeepClubDayAsPersonalRecord={handleKeepClubDayAsPersonalRecord}
+                onShowExportClubDay={() => setShowExportClubDay(true)}
+                confirmAction={confirmAction}
+                onConvertSignalToFind={handleConvertSignalToFind}
+            />
+
             {/* Offline Access card — regular permissions with a mapped boundary */}
             {isEdit && !isClubDayMember && !isEditing && !!boundary && (
                 <div className="lg:col-span-3">
@@ -1604,36 +1635,16 @@ export default function PermissionPage(props: {
             )}
 
             {isEdit && id && (
-              <PermissionPulseCard permissionId={id} />
+              <div className="lg:col-span-3">
+                <PermissionPulseCard permissionId={id} />
+              </div>
             )}
 
-            <PermissionActivityColumn
-                isEdit={isEdit}
-                permissionId={id}
-                pendingFinds={pendingFinds}
-                standaloneFinds={standaloneFinds}
-                finds={finds}
-                sessions={sessions}
-                fields={fields}
-                allMedia={allMedia}
-                isClubDayMember={isClubDayMember}
-                isRally={isRally}
-                persona={persona}
-                name={name}
-                landownerName={landownerName}
-                landownerPhone={landownerPhone}
-                landownerEmail={landownerEmail}
-                validFrom={validFrom}
-                lat={lat}
-                lon={lon}
-                saving={saving}
-                onOpenFind={setOpenFindId}
-                onRecordFind={goRecordFind}
-                onKeepClubDayAsPersonalRecord={handleKeepClubDayAsPersonalRecord}
-                onShowExportClubDay={() => setShowExportClubDay(true)}
-                confirmAction={confirmAction}
-                onConvertSignalToFind={handleConvertSignalToFind}
-            />
+            {isEdit && id && (
+              <div id="outstanding-questions-section" className="lg:col-span-3 scroll-mt-4">
+                <OutstandingQuestionsCard permissionId={id} />
+              </div>
+            )}
             </React.Fragment>
             )}
 

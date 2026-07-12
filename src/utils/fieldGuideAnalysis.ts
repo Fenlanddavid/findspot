@@ -78,6 +78,14 @@ function getMonumentProtectionMatch(lat: number, lon: number, geometry: { type: 
     return { inside: false, bufferOnly: false };
 }
 
+export function isPointProtectedByNHLE(lat: number, lon: number, nhleData: NHLELike): boolean {
+    return nhleData.features.some(asset => {
+        if (!asset.geometry) return false;
+        const match = getMonumentProtectionMatch(lat, lon, asset.geometry);
+        return match.inside || match.bufferOnly;
+    });
+}
+
 export function applyNHLEProtection(clusters: Cluster[], nhleData: NHLELike): Cluster[] {
     for (const cluster of clusters) {
         const [lon, lat] = cluster.center;

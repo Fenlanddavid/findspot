@@ -22,6 +22,7 @@ export type PulseTemplateId =
   | "sf_awaiting_excavation"
   | "sf_in_progress"
   | "open_signals"
+  | "questions_changed"
   | "last_visit"
   | "crop_change_stubble"
   | "crop_change_crop"
@@ -63,6 +64,8 @@ export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
     "Crop recorded as {crop}, previously {prevCrop}.",
   last_visit_finds:
     "Your last session produced {count} find{s}{nameClause}.",
+  questions_changed:
+    "{count} outstanding FieldGuide question{s} need review.",
   seasonal_pattern:
     "Your visits here have historically fallen between {monthA} and {monthB}.",
 };
@@ -77,6 +80,7 @@ const TEMPLATE_ORDER: PulseTemplateId[] = [
   "sf_in_progress",
   // action
   "open_signals",
+  "questions_changed",
   // delta
   "last_visit",
   "crop_change_stubble",
@@ -164,6 +168,27 @@ export async function derivePermissionPulse(
         verb: openSignalCount === 1 ? "s" : "",
       },
       link: { kind: "scroll", anchorId: "undug-signal-section" },
+    });
+  }
+
+  // ── a2: outstanding questions ────────────────────────────────────────────
+  const activeQuestions = await db.outstandingQuestions
+    .where("permissionId")
+    .equals(permissionId)
+    .filter(q => q.status !== "RESOLVED")
+    .count();
+
+  if (activeQuestions > 0) {
+    facts.push({
+      id: "questions_changed",
+      permissionId,
+      severity: "action",
+      templateId: "questions_changed",
+      slots: {
+        count: activeQuestions,
+        s: activeQuestions === 1 ? "" : "s",
+      },
+      link: { kind: "scroll", anchorId: "outstanding-questions-section" },
     });
   }
 

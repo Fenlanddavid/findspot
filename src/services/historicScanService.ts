@@ -779,12 +779,12 @@ export async function fetchAIMData(
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         const res = await fetch(url, { signal: timed.signal });
-        if (!res.ok) return { features: [] };
+        if (!res.ok) return { features: [], available: false };
         const data = await res.json() as Partial<AIMResponse>;
-        return { ...data, features: Array.isArray(data.features) ? data.features : [] };
+        return { ...data, features: Array.isArray(data.features) ? data.features : [], available: true };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
-        return { features: [] };
+        return { features: [], available: false };
     } finally {
         timed.clear();
     }

@@ -38,6 +38,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const significantFinds = await db.significantFinds.toArray();
   const savedPoints = await db.savedPoints.toArray();
   const undugSignals = await db.undugSignals.toArray();
+  const outstandingQuestions = await db.outstandingQuestions.toArray();
 
   let mediaExport: any[] = [];
   if (includeMedia) {
@@ -67,6 +68,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     importedPackages,
     savedPoints,
     undugSignals,
+    outstandingQuestions,
   };
 
   return JSON.stringify(data, null, 2);
@@ -130,6 +132,7 @@ type BackupData = {
   importedPackages: any[];
   savedPoints: any[];
   undugSignals: any[];
+  outstandingQuestions: any[];
 };
 
 function requireArray(data: any, key: keyof BackupData, required = false): any[] {
@@ -150,6 +153,47 @@ function assertRowsHaveId(rows: any[], table: string) {
   });
 }
 
+const QUESTION_RULE_IDS = new Set([
+  "MOVEMENT_NO_FINDS",
+  "SETTLEMENT_QUIET",
+  "UNRECORDED_ROUTE",
+]);
+const QUESTION_CATEGORIES = new Set(["MOVEMENT", "CONTRADICTION", "HISTORIC_CONTEXT"]);
+const QUESTION_STATUSES = new Set(["UNRESOLVED", "NEEDS_EVIDENCE", "WEAKENING", "RESOLVED"]);
+const QUESTION_RESOLVED_REASONS = new Set(["preconditions_cleared", "superseded", "cap_evicted"]);
+
+function assertOutstandingQuestion(question: any, index: number) {
+  const invalid = (field: string) => new Error(`Invalid format: outstandingQuestions[${index}] has an invalid ${field}`);
+  if (!QUESTION_RULE_IDS.has(question.ruleId)) throw invalid("ruleId");
+  if (!QUESTION_CATEGORIES.has(question.category)) throw invalid("category");
+  if (!QUESTION_STATUSES.has(question.status)) throw invalid("status");
+  if (!question.anchor || typeof question.anchor !== "object" ||
+      !Number.isFinite(question.anchor.lat) || question.anchor.lat < -90 || question.anchor.lat > 90 ||
+      !Number.isFinite(question.anchor.lon) || question.anchor.lon < -180 || question.anchor.lon > 180) {
+    throw invalid("anchor");
+  }
+  if (typeof question.title !== "string" || !question.title.trim()) throw invalid("title");
+  if (typeof question.description !== "string" || !question.description.trim()) throw invalid("description");
+  if (!Number.isFinite(question.confidence) || question.confidence < 0 || question.confidence > 1) throw invalid("confidence");
+  if (!Number.isFinite(question.createdAt) || !Number.isFinite(question.updatedAt)) throw invalid("timestamps");
+  if (typeof question.generatedByScanId !== "string" || !question.generatedByScanId.trim()) throw invalid("generatedByScanId");
+  if (question.resolvedReason !== undefined && !QUESTION_RESOLVED_REASONS.has(question.resolvedReason)) throw invalid("resolvedReason");
+  if (question.resolvedAt !== undefined && !Number.isFinite(question.resolvedAt)) throw invalid("resolvedAt");
+  if (question.consecutiveMisses !== undefined &&
+      (!Number.isInteger(question.consecutiveMisses) || question.consecutiveMisses < 0)) {
+    throw invalid("consecutiveMisses");
+  }
+
+  for (const field of ["supportingEvidence", "contradictingEvidence"] as const) {
+    if (!Array.isArray(question[field]) || question[field].some((e: any) =>
+      !e || typeof e !== "object" || typeof e.label !== "string" || !e.label.trim() ||
+      typeof e.sourceScanId !== "string" || !e.sourceScanId.trim()
+    )) {
+      throw invalid(field);
+    }
+  }
+}
+
 export function validateBackupData(data: any): BackupData {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid backup file: expected an object.");
@@ -168,6 +212,7 @@ export function validateBackupData(data: any): BackupData {
     importedPackages: requireArray(data, "importedPackages"),
     savedPoints: requireArray(data, "savedPoints"),
     undugSignals: requireArray(data, "undugSignals"),
+    outstandingQuestions: requireArray(data, "outstandingQuestions"),
   };
 
   assertRowsHaveId(backup.projects, "projects");
@@ -181,6 +226,7 @@ export function validateBackupData(data: any): BackupData {
   assertRowsHaveId(backup.importedPackages, "importedPackages");
   assertRowsHaveId(backup.savedPoints, "savedPoints");
   assertRowsHaveId(backup.undugSignals, "undugSignals");
+  assertRowsHaveId(backup.outstandingQuestions, "outstandingQuestions");
 
   const projectIds = new Set(backup.projects.map(p => p.id));
   const permissionIds = new Set(backup.permissions.map(p => p.id));
@@ -260,6 +306,13 @@ export function validateBackupData(data: any): BackupData {
     }
   });
 
+  backup.outstandingQuestions.forEach((question, index) => {
+    if (!permissionIds.has(question.permissionId)) {
+      throw new Error(`Invalid format: outstandingQuestions[${index}] references an unknown permission`);
+    }
+    assertOutstandingQuestion(question, index);
+  });
+
   return backup;
 }
 
@@ -283,7 +336,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.outstandingQuestions], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -299,6 +352,7 @@ export async function importData(json: string) {
     await db.importedPackages.clear();
     await db.savedPoints.clear();
     await db.undugSignals.clear();
+    await db.outstandingQuestions.clear();
 
     await db.projects.bulkPut(backup.projects);
     if (backup.permissions.length) await db.permissions.bulkPut(backup.permissions);
@@ -312,6 +366,7 @@ export async function importData(json: string) {
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
     if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
+    if (backup.outstandingQuestions.length) await db.outstandingQuestions.bulkPut(backup.outstandingQuestions);
   });
 }
 

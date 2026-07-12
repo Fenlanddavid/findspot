@@ -6,7 +6,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
 
-import { Cluster, Hotspot, HistoricRoute } from '../pages/fieldGuideTypes';
+import { Cluster, Hotspot, HistoricRoute, ScanBounds } from '../pages/fieldGuideTypes';
 import { db } from '../db';
 import {
     NHLEFeature, NHLEResponse, AIMResponse, OverpassElement,
@@ -37,6 +37,9 @@ export interface ScanContext {
     nhleData:         NHLEResponse | null;
     aimData:          AIMResponse  | null;
     scanCenter:       { lat: number; lng: number } | null;
+    analysisBounds:   ScanBounds | null;
+    questionTerrainAvailability: Record<string, boolean>;
+    historicRoutesAvailable: boolean;
 }
 
 export interface TerrainScanResult {
@@ -51,10 +54,13 @@ export interface TerrainScanResult {
     monumentPoints:     [number, number][];
     heritageCount:      number;
     sourceAvailability: Record<string, boolean>;
+    questionTerrainAvailability: Record<string, boolean>;
     fromCache:          boolean;
     noSignal:           boolean;
     scanStartCenter:    { lat: number; lng: number };
     scanStartBounds:     { west: number; south: number; east: number; north: number };
+    analysisBounds:      ScanBounds;
+    historicRoutesAvailable: boolean;
 }
 
 interface TerrainScanParams {
@@ -205,6 +211,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const scanEast  = tileLon(tX_start + 3);
         const scanNorth = tileLat(tY_start);
         const scanSouth = tileLat(tY_start + 3);
+        const analysisBounds = { west: scanWest, south: scanSouth, east: scanEast, north: scanNorth };
 
         // Tile-based cache key — deterministic for this exact viewport at Z16.
         const tileKey = `${zoom}-${tX_start}-${tY_start}`;
@@ -287,11 +294,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 onStatusChange('Filtering disturbance patterns...');
                 const suppressed     = suppressDisturbance(updatedFeatures);
                 let routes: HistoricRoute[] = [];
+                let osmRoutesAvailable = false;
                 try {
                     onStatusChange('Reading route context...');
                     // routePromise was fired before the cache check — it has had
                     // time to resolve during the DB lookup and NHLE/AIM fetches.
                     const routeRaw = await Promise.race([routePromise, new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
+                    osmRoutesAvailable = routeRaw !== null;
                     if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
                 } catch { /* routes unavailable */ }
                 // Itiner-e Roman roads — static asset, always available; must be
@@ -348,12 +357,19 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     onLog(`> Route suppression: modern road data failed; fallback hid ${fallbackHidden} high-risk linear signal${fallbackHidden !== 1 ? 's' : ''}.`, 'terrain', 'warn');
                 }
                 const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
+                const historicRoutesAvailable = osmRoutesAvailable && romanRoadResult.available;
+                const questionTerrainAvailability = cached.sourceCompleteness ?? {
+                    terrain: false, terrain_global: false, slope: false, hydrology: false,
+                    satellite_spring: false, satellite_summer: false,
+                };
                 if (mountedRef.current) setIsScanning(false);
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount,
                     sourceAvailability: applyOfflinePackAvailability(cached.sourceAvailability, offlinePackMeta),
-                    fromCache: true, noSignal: false, scanStartCenter, scanStartBounds,
+                    questionTerrainAvailability,
+                    fromCache: true, noSignal: false, scanStartCenter, scanStartBounds, analysisBounds,
+                    historicRoutesAvailable,
                 };
             }
         } catch {
@@ -444,9 +460,11 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             onStatusChange('Reading route context...');
             const routeStart = performance.now();
             let routes: HistoricRoute[] = [];
+            let osmRoutesAvailable = false;
             try {
                 const timeout  = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS));
                 const routeRaw = await Promise.race([routePromise, timeout]);
+                osmRoutesAvailable = routeRaw !== null;
                 if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
             } catch {
                 onLog('> Routes: service unavailable, continuing without.', 'terrain', 'warn');
@@ -482,6 +500,14 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 satellite_spring: springResult.tilesLoaded > 0,
                 satellite_summer: summerResult.tilesLoaded > 0,
             }, offlinePackMeta);
+            const questionTerrainAvailability: Record<string, boolean> = {
+                terrain:          terrainResult.tilesLoaded === 9,
+                terrain_global:   terrainGlobalResult.tilesLoaded === 9,
+                slope:            slopeResult.tilesLoaded === 9,
+                hydrology:        hydroResult.tilesLoaded === 9,
+                satellite_spring: springResult.tilesLoaded === 9,
+                satellite_summer: summerResult.tilesLoaded === 9,
+            };
 
             // If every tile source failed to load, the device has no signal.
             // Don't cache this result — it will resolve correctly once connectivity returns.
@@ -542,7 +568,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
                     await db.fieldGuideCache.put({
                         id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
-                        sourceAvailability, engineVersion: ENGINE_VERSION,
+                        sourceAvailability, sourceCompleteness: questionTerrainAvailability,
+                        engineVersion: ENGINE_VERSION,
                         ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
                     });
                 } catch { /* cache failure is non-fatal */ }
@@ -551,6 +578,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             onStatusChange('Building hotspot model...');
             const hotspots = buildTerrainHotspots(getHotspotInput(contextualized), routes, monumentPoints);
             const processSeconds = seconds(processStart);
+            const historicRoutesAvailable = osmRoutesAvailable && romanRoadResult.available;
 
             const duration = ((Date.now() - scanStart) / 1000).toFixed(1);
             onLog(`> Terrain scan complete in ${duration}s — ${contextualized.length} landscape signal${contextualized.length !== 1 ? 's' : ''} detected, ${hotspots.length} hotspot${hotspots.length !== 1 ? 's' : ''} identified.`, 'terrain');
@@ -560,7 +588,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             return {
                 terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                 nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability,
-                fromCache: false, noSignal, scanStartCenter, scanStartBounds,
+                questionTerrainAvailability,
+                fromCache: false, noSignal, scanStartCenter, scanStartBounds, analysisBounds,
+                historicRoutesAvailable,
             };
 
         } catch (e) {

@@ -12,6 +12,7 @@ import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { getPackMeta, isPackStale } from "../services/offlinePack";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
+import { LockIcon, SearchIcon } from "../components/AppIcons";
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -561,7 +562,7 @@ export default function Home(props: {
         onClick={() => setPrivacyExpanded(v => !v)}
         className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
       >
-        <span className="text-xs shrink-0">🔒</span>
+        <LockIcon className="h-3.5 w-3.5 shrink-0" />
         {privacyExpanded ? (
           <p className="text-xs font-normal text-black dark:text-white m-0">
             Your saved finds, GPS coordinates, photos and landowner details stay on this device unless you export or share them. Online features may request map tiles, search results or landscape data for the area you are viewing; Discover only sends details you type into its submit forms.
@@ -579,18 +580,12 @@ export default function Home(props: {
       </section>
 
       {isFirstRun ? (
-        <section className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/70 dark:bg-emerald-950/20">
-          <div className="mb-3 flex items-start justify-between gap-3">
+        <section className="rounded-lg border border-sky-200 bg-sky-50/50 p-4 dark:border-sky-900/70 dark:bg-sky-950/15">
+          <div className="mb-3">
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Start here</p>
+              <p className="text-xs font-black uppercase tracking-widest text-sky-700 dark:text-sky-300">Start here</p>
               <h3 className="mt-1 text-base font-black text-gray-900 dark:text-gray-100">Build your first field record</h3>
             </div>
-            <button
-              onClick={props.goFieldGuide}
-              className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm hover:bg-emerald-500"
-            >
-              Scan land
-            </button>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
@@ -604,11 +599,11 @@ export default function Home(props: {
                 onClick={item.action}
                 className={`min-h-14 rounded-xl border px-3 py-2 text-left transition-colors ${
                   item.active
-                    ? "border-emerald-500 bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100"
-                    : "border-emerald-200/80 bg-white/60 text-gray-700 hover:border-emerald-400 dark:border-emerald-900/70 dark:bg-gray-900/40 dark:text-gray-200"
+                    ? "border-sky-500 bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100"
+                    : "border-gray-200 bg-white/70 text-gray-700 hover:border-sky-400 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200"
                 }`}
               >
-                <span className="block text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Step {index + 1}</span>
+                <span className="block text-[10px] font-black uppercase tracking-widest text-sky-600 dark:text-sky-400">Step {index + 1}</span>
                 <span className="mt-0.5 block text-sm font-black leading-tight">{item.label}</span>
                 <span className="mt-0.5 block text-2xs leading-tight text-gray-500 dark:text-gray-400">{item.detail}</span>
               </button>
@@ -847,11 +842,11 @@ export default function Home(props: {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
             <div className="flex items-baseline gap-4">
                 <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap">Permissions</h2>
-                <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All</button>
+                {!isFirstRun && <button onClick={props.goPermissions} className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1.5 rounded-lg text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">Open All</button>}
             </div>
-            <div className="flex items-center gap-3 w-full md:max-w-md">
+            {!isFirstRun && <div className="flex items-center gap-3 w-full md:max-w-md">
                 <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+                    <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                     <input
                         type="text"
                         placeholder="Search permissions..."
@@ -864,7 +859,7 @@ export default function Home(props: {
                 </div>
                 <div className="text-sm text-gray-500 font-mono hidden sm:block whitespace-nowrap">{permissions?.filter(p => !p.isDefault).length ?? 0} total</div>
 
-            </div>
+            </div>}
         </div>
         
         {(!filteredPermissions || filteredPermissions.length === 0) && (
@@ -978,17 +973,17 @@ export default function Home(props: {
       <section>
         <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Latest Finds</h2>
-            <button onClick={props.goAllFinds} className="shrink-0 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">
+            {(!isFirstRun || (recentFinds?.length ?? 0) > 0) && <button onClick={props.goAllFinds} className="shrink-0 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-2xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all">
               <span className="sm:hidden">Finds</span>
               <span className="hidden sm:inline">Open All Finds</span>
-            </button>
+            </button>}
         </div>
 
         {(!recentFinds || recentFinds.length === 0) && (
           <div className={`${isFirstRun ? "p-4" : "p-8"} bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center`}>
             <p className="text-sm font-bold text-gray-700 dark:text-gray-200">No finds recorded yet.</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">When you record your first find, it will appear here.</p>
-            <button onClick={() => props.goFind()} className={`${isFirstRun ? "mt-3 px-4 py-2 text-xs" : "mt-4 px-5 py-2.5 text-sm"} bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black transition-colors`}>Record First Find</button>
+            {!isFirstRun && <button onClick={() => props.goFind()} className="mt-4 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-black text-white transition-colors hover:bg-emerald-500">Record First Find</button>}
           </div>
         )}
         

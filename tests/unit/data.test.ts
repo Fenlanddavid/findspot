@@ -35,6 +35,13 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
     importedPackages: [{ id: 'pkg-1' }],
     savedPoints:      [{ id: 'sp-1', projectId: 'proj-1', label: 'NE corner', lat: 52.5, lon: -1.5, zoom: 16, note: '', createdAt: '2024-01-01' }],
     undugSignals:     [{ id: 'us-1', createdAt: 1_700_000_000_000, lat: 51.5, lng: -1.2, status: 'open' }],
+    outstandingQuestions: [{
+      id: 'oq-1', permissionId: 'perm-1', ruleId: 'MOVEMENT_NO_FINDS',
+      anchor: { lat: 52.5, lon: -1.5 }, title: 'Question', description: 'Description',
+      category: 'MOVEMENT', status: 'UNRESOLVED', confidence: 0.8,
+      createdAt: 1, updatedAt: 1, generatedByScanId: 'scan-1',
+      supportingEvidence: [], contradictingEvidence: [],
+    }],
     ...overrides,
   };
 }
@@ -59,6 +66,7 @@ describe('validateBackupData — accepts valid backups', () => {
     expect(Array.isArray(result.settings)).toBe(true);
     expect(Array.isArray(result.importedPackages)).toBe(true);
     expect(Array.isArray(result.savedPoints)).toBe(true);
+    expect(Array.isArray(result.outstandingQuestions)).toBe(true);
   });
 
   it('accepts a data-only backup with empty media array', () => {
@@ -76,6 +84,7 @@ describe('validateBackupData — accepts valid backups', () => {
       settings: undefined,
       importedPackages: undefined,
       savedPoints: undefined,
+      outstandingQuestions: undefined,
     });
     expect(() => validateBackupData(sparse)).not.toThrow();
   });
@@ -280,6 +289,28 @@ describe('validateBackupData — savedPoints', () => {
     expect(() => validateBackupData(data)).toThrow(/savedPoints/i);
   });
 
+  it('rejects an outstanding question for an unknown permission', () => {
+    const data = makeValidBackup({
+      outstandingQuestions: [{ id: 'oq-1', permissionId: 'missing' }],
+    });
+    expect(() => validateBackupData(data)).toThrow(/outstandingQuestions/i);
+  });
+
+  it.each([
+    ['ruleId', { ruleId: 'REMOVED_RULE' }],
+    ['status', { status: 'DISMISSED' }],
+    ['anchor', { anchor: { lat: 200, lon: -1.5 } }],
+    ['confidence', { confidence: 2 }],
+    ['supportingEvidence', { supportingEvidence: [{ label: '', sourceScanId: 'scan-1' }] }],
+  ])('rejects an outstanding question with invalid %s', (field, invalidFields) => {
+    const validQuestion = makeValidBackup().outstandingQuestions[0];
+    const data = makeValidBackup({
+      outstandingQuestions: [{ ...validQuestion, ...invalidFields }],
+    });
+
+    expect(() => validateBackupData(data)).toThrow(new RegExp(String(field), 'i'));
+  });
+
   it('rejects a savedPoint referencing an unknown project', () => {
     const data = makeValidBackup({
       savedPoints: [{ id: 'sp-1', projectId: 'GHOST-PROJECT', label: 'Ghost', lat: 52.5, lon: -1.5, zoom: 16, note: '' }],
@@ -349,6 +380,7 @@ describe('table coverage guard', () => {
     'importedPackages',
     'savedPoints',
     'undugSignals',
+    'outstandingQuestions',
   ] as const;
 
   it('validateBackupData returns every user table as an array', () => {
@@ -364,5 +396,6 @@ describe('table coverage guard', () => {
     // projects is required; the others default to [] if absent but must be present in a v4 export
     expect(result.projects.length).toBeGreaterThan(0);
     expect(result.savedPoints.length).toBeGreaterThan(0);
+    expect(result.outstandingQuestions.length).toBeGreaterThan(0);
   });
 });

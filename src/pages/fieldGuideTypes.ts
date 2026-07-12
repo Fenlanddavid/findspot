@@ -9,6 +9,13 @@
  */
 export type LayerFetchStatus = 'ok' | 'cached' | 'unavailable' | 'partial';
 
+export interface ScanBounds {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+}
+
 export interface Cluster {
     id: string; points: {x: number, y: number}[];
     minX: number; maxX: number; minY: number; maxY: number;

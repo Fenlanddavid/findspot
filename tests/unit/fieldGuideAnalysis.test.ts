@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeContext, applyAIMEnrichment, suppressDisturbance } from '../../src/utils/fieldGuideAnalysis';
+import { analyzeContext, applyAIMEnrichment, isPointProtectedByNHLE, suppressDisturbance } from '../../src/utils/fieldGuideAnalysis';
 import type { Cluster } from '../../src/pages/fieldGuideTypes';
 
 function cluster(overrides: Partial<Cluster> = {}): Cluster {
@@ -42,6 +42,28 @@ describe('applyAIMEnrichment', () => {
 
         expect(() => applyAIMEnrichment(input, {})).not.toThrow();
         expect(applyAIMEnrichment(input, {})[0].sources).toEqual(['terrain']);
+    });
+});
+
+describe('isPointProtectedByNHLE', () => {
+    const scheduledMonuments = {
+        features: [{
+            geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                    [-0.001, 51.999], [0.001, 51.999], [0.001, 52.001],
+                    [-0.001, 52.001], [-0.001, 51.999],
+                ]],
+            },
+        }],
+    };
+
+    it('recognises an anchor inside a scheduled monument', () => {
+        expect(isPointProtectedByNHLE(52, 0, scheduledMonuments)).toBe(true);
+    });
+
+    it('allows an anchor clear of scheduled monuments and their buffer', () => {
+        expect(isPointProtectedByNHLE(52.01, 0, scheduledMonuments)).toBe(false);
     });
 });
 

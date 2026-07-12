@@ -27,6 +27,14 @@ import { toOSGridRef } from "./services/gps";
 import { findResumable, buildResumeContext, PATH_STEP_ORDER } from "./services/significantFindResume";
 import { PATH_LABELS } from "./components/significant/significantFindDisplay";
 import type { SignificantFind } from "./db";
+import {
+  DiscoverIcon,
+  FieldGuideIcon,
+  FindsIcon,
+  HomeIcon,
+  PermissionsIcon,
+  SettingsIcon,
+} from "./components/AppIcons";
 
 export { Logo } from "./components/Logo";
 
@@ -353,7 +361,7 @@ function Shell() {
                   </span>
                 </button>
                 <NavLink to="/settings" aria-label="Settings" className={({ isActive }) => `inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-xs sm:min-h-0 sm:min-w-0 sm:rounded-none sm:text-sm font-medium text-gray-600 dark:text-gray-300 ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                  <span className="min-[400px]:hidden text-xl leading-none">⚙</span>
+                  <SettingsIcon className="min-[400px]:hidden h-5 w-5" />
                   <span className="hidden min-[400px]:inline">Settings</span>
                 </NavLink>
             </div>
@@ -479,20 +487,20 @@ function Shell() {
       <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {[
-            { to: "/", label: "Home", icon: "⌂" },
-            { to: "/fieldguide", label: "FieldGuide", icon: "◎" },
-            { to: "/permissions", label: "Permissions", icon: "□" },
-            { to: "/discover", label: "Discover", icon: "⌕" },
-            { to: "/finds-box", label: "Finds", icon: "☆" },
+            { to: "/", label: "Home", icon: HomeIcon },
+            { to: "/fieldguide", label: "FieldGuide", icon: FieldGuideIcon },
+            { to: "/permissions", label: "Permissions", icon: PermissionsIcon },
+            { to: "/discover", label: "Discover", icon: DiscoverIcon },
+            { to: "/finds-box", label: "Finds", icon: FindsIcon },
           ].map(item => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
-              className={({ isActive }) => `flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-black transition-colors ${isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}
+              className={({ isActive }) => `flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[9px] font-bold leading-tight transition-colors ${isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}
             >
-              <span className="text-lg leading-none" aria-hidden="true">{item.icon}</span>
-              <span className="max-w-full truncate">{item.label}</span>
+              <item.icon className="h-[18px] w-[18px] shrink-0" />
+              <span className="max-w-full whitespace-nowrap">{item.label}</span>
             </NavLink>
           ))}
         </div>
