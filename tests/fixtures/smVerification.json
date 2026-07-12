@@ -147,8 +147,8 @@
       "source": "Cadw"
     },
     {
-      "lat": 55.948,
-      "lon": -3.2,
+      "lat": 55.9456,
+      "lon": -3.196,
       "label": "Edinburgh Town Wall",
       "expected": "flag",
       "listEntry": "SM2901",

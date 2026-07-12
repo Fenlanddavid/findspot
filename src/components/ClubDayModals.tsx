@@ -213,6 +213,9 @@ export function CreateClubDayPackModal({
       setSharedPermissionId(sid);
 
       const url = buildJoinUrl({ packJson: compactClubDayPackJson(packJson) });
+      if (url.length > 2000) {
+        setError(`Join link is very long (${Math.round(url.length / 1000)}k chars) — some apps or QR scanners may not handle it. Consider including fewer mapped fields.`);
+      }
       setJoinUrl(url);
     } catch (e: any) {
       setError(e?.message ?? "Failed to generate Club Day pack");

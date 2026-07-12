@@ -63,7 +63,7 @@ function Shell() {
   const location = useLocation();
   const sfWorkflow = useSignificantFindWorkflow(projectId ?? "");
   const [resumableSf, setResumableSf] = React.useState<SignificantFind | null>(null);
-  const [resumeDismissed, setResumeDismissed] = React.useState(false);
+  const [dismissedResumeId, setDismissedResumeId] = React.useState<string | null>(null);
 
   // Check for a resumable wizard on mount and whenever the workflow closes
   React.useEffect(() => {
@@ -440,11 +440,11 @@ function Shell() {
             </div>
           </div>
         )}
-        {resumableSf && !sfWorkflow.isOpen && !resumeDismissed && (
+        {resumableSf && !sfWorkflow.isOpen && resumableSf.id !== dismissedResumeId && (
           <ResumeSignificantFindBanner
             sf={resumableSf}
             onResume={() => void openSignificantFind("manual", buildResumeContext(resumableSf))}
-            onDismiss={() => setResumeDismissed(true)}
+            onDismiss={() => setDismissedResumeId(resumableSf.id)}
           />
         )}
         <PageErrorBoundary>

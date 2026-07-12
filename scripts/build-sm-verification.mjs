@@ -163,10 +163,10 @@ const TEST_POINTS = [
   // ── Known Scottish Scheduled Monuments (HES MapServer/5) ───────────────────
   {
     label: 'Edinburgh Town Wall',
-    lat:   55.948,
-    lon:   -3.200,
+    lat:   55.9456,
+    lon:   -3.196,
     source: 'HES',
-    note:  'HES SM2901 — urban Edinburgh area',
+    note:  'HES SM2901 — Flodden Wall, Heriot Place (bbox centroid)',
   },
   {
     label: 'Costerton Fort',

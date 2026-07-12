@@ -122,8 +122,8 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
         sources: { ...BASEMAP_SOURCES },
         layers:  [ ...BASEMAP_LAYERS ],
       },
-      center: initialLon && initialLat ? [initialLon, initialLat] : [-2, 54.5],
-      zoom: initialLon && initialLat ? 16 : 5,
+      center: initialLon != null && initialLat != null ? [initialLon, initialLat] : [-2, 54.5],
+      zoom: initialLon != null && initialLat != null ? 16 : 5,
     });
 
     // Fit bounds if we have a boundary

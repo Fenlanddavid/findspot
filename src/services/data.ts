@@ -882,21 +882,87 @@ export type ClubDayMergeResult = {
   alreadyPresent: number;
 };
 
+// ─── Import validation ────────────────────────────────────────────────────
+
+const MAX_IMPORT_JSON_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_IMPORT_RECORDS = 5_000;
+const MAX_MEDIA_BLOB_BYTES = 10 * 1024 * 1024; // 10 MB per blob
+const ID_MAX_LEN = 128;
+
+function validateClubDayExport(raw: string): ClubDayExport {
+  if (raw.length > MAX_IMPORT_JSON_BYTES) {
+    throw new Error("Import file is too large.");
+  }
+
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error("Invalid Club Day export: could not parse file.");
+  }
+
+  if (!data || typeof data !== "object") throw new Error("Invalid export: not an object.");
+  if (data.type !== "findspot-club-day-export") throw new Error("This file is not a Club Day export.");
+  if (typeof data.sharedPermissionId !== "string" || !data.sharedPermissionId) throw new Error("Missing sharedPermissionId.");
+  if (typeof data.recorderId !== "string" || !data.recorderId) throw new Error("Missing recorderId.");
+  if (typeof data.recorderName !== "string") throw new Error("Missing recorderName.");
+
+  if (!Array.isArray(data.sessions)) throw new Error("Invalid export: sessions is not an array.");
+  if (!Array.isArray(data.finds)) throw new Error("Invalid export: finds is not an array.");
+  if (!Array.isArray(data.media)) throw new Error("Invalid export: media is not an array.");
+  if (data.significantFinds !== undefined && !Array.isArray(data.significantFinds)) throw new Error("Invalid export: significantFinds is not an array.");
+
+  const totalRecords = data.sessions.length + data.finds.length + (data.significantFinds?.length ?? 0) + data.media.length;
+  if (totalRecords > MAX_IMPORT_RECORDS) throw new Error(`Import contains ${totalRecords} records — maximum is ${MAX_IMPORT_RECORDS}.`);
+
+  // Validate IDs and basic structure
+  const allIds = new Set<string>();
+  function checkId(id: unknown, label: string) {
+    if (typeof id !== "string" || id.length === 0 || id.length > ID_MAX_LEN) throw new Error(`Invalid ${label} ID: ${String(id)}`);
+    if (allIds.has(id)) throw new Error(`Duplicate ID in import: ${id}`);
+    allIds.add(id);
+  }
+
+  for (const s of data.sessions) {
+    if (!s || typeof s !== "object") throw new Error("Invalid session record.");
+    checkId(s.id, "session");
+  }
+  for (const f of data.finds) {
+    if (!f || typeof f !== "object") throw new Error("Invalid find record.");
+    checkId(f.id, "find");
+    if (f.lat != null && (typeof f.lat !== "number" || f.lat < -90 || f.lat > 90)) throw new Error("Invalid find latitude.");
+    if (f.lon != null && (typeof f.lon !== "number" || f.lon < -180 || f.lon > 180)) throw new Error("Invalid find longitude.");
+  }
+  for (const sf of (data.significantFinds ?? [])) {
+    if (!sf || typeof sf !== "object") throw new Error("Invalid significant find record.");
+    checkId(sf.id, "significantFind");
+  }
+  const mediaOwnerIds = new Set<string>([
+    ...data.finds.map((f: any) => f.id),
+    ...(data.significantFinds ?? []).map((sf: any) => sf.id),
+  ]);
+  for (const m of data.media) {
+    if (!m || typeof m !== "object") throw new Error("Invalid media record.");
+    checkId(m.id, "media");
+    if (typeof m.findId !== "string" || m.findId.length === 0 || m.findId.length > ID_MAX_LEN) {
+      throw new Error("Invalid media find reference.");
+    }
+    if (!mediaOwnerIds.has(m.findId)) throw new Error("Media references a missing find.");
+    if (typeof m.blob !== "string") throw new Error("Invalid media blob.");
+    if (m.blob.length > MAX_MEDIA_BLOB_BYTES * 1.37) {
+      throw new Error("Media blob exceeds size limit.");
+    }
+  }
+
+  return data as ClubDayExport;
+}
+
 /**
  * Organiser: merges a member's Club Day export into the local database.
  * Matches by sharedPermissionId. Uses upsert — existing records are kept.
  */
 export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult> {
-  let data: ClubDayExport;
-  try {
-    data = JSON.parse(json);
-  } catch {
-    throw new Error("Invalid Club Day export: could not parse file.");
-  }
-
-  if (data.type !== "findspot-club-day-export") {
-    throw new Error("This file is not a Club Day export.");
-  }
+  const data = validateClubDayExport(json);
 
   // Duplicate check
   const hash = await hashString(json);
@@ -940,6 +1006,35 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
     incomingSessions.length + incomingFinds.length + incomingSignificantFinds.length -
     newSessions.length - newFinds.length - newSignificantFinds.length;
 
+  // ── ID collision guard ──────────────────────────────────────────────────
+  // Check incoming IDs against the *entire* database, not just the target
+  // permission, to prevent cross-permission overwrites via bulkPut.
+  const idMap = new Map<string, string>(); // oldId → newId (only for collisions)
+
+  async function remapIfCollides(id: string, table: { get(id: string): Promise<any> }, checkOwnership = true): Promise<string> {
+    const existing = await table.get(id);
+    if (existing && (!checkOwnership || existing.permissionId !== permission!.id)) {
+      const newId = uuid();
+      idMap.set(id, newId);
+      return newId;
+    }
+    return id;
+  }
+
+  for (const s of newSessions) {
+    s.id = await remapIfCollides(s.id, db.sessions);
+  }
+  for (const f of newFinds) {
+    f.id = await remapIfCollides(f.id, db.finds);
+    // Rewrite sessionId reference if session was remapped
+    if (f.sessionId && idMap.has(f.sessionId)) f.sessionId = idMap.get(f.sessionId)!;
+  }
+  for (const sf of newSignificantFinds) {
+    sf.id = await remapIfCollides(sf.id, db.significantFinds);
+    if (sf.sessionId && idMap.has(sf.sessionId)) sf.sessionId = idMap.get(sf.sessionId)!;
+    if (sf.findId && idMap.has(sf.findId)) sf.findId = idMap.get(sf.findId)!;
+  }
+
   // Normalise to organiser's permission so merged records appear in their session list,
   // the session page resolves the permission correctly, and a single query covers all data.
   const fixedSessions = newSessions.map((s: any) => ({ ...s, projectId: permission.projectId, permissionId: permission.id }));
@@ -949,8 +1044,20 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
   // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
   // IndexedDB operation and awaiting it inside a transaction causes IDB to
   // auto-commit, silently dropping everything written afterwards.
+  // Media rows often lack permissionId, so use find-level ownership instead:
+  // only remap when the existing media points to a different find.
   const mediaItems: Media[] = data.media?.length
-    ? await Promise.all((data.media as any[]).map(async m => ({ ...m, blob: await base64ToBlob(m.blob) })))
+    ? await Promise.all((data.media as any[]).map(async m => {
+        // Resolve the final findId first so we can compare ownership
+        const fixedFindId = m.findId && idMap.has(m.findId) ? idMap.get(m.findId)! : m.findId;
+        const existing = await db.media.get(m.id);
+        const remappedId = existing && existing.findId !== fixedFindId ? uuid() : m.id;
+        if (remappedId !== m.id) idMap.set(m.id, remappedId);
+        const fixedM = { ...m, id: remappedId, findId: fixedFindId };
+        if (fixedM.sessionId && idMap.has(fixedM.sessionId)) fixedM.sessionId = idMap.get(fixedM.sessionId)!;
+        if (fixedM.significantFindId && idMap.has(fixedM.significantFindId)) fixedM.significantFindId = idMap.get(fixedM.significantFindId)!;
+        return { ...fixedM, blob: await base64ToBlob(fixedM.blob) };
+      }))
     : [];
 
   // Upsert by recorderId so re-exports from the same member don't create duplicate rows

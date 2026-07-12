@@ -152,7 +152,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
   const [generating, setGenerating] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
-  const canShare = typeof navigator !== "undefined" && "share" in navigator;
+  const canShare = typeof navigator !== "undefined" && !!navigator.canShare;
 
   const mapDivRef = useRef<HTMLDivElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);

@@ -90,7 +90,7 @@ export function AgreementModal(props: {
   const [savedAgreement, setSavedAgreement] = useState<SavedAgreement | null>(null);
   const [clubRallyEditorOpen, setClubRallyEditorOpen] = useState(false);
   const clubRallyOrganiserName = isClubRallyAgreement
-    ? ((props.permission as any).organiserName || props.permission.landownerName || "")
+    ? (props.permission.collector || "")
     : props.permission.collector || "";
   const [clubRallyDetails, setClubRallyDetails] = useState<ClubRallyDetails>({
     landownerName: isClubRallyAgreement ? "" : props.permission.landownerName || "",
@@ -103,7 +103,7 @@ export function AgreementModal(props: {
   
   const agreementRef = useRef<HTMLDivElement>(null);
   const generatedAtRef = useRef(new Date());
-  const canShare = typeof navigator !== "undefined" && "share" in navigator;
+  const canShare = typeof navigator !== "undefined" && !!navigator.canShare;
   const agreementKind = isClubRallyAgreement ? "Club/Rally Agreement" : "Landowner Agreement";
   const agreementReferencePrefix = isClubRallyAgreement ? "FS-RALLY" : "FS-AGREE";
   const agreementFilenamePrefix = isClubRallyAgreement ? "club-rally-agreement" : "landowner-agreement";
@@ -268,8 +268,10 @@ export function AgreementModal(props: {
       createdAt: new Date().toISOString(),
     };
 
-    await db.media.add(media);
-    await db.permissions.update(props.permission.id, { agreementId: mediaId });
+    await db.transaction("rw", [db.media, db.permissions], async () => {
+      await db.media.add(media);
+      await db.permissions.update(props.permission.id, { agreementId: mediaId });
+    });
 
     const saved = { mediaId, filename, blob };
     setSavedAgreement(saved);
