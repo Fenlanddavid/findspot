@@ -65,7 +65,7 @@ export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
   last_visit_finds:
     "Your last session produced {count} find{s}{nameClause}.",
   questions_changed:
-    "{count} outstanding FieldGuide question{s} need review.",
+    "{count} outstanding FieldGuide question{s} need{verb} review.",
   seasonal_pattern:
     "Your visits here have historically fallen between {monthA} and {monthB}.",
 };
@@ -187,6 +187,7 @@ export async function derivePermissionPulse(
       slots: {
         count: activeQuestions,
         s: activeQuestions === 1 ? "" : "s",
+        verb: activeQuestions === 1 ? "s" : "",
       },
       link: { kind: "scroll", anchorId: "outstanding-questions-section" },
     });

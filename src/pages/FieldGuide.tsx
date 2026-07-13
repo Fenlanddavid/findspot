@@ -2,7 +2,7 @@ import React, { useState, useReducer, useRef, useEffect, useLayoutEffect, useCal
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, Find, Media, SavedPoint } from '../db';
 import { ScaledImage } from '../components/ScaledImage';
@@ -25,6 +25,10 @@ import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
 import { updateQuestionsAfterScan } from '../outstandingQuestions/updateAfterScan';
+import { positionMapForPermissionScan } from '../outstandingQuestions/permissionScanTarget';
+import { updatePermissionIntelligenceQuestions } from '../outstandingQuestions/protectionScan';
+import { historicQuestionRuleScope } from '../outstandingQuestions/rules';
+import type { RuleId } from '../outstandingQuestions/types';
 import { diagLog } from '../services/diagLog';
 import {
     DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence,
@@ -402,6 +406,7 @@ function getSignalSummary(breakdown: { terrain: number; hydro: number; historic:
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function FieldGuide({ projectId, onSignificantFind }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void }) {
+    const navigate = useNavigate();
     // Engine state
     const [engineState, dispatch] = useReducer(engineReducer, initialEngineState);
     const {
@@ -480,6 +485,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const terrainAnalysisBoundsRef = useRef<{ west: number; south: number; east: number; north: number } | null>(null);
     const terrainHistoricRoutesAvailableRef = useRef(false);
     const questionTerrainAvailabilityRef = useRef<Record<string, boolean>>({});
+    const questionScanAutoStartedRef = useRef(false);
 
     // Lab export: NHLE/AIM responses, modern ways, and raw clusters stored after scan
     const nhleDataRef      = useRef<{ features: any[] } | null>(null);
@@ -753,6 +759,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const initLng = parseFloat(searchParams.get('lng') ?? '');
     const initPinLabel = searchParams.get('pin') === 'signal' ? 'Un-dug signal' : undefined;
     const openSavedPointsParam = searchParams.get('savedPoints') === '1';
+    const questionScanRequested = searchParams.get('scan') === 'questions';
+    const questionPermissionId = questionScanRequested ? searchParams.get('permissionId') ?? undefined : undefined;
 
     // Clear one-shot URL actions after the map/sheet uses them.
     useEffect(() => {
@@ -1029,7 +1037,11 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
     // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
 
-    const runHistoricPhase = useCallback(async (context: ScanContext) => {
+    const runHistoricPhase = useCallback(async (
+        context: ScanContext,
+        requestedQuestionPermissionId?: string,
+        questionRuleIds?: readonly RuleId[],
+    ): Promise<boolean> => {
         const result = await runHistoricScan({
             mapRef,
             ...context,
@@ -1038,7 +1050,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             targetPeriod,
         });
 
-        if (!result) return;
+        if (!result) return false;
 
         // If fresh NHLE/AIM data was fetched (standalone mode), push to map and update refs
         // so the ALIE worker receives the actual feature data (not empty arrays).
@@ -1052,7 +1064,6 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
         setPasDensityCell(result.pasCell ?? null);
-        setHistoricScanCompleted(true);
         calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
 
         dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints, routes: result.routes });
@@ -1065,26 +1076,38 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(() => {});
         }
 
+        let questionsUpdated = false;
         if (!result.drifted && context.analysisBounds) {
-            // Non-blocking — update outstanding questions for the scanned permission.
-            updateQuestionsAfterScan({
-                scanCenter: context.scanCenter ?? result.center,
-                hotspots: result.enhancedHotspots,
-                clusters: context.terrainClusters,
-                routes: result.routes,
-                scanBounds: context.analysisBounds,
-                sourceAvailability: result.questionSourceAvailability,
-                permissions,
-                scheduledMonuments: result.scheduledMonuments,
-                pasRecordCountInScanCell: result.pasCell?.c,
-            }).catch(error => {
+            // Persist question evaluation before treating the combined scan as complete.
+            // Permission-page scans carry an explicit ID because a saved GPS point
+            // may sit outside the permission's drawn boundary.
+            try {
+                await updateQuestionsAfterScan({
+                    permissionId: requestedQuestionPermissionId,
+                    scanCenter: context.scanCenter ?? result.center,
+                    hotspots: result.enhancedHotspots,
+                    clusters: context.terrainClusters,
+                    routes: result.routes,
+                    scanBounds: context.analysisBounds,
+                    sourceAvailability: result.questionSourceAvailability,
+                    permissions,
+                    scheduledMonuments: result.scheduledMonuments,
+                    pasRecordCountInScanCell: result.pasCell?.c,
+                    pasTopPeriods: result.pasCell?.p,
+                    pasTopTypes: result.pasCell?.t,
+                    ruleIds: questionRuleIds,
+                });
+                questionsUpdated = true;
+            } catch (error) {
                 void diagLog.error(
                     'outstanding_questions',
                     'Post-scan question update failed',
                     error instanceof Error ? error.message : String(error),
                 );
-            });
+            }
         }
+        setHistoricScanCompleted(true);
+        return questionsUpdated;
     }, [runHistoricScan, permissions, fields, targetPeriod, calculatePotentialScore, projectFinds]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Geology context phase (non-blocking) ────────────────────────────────
@@ -1150,8 +1173,35 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
     // ─── Main combined scan ───────────────────────────────────────────────────
 
-    const executeScan = async () => {
+    const executeScan = async (requestedQuestionPermissionId?: string) => {
         if (!mapRef.current || analyzing || isTerrainScanning || isHistoricScanning) return;
+
+        let requestedPermission: (typeof permissions)[number] | undefined;
+        if (requestedQuestionPermissionId) {
+            requestedPermission = permissions.find(permission => permission.id === requestedQuestionPermissionId);
+            if (!requestedPermission || !positionMapForPermissionScan(mapRef.current, requestedPermission)) {
+                void diagLog.error(
+                    'outstanding_questions',
+                    'Permission question scan could not be positioned',
+                    `Permission ${requestedQuestionPermissionId} has no usable scan location`,
+                );
+                return;
+            }
+        }
+
+        // Core permission intelligence has a small, permission-wide data path.
+        // Start it before the heavier terrain scan so terrain availability cannot
+        // block scheduled monuments, Roman roads, PAS context or local coverage.
+        const permissionIntelligencePromise = requestedPermission
+            ? updatePermissionIntelligenceQuestions(requestedPermission).catch(error => {
+                void diagLog.error(
+                    'outstanding_questions',
+                    'Permission intelligence question update failed',
+                    error instanceof Error ? error.message : String(error),
+                );
+                return false;
+            })
+            : Promise.resolve(false);
 
         setScanCount(prev => {
             const next = prev + 1;
@@ -1166,7 +1216,11 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         const result = await runTerrainScan({ mapRef, permissions, fields, targetPeriod });
 
         if (!result) {
+            await permissionIntelligencePromise;
             dispatch({ type: 'SCAN_FAIL' });
+            if (requestedQuestionPermissionId) {
+                navigate(`/permission/${requestedQuestionPermissionId}`, { replace: true });
+            }
             return;
         }
 
@@ -1231,13 +1285,78 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         setIntelDetailsOpen(false);
         setIntelLayersOpen(false);
 
+        // The permission-wide pass started alongside terrain. Resolve its
+        // ownership before the historic pass writes, so the two transactions
+        // never update the same rule family. If it failed, historic keeps the
+        // full rule set as a fallback.
+        const permissionIntelligenceUpdated = await permissionIntelligencePromise;
+        const historicQuestionRuleIds = historicQuestionRuleScope(
+            !!requestedQuestionPermissionId,
+            permissionIntelligenceUpdated,
+        );
+
         addLog('> Terrain result ready — historic landscape context continues in the background.', 'terrain');
-        void runHistoricPhase(context).then(() => {
+        void runHistoricPhase(context, requestedQuestionPermissionId, historicQuestionRuleIds).then(async questionsUpdated => {
+            // Even when historic sources are unavailable or no rule fires, a
+            // successful terrain scan from the permission card must stop the UI
+            // presenting this as an unscanned permission.
+            if (requestedQuestionPermissionId && !questionsUpdated) {
+                try {
+                    await db.permissions.update(requestedQuestionPermissionId, {
+                        questionsEvaluatedAt: new Date().toISOString(),
+                    });
+                } catch (error) {
+                    void diagLog.error(
+                        'outstanding_questions',
+                        'Could not record permission question scan',
+                        error instanceof Error ? error.message : String(error),
+                    );
+                }
+            }
             clearMapItemSelections();
             setSelectedHotspotId(null);
             persistSheetExpanded(true);
+            if (requestedQuestionPermissionId) {
+                navigate(`/permission/${requestedQuestionPermissionId}`, { replace: true });
+            }
+        }).catch(error => {
+            void diagLog.error(
+                'outstanding_questions',
+                'Permission question scan completion failed',
+                error instanceof Error ? error.message : String(error),
+            );
         });
     };
+
+    // Permission-page Questions CTA: wait for the map and permission data, then
+    // run the same combined terrain + historic scan as the primary Scan action.
+    useEffect(() => {
+        if (!questionScanRequested || questionScanAutoStartedRef.current) return;
+        let cancelled = false;
+        let attempts = 0;
+        let timer: number | undefined;
+
+        const tryStart = () => {
+            if (cancelled || questionScanAutoStartedRef.current) return;
+            if (mapRef.current && permissions.length > 0 && !analyzing && !isTerrainScanning && !isHistoricScanning) {
+                questionScanAutoStartedRef.current = true;
+                const nextParams = new URLSearchParams(window.location.search);
+                nextParams.delete('scan');
+                nextParams.delete('permissionId');
+                setSearchParams(nextParams, { replace: true });
+                void executeScan(questionPermissionId);
+                return;
+            }
+            attempts += 1;
+            if (attempts < 40) timer = window.setTimeout(tryStart, 250);
+        };
+
+        timer = window.setTimeout(tryStart, 300);
+        return () => {
+            cancelled = true;
+            if (timer !== undefined) window.clearTimeout(timer);
+        };
+    }, [questionScanRequested, questionPermissionId, permissions.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ─── Standalone historic scan (context drawer / historic layers button) ───
 
@@ -1559,7 +1678,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         handleRasterOverlayPress, updateRasterOverlayOpacity,
         helperTips,
         persistSheetExpanded, handleSheetTouchStart, handleSheetTouchEnd,
-        clearMapItemSelections, focusTarget, clearScan, executeScan,
+        clearMapItemSelections, focusTarget, clearScan,
+        executeScan: () => { void executeScan(); },
         findMe, searchLocation, loadStandaloneHistoric,
         handleLabExport, handleAnnotationConfirm, buildSuggestedLabel,
         rawClusters, userGpsPos, setUserGpsPos,
@@ -1595,7 +1715,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
                             {isLocating ? '...' : 'GPS'}
                         </button>
                         <button
-                            onClick={detectedFeatures.length > 0 ? clearScan : executeScan}
+                            onClick={detectedFeatures.length > 0 ? clearScan : () => void executeScan()}
                             disabled={analyzing || isTerrainScanning}
                             title={detectedFeatures.length > 0 ? 'Clear scan results' : 'Scan area locked to Z16 for precision'}
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase transition-all whitespace-nowrap disabled:opacity-50 disabled:animate-pulse ${detectedFeatures.length > 0 ? 'bg-slate-600 text-white hover:bg-slate-500' : 'bg-emerald-500 text-white hover:bg-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)]'}`}

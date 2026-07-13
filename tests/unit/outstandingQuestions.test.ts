@@ -4,11 +4,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   hasRequiredSources,
+  historicQuestionRuleScope,
   RULE_REQUIRED_SOURCES,
   runRules,
   type ScanContext,
 } from '../../src/outstandingQuestions/rules';
 import { isAnchorInScanBounds, passesBoundaryGate, passesSMGate, passesCoverageFence, passesAllGates } from '../../src/outstandingQuestions/gates';
+import { generateCandidates } from '../../src/outstandingQuestions/generator';
 import { diffQuestions } from '../../src/outstandingQuestions/differ';
 import { confidenceBand, anchorOctant } from '../../src/outstandingQuestions/types';
 import type {
@@ -151,6 +153,114 @@ describe('Rules — positive fixtures', () => {
     expect(r!.category).toBe('HISTORIC_CONTEXT');
   });
 
+  it('ROMAN_ROUTE_ACTIVITY fires on a Roman road with high PAS density', () => {
+    const ctx = baseScanCtx({
+      historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere', name: 'Ermine Street' })],
+      pasRecordCountInScanCell: 18,
+      localCoverageAtAnchor: () => 35,
+    });
+    const results = runRules(ctx);
+    const r = results.find(c => c.ruleId === 'ROMAN_ROUTE_ACTIVITY');
+    expect(r).toBeTruthy();
+    expect(r!.category).toBe('HISTORIC_CONTEXT');
+    expect(r!.status).toBe('UNRESOLVED');
+    expect(r!.description).toContain('contextual only');
+    expect(r!.supportingEvidence.map(e => e.label)).toContain('Roman road alignment: Ermine Street');
+  });
+
+  it('PROTECTED_AREA_EXCLUSION fires whenever an SM intersects the permission', () => {
+    const results = runRules(baseScanCtx({ protectedAreaPresent: true }));
+    const question = results.find(candidate => candidate.ruleId === 'PROTECTED_AREA_EXCLUSION');
+    expect(question).toBeTruthy();
+    expect(question!.locationActionAllowed).toBe(false);
+    expect(question!.description).toContain('does not authorise detecting on protected archaeology');
+  });
+
+  it('PUBLIC_RECORD_CONTEXT turns a populated PAS cell into an honest comparison question', () => {
+    const results = runRules(baseScanCtx({
+      pasRecordCountInScanCell: 24,
+      pasTopPeriods: ['ROMAN', 'MEDIEVAL'],
+      pasTopTypes: ['COIN', 'BROOCH'],
+    }));
+    const question = results.find(candidate => candidate.ruleId === 'PUBLIC_RECORD_CONTEXT');
+    expect(question).toBeTruthy();
+    expect(question!.description).toContain('broad landscape context');
+    expect(question!.supportingEvidence.map(evidence => evidence.label)).toContain('Leading public periods: ROMAN, MEDIEVAL');
+  });
+
+  it('COVERAGE_GAP provides a baseline when no detecting tracks are recorded', () => {
+    const results = runRules(baseScanCtx({
+      totalCoveragePct: 0,
+      hasRecordedTracks: false,
+    }));
+    const question = results.find(candidate => candidate.ruleId === 'COVERAGE_GAP');
+    expect(question).toBeTruthy();
+    expect(question!.title).toContain('first recorded coverage baseline');
+    expect(question!.category).toBe('COVERAGE');
+  });
+
+  it('retains non-location coverage context on a permission narrower than the target inset', () => {
+    const tinyBoundary: GeoJSONPolygon = {
+      type: 'Polygon',
+      coordinates: [[
+        [-0.5001, 52.4999], [-0.4999, 52.4999],
+        [-0.4999, 52.5001], [-0.5001, 52.5001],
+        [-0.5001, 52.4999],
+      ]],
+    };
+    const candidates = generateCandidates(
+      baseScanCtx({ totalCoveragePct: 0, hasRecordedTracks: false }),
+      {
+        boundary: tinyBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.51, south: 52.49, east: -0.49, north: 52.51 },
+        isAnchorProtected: () => false,
+      },
+    );
+
+    expect(candidates.some(candidate => candidate.ruleId === 'COVERAGE_GAP')).toBe(true);
+  });
+
+  it('ROMAN_ROUTE_ACTIVITY survives the permission boundary and monument safety gates', () => {
+    const candidates = generateCandidates(
+      baseScanCtx({
+        historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere' })],
+        pasRecordCountInScanCell: 18,
+      }),
+      {
+        boundary: testBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.51, south: 52.49, east: -0.49, north: 52.51 },
+        isAnchorProtected: () => false,
+      },
+    );
+
+    expect(candidates.some(candidate => candidate.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toBe(true);
+  });
+
+  it('ROMAN_ROUTE_ACTIVITY moves to a safe point on the road when its preferred anchor is protected', () => {
+    const candidates = generateCandidates(
+      baseScanCtx({
+        historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere' })],
+        pasRecordCountInScanCell: 18,
+      }),
+      {
+        boundary: testBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.51, south: 52.49, east: -0.49, north: 52.51 },
+        isAnchorProtected: anchor => anchor.lon <= -0.5008,
+      },
+    );
+
+    const question = candidates.find(candidate => candidate.ruleId === 'ROMAN_ROUTE_ACTIVITY');
+    expect(question).toBeTruthy();
+    expect(question!.anchor.lon).toBeGreaterThan(-0.5008);
+    expect(question!.alternativeAnchors).toBeUndefined();
+  });
+
 });
 
 // ─── Rules: negative fixtures ───────────────────────────────────────────────
@@ -198,6 +308,25 @@ describe('Rules — negative fixtures', () => {
     expect(results.find(c => c.ruleId === 'UNRECORDED_ROUTE')).toBeFalsy();
   });
 
+  it('ROMAN_ROUTE_ACTIVITY remains useful when PAS density is low', () => {
+    const ctx = baseScanCtx({
+      historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere' })],
+      pasRecordCountInScanCell: 5,
+    });
+    const results = runRules(ctx);
+    expect(results.find(c => c.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toBeTruthy();
+  });
+
+  it('PUBLIC_RECORD_CONTEXT stays silent for a negligible PAS count', () => {
+    const results = runRules(baseScanCtx({ pasRecordCountInScanCell: 2 }));
+    expect(results.find(c => c.ruleId === 'PUBLIC_RECORD_CONTEXT')).toBeFalsy();
+  });
+
+  it('COVERAGE_GAP stays silent once recorded coverage is substantial', () => {
+    const results = runRules(baseScanCtx({ totalCoveragePct: 80, hasRecordedTracks: true }));
+    expect(results.find(c => c.ruleId === 'COVERAGE_GAP')).toBeFalsy();
+  });
+
 });
 
 describe('Rule source completeness', () => {
@@ -219,6 +348,24 @@ describe('Rule source completeness', () => {
       });
     }
   }
+});
+
+describe('Permission scan rule ownership', () => {
+  it('limits historic updates after the permission-wide pass succeeds', () => {
+    expect(historicQuestionRuleScope(true, true)).toEqual([
+      'MOVEMENT_NO_FINDS',
+      'SETTLEMENT_QUIET',
+      'UNRECORDED_ROUTE',
+    ]);
+  });
+
+  it('lets historic retain full fallback ownership when the permission-wide pass fails', () => {
+    expect(historicQuestionRuleScope(true, false)).toBeUndefined();
+  });
+
+  it('keeps ordinary FieldGuide scans unscoped', () => {
+    expect(historicQuestionRuleScope(false, true)).toBeUndefined();
+  });
 });
 
 // ─── Rules: NEEDS_EVIDENCE variants ─────────────────────────────────────────
@@ -648,6 +795,11 @@ describe('Copy-lint — prohibited terms', () => {
       baseScanCtx({
         hotspots: [makeHotspot({ type: 'Movement Corridor (Likely)', score: 70, center: [-0.5, 52.5] })],
         localCoverageAtAnchor: () => 10,
+      }),
+      baseScanCtx({
+        historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere', name: 'Test Roman road' })],
+        pasRecordCountInScanCell: 18,
+        localCoverageAtAnchor: () => 30,
       }),
     ];
 

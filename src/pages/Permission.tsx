@@ -21,7 +21,6 @@ import { FieldNotesModal } from "../components/FieldNotesModal";
 import PermissionProofModal from "../components/PermissionProofModal";
 import { PermissionActivityColumn } from "../components/PermissionActivityColumn";
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
-import { PermissionPulseCard } from "../components/PermissionPulseCard";
 import { OutstandingQuestionsCard } from "../components/OutstandingQuestionsCard";
 import { RallyPersonaChip } from "../components/RallyPersonaChip";
 import { rallyPersona } from "../utils/rallyPersona";
@@ -1632,12 +1631,6 @@ export default function PermissionPage(props: {
                         )}
                     </div>
                 </div>
-            )}
-
-            {isEdit && id && (
-              <div className="lg:col-span-3">
-                <PermissionPulseCard permissionId={id} />
-              </div>
             )}
 
             {isEdit && id && (

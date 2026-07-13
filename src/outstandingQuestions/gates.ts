@@ -15,6 +15,21 @@ import * as turf from '@turf/turf';
 
 const BOUNDARY_INSET_M = 25;
 
+export function isAnchorInsideBoundary(
+  anchor: QuestionCandidate['anchor'],
+  boundary: GeoJSONPolygon | undefined,
+): boolean {
+  if (!boundary?.coordinates?.[0]?.length) return false;
+  try {
+    return turf.booleanPointInPolygon(
+      turf.point([anchor.lon, anchor.lat]),
+      turf.polygon(boundary.coordinates),
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function passesBoundaryGate(
   candidate: QuestionCandidate,
   boundary: GeoJSONPolygon | undefined,

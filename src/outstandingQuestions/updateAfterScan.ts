@@ -12,14 +12,14 @@ import { diffQuestions } from './differ';
 import type { Hotspot, Cluster, HistoricRoute, ScanBounds } from '../pages/fieldGuideTypes';
 import type { GateContext } from './gates';
 import type { ScanContext } from './rules';
-import type { OutstandingQuestion } from './types';
-import type { QuestionSourceAvailability } from './types';
+import type { OutstandingQuestion, QuestionSourceAvailability, RuleId } from './types';
 import { hasRequiredSources } from './rules';
 import { isPointInPolygon, isPointProtectedByNHLE } from '../utils/fieldGuideAnalysis';
 import type { NHLEResponse } from '../services/historicScanService';
 import * as turf from '@turf/turf';
 
 export interface ScanCompleteInput {
+  permissionId?: string;
   scanCenter: { lat: number; lng: number };
   hotspots: Hotspot[];
   clusters: Cluster[];
@@ -29,6 +29,10 @@ export interface ScanCompleteInput {
   permissions: Permission[];
   scheduledMonuments: NHLEResponse;
   pasRecordCountInScanCell?: number;
+  pasTopPeriods?: string[];
+  pasTopTypes?: string[];
+  /** Rules owned by this scan pass. Out-of-scope questions remain untouched. */
+  ruleIds?: readonly RuleId[];
 }
 
 /**
@@ -36,13 +40,17 @@ export interface ScanCompleteInput {
  * Pure side-effect — reads finds/tracks from Dexie, writes questions back.
  */
 export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promise<void> {
-  const { scanCenter, hotspots, clusters, routes, scanBounds, sourceAvailability, permissions, scheduledMonuments, pasRecordCountInScanCell } = input;
+  const { permissionId: requestedPermissionId, scanCenter, hotspots, clusters, routes, scanBounds, sourceAvailability, permissions, scheduledMonuments, pasRecordCountInScanCell, pasTopPeriods, pasTopTypes, ruleIds } = input;
+  const ruleScope = ruleIds ? new Set<RuleId>(ruleIds) : null;
 
-  // 1. Find which permission this scan falls within
-  const matchedPermission = permissions.find(p => {
-    if (!p.boundary?.coordinates?.[0]?.length) return false;
-    return isPointInPolygon(scanCenter.lat, scanCenter.lng, p.boundary.coordinates);
-  });
+  // 1. A permission-page scan carries its permission ID explicitly. Ordinary
+  // FieldGuide scans still use spatial matching against the scan centre.
+  const matchedPermission = requestedPermissionId
+    ? permissions.find(p => p.id === requestedPermissionId)
+    : permissions.find(p => {
+        if (!p.boundary?.coordinates?.[0]?.length) return false;
+        return isPointInPolygon(scanCenter.lat, scanCenter.lng, p.boundary.coordinates);
+      });
   if (!matchedPermission) return; // Scan outside any permission — no questions
 
   const permissionId = matchedPermission.id;
@@ -57,6 +65,9 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
   const tracks = sessionIds.length > 0
     ? await db.tracks.where('sessionId').anyOf(sessionIds).toArray()
     : [];
+  const permissionCoverage = boundary
+    ? calculateCoverage(boundary, tracks)
+    : null;
   const localCoverageAtAnchor = (lat: number, lon: number, radiusM: number): number | null => {
     if (!boundary) return null;
     try {
@@ -84,6 +95,18 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
   // 5. Generate scan ID
   const scanId = `scan-${permissionId}-${Date.now()}`;
 
+  const protectedAreaPresent = !!boundary && scheduledMonuments.features.some(feature => {
+    if (!feature.geometry) return false;
+    try {
+      return turf.booleanIntersects(
+        turf.polygon(boundary.coordinates),
+        turf.feature(feature.geometry as GeoJSON.Geometry),
+      );
+    } catch {
+      return false;
+    }
+  });
+
   // 6. Build scan context
   const scanCtx: ScanContext = {
     scanId,
@@ -94,6 +117,11 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     localCoverageAtAnchor,
     permissionCentroid: centroid,
     pasRecordCountInScanCell,
+    pasTopPeriods,
+    pasTopTypes,
+    totalCoveragePct: permissionCoverage?.percentCovered ?? null,
+    hasRecordedTracks: tracks.some(track => Array.isArray(track.points) && track.points.length >= 2),
+    protectedAreaPresent,
   };
 
   // 7. Build gate context
@@ -110,11 +138,12 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
 
   // 8. Generate and diff
   const candidates = generateCandidates(scanCtx, gateCtx)
+    .filter(candidate => !ruleScope || ruleScope.has(candidate.ruleId))
     .filter(candidate => hasRequiredSources(candidate.ruleId, sourceAvailability));
 
   // Keep the read/diff/write lifecycle atomic. This prevents two detached scan
   // completions from advancing or replacing the same question from stale state.
-  await db.transaction('rw', db.outstandingQuestions, async () => {
+  await db.transaction('rw', [db.outstandingQuestions, db.permissions], async () => {
     const existing = await db.outstandingQuestions
       .where('permissionId')
       .equals(permissionId)
@@ -123,6 +152,7 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     const now = Date.now();
     const result = diffQuestions(existing, candidates, now, {
       contains: question => {
+        if (ruleScope && !ruleScope.has(question.ruleId)) return false;
         const spatiallyCovered = question.anchor.lat >= scanBounds.south && question.anchor.lat <= scanBounds.north &&
           question.anchor.lon >= scanBounds.west && question.anchor.lon <= scanBounds.east;
         if (!spatiallyCovered) return false;
@@ -139,5 +169,8 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     if (allQuestions.length > 0) {
       await db.outstandingQuestions.bulkPut(allQuestions);
     }
+    await db.permissions.update(permissionId, {
+      questionsEvaluatedAt: new Date(now).toISOString(),
+    });
   });
 }

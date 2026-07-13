@@ -167,6 +167,15 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
     const [coverageError, setCoverageError] = useState(false); // dead but keep
     const [isMapExpanded, setIsMapExpanded] = useState(false);
+    const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+
+    const displayAcres = (() => {
+        const fieldsWithBoundary = (fields ?? []).filter(f => f.boundary);
+        if (fieldsWithBoundary.length > 0) {
+            return fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary) / 4046.86, 0);
+        }
+        return boundary ? turfArea(boundary) / 4046.86 : null;
+    })();
 
     // Refs
     const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -578,7 +587,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     }, [selectedFieldId]);
 
     return (
-        <div className={`lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
+        <div className={`lg:col-span-2 min-w-0 grid h-fit ${isEditing ? "overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800 gap-6" : "gap-4"}${isEditing && saving ? ' opacity-60 pointer-events-none' : ''}`}>
             {isEditing ? (
               <>
                 <div className="flex items-center gap-3">
@@ -975,7 +984,8 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                 </div>
               </>
             ) : (
-                <div className="grid gap-8 min-w-0">
+                <div className="grid gap-4 min-w-0">
+                <section className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5">
                 <div className="grid gap-3">
                     {/* Row 1 — type badge left, finds count right (always same line) */}
                     <div className="flex items-center justify-between gap-2 min-w-0">
@@ -1013,6 +1023,54 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
 
                     {/* Row 2 — permission name */}
                     <h3 className="min-w-0 max-w-full whitespace-normal text-xl min-[420px]:text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words leading-tight">{name}</h3>
+
+                    {!isRally && !isClubDayMember && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-gray-500 dark:text-gray-400">
+                        {landType && <span className="capitalize">{landType}</span>}
+                        {landType && displayAcres !== null && <span aria-hidden="true">·</span>}
+                        {displayAcres !== null && <span>{displayAcres.toFixed(1)} acres</span>}
+                        <span className={`basis-full font-bold ${permissionNeedsCompletion ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {permissionNeedsCompletion ? "Permission record needs completing" : "Permission record complete"}
+                        </span>
+                      </div>
+                    )}
+
+                    {!isClubDayMember && (
+                      <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-emerald-100 bg-emerald-50/55 px-3.5 py-3 dark:border-emerald-900/70 dark:bg-emerald-950/20 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                            {isRally ? "Organiser contact" : "Landowner contact"}
+                          </p>
+                          <p className="mt-0.5 truncate text-sm font-black text-gray-800 dark:text-gray-100">
+                            {landownerName || "Not recorded"}
+                          </p>
+                          {!isRally && landownerAddress && (
+                            <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{landownerAddress}</p>
+                          )}
+                        </div>
+                        <div className="flex min-w-0 flex-wrap gap-2 sm:justify-end">
+                          {landownerPhone && (
+                            <a
+                              href={`tel:${landownerPhone}`}
+                              className="inline-flex min-h-9 items-center rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-700 transition-colors hover:border-emerald-500 hover:bg-emerald-600 hover:text-white dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                            >
+                              Call · {landownerPhone}
+                            </a>
+                          )}
+                          {landownerEmail && (
+                            <a
+                              href={`mailto:${landownerEmail}`}
+                              className="inline-flex min-h-9 min-w-0 max-w-full items-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition-colors hover:border-emerald-500 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-emerald-300"
+                            >
+                              <span className="truncate">Email · {landownerEmail}</span>
+                            </a>
+                          )}
+                          {!landownerPhone && !landownerEmail && (
+                            <span className="text-xs font-medium text-gray-400 dark:text-gray-500">No phone or email saved</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Club Day member banners */}
                     {isClubDayMember && (
@@ -1080,86 +1138,85 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                       </div>
                     )}
 
-                    {/* Row 3 — action buttons */}
-                    <div className="grid grid-cols-1 gap-2 min-w-0 min-[420px]:flex min-[420px]:flex-wrap min-[420px]:items-center">
-                        {canUseAgreement && (
-                          <input
-                            ref={agreementUploadRef}
-                            type="file"
-                            accept="application/pdf,image/*,.doc,.docx,.rtf,.txt"
-                            className="hidden"
-                            onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; onUploadAgreement(file); }}
-                          />
-                        )}
-                        {permissionNeedsCompletion && (
-                            <button
-                                onClick={onCompletePermission}
-                                className="min-w-0 justify-center text-2xs font-black bg-emerald-600 px-3 py-1.5 rounded-lg text-white hover:bg-emerald-700 transition-all inline-flex items-center gap-1.5 shadow-sm uppercase tracking-widest"
-                            >
-                                <span className="truncate">Complete Permission</span>
-                            </button>
-                        )}
-                        {lat != null && lon != null && (
-                            <button
-                                onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
-                                className="min-w-0 justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-sky-200 dark:border-sky-900 px-3 py-1.5 rounded-lg text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 transition-all inline-flex items-center gap-1.5 shadow-sm"
-                            >
-                                <span className="truncate">FieldGuide</span>
-                            </button>
-                        )}
-                        {canUseAgreement && (
-                        <button
-                            type="button"
-                            onClick={() => onOpenAgreement()}
-                            className="min-w-0 max-w-full justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400 hover:text-emerald-600 transition-all inline-flex items-center gap-1.5 shadow-sm"
-                        >
-                            <span className="truncate">{generateAgreementLabel}</span>
-                        </button>
-                        )}
-                        {canUseAgreement && (
+                    {/* Primary next action, with secondary tools kept out of the main hierarchy. */}
+                    {canUseAgreement && (
+                      <input
+                        ref={agreementUploadRef}
+                        type="file"
+                        accept="application/pdf,image/*,.doc,.docx,.rtf,.txt"
+                        className="hidden"
+                        onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; onUploadAgreement(file); }}
+                      />
+                    )}
+                    {!isClubDayMember && (
+                      <div className="flex items-center gap-2">
+                        {permissionNeedsCompletion ? (
+                          <button
+                            onClick={onCompletePermission}
+                            className="min-h-10 min-w-0 flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-2xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-700"
+                          >
+                            Complete permission
+                          </button>
+                        ) : !isRally && permissionId ? (
+                          <button
+                            onClick={() => nav(`/session/new?permissionId=${permissionId}`)}
+                            className="min-h-10 min-w-0 flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-2xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-700"
+                          >
+                            Start visit
+                          </button>
+                        ) : null}
+                        {(lat != null && lon != null || canUseAgreement) && (
                           <button
                             type="button"
-                            onClick={() => agreementUploadRef.current?.click()}
-                            className="min-w-0 max-w-full justify-center text-2xs font-bold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:border-sky-400 hover:text-sky-600 transition-all inline-flex items-center gap-1.5 shadow-sm"
+                            aria-expanded={moreActionsOpen}
+                            onClick={() => setMoreActionsOpen(value => !value)}
+                            className="min-h-10 shrink-0 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-2xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-400 hover:text-emerald-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300"
                           >
-                            <span className="truncate">{uploadAgreementLabel}</span>
+                            More {moreActionsOpen ? "↑" : "↓"}
                           </button>
                         )}
-                    </div>
-                    {canUseAgreement && agreementFile && (
-                      <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold truncate">
-                        Agreement file: {agreementFile.filename}
-                      </p>
+                      </div>
+                    )}
+                    {moreActionsOpen && !isClubDayMember && (
+                      <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/40">
+                        {lat != null && lon != null && (
+                          <button onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)} className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-2xs font-bold text-sky-600 hover:border-sky-400 dark:border-sky-900 dark:bg-gray-800 dark:text-sky-400">
+                            Open FieldGuide
+                          </button>
+                        )}
+                        {canUseAgreement && (
+                          <button type="button" onClick={() => onOpenAgreement()} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-2xs font-bold text-gray-600 hover:border-emerald-400 hover:text-emerald-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            {generateAgreementLabel}
+                          </button>
+                        )}
+                        {canUseAgreement && (
+                          <button type="button" onClick={() => agreementUploadRef.current?.click()} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-2xs font-bold text-gray-600 hover:border-sky-400 hover:text-sky-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                            {uploadAgreementLabel}
+                          </button>
+                        )}
+                        {canUseAgreement && agreementFile && (
+                          <p className="w-full truncate px-1 text-3xs font-bold text-gray-400 dark:text-gray-500">Agreement file: {agreementFile.filename}</p>
+                        )}
+                      </div>
                     )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <details className="group/details mt-4 border-t border-gray-100 pt-3 dark:border-gray-700">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-400 [&::-webkit-details-marker]:hidden">
+                    Permission details
+                    <span className="text-base font-medium transition-transform group-open/details:rotate-180">⌄</span>
+                  </summary>
+                <div className="mt-4 grid grid-cols-1 gap-5 rounded-xl bg-gray-50 p-4 dark:bg-gray-900/40 md:grid-cols-2">
                     <div className="grid gap-4">
-                        <div>
-                            <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">{isRally ? "Organiser / Contact" : "Landowner / Contact"}</h4>
-                            <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName || "Not recorded"}</p>
-                            {landownerPhone && <p className="text-sm opacity-60">📞 {landownerPhone}</p>}
-                            {landownerEmail && <p className="text-sm opacity-60">✉️ {landownerEmail}</p>}
-                            {!isRally && landownerAddress && <p className="text-sm opacity-60 mt-1 italic">📍 {landownerAddress}</p>}
-                        </div>
                         {!isRally && (
                         <div>
                             <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Land Details</h4>
                             <div className="flex justify-between items-center">
                                 <div>
                                     <p className="font-bold text-gray-700 dark:text-gray-300 capitalize">{landType}</p>
-                                    {(() => {
-                                        const fieldsWithBoundary = (fields ?? []).filter(f => f.boundary);
-                                        let acres: number | null = null;
-                                        if (fieldsWithBoundary.length > 0) {
-                                            acres = fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary) / 4046.86, 0);
-                                        } else if (boundary) {
-                                            acres = turfArea(boundary) / 4046.86;
-                                        }
-                                        return acres !== null ? (
-                                            <p className="text-[10px] font-bold text-gray-400 dark:text-white/80 mt-0.5">{acres.toFixed(1)} acres</p>
-                                        ) : null;
-                                    })()}
+                                    {displayAcres !== null && (
+                                      <p className="text-3xs font-bold text-gray-400 dark:text-white/80 mt-0.5">{displayAcres.toFixed(1)} acres</p>
+                                    )}
                                 </div>
                                 {validFrom && (
                                     <div className="text-right">
@@ -1219,6 +1276,8 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         </div>
                     </div>
                 </div>
+                </details>
+                </section>
 
                 {notes && (
                     <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-800">

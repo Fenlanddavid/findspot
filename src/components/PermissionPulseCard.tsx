@@ -42,8 +42,10 @@ function renderSlottedText(fact: PulseFact): string {
 
 export function PermissionPulseCard({
   permissionId,
+  embedded = false,
 }: {
   permissionId: string;
+  embedded?: boolean;
 }) {
   const nav = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -85,11 +87,20 @@ export function PermissionPulseCard({
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/60">
-      <div className="mb-2 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+    <div className={embedded
+      ? "border-b border-sky-100/80 bg-sky-50/70 px-4 py-3 dark:border-sky-900/50 dark:bg-sky-950/20 sm:px-5"
+      : "rounded-lg border border-gray-200 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-800/60"}
+    >
+      <div className={`mb-1.5 flex items-center gap-1.5 font-black uppercase tracking-widest ${embedded ? "text-2xs text-sky-700 dark:text-sky-300" : "text-xs text-gray-500 dark:text-gray-400"}`}>
+        {embedded && (
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        )}
         {header}
       </div>
-      <div className="flex flex-col gap-1">
+      <div className={embedded ? "grid gap-1 sm:grid-cols-2 sm:gap-x-5" : "flex flex-col gap-1"}>
         {allVisible.map((fact) => {
           const style = SEVERITY_STYLE[fact.severity];
           const isInteractive = !!fact.link && fact.link.kind !== "sf-resume";

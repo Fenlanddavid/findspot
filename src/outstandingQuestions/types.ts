@@ -5,10 +5,15 @@
 export type RuleId =
   | 'MOVEMENT_NO_FINDS'
   | 'SETTLEMENT_QUIET'
-  | 'UNRECORDED_ROUTE';
+  | 'UNRECORDED_ROUTE'
+  | 'ROMAN_ROUTE_ACTIVITY'
+  | 'PUBLIC_RECORD_CONTEXT'
+  | 'COVERAGE_GAP'
+  | 'PROTECTED_AREA_EXCLUSION';
 
 export type QuestionCategory =
   | 'MOVEMENT'
+  | 'COVERAGE'
   | 'CONTRADICTION'
   | 'HISTORIC_CONTEXT';
 
@@ -49,6 +54,8 @@ export interface OutstandingQuestion {
   generatedByScanId: string;
   supportingEvidence: EvidenceSnapshot[];
   contradictingEvidence: EvidenceSnapshot[];
+  /** False for contextual questions whose evidence lies on protected land. */
+  locationActionAllowed?: boolean;
   resolvedReason?: 'preconditions_cleared' | 'superseded' | 'cap_evicted';
   resolvedAt?: number;
   /** Consecutive scoped scans where this question's preconditions were absent. */
@@ -59,6 +66,8 @@ export interface OutstandingQuestion {
 export interface QuestionCandidate {
   ruleId: RuleId;
   anchor: { lat: number; lon: number };
+  /** Alternate points for the safety gates to try; never persisted. */
+  alternativeAnchors?: { lat: number; lon: number }[];
   title: string;
   description: string;
   category: QuestionCategory;
@@ -67,6 +76,8 @@ export interface QuestionCandidate {
   scanId: string;
   supportingEvidence: EvidenceSnapshot[];
   contradictingEvidence: EvidenceSnapshot[];
+  /** False when the eventual question must not link to its evidence location. */
+  locationActionAllowed?: boolean;
 }
 
 /** Result of the diff engine. */

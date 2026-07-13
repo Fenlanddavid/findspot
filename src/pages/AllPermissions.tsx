@@ -2,10 +2,8 @@ import React, { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { useNavigate } from "react-router-dom";
-import { StaticMapPreview } from "../components/StaticMapPreview";
 import { enrichPermissions } from "../services/permissions";
-import { rallyPersona } from "../utils/rallyPersona";
-import { RallyPersonaChip } from "../components/RallyPersonaChip";
+import { PermissionCard } from "../components/PermissionCard";
 
 export default function AllPermissions(props: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -129,121 +127,18 @@ export default function AllPermissions(props: { projectId: string }) {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredByMode.map((l) => {
-            const isRally = l.type === "rally";
-            return (
-              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => navigate(`/permission/${l.id}`)}>
-                {isRally && !l.submittedAt && (() => {
-                  const p = rallyPersona(l);
-                  return p !== 'not_rally' ? <div className="absolute top-0 right-0 z-10 rounded-bl overflow-hidden"><RallyPersonaChip persona={p} /></div> : null;
-                })()}
-                {l.submittedAt && <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Data Sent ✓</div>}
-                {l.isDefault && <div className="absolute top-0 right-0 bg-gray-400 dark:bg-gray-600 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">General</div>}
-
-                {/* Header */}
-                <div className="flex justify-between items-start gap-3 mb-3">
-                  <div className="min-w-0">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }}
-                      className="text-gray-900 dark:text-white truncate text-lg font-black group-hover:text-emerald-600 dark:group-hover:text-emerald-400 text-left transition-colors leading-tight"
-                    >
-                      {l.name || "(Unnamed)"}
-                    </button>
-                    <div className="text-[10px] opacity-40 font-mono mt-0.5">
-                      {isRally && l.validFrom
-                        ? new Date(l.validFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-                        : l.createdAt ? new Date(l.createdAt).toLocaleDateString() : ""}
-                    </div>
-                  </div>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
-                    {l.findCount} <span className="opacity-50">finds</span>
-                  </span>
-                </div>
-
-                {/* Satellite Preview */}
-                <div className="relative aspect-video -mx-4 mb-4 overflow-hidden rounded-lg">
-                  <StaticMapPreview
-                    lat={l.lat}
-                    lon={l.lon}
-                    boundary={l.boundary || l.fields?.[0]?.boundary}
-                    tracks={l.tracks}
-                    className="h-full w-full rounded-none"
-                  />
-                  {!isRally && l.cumulativePercent !== null && (
-                    <div className="absolute bottom-2 left-2 flex flex-col gap-1">
-                      <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
-                        <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
-                        <span className={`text-[10px] font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm border border-white/20 px-1.5 py-0.5 rounded text-[8px] font-mono text-white/60">
-                    {l.lat != null && l.lon != null ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
-                  </div>
-                </div>
-
-                <div className="grid gap-2 mb-4 flex-1">
-                  {l.openSignalCount > 0 && (
-                    <div className="flex items-center gap-1.5 text-2xs text-sky-500 dark:text-sky-400 font-semibold">
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <circle cx="8" cy="12" r="1.5" fill="currentColor" />
-                        <path d="M4.5 8.5 A5 5 0 0 1 11.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        <path d="M1.5 5.5 A9 9 0 0 1 14.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                      {l.openSignalCount} {l.openSignalCount === 1 ? 'signal' : 'signals'} to revisit
-                    </div>
-                  )}
-                  {l.landownerName && (
-                    <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">
-                      {l.landownerName}
-                    </div>
-                  )}
-                  {!isRally && (
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                        {l.fields?.length || 0} {l.fields?.length === 1 ? 'Field' : 'Fields'}
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {l.totalAcres !== null && (
-                          <div className="text-xs font-bold text-emerald-700/70 dark:text-emerald-400/80">
-                            {l.totalAcres.toFixed(1)} acres
-                          </div>
-                        )}
-                        {l.landType && <div className="text-xs font-medium opacity-70 uppercase tracking-tighter">{l.landType}</div>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
-                  {!isRally && (
-                    <button onClick={(e) => { e.stopPropagation(); navigate(`/find?permissionId=${l.id}`); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-xs font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
-                      Add find
-                    </button>
-                  )}
-                  <button onClick={(e) => { e.stopPropagation(); navigate(`/permission/${l.id}`); }} className="flex-1 px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
-                    View
-                  </button>
-                  {l.lat != null && l.lon != null && (
-                    <button
-                      title="Open in FieldGuide"
-                      onClick={(e) => { e.stopPropagation(); navigate(`/fieldguide?lat=${l.lat}&lng=${l.lon}`); }}
-                      className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase"
-                    >
-                      FieldGuide
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }); }}
-                    title={l.isPinned ? "Unpin" : "Pin to top"}
-                    className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
-                  >
-                    {l.isPinned ? "Pinned" : "Pin"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          {filteredByMode.map((permission) => (
+            <PermissionCard
+              key={permission.id}
+              permission={permission}
+              onOpen={() => navigate(`/permission/${permission.id}`)}
+              onAddFind={permission.type !== "rally" ? () => navigate(`/find?permissionId=${permission.id}`) : undefined}
+              onOpenFieldGuide={permission.lat != null && permission.lon != null
+                ? () => navigate(`/fieldguide?lat=${permission.lat}&lng=${permission.lon}`)
+                : undefined}
+              onTogglePin={() => db.permissions.update(permission.id, { isPinned: !permission.isPinned })}
+            />
+          ))}
         </div>
       )}
     </div>

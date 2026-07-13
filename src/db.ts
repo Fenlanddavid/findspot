@@ -77,6 +77,9 @@ export type Permission = {
   isPinned?: boolean;
   isDefault?: boolean;
 
+  // Last Historic FieldGuide scan that evaluated this permission for questions.
+  questionsEvaluatedAt?: string;
+
   // Club Day — organiser side
   sharedPermissionId?: string;   // Merge anchor; set when "Create Club Day Pack" is used
   isSharedPermission?: boolean;  // True on organiser's permission once a pack has been created

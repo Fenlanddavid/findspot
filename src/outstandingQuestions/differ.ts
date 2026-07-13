@@ -96,6 +96,7 @@ export function diffQuestions(
       generatedByScanId: candidate.scanId,
       supportingEvidence: candidate.supportingEvidence,
       contradictingEvidence: candidate.contradictingEvidence,
+      locationActionAllowed: candidate.locationActionAllowed,
       consecutiveMisses: 0,
       // Preserve id, createdAt, permissionId, ruleId, category
       resolvedReason: undefined,
@@ -120,6 +121,7 @@ export function diffQuestions(
       generatedByScanId: candidate.scanId,
       supportingEvidence: candidate.supportingEvidence,
       contradictingEvidence: candidate.contradictingEvidence,
+      locationActionAllowed: candidate.locationActionAllowed,
       consecutiveMisses: 0,
     });
   }

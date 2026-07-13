@@ -4,8 +4,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, Media } from "../db";
 import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
-import { StaticMapPreview } from "../components/StaticMapPreview";
-import { enrichPermissions, EnrichedPermission } from "../services/permissions";
+import { enrichPermissions } from "../services/permissions";
+import { PermissionCard } from "../components/PermissionCard";
 import { deriveTreasureClock, TreasureClockItem } from "../services/treasureClock";
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
@@ -886,85 +886,17 @@ export default function Home(props: {
         
         {filteredPermissions && filteredPermissions.length > 0 && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredPermissions.map((l) => (
-              <div key={l.id} className="border border-gray-200 dark:border-gray-700 rounded-2xl p-4 bg-white dark:bg-gray-800 shadow-sm hover:shadow-lg hover:-translate-y-[1px] hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 ease-out flex flex-col h-full group relative overflow-hidden cursor-pointer" onClick={() => props.goPermissionEdit(l.id)}>
-                {l.type === 'rally' && <div className="absolute top-0 right-0 bg-teal-500 text-white text-[8px] font-black px-2 py-1 rounded-bl uppercase tracking-widest z-10">Rally</div>}
-                
-                {/* Header */}
-                <div className="flex justify-between items-start gap-3 mb-3">
-                  <div className="min-w-0">
-                    <button
-                        onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }}
-                        className="text-gray-900 dark:text-white truncate text-lg font-black group-hover:text-emerald-600 dark:group-hover:text-emerald-400 text-left transition-colors leading-tight"
-                    >
-                        {l.name || "(Unnamed)"}
-                    </button>
-                    {l.createdAt && (
-                        <div className="text-xs opacity-60 font-mono mt-0.5">
-                            {new Date(l.createdAt).toLocaleDateString()}
-                        </div>
-                    )}
-                  </div>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-amber-500 dark:text-amber-400 whitespace-nowrap shrink-0 bg-transparent border border-amber-200/50 dark:border-amber-700/50 px-1.5 py-0.5 rounded-md">
-                    {l.findCount} <span className="opacity-50">finds</span>
-                  </span>
-                </div>
-
-                {/* Satellite Preview with Progress Overlay */}
-                <div className="relative aspect-video -mx-4 mb-4 overflow-hidden rounded-lg">
-                    <StaticMapPreview
-                        lat={l.lat}
-                        lon={l.lon}
-                        boundary={l.boundary || l.fields?.[0]?.boundary}
-                        tracks={l.tracks}
-                        className="h-full w-full rounded-none"
-                    />
-
-                    {l.cumulativePercent !== null && (
-                        <div className="absolute bottom-2 left-2 flex flex-col gap-1">
-                            <div className="px-2 py-1 rounded-lg backdrop-blur-md border border-white/20 bg-black/50 shadow-md flex flex-col items-center">
-                                <span className="text-[8px] font-black uppercase leading-none opacity-60 mb-0.5">Undetected</span>
-                                <span className={`text-xs font-black leading-none ${l.cumulativePercent < 90 ? 'text-orange-400' : 'text-emerald-400'}`}>{Math.round(100 - l.cumulativePercent)}%</span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="absolute bottom-2 right-2 bg-black/50 backdrop-blur-sm border border-white/20 px-1.5 py-0.5 rounded text-[8px] font-mono text-white/60">
-                        {l.lat != null && l.lon != null ? `${l.lat.toFixed(3)}, ${l.lon.toFixed(3)}` : "No GPS"}
-                    </div>
-                </div>
-                
-                <div className="grid gap-2 mb-4 flex-1">
-                  {l.landownerName && <div className="text-xs font-bold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 italic">{l.landownerName}</div>}
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                        {l.sessionCount} {l.sessionCount === 1 ? 'Visit' : 'Visits'}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {l.totalAcres !== null && (
-                        <div className="text-xs font-bold text-emerald-700/70 dark:text-emerald-400/80">{l.totalAcres.toFixed(1)} acres</div>
-                      )}
-                      {l.landType && <div className="text-xs font-medium opacity-70 uppercase tracking-tighter">{l.landType}</div>}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="pt-3 mt-auto border-t border-gray-200 dark:border-gray-700 flex gap-2 items-center">
-                  <button onClick={(e) => { e.stopPropagation(); props.goFind(l.id); }} className="flex-1 bg-emerald-600/90 dark:bg-emerald-700/90 text-white text-xs font-black py-1.5 rounded-lg hover:bg-emerald-500 dark:hover:bg-emerald-600 transition-all duration-200 ease-out uppercase tracking-wider shadow-sm">
-                    Add find
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); props.goPermissionEdit(l.id); }} className="px-3 bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-xs font-bold py-1.5 rounded-lg transition-all duration-200 ease-out border border-gray-200 dark:border-gray-700 uppercase">
-                    View
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); db.permissions.update(l.id, { isPinned: !l.isPinned }).catch(console.error); }}
-                    title={l.isPinned ? "Unpin" : "Pin to top"}
-                    className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ease-out border ${l.isPinned ? "bg-amber-50 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700" : "bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700 opacity-40 hover:opacity-100"}`}
-                  >
-                    {l.isPinned ? "Pinned" : "Pin"}
-                  </button>
-                </div>
-              </div>
+            {filteredPermissions.map((permission) => (
+              <PermissionCard
+                key={permission.id}
+                permission={permission}
+                onOpen={() => props.goPermissionEdit(permission.id)}
+                onAddFind={() => props.goFind(permission.id)}
+                onOpenFieldGuide={permission.lat != null && permission.lon != null
+                  ? () => nav(`/fieldguide?lat=${permission.lat}&lng=${permission.lon}`)
+                  : undefined}
+                onTogglePin={() => db.permissions.update(permission.id, { isPinned: !permission.isPinned }).catch(console.error)}
+              />
             ))}
           </div>
         )}

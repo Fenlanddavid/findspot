@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => {
   const tracksToArray = vi.fn();
   const questionsToArray = vi.fn();
   const bulkPut = vi.fn();
+  const updatePermission = vi.fn();
   const generateCandidates = vi.fn();
   const diffQuestions = vi.fn();
   const calculateCoverage = vi.fn();
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => {
     tracksToArray,
     questionsToArray,
     bulkPut,
+    updatePermission,
     generateCandidates,
     diffQuestions,
     calculateCoverage,
@@ -33,6 +35,7 @@ vi.mock('../../src/db', () => ({
       where: () => ({ equals: () => ({ toArray: mocks.questionsToArray }) }),
       bulkPut: mocks.bulkPut,
     },
+    permissions: { update: mocks.updatePermission },
     transaction: mocks.transaction,
   },
 }));
@@ -114,6 +117,18 @@ describe('updateQuestionsAfterScan', () => {
     expect(mocks.bulkPut).not.toHaveBeenCalled();
   });
 
+  it('uses an explicitly requested permission even when its saved scan centre is outside the boundary', async () => {
+    await updateQuestionsAfterScan(input({
+      permissionId: 'permission-1',
+      scanCenter: { lat: 53, lng: 0 },
+    }));
+
+    expect(mocks.generateCandidates).toHaveBeenCalled();
+    expect(mocks.updatePermission).toHaveBeenCalledWith('permission-1', {
+      questionsEvaluatedAt: expect.any(String),
+    });
+  });
+
   it('passes PAS and monument context through and stamps persisted records', async () => {
     const monument = {
       type: 'Feature',
@@ -149,6 +164,9 @@ describe('updateQuestionsAfterScan', () => {
     expect(mocks.bulkPut).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'question-1', permissionId: 'permission-1' }),
     ]);
+    expect(mocks.updatePermission).toHaveBeenCalledWith('permission-1', {
+      questionsEvaluatedAt: expect.any(String),
+    });
   });
 
   it('does not count a miss when a rule-specific source is unavailable', async () => {
@@ -188,11 +206,48 @@ describe('updateQuestionsAfterScan', () => {
     );
   });
 
+  it('filters candidates and differ coverage to the rules owned by this scan pass', async () => {
+    const candidate = (ruleId: string) => ({
+      ruleId,
+      anchor: { lat: 52, lon: 0 },
+      title: 'Question',
+      description: 'Description',
+      category: 'HISTORIC_CONTEXT',
+      status: 'NEEDS_EVIDENCE',
+      confidence: 0.7,
+      scanId: 'scan-1',
+      supportingEvidence: [],
+      contradictingEvidence: [],
+    });
+    mocks.generateCandidates.mockReturnValue([
+      candidate('COVERAGE_GAP'),
+      candidate('MOVEMENT_NO_FINDS'),
+    ]);
+
+    await updateQuestionsAfterScan(input({ ruleIds: ['COVERAGE_GAP'] }));
+
+    expect(mocks.diffQuestions.mock.calls[0][1]).toEqual([
+      expect.objectContaining({ ruleId: 'COVERAGE_GAP' }),
+    ]);
+    const diffScope = mocks.diffQuestions.mock.calls[0][3];
+    expect(diffScope.contains({ ruleId: 'COVERAGE_GAP', anchor: { lat: 52, lon: 0 } })).toBe(true);
+    expect(diffScope.contains({ ruleId: 'MOVEMENT_NO_FINDS', anchor: { lat: 52, lon: 0 } })).toBe(false);
+  });
+
   it('reads and writes question state inside one transaction', async () => {
     await updateQuestionsAfterScan(input());
 
     const transactionOrder = mocks.transaction.mock.invocationCallOrder[0];
     const readOrder = mocks.questionsToArray.mock.invocationCallOrder[0];
     expect(transactionOrder).toBeLessThan(readOrder);
+  });
+
+  it('marks a matched permission as evaluated even when no questions fire', async () => {
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.bulkPut).not.toHaveBeenCalled();
+    expect(mocks.updatePermission).toHaveBeenCalledWith('permission-1', {
+      questionsEvaluatedAt: expect.any(String),
+    });
   });
 });

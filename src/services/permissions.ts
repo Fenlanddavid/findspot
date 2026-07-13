@@ -11,12 +11,13 @@ export type EnrichedPermission = Permission & {
   lastSessionDate: string | null;
   findCount: number;
   openSignalCount: number;
+  activeQuestionCount: number;
 };
 
 /**
  * Enriches a list of permissions with fields, sessions, tracks, coverage %,
- * and coordinate fallbacks. Uses 4 batched queries regardless of how many
- * permissions are in the list, avoiding the previous N+1 pattern.
+ * and coordinate fallbacks. Uses a fixed set of batched queries regardless of
+ * how many permissions are in the list, avoiding the previous N+1 pattern.
  */
 export async function enrichPermissions(
   projectId: string,
@@ -26,19 +27,29 @@ export async function enrichPermissions(
 
   const permissionIds = rows.map(p => p.id);
 
-  const [allFields, allSessions, allFinds, allOpenSignals] = await Promise.all([
+  const [allFields, allSessions, allFinds, allOpenSignals, allQuestions] = await Promise.all([
     db.fields.where("permissionId").anyOf(permissionIds).toArray(),
     db.sessions.where("permissionId").anyOf(permissionIds).toArray(),
     db.finds.where("permissionId").anyOf(permissionIds).toArray(),
     db.undugSignals.where("status").equals("open").toArray(),
+    db.outstandingQuestions.where("permissionId").anyOf(permissionIds).toArray(),
   ]);
 
   // Count open signals per permission (filter in memory — single query for all)
   const openSignalCountByPermission = new Map<string, number>();
+  const activeQuestionCountByPermission = new Map<string, number>();
   const permIdSet = new Set(permissionIds);
   for (const s of allOpenSignals) {
     if (s.permissionId && permIdSet.has(s.permissionId)) {
       openSignalCountByPermission.set(s.permissionId, (openSignalCountByPermission.get(s.permissionId) ?? 0) + 1);
+    }
+  }
+  for (const question of allQuestions) {
+    if (question.status !== "RESOLVED") {
+      activeQuestionCountByPermission.set(
+        question.permissionId,
+        (activeQuestionCountByPermission.get(question.permissionId) ?? 0) + 1,
+      );
     }
   }
 
@@ -169,6 +180,7 @@ export async function enrichPermissions(
       lastSessionDate,
       findCount,
       openSignalCount: openSignalCountByPermission.get(p.id) ?? 0,
+      activeQuestionCount: activeQuestionCountByPermission.get(p.id) ?? 0,
     };
   });
 }
