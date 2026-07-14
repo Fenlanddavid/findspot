@@ -5,6 +5,7 @@
 
 import { HistoricRoute } from '../pages/fieldGuideTypes';
 import { cachedFetchAny } from '../utils/cachedFetch';
+import { HISTORIC_CONTEXT_RADIUS_KM } from '../outstandingQuestions/contextRadius';
 
 interface ItinereFeature {
     type: 'Feature';
@@ -54,7 +55,7 @@ export function prefetchRomanRoads(): void {
 
 /**
  * Return Itiner-e Roman road alignments within the given bounding box.
- * Adds 2km padding so roads just outside the visible viewport are included.
+ * Adds the shared historic-context padding so nearby roads are included.
  * Multi-ring segments are split into individual HistoricRoute entries.
  */
 /**
@@ -82,10 +83,9 @@ export async function fetchRomanRoads(
     east: number,
     north: number,
 ): Promise<HistoricRoute[]> {
-    // 2km padding so roads near the edge of the viewport are included
-    const latPad = 2 / 111.32;
+    const latPad = HISTORIC_CONTEXT_RADIUS_KM / 111.32;
     const centerLat = (south + north) / 2;
-    const lonPad = 2 / (111.32 * Math.max(0.1, Math.cos(centerLat * Math.PI / 180)));
+    const lonPad = HISTORIC_CONTEXT_RADIUS_KM / (111.32 * Math.max(0.1, Math.cos(centerLat * Math.PI / 180)));
     const minLon = west  - lonPad, maxLon = east  + lonPad;
     const minLat = south - latPad, maxLat = north + latPad;
 
@@ -100,9 +100,14 @@ export async function fetchRomanRoads(
                 : (geom.coordinates as number[][][]);
 
         const allCoords = rings.flat();
-        const inBbox = allCoords.some(
-            ([lon, latC]) => lon >= minLon && lon <= maxLon && latC >= minLat && latC <= maxLat,
-        );
+        const routeLons = allCoords.map(([lon]) => lon);
+        const routeLats = allCoords.map(([, lat]) => lat);
+        // Bounding-box overlap also catches a long segment that crosses the
+        // context area without having a stored vertex inside it. The exact
+        // 2km route-to-permission distance is enforced later by the rule.
+        const inBbox = routeLons.length > 0 && routeLats.length > 0 &&
+            Math.min(...routeLons) <= maxLon && Math.max(...routeLons) >= minLon &&
+            Math.min(...routeLats) <= maxLat && Math.max(...routeLats) >= minLat;
         if (!inBbox) continue;
 
         const p = feat.properties;

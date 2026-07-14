@@ -116,6 +116,8 @@ export interface QuestionCandidate {
   contradictingEvidence: EvidenceSnapshot[];
   /** False when the eventual question must not link to its evidence location. */
   locationActionAllowed?: boolean;
+  /** Candidate-only: evidence is near, rather than inside, the permission. */
+  contextOnly?: boolean;
   metrics: InvestigationMetrics;
   contextGeometry?: [number, number][];
 }

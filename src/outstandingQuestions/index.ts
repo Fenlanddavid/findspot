@@ -77,3 +77,4 @@ export {
   calculateInvestigationSections,
 } from './sectionalStats';
 export type { InvestigationSectionStat } from './sectionalStats';
+export { HISTORIC_CONTEXT_RADIUS_M, HISTORIC_CONTEXT_RADIUS_KM } from './contextRadius';

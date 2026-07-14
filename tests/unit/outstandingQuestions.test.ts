@@ -231,6 +231,71 @@ describe('Rules — positive fixtures', () => {
     expect(question!.alternativeAnchors).toBeUndefined();
   });
 
+  it('keeps a Roman road within 2km as non-actionable surrounding context', () => {
+    const nearbyRoad = makeRoute({
+      type: 'roman_road',
+      source: 'itinere',
+      name: 'Nearby Roman road',
+      geometry: [[-0.486, 52.499], [-0.486, 52.501]],
+      bbox: [[-0.486, 52.499], [-0.486, 52.501]],
+    });
+    const candidates = generateCandidates(
+      baseScanCtx({
+        historicRoutes: [nearbyRoad],
+        pasRecordCountInScanCell: 12,
+        localCoverageAtAnchor: () => 80,
+        finds: [{ id: 'f-near', lat: 52.5, lon: -0.5 } as any],
+      }),
+      {
+        boundary: testBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.504, south: 52.498, east: -0.496, north: 52.502 },
+        isAnchorProtected: () => false,
+      },
+    );
+
+    const question = candidates.find(candidate => candidate.ruleId === 'ROMAN_ROUTE_ACTIVITY');
+    expect(question).toBeDefined();
+    expect(question).toMatchObject({
+      locationActionAllowed: false,
+      status: 'NEEDS_EVIDENCE',
+      metrics: { bufferM: 250, findsNearCount: 0 },
+    });
+    expect(question!.metrics.localCoveragePct).toBeUndefined();
+    expect(question!.contextGeometry).toBeUndefined();
+    expect(question!.description).toContain('from this permission');
+    expect(question!.description).toContain('surrounding landscape context only');
+    expect(question!.supportingEvidence.map(e => e.label).join(' ')).toMatch(/approximately .* from permission boundary/);
+    expect(question!.anchor.lon).toBeLessThan(-0.496);
+    expect(question!.anchor.lon).toBeGreaterThan(-0.504);
+  });
+
+  it('keeps a nearby non-Roman historic route as non-actionable context', () => {
+    const nearbyRoute = makeRoute({
+      geometry: [[-0.486, 52.499], [-0.486, 52.501]],
+      bbox: [[-0.486, 52.499], [-0.486, 52.501]],
+    });
+    const candidates = generateCandidates(
+      baseScanCtx({ historicRoutes: [nearbyRoute], pasRecordCountInScanCell: 0 }),
+      {
+        boundary: testBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.504, south: 52.498, east: -0.496, north: 52.502 },
+        isAnchorProtected: () => false,
+      },
+    );
+
+    const question = candidates.find(candidate => candidate.ruleId === 'UNRECORDED_ROUTE');
+    expect(question).toMatchObject({
+      locationActionAllowed: false,
+      status: 'UNRESOLVED',
+      metrics: { bufferM: 250, findsNearCount: 0 },
+    });
+    expect(question!.description).toContain('surrounding landscape context only');
+  });
+
 });
 
 // ─── Rules: negative fixtures ───────────────────────────────────────────────
@@ -285,6 +350,18 @@ describe('Rules — negative fixtures', () => {
     });
     const results = runRules(ctx);
     expect(results.find(c => c.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toBeTruthy();
+  });
+
+  it('does not emit Roman-road context beyond 2km of the permission', () => {
+    const results = runRules(baseScanCtx({
+      historicRoutes: [makeRoute({
+        type: 'roman_road',
+        source: 'itinere',
+        geometry: [[-0.45, 52.499], [-0.45, 52.501]],
+        bbox: [[-0.45, 52.499], [-0.45, 52.501]],
+      })],
+    }));
+    expect(results.find(candidate => candidate.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toBeUndefined();
   });
 
 

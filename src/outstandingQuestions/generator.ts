@@ -73,8 +73,31 @@ export function generateCandidates(
   const raw = runRules(scanCtx);
   return raw.flatMap(candidate => {
     const anchors = [candidate.anchor, ...(candidate.alternativeAnchors ?? [])];
+    const {
+      alternativeAnchors: _alternatives,
+      contextOnly: _contextOnly,
+      ...persistableCandidate
+    } = candidate;
+
+    // Nearby historic evidence is deliberately displayed as non-actionable
+    // permission context. Anchor the row to the nearest safe internal point so
+    // the normal boundary/protection guarantees remain intact, but do not turn
+    // unrelated permission coverage or finds into evidence about the external
+    // route.
+    if (candidate.contextOnly) {
+      if (gateCtx.smStatus !== 'green' || !passesCoverageFence(gateCtx.smCoverageAvailable)) return [];
+      const contextAnchor = safePermissionAnchors(candidate, gateCtx)
+        .find(anchor => passesAllGates({ ...candidate, anchor }, gateCtx));
+      if (!contextAnchor) return [];
+      return [{
+        ...persistableCandidate,
+        anchor: contextAnchor,
+        locationActionAllowed: false,
+        contextGeometry: undefined,
+      }];
+    }
+
     const safeAnchor = anchors.find(anchor => passesAllGates({ ...candidate, anchor }, gateCtx));
-    const { alternativeAnchors: _alternatives, ...persistableCandidate } = candidate;
     if (safeAnchor) return [{
       ...persistableCandidate,
       anchor: safeAnchor,

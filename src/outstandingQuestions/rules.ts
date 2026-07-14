@@ -12,6 +12,7 @@ import type {
   InvestigationMetrics,
 } from './types';
 import { anchorOctant, HYPOTHESIS_BY_RULE } from './types';
+import { HISTORIC_CONTEXT_RADIUS_M } from './contextRadius';
 
 export interface ScanContext {
   scanId: string;
@@ -181,6 +182,71 @@ function sampledRouteAnchors(
   );
 }
 
+interface RouteBoundaryContext {
+  route: HistoricRoute;
+  intersectsPermission: boolean;
+  distanceM: number;
+}
+
+function certainty01(score: number): number {
+  return clamp01(score > 1 ? score / 100 : score);
+}
+
+function routeBoundaryContext(
+  route: HistoricRoute,
+  boundary?: GeoJSONPolygon,
+): RouteBoundaryContext | null {
+  const ring = boundary?.coordinates?.[0] as [number, number][] | undefined;
+  if (!ring || ring.length < 4 || route.geometry.length < 2) return null;
+  try {
+    const polygon = turf.polygon(boundary!.coordinates);
+    const routeLine = turf.lineString(route.geometry);
+    if (turf.booleanIntersects(routeLine, polygon)) {
+      return { route, intersectsPermission: true, distanceM: 0 };
+    }
+
+    const boundaryLine = turf.lineString(ring);
+    const boundaryToRoute = ring.map(point => turf.pointToLineDistance(
+      turf.point(point), routeLine, { units: 'meters' },
+    ));
+    const routeToBoundary = route.geometry.map(point => turf.pointToLineDistance(
+      turf.point(point), boundaryLine, { units: 'meters' },
+    ));
+    const distanceM = Math.min(...boundaryToRoute, ...routeToBoundary);
+    if (!Number.isFinite(distanceM) || distanceM > HISTORIC_CONTEXT_RADIUS_M) return null;
+    return { route, intersectsPermission: false, distanceM };
+  } catch {
+    return null;
+  }
+}
+
+function contextualRoutes(
+  routes: HistoricRoute[],
+  boundary?: GeoJSONPolygon,
+): RouteBoundaryContext[] {
+  return routes
+    .map(route => routeBoundaryContext(route, boundary))
+    .filter((context): context is RouteBoundaryContext => context !== null)
+    .sort((a, b) => {
+      if (a.intersectsPermission !== b.intersectsPermission) {
+        return a.intersectsPermission ? -1 : 1;
+      }
+      const score = (context: RouteBoundaryContext) =>
+        certainty01(context.route.certaintyScore) *
+        (1 - 0.6 * context.distanceM / HISTORIC_CONTEXT_RADIUS_M);
+      return score(b) - score(a) || a.distanceM - b.distanceM;
+    });
+}
+
+function contextualConfidenceFactor(distanceM: number): number {
+  return 1 - 0.35 * Math.min(distanceM / HISTORIC_CONTEXT_RADIUS_M, 1);
+}
+
+function approximateDistance(distanceM: number): string {
+  if (distanceM < 1_000) return `${Math.max(50, Math.round(distanceM / 50) * 50)}m`;
+  return `${(distanceM / 1_000).toFixed(1)}km`;
+}
+
 const ruleMovementNoFinds: RuleFn = (ctx) => {
   const corridors = ctx.hotspots.filter(h =>
     h.type === 'Movement Corridor (Likely)' && h.score >= 60
@@ -273,10 +339,14 @@ const ruleUnrecordedRoute: RuleFn = (ctx) => {
   );
   if (routes.length === 0) return null;
 
-  const best = routes.reduce((a, b) => a.certaintyScore > b.certaintyScore ? a : b);
-  const midpoint = best.geometry[Math.floor(best.geometry.length / 2)];
-  if (!midpoint) return null;
-  const [lon, lat] = midpoint;
+  const routeContext = contextualRoutes(routes, ctx.permissionBoundary)[0];
+  if (!routeContext) return null;
+  const best = routeContext.route;
+  const contextOnly = !routeContext.intersectsPermission;
+  const routeAnchors = sampledRouteAnchors(best.geometry, ctx.permissionCentroid);
+  const closest = routeAnchors[0];
+  if (!closest) return null;
+  const { lat, lon } = closest;
 
   const pasRecordCount = ctx.pasRecordCountInScanCell;
   if (pasRecordCount == null || !Number.isFinite(pasRecordCount) || pasRecordCount > 5) return null;
@@ -287,29 +357,39 @@ const ruleUnrecordedRoute: RuleFn = (ctx) => {
   if (scheduledMonumentsNear) return null;
 
   const bufferM = ROUTE_INVESTIGATION_BUFFER_M;
-  const coveragePct = ctx.localCoverageAtAnchor?.(lat, lon, bufferM) ?? null;
-  const findsNear = ctx.finds.filter(f =>
+  const coveragePct = contextOnly ? null : ctx.localCoverageAtAnchor?.(lat, lon, bufferM) ?? null;
+  const findsNear = contextOnly ? [] : ctx.finds.filter(f =>
     f.lat != null && f.lon != null && distM(lat, lon, f.lat, f.lon) < bufferM
   );
 
   const anchor = { lat, lon };
+  const distanceLabel = approximateDistance(routeContext.distanceM);
   return {
     ruleId: 'UNRECORDED_ROUTE',
     hypothesisId: HYPOTHESIS_BY_RULE.UNRECORDED_ROUTE,
     anchor,
+    alternativeAnchors: routeAnchors.slice(1),
     title: 'Why does this route-like signal have little supporting context?',
-    description: `A ${best.type.replace(/_/g, ' ')} signal in the ${loc(anchor, ctx.permissionCentroid)} has little support in public PAS records for the scan area. This may reflect an unrecorded feature, a natural landscape formation, or incomplete public data.`,
+    description: contextOnly
+      ? `A ${best.type.replace(/_/g, ' ')} signal passes approximately ${distanceLabel} from this permission. It is surrounding landscape context only and does not show that the feature or related activity continues into the permission.`
+      : `A ${best.type.replace(/_/g, ' ')} signal in the ${loc(anchor, ctx.permissionCentroid)} has little support in public PAS records for the scan area. This may reflect an unrecorded feature, a natural landscape formation, or incomplete public data.`,
     category: 'HISTORIC_CONTEXT',
     status: 'UNRESOLVED',
-    confidence: clamp01(best.certaintyScore * 0.7 + (1 - Math.min(pasRecordCount, 10) / 10) * 0.3),
+    confidence: clamp01(
+      (certainty01(best.certaintyScore) * 0.7 + (1 - Math.min(pasRecordCount, 10) / 10) * 0.3) *
+      contextualConfidenceFactor(routeContext.distanceM)
+    ),
     scanId: ctx.scanId,
     supportingEvidence: [
       snap(`Route type: ${best.type.replace(/_/g, ' ')}`, ctx.scanId),
       snap(`Source: ${best.source}`, ctx.scanId),
       snap(`Certainty: ${best.confidenceClass}`, ctx.scanId),
+      snap(contextOnly ? `Route approximately ${distanceLabel} from permission boundary` : 'Route crosses this permission', ctx.scanId),
       snap(`PAS records in scan cell: ${pasRecordCount}`, ctx.scanId),
     ],
     contradictingEvidence: [],
+    locationActionAllowed: contextOnly ? false : undefined,
+    contextOnly,
     metrics: investigationMetrics(bufferM, coveragePct, findsNear.length),
   };
 };
@@ -319,7 +399,10 @@ const ruleRomanRouteActivity: RuleFn = (ctx) => {
   const pasRecordCount = ctx.pasRecordCountInScanCell;
   if (romanRoutes.length === 0) return null;
 
-  const best = romanRoutes.reduce((a, b) => a.certaintyScore > b.certaintyScore ? a : b);
+  const routeContext = contextualRoutes(romanRoutes, ctx.permissionBoundary)[0];
+  if (!routeContext) return null;
+  const best = routeContext.route;
+  const contextOnly = !routeContext.intersectsPermission;
   // Route geometries can extend beyond the permission or pass through a
   // scheduled monument. Supply sampled alternatives so the generator can pick
   // the nearest point that passes every boundary and protection gate.
@@ -329,12 +412,14 @@ const ruleRomanRouteActivity: RuleFn = (ctx) => {
 
   const { lat, lon } = closest;
   const bufferM = ROUTE_INVESTIGATION_BUFFER_M;
-  const coveragePct = ctx.localCoverageAtAnchor?.(lat, lon, bufferM) ?? null;
-  const findsNear = ctx.finds.filter(f =>
+  const coveragePct = contextOnly ? null : ctx.localCoverageAtAnchor?.(lat, lon, bufferM) ?? null;
+  const findsNear = contextOnly ? [] : ctx.finds.filter(f =>
     f.lat != null && f.lon != null && distM(lat, lon, f.lat, f.lon) < bufferM
   );
+  const distanceLabel = approximateDistance(routeContext.distanceM);
   const evidence: EvidenceSnapshot[] = [
     snap(`Roman road alignment${best.name ? `: ${best.name}` : ''}`, ctx.scanId),
+    snap(contextOnly ? `Roman road approximately ${distanceLabel} from permission boundary` : 'Roman road crosses this permission', ctx.scanId),
     snap(`Route confidence: ${best.confidenceClass}`, ctx.scanId),
   ];
   if (pasRecordCount != null && Number.isFinite(pasRecordCount)) {
@@ -351,17 +436,24 @@ const ruleRomanRouteActivity: RuleFn = (ctx) => {
     anchor,
     alternativeAnchors: routeAnchors.slice(1),
     title: 'How does the recorded activity relate to the Roman road corridor?',
-    description: pasRecordCount != null && Number.isFinite(pasRecordCount)
-      ? `A Roman road alignment passes through this permission, within a wider area containing ${pasRecordCount} public PAS records. The density is contextual only: it does not show that individual records came from this permission or are associated with the road. Comparing your own finds and coverage may help distinguish activity focused on the corridor from broader landscape use.`
-      : 'A Roman road alignment passes through this permission. Comparing your own finds and recorded coverage may help test whether activity is focused on the corridor or reflects broader landscape use.',
+    description: contextOnly
+      ? `A Roman road alignment passes approximately ${distanceLabel} from this permission. It is surrounding landscape context only and does not show that the road or related activity continues into the permission.${pasRecordCount != null && Number.isFinite(pasRecordCount) ? ` The wider density cell contains ${pasRecordCount} public PAS records.` : ''}`
+      : pasRecordCount != null && Number.isFinite(pasRecordCount)
+        ? `A Roman road alignment passes through this permission, within a wider area containing ${pasRecordCount} public PAS records. The density is contextual only: it does not show that individual records came from this permission or are associated with the road. Comparing your own finds and coverage may help distinguish activity focused on the corridor from broader landscape use.`
+        : 'A Roman road alignment passes through this permission. Comparing your own finds and recorded coverage may help test whether activity is focused on the corridor or reflects broader landscape use.',
     category: 'HISTORIC_CONTEXT',
-    status: coveragePct != null && coveragePct >= 20 ? 'UNRESOLVED' : 'NEEDS_EVIDENCE',
-    confidence: clamp01(best.certaintyScore * 0.75 + (pasRecordCount != null && Number.isFinite(pasRecordCount) ? Math.min(pasRecordCount / 25, 1) * 0.25 : 0.1)),
+    status: contextOnly || coveragePct == null || coveragePct < 20 ? 'NEEDS_EVIDENCE' : 'UNRESOLVED',
+    confidence: clamp01(
+      (certainty01(best.certaintyScore) * 0.75 + (pasRecordCount != null && Number.isFinite(pasRecordCount) ? Math.min(pasRecordCount / 25, 1) * 0.25 : 0.1)) *
+      contextualConfidenceFactor(routeContext.distanceM)
+    ),
     scanId: ctx.scanId,
     supportingEvidence: evidence,
     contradictingEvidence: [],
+    locationActionAllowed: contextOnly ? false : undefined,
+    contextOnly,
     metrics: investigationMetrics(bufferM, coveragePct, findsNear.length),
-    contextGeometry: corridorContextGeometry(best.geometry, ctx.permissionBoundary),
+    contextGeometry: contextOnly ? undefined : corridorContextGeometry(best.geometry, ctx.permissionBoundary),
   };
 };
 
