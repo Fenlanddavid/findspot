@@ -39,6 +39,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   const savedPoints = await db.savedPoints.toArray();
   const undugSignals = await db.undugSignals.toArray();
   const outstandingQuestions = await db.outstandingQuestions.toArray();
+  const questionNotes = await db.questionNotes.toArray();
 
   let mediaExport: any[] = [];
   if (includeMedia) {
@@ -69,6 +70,7 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     savedPoints,
     undugSignals,
     outstandingQuestions,
+    questionNotes,
   };
 
   return JSON.stringify(data, null, 2);
@@ -133,6 +135,7 @@ type BackupData = {
   savedPoints: any[];
   undugSignals: any[];
   outstandingQuestions: any[];
+  questionNotes: any[];
 };
 
 function requireArray(data: any, key: keyof BackupData, required = false): any[] {
@@ -153,11 +156,50 @@ function assertRowsHaveId(rows: any[], table: string) {
   });
 }
 
+function isIsoDateString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && Number.isFinite(Date.parse(value));
+}
+
+function assertPermissionIntelligence(permission: any, index: number) {
+  const invalid = (field: string) => new Error(`Invalid format: permissions[${index}] has an invalid ${field}`);
+
+  if (permission.protectionStatus !== undefined) {
+    const status = permission.protectionStatus;
+    if (!status || typeof status !== "object") throw invalid("protectionStatus");
+    if (!new Set(["present", "clear", "unknown"]).has(status.state)) {
+      throw invalid("protectionStatus.state");
+    }
+    if (!isIsoDateString(status.evaluatedAt)) throw invalid("protectionStatus.evaluatedAt");
+    if (status.monumentCount !== undefined &&
+        (!Number.isInteger(status.monumentCount) || status.monumentCount < 0)) {
+      throw invalid("protectionStatus.monumentCount");
+    }
+  }
+
+  if (permission.pasContext !== undefined) {
+    const context = permission.pasContext;
+    if (!context || typeof context !== "object") throw invalid("pasContext");
+    if (!Number.isInteger(context.count) || context.count < 0) throw invalid("pasContext.count");
+    for (const field of ["topPeriods", "topTypes"] as const) {
+      if (!Array.isArray(context[field]) || context[field].length > 3 ||
+          context[field].some((value: unknown) => typeof value !== "string")) {
+        throw invalid(`pasContext.${field}`);
+      }
+    }
+    if (!isIsoDateString(context.evaluatedAt)) throw invalid("pasContext.evaluatedAt");
+  }
+}
+
+// Active rule IDs — used for validation of current exports.
 const QUESTION_RULE_IDS = new Set([
   "MOVEMENT_NO_FINDS",
   "SETTLEMENT_QUIET",
   "UNRECORDED_ROUTE",
   "ROMAN_ROUTE_ACTIVITY",
+]);
+
+// Retired rule IDs — accepted on import (old backups), silently dropped before insertion.
+const RETIRED_QUESTION_RULE_IDS = new Set([
   "PUBLIC_RECORD_CONTEXT",
   "COVERAGE_GAP",
   "PROTECTED_AREA_EXCLUSION",
@@ -165,10 +207,32 @@ const QUESTION_RULE_IDS = new Set([
 const QUESTION_CATEGORIES = new Set(["MOVEMENT", "COVERAGE", "CONTRADICTION", "HISTORIC_CONTEXT"]);
 const QUESTION_STATUSES = new Set(["UNRESOLVED", "NEEDS_EVIDENCE", "WEAKENING", "RESOLVED"]);
 const QUESTION_RESOLVED_REASONS = new Set(["preconditions_cleared", "superseded", "cap_evicted"]);
+const QUESTION_HYPOTHESES = new Set([
+  "activity_follows_route",
+  "settlement_signal_reflects_activity",
+  "route_signal_is_historic",
+  "activity_associated_with_roman_road",
+]);
+const QUESTION_RESOLVED_OUTCOMES = new Set([
+  "likely_supported", "likely_unsupported", "inconclusive_adequate", "not_applicable",
+]);
+
+function assertInvestigationMetrics(value: any, invalid: (field: string) => Error, field: string) {
+  if (!value || typeof value !== "object") throw invalid(field);
+  if (!Number.isFinite(value.bufferM) || value.bufferM <= 0) throw invalid(`${field}.bufferM`);
+  if (value.localCoveragePct !== undefined &&
+      (!Number.isFinite(value.localCoveragePct) || value.localCoveragePct < 0 || value.localCoveragePct > 100)) {
+    throw invalid(`${field}.localCoveragePct`);
+  }
+  if (value.findsNearCount !== undefined &&
+      (!Number.isInteger(value.findsNearCount) || value.findsNearCount < 0)) {
+    throw invalid(`${field}.findsNearCount`);
+  }
+}
 
 function assertOutstandingQuestion(question: any, index: number) {
   const invalid = (field: string) => new Error(`Invalid format: outstandingQuestions[${index}] has an invalid ${field}`);
-  if (!QUESTION_RULE_IDS.has(question.ruleId)) throw invalid("ruleId");
+  if (!QUESTION_RULE_IDS.has(question.ruleId) && !RETIRED_QUESTION_RULE_IDS.has(question.ruleId)) throw invalid("ruleId");
   if (!QUESTION_CATEGORIES.has(question.category)) throw invalid("category");
   if (!QUESTION_STATUSES.has(question.status)) throw invalid("status");
   if (!question.anchor || typeof question.anchor !== "object" ||
@@ -186,6 +250,41 @@ function assertOutstandingQuestion(question: any, index: number) {
   if (question.consecutiveMisses !== undefined &&
       (!Number.isInteger(question.consecutiveMisses) || question.consecutiveMisses < 0)) {
     throw invalid("consecutiveMisses");
+  }
+  if (question.dismissedByUser !== undefined && typeof question.dismissedByUser !== "boolean") {
+    throw invalid("dismissedByUser");
+  }
+  if (question.hypothesisId !== undefined && !QUESTION_HYPOTHESES.has(question.hypothesisId)) {
+    throw invalid("hypothesisId");
+  }
+  if (question.metrics !== undefined) assertInvestigationMetrics(question.metrics, invalid, "metrics");
+  if (question.initialMetrics !== undefined) assertInvestigationMetrics(question.initialMetrics, invalid, "initialMetrics");
+  if (question.contextGeometry !== undefined) {
+    if (!Array.isArray(question.contextGeometry) || question.contextGeometry.length < 2 ||
+        question.contextGeometry.length > 50 || question.contextGeometry.some((point: any) =>
+          !Array.isArray(point) || point.length !== 2 ||
+          !Number.isFinite(point[0]) || point[0] < -180 || point[0] > 180 ||
+          !Number.isFinite(point[1]) || point[1] < -90 || point[1] > 90
+        )) {
+      throw invalid("contextGeometry");
+    }
+  }
+  if (question.resolvedOutcome !== undefined && !QUESTION_RESOLVED_OUTCOMES.has(question.resolvedOutcome)) {
+    throw invalid("resolvedOutcome");
+  }
+  if (question.resolvedOutcome !== undefined && question.status !== "RESOLVED") {
+    throw invalid("resolvedOutcome");
+  }
+  if (question.priorityState !== undefined &&
+      (!question.priorityState || typeof question.priorityState !== "object" ||
+       !Number.isInteger(question.priorityState.scansSinceEvidenceChange) ||
+       question.priorityState.scansSinceEvidenceChange < 0)) {
+    throw invalid("priorityState");
+  }
+  if (question.supersededByIds !== undefined &&
+      (!Array.isArray(question.supersededByIds) || question.supersededByIds.length === 0 ||
+       question.supersededByIds.some((id: any) => typeof id !== "string" || !id.trim()))) {
+    throw invalid("supersededByIds");
   }
 
   for (const field of ["supportingEvidence", "contradictingEvidence"] as const) {
@@ -217,6 +316,7 @@ export function validateBackupData(data: any): BackupData {
     savedPoints: requireArray(data, "savedPoints"),
     undugSignals: requireArray(data, "undugSignals"),
     outstandingQuestions: requireArray(data, "outstandingQuestions"),
+    questionNotes: requireArray(data, "questionNotes"),
   };
 
   assertRowsHaveId(backup.projects, "projects");
@@ -231,6 +331,7 @@ export function validateBackupData(data: any): BackupData {
   assertRowsHaveId(backup.savedPoints, "savedPoints");
   assertRowsHaveId(backup.undugSignals, "undugSignals");
   assertRowsHaveId(backup.outstandingQuestions, "outstandingQuestions");
+  assertRowsHaveId(backup.questionNotes, "questionNotes");
 
   const projectIds = new Set(backup.projects.map(p => p.id));
   const permissionIds = new Set(backup.permissions.map(p => p.id));
@@ -242,6 +343,8 @@ export function validateBackupData(data: any): BackupData {
     if (!projectIds.has(permission.projectId)) {
       throw new Error(`Invalid format: permissions[${index}] references an unknown project`);
     }
+    // Optional for old backups; fully validated when present in current ones.
+    assertPermissionIntelligence(permission, index);
   });
 
   backup.fields.forEach((field, index) => {
@@ -317,6 +420,27 @@ export function validateBackupData(data: any): BackupData {
     assertOutstandingQuestion(question, index);
   });
 
+  const VALID_NOTE_TYPES = new Set([
+    "searched_nothing", "found_something", "ground_inaccessible",
+    "poor_conditions", "modern_disturbance", "freeform", "session_crossed",
+    "status_change", "merged_from",
+  ]);
+  backup.questionNotes.forEach((note, index) => {
+    const invalid = (field: string) => new Error(`Invalid format: questionNotes[${index}] has an invalid ${field}`);
+    if (typeof note.questionId !== "string" || !note.questionId.trim()) throw invalid("questionId");
+    // questionId may reference a deleted question (orphaned user notes are retained — documented).
+    if (typeof note.author !== "string" || (note.author !== "user" && note.author !== "system")) throw invalid("author");
+    if (!VALID_NOTE_TYPES.has(note.type)) throw invalid("type");
+    if (note.text !== undefined && (typeof note.text !== "string" || note.text.length > 1000)) throw invalid("text");
+    if (!Number.isFinite(note.createdAt)) throw invalid("createdAt");
+    if (note.sessionId !== undefined && typeof note.sessionId !== "string") throw invalid("sessionId");
+    if (note.linkedFindIds !== undefined) {
+      if (!Array.isArray(note.linkedFindIds) || note.linkedFindIds.some((id: any) => typeof id !== "string")) {
+        throw invalid("linkedFindIds");
+      }
+    }
+  });
+
   return backup;
 }
 
@@ -340,7 +464,7 @@ export async function importData(json: string) {
       })))
     : [];
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.outstandingQuestions], async () => {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.outstandingQuestions, db.questionNotes], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -357,6 +481,7 @@ export async function importData(json: string) {
     await db.savedPoints.clear();
     await db.undugSignals.clear();
     await db.outstandingQuestions.clear();
+    await db.questionNotes.clear();
 
     await db.projects.bulkPut(backup.projects);
     if (backup.permissions.length) await db.permissions.bulkPut(backup.permissions);
@@ -370,7 +495,11 @@ export async function importData(json: string) {
     if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
     if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
-    if (backup.outstandingQuestions.length) await db.outstandingQuestions.bulkPut(backup.outstandingQuestions);
+    const activeQuestions = backup.outstandingQuestions.filter(
+      (q: any) => !RETIRED_QUESTION_RULE_IDS.has(q.ruleId)
+    );
+    if (activeQuestions.length) await db.outstandingQuestions.bulkPut(activeQuestions);
+    if (backup.questionNotes.length) await db.questionNotes.bulkPut(backup.questionNotes);
   });
 }
 

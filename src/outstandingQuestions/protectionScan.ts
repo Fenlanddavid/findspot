@@ -51,11 +51,11 @@ export async function updatePermissionIntelligenceQuestions(permission: Permissi
     ),
     getPASDensityNear(scanCenter.lat, scanCenter.lon),
   ]);
-  if (scheduledMonuments.available === false) return false;
+  const scheduledMonumentsAvailable = scheduledMonuments.available !== false;
 
   const sourceAvailability: QuestionSourceAvailability = {
     ...PERMISSION_SCAN_SOURCES,
-    scheduled_monuments: true,
+    scheduled_monuments: scheduledMonumentsAvailable,
     historic_routes: romanRoadResult.available,
     pas_density: pasCell !== null,
   };
@@ -75,5 +75,8 @@ export async function updatePermissionIntelligenceQuestions(permission: Permissi
     pasTopTypes: pasCell?.t,
     ruleIds: PERMISSION_WIDE_RULE_IDS,
   });
-  return true;
+  // When monument coverage is unavailable, the protection check still records
+  // an evaluatedAt timestamp without downgrading the stored state. Return false
+  // so the later historic pass retains fallback ownership of the rule family.
+  return scheduledMonumentsAvailable;
 }

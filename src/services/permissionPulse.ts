@@ -23,6 +23,8 @@ export type PulseTemplateId =
   | "sf_in_progress"
   | "open_signals"
   | "questions_changed"
+  | "coverage_context"
+  | "pas_context"
   | "last_visit"
   | "crop_change_stubble"
   | "crop_change_crop"
@@ -65,7 +67,11 @@ export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
   last_visit_finds:
     "Your last session produced {count} find{s}{nameClause}.",
   questions_changed:
-    "{count} outstanding FieldGuide question{s} need{verb} review.",
+    "{count} open FieldGuide investigation{s} need{verb} review.",
+  coverage_context:
+    "Recorded coverage: approximately {pct}% of this permission.",
+  pas_context:
+    "{count} public PAS records in the surrounding area{periodsClause}.",
   seasonal_pattern:
     "Your visits here have historically fallen between {monthA} and {monthB}.",
 };
@@ -81,6 +87,8 @@ const TEMPLATE_ORDER: PulseTemplateId[] = [
   // action
   "open_signals",
   "questions_changed",
+  "coverage_context",
+  "pas_context",
   // delta
   "last_visit",
   "crop_change_stubble",
@@ -193,12 +201,48 @@ export async function derivePermissionPulse(
     });
   }
 
-  // ── Sessions (shared by d1, d2, d3, m1) ────────────────────────────────
+  // ── a3: coverage context ──────────────────────────────────────────────
+  const permission = await db.permissions.get(permissionId);
   const sessions = await db.sessions
     .where("permissionId")
     .equals(permissionId)
     .toArray();
+  if (permission?.boundary) {
+    const permSessionIds = sessions.map(s => s.id);
+    const permTracks = permSessionIds.length > 0
+      ? await db.tracks.where('sessionId').anyOf(permSessionIds).toArray()
+      : [];
+    const hasTracks = permTracks.some(t => Array.isArray(t.points) && t.points.length >= 2);
+    if (hasTracks) {
+      const { calculateCoverage } = await import('../services/coverage');
+      const cov = calculateCoverage(permission.boundary, permTracks);
+      if (cov && Number.isFinite(cov.percentCovered)) {
+        const pct = Math.max(0, Math.round(cov.percentCovered));
+        facts.push({
+          id: "coverage_context",
+          permissionId,
+          severity: "ambient",
+          templateId: "coverage_context",
+          slots: { pct },
+        });
+      }
+    }
+  }
 
+  // ── a4: PAS context ────────────────────────────────────────────────────
+  if (permission?.pasContext) {
+    const { count, topPeriods } = permission.pasContext;
+    const periodsClause = topPeriods.length > 0 ? `, led by ${topPeriods.join(', ')}` : '';
+    facts.push({
+      id: "pas_context",
+      permissionId,
+      severity: "ambient",
+      templateId: "pas_context",
+      slots: { count, periodsClause },
+    });
+  }
+
+  // ── Sessions (shared by d1, d2, d3, m1) ────────────────────────────────
   // Sort newest first; prefer finished sessions
   sessions.sort((a, b) => {
     const da = new Date(a.date).getTime();

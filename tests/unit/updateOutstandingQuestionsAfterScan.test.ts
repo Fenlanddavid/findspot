@@ -5,8 +5,12 @@ const mocks = vi.hoisted(() => {
   const sessionsToArray = vi.fn();
   const tracksToArray = vi.fn();
   const questionsToArray = vi.fn();
+  const notesToArray = vi.fn();
   const bulkPut = vi.fn();
+  const updateNote = vi.fn();
+  const bulkPutNotes = vi.fn();
   const updatePermission = vi.fn();
+  const getPermission = vi.fn();
   const generateCandidates = vi.fn();
   const diffQuestions = vi.fn();
   const calculateCoverage = vi.fn();
@@ -17,8 +21,12 @@ const mocks = vi.hoisted(() => {
     sessionsToArray,
     tracksToArray,
     questionsToArray,
+    notesToArray,
     bulkPut,
+    updateNote,
+    bulkPutNotes,
     updatePermission,
+    getPermission,
     generateCandidates,
     diffQuestions,
     calculateCoverage,
@@ -35,7 +43,12 @@ vi.mock('../../src/db', () => ({
       where: () => ({ equals: () => ({ toArray: mocks.questionsToArray }) }),
       bulkPut: mocks.bulkPut,
     },
-    permissions: { update: mocks.updatePermission },
+    questionNotes: {
+      where: () => ({ anyOf: () => ({ toArray: mocks.notesToArray }) }),
+      update: mocks.updateNote,
+      bulkPut: mocks.bulkPutNotes,
+    },
+    permissions: { get: mocks.getPermission, update: mocks.updatePermission },
     transaction: mocks.transaction,
   },
 }));
@@ -99,6 +112,7 @@ describe('updateQuestionsAfterScan', () => {
     mocks.findsToArray.mockResolvedValue([]);
     mocks.sessionsToArray.mockResolvedValue([]);
     mocks.questionsToArray.mockResolvedValue([]);
+    mocks.notesToArray.mockResolvedValue([]);
     mocks.generateCandidates.mockReturnValue([]);
     mocks.diffQuestions.mockReturnValue({ upserts: [], resolved: [] });
     mocks.calculateCoverage.mockReturnValue({
@@ -108,6 +122,7 @@ describe('updateQuestionsAfterScan', () => {
       percentCovered: 40,
       percentUndetected: 60,
     });
+    mocks.getPermission.mockResolvedValue(permission);
   });
 
   it('does nothing when the scan centre is outside every permission', async () => {
@@ -220,34 +235,257 @@ describe('updateQuestionsAfterScan', () => {
       contradictingEvidence: [],
     });
     mocks.generateCandidates.mockReturnValue([
-      candidate('COVERAGE_GAP'),
+      candidate('ROMAN_ROUTE_ACTIVITY'),
       candidate('MOVEMENT_NO_FINDS'),
     ]);
 
-    await updateQuestionsAfterScan(input({ ruleIds: ['COVERAGE_GAP'] }));
+    await updateQuestionsAfterScan(input({ ruleIds: ['ROMAN_ROUTE_ACTIVITY'] }));
 
     expect(mocks.diffQuestions.mock.calls[0][1]).toEqual([
-      expect.objectContaining({ ruleId: 'COVERAGE_GAP' }),
+      expect.objectContaining({ ruleId: 'ROMAN_ROUTE_ACTIVITY' }),
     ]);
     const diffScope = mocks.diffQuestions.mock.calls[0][3];
-    expect(diffScope.contains({ ruleId: 'COVERAGE_GAP', anchor: { lat: 52, lon: 0 } })).toBe(true);
+    expect(diffScope.contains({ ruleId: 'ROMAN_ROUTE_ACTIVITY', anchor: { lat: 52, lon: 0 } })).toBe(true);
     expect(diffScope.contains({ ruleId: 'MOVEMENT_NO_FINDS', anchor: { lat: 52, lon: 0 } })).toBe(false);
   });
 
-  it('reads and writes question state inside one transaction', async () => {
+  it('reads and writes question state inside a transaction', async () => {
     await updateQuestionsAfterScan(input());
 
-    const transactionOrder = mocks.transaction.mock.invocationCallOrder[0];
+    // Two transactions: protection/pasContext write, then diff/persist.
+    // The diff transaction (second) must contain the question read.
+    expect(mocks.transaction).toHaveBeenCalledTimes(2);
+    const diffTransactionOrder = mocks.transaction.mock.invocationCallOrder[1];
     const readOrder = mocks.questionsToArray.mock.invocationCallOrder[0];
-    expect(transactionOrder).toBeLessThan(readOrder);
+    expect(diffTransactionOrder).toBeLessThan(readOrder);
   });
 
   it('marks a matched permission as evaluated even when no questions fire', async () => {
     await updateQuestionsAfterScan(input());
 
     expect(mocks.bulkPut).not.toHaveBeenCalled();
-    expect(mocks.updatePermission).toHaveBeenCalledWith('permission-1', {
-      questionsEvaluatedAt: expect.any(String),
+    expect(mocks.updatePermission).toHaveBeenCalledWith(
+      'permission-1',
+      expect.objectContaining({ questionsEvaluatedAt: expect.any(String) }),
+    );
+  });
+
+  it('keeps a partial green scan unknown and marks a fully containing green scan clear', async () => {
+    await updateQuestionsAfterScan(input({
+      scanBounds: { west: -0.005, south: 51.995, east: 0.005, north: 52.005 },
+    }));
+    expect(mocks.updatePermission).toHaveBeenNthCalledWith(1, 'permission-1',
+      expect.objectContaining({
+        protectionStatus: expect.objectContaining({ state: 'unknown', evaluatedAt: expect.any(String) }),
+      }),
+    );
+
+    vi.clearAllMocks();
+    mocks.findsToArray.mockResolvedValue([]);
+    mocks.sessionsToArray.mockResolvedValue([]);
+    mocks.questionsToArray.mockResolvedValue([]);
+    mocks.notesToArray.mockResolvedValue([]);
+    mocks.generateCandidates.mockReturnValue([]);
+    mocks.diffQuestions.mockReturnValue({ upserts: [], resolved: [] });
+    mocks.calculateCoverage.mockReturnValue(null);
+    mocks.getPermission.mockResolvedValue(permission);
+
+    await updateQuestionsAfterScan(input());
+    expect(mocks.updatePermission).toHaveBeenNthCalledWith(1, 'permission-1',
+      expect.objectContaining({
+        protectionStatus: expect.objectContaining({ state: 'clear', evaluatedAt: expect.any(String) }),
+      }),
+    );
+  });
+
+  it('preserves a present state and monument count when monument coverage is unavailable', async () => {
+    mocks.getPermission.mockResolvedValue({
+      ...permission,
+      protectionStatus: {
+        state: 'present', evaluatedAt: '2026-01-01T00:00:00.000Z', monumentCount: 4,
+      },
     });
+
+    await updateQuestionsAfterScan(input({
+      sourceAvailability: { ...completeSources, scheduled_monuments: false },
+      scheduledMonuments: { features: [], available: false },
+    }));
+
+    expect(mocks.updatePermission).toHaveBeenNthCalledWith(1, 'permission-1',
+      expect.objectContaining({
+        protectionStatus: {
+          state: 'present', evaluatedAt: expect.any(String), monumentCount: 4,
+        },
+      }),
+    );
+  });
+
+  it('persists permission context before candidate generation can fail', async () => {
+    mocks.generateCandidates.mockImplementation(() => { throw new Error('candidate failure'); });
+
+    await expect(updateQuestionsAfterScan(input())).rejects.toThrow('candidate failure');
+
+    expect(mocks.updatePermission).toHaveBeenCalledWith('permission-1',
+      expect.objectContaining({
+        protectionStatus: expect.any(Object),
+        pasContext: expect.objectContaining({ count: 3 }),
+      }),
+    );
+    expect(mocks.diffQuestions).not.toHaveBeenCalled();
+  });
+
+  it('includes question notes in the diff persistence transaction', async () => {
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.transaction.mock.calls[1][1]).toHaveLength(3);
+  });
+
+  it('increments decay without changing stored confidence when scan evidence is unchanged', async () => {
+    const previous = {
+      id: 'question-1', permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',
+      hypothesisId: 'activity_follows_route', anchor: { lat: 52, lon: 0 },
+      title: 'Question', description: 'Description', category: 'MOVEMENT',
+      status: 'UNRESOLVED', confidence: 0.8, createdAt: 1, updatedAt: 100,
+      generatedByScanId: 'scan-old', supportingEvidence: [], contradictingEvidence: [],
+      metrics: { localCoveragePct: 60, findsNearCount: 0, bufferM: 200 },
+      initialMetrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
+      priorityState: { scansSinceEvidenceChange: 2 },
+    } as any;
+    const updated = { ...previous, updatedAt: 200, generatedByScanId: 'scan-new' };
+    mocks.questionsToArray.mockResolvedValue([previous]);
+    mocks.diffQuestions.mockReturnValue({ upserts: [updated], resolved: [] });
+
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.bulkPut).toHaveBeenCalledWith([
+      expect.objectContaining({
+        confidence: 0.8,
+        priorityState: { scansSinceEvidenceChange: 3 },
+      }),
+    ]);
+  });
+
+  it('resets decay when a controlled observation was added since the previous scan', async () => {
+    const previous = {
+      id: 'question-1', permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',
+      hypothesisId: 'activity_follows_route', anchor: { lat: 52, lon: 0 },
+      title: 'Question', description: 'Description', category: 'MOVEMENT',
+      status: 'UNRESOLVED', confidence: 0.8, createdAt: 1, updatedAt: 100,
+      generatedByScanId: 'scan-old', supportingEvidence: [], contradictingEvidence: [],
+      metrics: { localCoveragePct: 60, findsNearCount: 0, bufferM: 200 },
+      initialMetrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
+      priorityState: { scansSinceEvidenceChange: 4 },
+    } as any;
+    mocks.questionsToArray.mockResolvedValue([previous]);
+    mocks.notesToArray.mockResolvedValue([{
+      id: 'note-1', questionId: 'question-1', author: 'user',
+      type: 'searched_nothing', createdAt: 150,
+    }]);
+    mocks.diffQuestions.mockReturnValue({
+      upserts: [{ ...previous, updatedAt: 200, generatedByScanId: 'scan-new' }],
+      resolved: [],
+    });
+
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.bulkPut).toHaveBeenCalledWith([
+      expect.objectContaining({ priorityState: { scansSinceEvidenceChange: 0 } }),
+    ]);
+  });
+
+  it('resets decay for a new note and writes a closure outcome from notes in-transaction', async () => {
+    const previous = {
+      id: 'question-1', permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',
+      hypothesisId: 'activity_follows_route', anchor: { lat: 52, lon: 0 },
+      title: 'Question', description: 'Description', category: 'MOVEMENT',
+      status: 'WEAKENING', confidence: 0.8, createdAt: 1, updatedAt: 100,
+      generatedByScanId: 'scan-old', supportingEvidence: [], contradictingEvidence: [],
+      metrics: { localCoveragePct: 70, findsNearCount: 0, bufferM: 200 },
+      initialMetrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
+      priorityState: { scansSinceEvidenceChange: 4 }, consecutiveMisses: 1,
+    } as any;
+    const resolved = {
+      ...previous, status: 'RESOLVED', resolvedReason: 'preconditions_cleared',
+      resolvedAt: 200, updatedAt: 200, consecutiveMisses: 2,
+    } as any;
+    mocks.questionsToArray.mockResolvedValue([previous]);
+    mocks.notesToArray.mockResolvedValue([{
+      id: 'note-1', questionId: 'question-1', author: 'user',
+      type: 'searched_nothing', createdAt: 150,
+    }]);
+    mocks.diffQuestions.mockReturnValue({ upserts: [], resolved: [resolved] });
+
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.bulkPut).toHaveBeenCalledWith([
+      expect.objectContaining({
+        resolvedOutcome: 'likely_unsupported',
+        priorityState: { scansSinceEvidenceChange: 0 },
+      }),
+    ]);
+    expect(mocks.notesToArray).toHaveBeenCalled();
+  });
+
+  it('persists each status transition as a system timeline note', async () => {
+    const previous = {
+      id: 'question-1', permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',
+      hypothesisId: 'activity_follows_route', anchor: { lat: 52, lon: 0 },
+      title: 'Question', description: 'Description', category: 'MOVEMENT',
+      status: 'UNRESOLVED', confidence: 0.8, createdAt: 1, updatedAt: 100,
+      generatedByScanId: 'scan-old', supportingEvidence: [], contradictingEvidence: [],
+      metrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
+    } as any;
+    mocks.questionsToArray.mockResolvedValue([previous]);
+    mocks.diffQuestions.mockReturnValue({
+      upserts: [{ ...previous, status: 'WEAKENING', updatedAt: 200 }],
+      resolved: [],
+    });
+
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.bulkPutNotes).toHaveBeenCalledWith([
+      expect.objectContaining({
+        questionId: 'question-1', author: 'system', type: 'status_change',
+        text: expect.stringContaining('weakening'),
+      }),
+    ]);
+  });
+
+  it('re-points user notes through a supersession chain and records ancestry on the terminal survivor', async () => {
+    const base = {
+      permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',
+      hypothesisId: 'activity_follows_route', anchor: { lat: 52, lon: 0 },
+      description: 'Description', category: 'MOVEMENT', status: 'UNRESOLVED',
+      confidence: 0.8, createdAt: 1, updatedAt: 100,
+      generatedByScanId: 'scan-old', supportingEvidence: [], contradictingEvidence: [],
+      metrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
+    } as any;
+    const a = { ...base, id: 'a', title: 'Earlier A' };
+    const b = { ...base, id: 'b', title: 'Earlier B' };
+    const c = { ...base, id: 'c', title: 'Survivor C' };
+    mocks.questionsToArray.mockResolvedValue([a, b, c]);
+    mocks.notesToArray.mockResolvedValue([
+      { id: 'note-a', questionId: 'a', author: 'user', type: 'freeform', createdAt: 110 },
+      { id: 'system-a', questionId: 'a', author: 'system', type: 'status_change', createdAt: 111 },
+      { id: 'note-b', questionId: 'b', author: 'user', type: 'searched_nothing', createdAt: 112 },
+    ]);
+    mocks.diffQuestions.mockReturnValue({
+      upserts: [{ ...c, updatedAt: 200 }],
+      resolved: [
+        { ...a, status: 'RESOLVED', resolvedReason: 'superseded', supersededByIds: ['b'], updatedAt: 200, resolvedAt: 200 },
+        { ...b, status: 'RESOLVED', resolvedReason: 'superseded', supersededByIds: ['c'], updatedAt: 200, resolvedAt: 200 },
+      ],
+    });
+
+    await updateQuestionsAfterScan(input());
+
+    expect(mocks.updateNote).toHaveBeenCalledWith('note-a', { questionId: 'c' });
+    expect(mocks.updateNote).toHaveBeenCalledWith('note-b', { questionId: 'c' });
+    expect(mocks.updateNote).not.toHaveBeenCalledWith('system-a', expect.anything());
+    const writtenNotes = mocks.bulkPutNotes.mock.calls[0][0];
+    expect(writtenNotes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionId: 'c', author: 'system', type: 'merged_from', text: expect.stringContaining('Earlier A') }),
+      expect.objectContaining({ questionId: 'c', author: 'system', type: 'merged_from', text: expect.stringContaining('Earlier B') }),
+    ]));
   });
 });

@@ -41,6 +41,12 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
       category: 'MOVEMENT', status: 'UNRESOLVED', confidence: 0.8,
       createdAt: 1, updatedAt: 1, generatedByScanId: 'scan-1',
       supportingEvidence: [], contradictingEvidence: [],
+      hypothesisId: 'activity_follows_route',
+      metrics: { localCoveragePct: 60, findsNearCount: 0, bufferM: 200 },
+      initialMetrics: { localCoveragePct: 10, findsNearCount: 0, bufferM: 200 },
+      contextGeometry: [[-1.501, 52.5], [-1.499, 52.5]],
+      priorityState: { scansSinceEvidenceChange: 0 },
+      supersededByIds: ['oq-2'],
     }],
     ...overrides,
   };
@@ -67,6 +73,7 @@ describe('validateBackupData — accepts valid backups', () => {
     expect(Array.isArray(result.importedPackages)).toBe(true);
     expect(Array.isArray(result.savedPoints)).toBe(true);
     expect(Array.isArray(result.outstandingQuestions)).toBe(true);
+    expect(Array.isArray(result.questionNotes)).toBe(true);
   });
 
   it('accepts a data-only backup with empty media array', () => {
@@ -85,6 +92,7 @@ describe('validateBackupData — accepts valid backups', () => {
       importedPackages: undefined,
       savedPoints: undefined,
       outstandingQuestions: undefined,
+      questionNotes: undefined,
     });
     expect(() => validateBackupData(sparse)).not.toThrow();
   });
@@ -103,6 +111,47 @@ describe('validateBackupData — accepts valid backups', () => {
       importedPackages: [],
     };
     expect(() => validateBackupData(minimal)).not.toThrow();
+  });
+});
+
+describe('validateBackupData — permission intelligence', () => {
+  it('accepts old permissions without intelligence fields and current permissions with them', () => {
+    const currentPermission = {
+      ...(makeValidBackup().permissions[0] as Record<string, unknown>),
+      protectionStatus: {
+        state: 'present', evaluatedAt: '2026-07-14T12:00:00.000Z', monumentCount: 2,
+      },
+      pasContext: {
+        count: 14, topPeriods: ['ROMAN', 'MEDIEVAL'], topTypes: ['COIN'],
+        evaluatedAt: '2026-07-14T12:00:00.000Z',
+      },
+    };
+
+    expect(() => validateBackupData(makeValidBackup())).not.toThrow();
+    expect(() => validateBackupData(makeValidBackup({ permissions: [currentPermission] }))).not.toThrow();
+  });
+
+  it('rejects a clear protection state without a valid evaluation timestamp', () => {
+    const permission = {
+      ...(makeValidBackup().permissions[0] as Record<string, unknown>),
+      protectionStatus: { state: 'clear', evaluatedAt: 'not-a-date' },
+    };
+    expect(() => validateBackupData(makeValidBackup({ permissions: [permission] })))
+      .toThrow(/protectionStatus\.evaluatedAt/);
+  });
+
+  it('rejects PAS summaries outside the persisted shape', () => {
+    const permission = {
+      ...(makeValidBackup().permissions[0] as Record<string, unknown>),
+      pasContext: {
+        count: 3,
+        topPeriods: ['A', 'B', 'C', 'D'],
+        topTypes: [],
+        evaluatedAt: '2026-07-14T12:00:00.000Z',
+      },
+    };
+    expect(() => validateBackupData(makeValidBackup({ permissions: [permission] })))
+      .toThrow(/pasContext\.topPeriods/);
   });
 });
 
@@ -309,6 +358,21 @@ describe('validateBackupData — savedPoints', () => {
     });
 
     expect(() => validateBackupData(data)).toThrow(new RegExp(String(field), 'i'));
+  });
+
+  it.each([
+    ['hypothesisId', { hypothesisId: 'invented_hypothesis' }],
+    ['metrics', { metrics: { localCoveragePct: 101, findsNearCount: 0, bufferM: 200 } }],
+    ['initialMetrics', { initialMetrics: { localCoveragePct: 20, findsNearCount: -1, bufferM: 200 } }],
+    ['contextGeometry', { contextGeometry: [[-1.5, 52.5]] }],
+    ['resolvedOutcome', { resolvedOutcome: 'definitely_proven' }],
+    ['priorityState', { priorityState: { scansSinceEvidenceChange: -1 } }],
+    ['supersededByIds', { supersededByIds: [] }],
+  ])('rejects invalid investigation field %s', (field, invalidFields) => {
+    const validQuestion = makeValidBackup().outstandingQuestions[0];
+    expect(() => validateBackupData(makeValidBackup({
+      outstandingQuestions: [{ ...validQuestion, ...invalidFields }],
+    }))).toThrow(new RegExp(String(field), 'i'));
   });
 
   it('rejects a savedPoint referencing an unknown project', () => {

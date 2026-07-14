@@ -7,12 +7,13 @@ import {
   historicQuestionRuleScope,
   RULE_REQUIRED_SOURCES,
   runRules,
+  corridorContextGeometry,
   type ScanContext,
 } from '../../src/outstandingQuestions/rules';
 import { isAnchorInScanBounds, passesBoundaryGate, passesSMGate, passesCoverageFence, passesAllGates } from '../../src/outstandingQuestions/gates';
 import { generateCandidates } from '../../src/outstandingQuestions/generator';
 import { diffQuestions } from '../../src/outstandingQuestions/differ';
-import { confidenceBand, anchorOctant } from '../../src/outstandingQuestions/types';
+import { confidenceBand, anchorOctant, HYPOTHESIS_BY_RULE } from '../../src/outstandingQuestions/types';
 import type {
   QuestionCandidate,
   QuestionEvidenceSource,
@@ -75,6 +76,7 @@ function baseScanCtx(overrides?: Partial<ScanContext>): ScanContext {
     historicRoutes: [],
     finds: [],
     permissionCentroid: centroid,
+    permissionBoundary: testBoundary,
     ...overrides,
   };
 }
@@ -82,6 +84,7 @@ function baseScanCtx(overrides?: Partial<ScanContext>): ScanContext {
 function makeCandidate(overrides?: Partial<QuestionCandidate>): QuestionCandidate {
   return {
     ruleId: 'MOVEMENT_NO_FINDS',
+    hypothesisId: 'activity_follows_route',
     anchor: { lat: 52.5, lon: -0.5 },
     title: 'Test question',
     description: 'Test description',
@@ -91,6 +94,7 @@ function makeCandidate(overrides?: Partial<QuestionCandidate>): QuestionCandidat
     scanId: 'scan-1',
     supportingEvidence: [{ label: 'Evidence A', sourceScanId: 'scan-1' }],
     contradictingEvidence: [],
+    metrics: { localCoveragePct: 60, findsNearCount: 0, bufferM: 200 },
     ...overrides,
   };
 }
@@ -111,6 +115,9 @@ function makeExisting(overrides?: Partial<OutstandingQuestion>): OutstandingQues
     generatedByScanId: 'scan-0',
     supportingEvidence: [{ label: 'Old evidence', sourceScanId: 'scan-0' }],
     contradictingEvidence: [],
+    hypothesisId: 'activity_follows_route',
+    metrics: { localCoveragePct: 60, findsNearCount: 0, bufferM: 200 },
+    initialMetrics: { localCoveragePct: 20, findsNearCount: 0, bufferM: 200 },
     ...overrides,
   };
 }
@@ -118,6 +125,18 @@ function makeExisting(overrides?: Partial<OutstandingQuestion>): OutstandingQues
 // ─── Rules: positive fixtures ───────────────────────────────────────────────
 
 describe('Rules — positive fixtures', () => {
+  it('clips and caps persisted corridor geometry inside the permission', () => {
+    const longLine = Array.from({ length: 120 }, (_, index) =>
+      [-0.51 + index * (0.02 / 119), 52.5] as [number, number]
+    );
+    const geometry = corridorContextGeometry(longLine, testBoundary);
+    expect(geometry).toBeDefined();
+    expect(geometry!.length).toBeLessThanOrEqual(50);
+    expect(geometry!.every(([lon, lat]) =>
+      lon >= -0.504 && lon <= -0.496 && lat >= 52.498 && lat <= 52.502
+    )).toBe(true);
+  });
+
   it('MOVEMENT_NO_FINDS fires on high-scoring corridor with no finds', () => {
     const ctx = baseScanCtx({
       hotspots: [makeHotspot({ type: 'Movement Corridor (Likely)', score: 70, center: [-0.5, 52.5] })],
@@ -128,6 +147,8 @@ describe('Rules — positive fixtures', () => {
     expect(r).toBeTruthy();
     expect(r!.category).toBe('MOVEMENT');
     expect(r!.status).toBe('UNRESOLVED');
+    expect(r!.metrics).toEqual({ localCoveragePct: 35, findsNearCount: 0, bufferM: 200 });
+    expect(r!.contextGeometry?.length).toBeGreaterThanOrEqual(2);
   });
 
   it('SETTLEMENT_QUIET fires on high settlement score with good coverage but few finds', () => {
@@ -140,6 +161,7 @@ describe('Rules — positive fixtures', () => {
     const r = results.find(c => c.ruleId === 'SETTLEMENT_QUIET');
     expect(r).toBeTruthy();
     expect(r!.category).toBe('CONTRADICTION');
+    expect(r!.metrics).toMatchObject({ localCoveragePct: 75, findsNearCount: 1, bufferM: 300 });
   });
 
   it('UNRECORDED_ROUTE fires on non-OSM route with few PAS records', () => {
@@ -151,6 +173,7 @@ describe('Rules — positive fixtures', () => {
     const r = results.find(c => c.ruleId === 'UNRECORDED_ROUTE');
     expect(r).toBeTruthy();
     expect(r!.category).toBe('HISTORIC_CONTEXT');
+    expect(r!.metrics.bufferM).toBe(250);
   });
 
   it('ROMAN_ROUTE_ACTIVITY fires on a Roman road with high PAS density', () => {
@@ -166,60 +189,7 @@ describe('Rules — positive fixtures', () => {
     expect(r!.status).toBe('UNRESOLVED');
     expect(r!.description).toContain('contextual only');
     expect(r!.supportingEvidence.map(e => e.label)).toContain('Roman road alignment: Ermine Street');
-  });
-
-  it('PROTECTED_AREA_EXCLUSION fires whenever an SM intersects the permission', () => {
-    const results = runRules(baseScanCtx({ protectedAreaPresent: true }));
-    const question = results.find(candidate => candidate.ruleId === 'PROTECTED_AREA_EXCLUSION');
-    expect(question).toBeTruthy();
-    expect(question!.locationActionAllowed).toBe(false);
-    expect(question!.description).toContain('does not authorise detecting on protected archaeology');
-  });
-
-  it('PUBLIC_RECORD_CONTEXT turns a populated PAS cell into an honest comparison question', () => {
-    const results = runRules(baseScanCtx({
-      pasRecordCountInScanCell: 24,
-      pasTopPeriods: ['ROMAN', 'MEDIEVAL'],
-      pasTopTypes: ['COIN', 'BROOCH'],
-    }));
-    const question = results.find(candidate => candidate.ruleId === 'PUBLIC_RECORD_CONTEXT');
-    expect(question).toBeTruthy();
-    expect(question!.description).toContain('broad landscape context');
-    expect(question!.supportingEvidence.map(evidence => evidence.label)).toContain('Leading public periods: ROMAN, MEDIEVAL');
-  });
-
-  it('COVERAGE_GAP provides a baseline when no detecting tracks are recorded', () => {
-    const results = runRules(baseScanCtx({
-      totalCoveragePct: 0,
-      hasRecordedTracks: false,
-    }));
-    const question = results.find(candidate => candidate.ruleId === 'COVERAGE_GAP');
-    expect(question).toBeTruthy();
-    expect(question!.title).toContain('first recorded coverage baseline');
-    expect(question!.category).toBe('COVERAGE');
-  });
-
-  it('retains non-location coverage context on a permission narrower than the target inset', () => {
-    const tinyBoundary: GeoJSONPolygon = {
-      type: 'Polygon',
-      coordinates: [[
-        [-0.5001, 52.4999], [-0.4999, 52.4999],
-        [-0.4999, 52.5001], [-0.5001, 52.5001],
-        [-0.5001, 52.4999],
-      ]],
-    };
-    const candidates = generateCandidates(
-      baseScanCtx({ totalCoveragePct: 0, hasRecordedTracks: false }),
-      {
-        boundary: tinyBoundary,
-        smStatus: 'green',
-        smCoverageAvailable: true,
-        scanBounds: { west: -0.51, south: 52.49, east: -0.49, north: 52.51 },
-        isAnchorProtected: () => false,
-      },
-    );
-
-    expect(candidates.some(candidate => candidate.ruleId === 'COVERAGE_GAP')).toBe(true);
+    expect(r!.contextGeometry?.length).toBeGreaterThanOrEqual(2);
   });
 
   it('ROMAN_ROUTE_ACTIVITY survives the permission boundary and monument safety gates', () => {
@@ -317,19 +287,15 @@ describe('Rules — negative fixtures', () => {
     expect(results.find(c => c.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toBeTruthy();
   });
 
-  it('PUBLIC_RECORD_CONTEXT stays silent for a negligible PAS count', () => {
-    const results = runRules(baseScanCtx({ pasRecordCountInScanCell: 2 }));
-    expect(results.find(c => c.ruleId === 'PUBLIC_RECORD_CONTEXT')).toBeFalsy();
-  });
-
-  it('COVERAGE_GAP stays silent once recorded coverage is substantial', () => {
-    const results = runRules(baseScanCtx({ totalCoveragePct: 80, hasRecordedTracks: true }));
-    expect(results.find(c => c.ruleId === 'COVERAGE_GAP')).toBeFalsy();
-  });
 
 });
 
 describe('Rule source completeness', () => {
+  it('has exactly one static hypothesis for each of the four live rules', () => {
+    expect(Object.keys(HYPOTHESIS_BY_RULE).sort()).toEqual(Object.keys(RULE_REQUIRED_SOURCES).sort());
+    expect(Object.keys(HYPOTHESIS_BY_RULE)).toHaveLength(4);
+  });
+
   const sources = [
     'terrain', 'terrain_global', 'slope', 'hydrology', 'satellite_spring',
     'satellite_summer', 'scheduled_monuments', 'aim', 'historic_context',
@@ -486,6 +452,42 @@ describe('Diff — carry-forward identity', () => {
     expect(result.upserts[0].id).not.toBe('q-existing-1');
     expect(result.resolved.some(q => q.id === 'q-existing-1')).toBe(true);
   });
+
+  it('preserves the display-only dismissal flag without using it as differ input', () => {
+    const existing = [makeExisting({ dismissedByUser: true })];
+    const result = diffQuestions(existing, [makeCandidate({ confidence: 0.85 })], 2000);
+
+    expect(result.upserts[0]).toMatchObject({
+      id: 'q-existing-1',
+      dismissedByUser: true,
+      confidence: 0.85,
+    });
+  });
+
+  it('mechanically carries latest metrics while preserving the initial baseline', () => {
+    const initialMetrics = { localCoveragePct: 12, findsNearCount: 0, bufferM: 200 };
+    const latestMetrics = { localCoveragePct: 68, findsNearCount: 1, bufferM: 200 };
+    const result = diffQuestions(
+      [makeExisting({ initialMetrics, metrics: { ...initialMetrics } })],
+      [makeCandidate({ metrics: latestMetrics })],
+      2000,
+    );
+
+    expect(result.upserts[0].metrics).toEqual(latestMetrics);
+    expect(result.upserts[0].initialMetrics).toEqual(initialMetrics);
+    expect(result.upserts[0].hypothesisId).toBe('activity_follows_route');
+  });
+
+  it('stamps the first available baseline on a pre-Phase-C row', () => {
+    const latestMetrics = { localCoveragePct: 35, findsNearCount: 0, bufferM: 200 };
+    const result = diffQuestions(
+      [makeExisting({ metrics: undefined, initialMetrics: undefined, hypothesisId: undefined })],
+      [makeCandidate({ metrics: latestMetrics })],
+      2000,
+    );
+
+    expect(result.upserts[0].initialMetrics).toEqual(latestMetrics);
+  });
 });
 
 describe('Diff — preconditions_cleared', () => {
@@ -503,6 +505,18 @@ describe('Diff — preconditions_cleared', () => {
     expect(second.resolved[0].id).toBe('q-existing-1');
     expect(second.resolved[0].resolvedReason).toBe('preconditions_cleared');
     expect(second.resolved[0].status).toBe('RESOLVED');
+  });
+
+  it('resolves a dismissed question normally so resolved can trump hidden in the UI', () => {
+    const result = diffQuestions([
+      makeExisting({ dismissedByUser: true, consecutiveMisses: 1 }),
+    ], [], 2000);
+
+    expect(result.resolved[0]).toMatchObject({
+      id: 'q-existing-1',
+      status: 'RESOLVED',
+      dismissedByUser: true,
+    });
   });
 
   it('leaves questions outside the current scan untouched', () => {
@@ -700,6 +714,7 @@ describe('Cap — dedupe overlap', () => {
     const superseded = result.resolved.find(q => q.id === 'superseded-existing');
     expect(superseded?.status).toBe('RESOLVED');
     expect(superseded?.resolvedReason).toBe('superseded');
+    expect(superseded?.supersededByIds).toEqual(['kept-existing']);
   });
 });
 

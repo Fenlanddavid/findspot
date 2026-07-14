@@ -13,10 +13,18 @@ import type { Hotspot, Cluster, HistoricRoute, ScanBounds } from '../pages/field
 import type { GateContext } from './gates';
 import type { ScanContext } from './rules';
 import type { OutstandingQuestion, QuestionSourceAvailability, RuleId } from './types';
+import type { QuestionNote } from './types';
 import { hasRequiredSources } from './rules';
+import { isControlledObservation, metricsChanged, resolvedOutcomeFor } from './investigationState';
 import { isPointInPolygon, isPointProtectedByNHLE } from '../utils/fieldGuideAnalysis';
 import type { NHLEResponse } from '../services/historicScanService';
 import * as turf from '@turf/turf';
+import { v4 as uuid } from 'uuid';
+import {
+  mergedFromText,
+  statusTransitionText,
+  terminalSupersedingQuestionId,
+} from './transitionHistory';
 
 export interface ScanCompleteInput {
   permissionId?: string;
@@ -116,12 +124,10 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     finds,
     localCoverageAtAnchor,
     permissionCentroid: centroid,
+    permissionBoundary: boundary,
     pasRecordCountInScanCell,
     pasTopPeriods,
     pasTopTypes,
-    totalCoveragePct: permissionCoverage?.percentCovered ?? null,
-    hasRecordedTracks: tracks.some(track => Array.isArray(track.points) && track.points.length >= 2),
-    protectedAreaPresent,
   };
 
   // 7. Build gate context
@@ -136,14 +142,85 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     isAnchorProtected: anchor => isPointProtectedByNHLE(anchor.lat, anchor.lon, scheduledMonuments),
   };
 
-  // 8. Generate and diff
+  // ── Write protectionStatus and pasContext to the permission BEFORE the
+  // question pipeline so the UI can render the banner even if candidate
+  // generation or differ/persistence fails downstream.
+  await db.transaction('rw', [db.permissions], async () => {
+    const perm = await db.permissions.get(permissionId);
+    if (!perm) return;
+
+    // Protection banner state machine (fail-safe, order matters):
+    const prevProtection = perm.protectionStatus;
+    const now_iso = new Date().toISOString();
+    let protectionState: 'present' | 'clear' | 'unknown' = prevProtection?.state ?? 'unknown';
+    let monumentCount = prevProtection?.monumentCount;
+
+    if (!smCoverageAvailable) {
+      // B1: SM source unavailable — preserve previous state, never write clear.
+      // evaluatedAt still updates to record "we checked, source was unavailable".
+    } else if (protectedAreaPresent) {
+      // B2: Intersection found on a green scan — sticky present.
+      protectionState = 'present';
+      monumentCount = scheduledMonuments.features.filter(f => {
+        if (!f.geometry || !boundary) return false;
+        try {
+          return turf.booleanIntersects(
+            turf.polygon(boundary.coordinates),
+            turf.feature(f.geometry as GeoJSON.Geometry),
+          );
+        } catch { return false; }
+      }).length;
+    } else {
+      // B3: clear requires full polygon containment inside scanBounds.
+      let fullyContained = false;
+      if (boundary) {
+        try {
+          const permPoly = turf.polygon(boundary.coordinates);
+          const boundsPolygon = turf.bboxPolygon([scanBounds.west, scanBounds.south, scanBounds.east, scanBounds.north]);
+          fullyContained = turf.booleanContains(boundsPolygon, permPoly);
+        } catch {
+          fullyContained = false;
+        }
+      }
+      if (fullyContained) {
+        protectionState = 'clear';
+        monumentCount = undefined;
+      }
+      // B4: else preserve previous state (already set above).
+    }
+
+    const protectionUpdate: Permission['protectionStatus'] = {
+      state: protectionState,
+      evaluatedAt: now_iso,
+      ...(monumentCount !== undefined ? { monumentCount } : {}),
+    };
+
+    const permUpdates: Partial<Permission> = {
+      protectionStatus: protectionUpdate,
+    };
+
+    // Write pasContext if PAS data is available.
+    if (pasRecordCountInScanCell != null && Number.isFinite(pasRecordCountInScanCell)) {
+      permUpdates.pasContext = {
+        count: pasRecordCountInScanCell,
+        topPeriods: (pasTopPeriods ?? []).filter(Boolean).slice(0, 3),
+        topTypes: (pasTopTypes ?? []).filter(Boolean).slice(0, 3),
+        evaluatedAt: now_iso,
+      };
+    }
+
+    await db.permissions.update(permissionId, permUpdates);
+  });
+
+  // 8. Generate and diff. The source guard also rejects unknown runtime rule
+  // IDs from an in-flight scan produced by an older deployed bundle.
   const candidates = generateCandidates(scanCtx, gateCtx)
     .filter(candidate => !ruleScope || ruleScope.has(candidate.ruleId))
     .filter(candidate => hasRequiredSources(candidate.ruleId, sourceAvailability));
 
   // Keep the read/diff/write lifecycle atomic. This prevents two detached scan
   // completions from advancing or replacing the same question from stale state.
-  await db.transaction('rw', [db.outstandingQuestions, db.permissions], async () => {
+  await db.transaction('rw', [db.outstandingQuestions, db.permissions, db.questionNotes], async () => {
     const existing = await db.outstandingQuestions
       .where('permissionId')
       .equals(permissionId)
@@ -160,12 +237,93 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
       },
     });
 
+    const existingById = new Map(existing.map(question => [question.id, question]));
+    const changedQuestions = [...result.upserts, ...result.resolved];
+    const changedQuestionIds = changedQuestions.map(question => question.id);
+    const notes = changedQuestionIds.length > 0
+      ? await db.questionNotes.where('questionId').anyOf(changedQuestionIds).toArray()
+      : [];
+    const notesByQuestion = new Map<string, typeof notes>();
+    for (const note of notes) {
+      const grouped = notesByQuestion.get(note.questionId) ?? [];
+      grouped.push(note);
+      notesByQuestion.set(note.questionId, grouped);
+    }
+    const historyNotes: QuestionNote[] = [];
+
+    for (const question of changedQuestions) {
+      const previous = existingById.get(question.id);
+      if (!previous) {
+        question.priorityState = { scansSinceEvidenceChange: 0 };
+      } else if (question.updatedAt === previous.updatedAt) {
+        // Out-of-scope questions were not examined by this scan and do not age.
+        question.priorityState = previous.priorityState ?? { scansSinceEvidenceChange: 0 };
+      } else {
+        const questionNotes = notesByQuestion.get(question.id) ?? [];
+        const evidenceChanged = previous.status !== question.status ||
+          metricsChanged(previous.metrics, question.metrics) ||
+          questionNotes.some(note =>
+            isControlledObservation(note) && note.createdAt > previous.updatedAt
+          );
+        question.priorityState = {
+          scansSinceEvidenceChange: evidenceChanged
+            ? 0
+            : (previous.priorityState?.scansSinceEvidenceChange ?? 0) + 1,
+        };
+      }
+
+      if (question.status === 'RESOLVED' && question.resolvedReason === 'preconditions_cleared') {
+        question.resolvedOutcome = resolvedOutcomeFor(
+          question,
+          notesByQuestion.get(question.id) ?? [],
+        );
+      }
+
+      if (previous && previous.status !== question.status) {
+        historyNotes.push({
+          id: uuid(),
+          questionId: question.id,
+          author: 'system',
+          type: 'status_change',
+          text: statusTransitionText(previous.status, question.status),
+          createdAt: now,
+        });
+      }
+    }
+
+    const questionById = new Map<string, OutstandingQuestion>([
+      ...existing.map(question => [question.id, question] as const),
+      ...changedQuestions.map(question => [question.id, question] as const),
+    ]);
+    for (const superseded of result.resolved.filter(question =>
+      question.resolvedReason === 'superseded' && question.supersededByIds?.[0]
+    )) {
+      const immediateSuccessorId = superseded.supersededByIds![0];
+      const terminalSuccessorId = terminalSupersedingQuestionId(immediateSuccessorId, questionById);
+      const userNotes = (notesByQuestion.get(superseded.id) ?? [])
+        .filter(note => note.author === 'user');
+      for (const note of userNotes) {
+        await db.questionNotes.update(note.id, { questionId: terminalSuccessorId });
+      }
+      historyNotes.push({
+        id: uuid(),
+        questionId: terminalSuccessorId,
+        author: 'system',
+        type: 'merged_from',
+        text: mergedFromText(superseded.title),
+        createdAt: now,
+      });
+    }
+    if (historyNotes.length > 0) {
+      await db.questionNotes.bulkPut(historyNotes);
+    }
+
     // Stamp permissionId on new questions (differ doesn't know it).
     for (const q of result.upserts) {
       q.permissionId = permissionId;
     }
 
-    const allQuestions = [...result.upserts, ...result.resolved];
+    const allQuestions = changedQuestions;
     if (allQuestions.length > 0) {
       await db.outstandingQuestions.bulkPut(allQuestions);
     }

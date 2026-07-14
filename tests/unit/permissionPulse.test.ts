@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type MockRow = Record<string, unknown>;
 
 // vi.hoisted runs before imports, so the mock tables exist when vi.mock fires.
-const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOutstandingQuestions } =
+const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOutstandingQuestions, mockPermissions, mockTracks, mockCalculateCoverage } =
   vi.hoisted(() => {
     function _makeTable() {
       let data: Record<string, unknown>[] = [];
@@ -60,6 +60,9 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOut
       mockSessions: _makeTable(),
       mockFinds: _makeTable(),
       mockOutstandingQuestions: _makeTable(),
+      mockPermissions: _makeTable(),
+      mockTracks: _makeTable(),
+      mockCalculateCoverage: vi.fn(),
     };
   });
 
@@ -70,7 +73,13 @@ vi.mock("../../src/db", () => ({
     sessions: mockSessions,
     finds: mockFinds,
     outstandingQuestions: mockOutstandingQuestions,
+    permissions: mockPermissions,
+    tracks: mockTracks,
   },
+}));
+
+vi.mock("../../src/services/coverage", () => ({
+  calculateCoverage: mockCalculateCoverage,
 }));
 
 import { derivePermissionPulse } from "../../src/services/permissionPulse";
@@ -134,6 +143,10 @@ function resetAll() {
   mockSessions._setData([]);
   mockFinds._setData([]);
   mockOutstandingQuestions._setData([]);
+  mockPermissions._setData([]);
+  mockTracks._setData([]);
+  mockCalculateCoverage.mockReset();
+  mockCalculateCoverage.mockReturnValue(null);
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -267,6 +280,43 @@ describe("permissionPulse — a2 (outstanding questions)", () => {
     expect(f!.slots.count).toBe(2);
     expect(f!.slots.s).toBe("s");
     expect(f!.link).toEqual({ kind: "scroll", anchorId: "outstanding-questions-section" });
+  });
+});
+
+describe("permissionPulse — permission context", () => {
+  it("emits coverage only when a mapped permission has a recorded track", async () => {
+    mockPermissions._setData([{
+      id: PERM_ID,
+      boundary: { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
+    }]);
+    mockSessions._setData([makeSession({ id: 'coverage-session' })]);
+    mockTracks._setData([{
+      id: 'track-1',
+      sessionId: 'coverage-session',
+      points: [{ lat: 52, lon: 0 }, { lat: 52.001, lon: 0 }],
+    }]);
+    mockCalculateCoverage.mockReturnValue({ percentCovered: 37.6 });
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    const coverage = facts.find(fact => fact.templateId === 'coverage_context');
+    expect(coverage?.slots).toEqual({ pct: 38 });
+  });
+
+  it("emits PAS count and leading periods without inventing coverage", async () => {
+    mockPermissions._setData([{
+      id: PERM_ID,
+      pasContext: {
+        count: 17,
+        topPeriods: ['ROMAN', 'MEDIEVAL'],
+        topTypes: ['COIN'],
+        evaluatedAt: '2026-07-14T12:00:00.000Z',
+      },
+    }]);
+
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    const pas = facts.find(fact => fact.templateId === 'pas_context');
+    expect(pas?.slots).toEqual({ count: 17, periodsClause: ', led by ROMAN, MEDIEVAL' });
+    expect(facts.find(fact => fact.templateId === 'coverage_context')).toBeUndefined();
   });
 });
 

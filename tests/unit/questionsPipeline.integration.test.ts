@@ -14,7 +14,11 @@ vi.mock('../../src/db', () => ({
       where: () => ({ equals: () => ({ toArray: async () => [...state.questions] }) }),
       bulkPut: async (rows: any[]) => { state.questions = rows; },
     },
+    questionNotes: {
+      where: () => ({ anyOf: () => ({ toArray: async () => [] }) }),
+    },
     permissions: {
+      get: async () => ({ id: 'permission-1' }),
       update: async (id: string, changes: Record<string, unknown>) => {
         state.permissionUpdates.push([id, changes]);
       },
@@ -91,17 +95,20 @@ describe('Roman-road question pipeline', () => {
       pasRecordCountInScanCell: 18,
     });
 
-    expect(state.questions).toHaveLength(3);
-    expect(state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toMatchObject({
+    // After Phase A: only ROMAN_ROUTE_ACTIVITY survives (PUBLIC_RECORD_CONTEXT
+    // and PROTECTED_AREA_EXCLUSION retired — their info is on the permission row).
+    expect(state.questions).toHaveLength(1);
+    expect(state.questions[0]).toMatchObject({
       permissionId: 'permission-1',
       ruleId: 'ROMAN_ROUTE_ACTIVITY',
       status: 'NEEDS_EVIDENCE',
     });
-    expect(state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY')!.anchor.lon).toBeLessThan(-0.002);
-    expect(state.permissionUpdates).toEqual([[
-      'permission-1',
-      { questionsEvaluatedAt: expect.any(String) },
-    ]]);
+    expect(state.questions[0].anchor.lon).toBeLessThan(-0.002);
+    // Two permission updates: protectionStatus/pasContext write + questionsEvaluatedAt.
+    expect(state.permissionUpdates).toEqual([
+      ['permission-1', expect.objectContaining({ protectionStatus: expect.any(Object) })],
+      ['permission-1', { questionsEvaluatedAt: expect.any(String) }],
+    ]);
   });
 
   it('persists a non-location protected-context question when the road section is entirely scheduled', async () => {
@@ -139,43 +146,19 @@ describe('Roman-road question pipeline', () => {
       pasRecordCountInScanCell: 18,
     });
 
-    expect(state.questions).toHaveLength(3);
-    expect(state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY')).toMatchObject({
+    // After Phase A retirement, only ROMAN_ROUTE_ACTIVITY remains from the
+    // permission-wide pass. The SM exclusion is now a banner on the permission.
+    const romanQ = state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY');
+    expect(romanQ).toMatchObject({
       permissionId: 'permission-2',
       ruleId: 'ROMAN_ROUTE_ACTIVITY',
       status: 'NEEDS_EVIDENCE',
       locationActionAllowed: false,
     });
-    expect(state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY')!.description).toContain('must remain excluded from detecting');
-    expect(isPointInsideRoadMonument(state.questions.find(question => question.ruleId === 'ROMAN_ROUTE_ACTIVITY')!.anchor)).toBe(false);
-    expect(state.questions.find(question => question.ruleId === 'PROTECTED_AREA_EXCLUSION')).toMatchObject({
-      locationActionAllowed: false,
-      status: 'UNRESOLVED',
-    });
-  });
-
-  it('persists an SM exclusion question without Roman-road or PAS inputs', async () => {
-    await updateQuestionsAfterScan({
-      permissionId: 'permission-3',
-      scanCenter: { lat: 52, lng: 0 },
-      hotspots: [], clusters: [], routes: [],
-      scanBounds: { west: -0.02, south: 51.98, east: 0.02, north: 52.02 },
-      sourceAvailability: {
-        terrain: false, terrain_global: false, slope: false, hydrology: false,
-        satellite_spring: false, satellite_summer: false,
-        scheduled_monuments: true, aim: false, historic_context: false,
-        historic_routes: false, pas_density: false,
-      },
-      permissions: [{ id: 'permission-3', boundary } as any],
-      scheduledMonuments: { features: [scheduledMonument], available: true },
-    });
-
-    expect(state.questions).toHaveLength(1);
-    expect(state.questions[0]).toMatchObject({
-      permissionId: 'permission-3',
-      ruleId: 'PROTECTED_AREA_EXCLUSION',
-      locationActionAllowed: false,
-    });
+    expect(romanQ!.description).toContain('must remain excluded from detecting');
+    expect(isPointInsideRoadMonument(romanQ!.anchor)).toBe(false);
+    // No PROTECTED_AREA_EXCLUSION question generated (retired in Phase A).
+    expect(state.questions.find(question => question.ruleId === 'PROTECTED_AREA_EXCLUSION')).toBeUndefined();
   });
 });
 

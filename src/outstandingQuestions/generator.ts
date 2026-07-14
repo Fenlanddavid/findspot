@@ -4,8 +4,36 @@
 
 import type { QuestionCandidate } from './types';
 import type { GateContext } from './gates';
-import { isAnchorInScanBounds, isAnchorInsideBoundary, passesAllGates, passesBoundaryGate, passesCoverageFence, passesSMGate } from './gates';
+import { isAnchorInScanBounds, passesAllGates, passesBoundaryGate, passesCoverageFence } from './gates';
 import { runRules, type ScanContext } from './rules';
+
+function distM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function metricsAtAnchor(
+  candidate: QuestionCandidate,
+  anchor: QuestionCandidate['anchor'],
+  scanCtx: ScanContext,
+): QuestionCandidate['metrics'] {
+  const bufferM = candidate.metrics.bufferM;
+  const coverage = scanCtx.localCoverageAtAnchor?.(anchor.lat, anchor.lon, bufferM) ?? null;
+  const findsNearCount = scanCtx.finds.filter(find =>
+    find.lat != null && find.lon != null &&
+    distM(anchor.lat, anchor.lon, find.lat, find.lon) < bufferM
+  ).length;
+  return {
+    bufferM,
+    ...(coverage != null && Number.isFinite(coverage) ? { localCoveragePct: coverage } : {}),
+    findsNearCount,
+  };
+}
 
 function safePermissionAnchors(candidate: QuestionCandidate, gateCtx: GateContext): QuestionCandidate['anchor'][] {
   const ring = gateCtx.boundary?.coordinates?.[0];
@@ -47,40 +75,11 @@ export function generateCandidates(
     const anchors = [candidate.anchor, ...(candidate.alternativeAnchors ?? [])];
     const safeAnchor = anchors.find(anchor => passesAllGates({ ...candidate, anchor }, gateCtx));
     const { alternativeAnchors: _alternatives, ...persistableCandidate } = candidate;
-    if (safeAnchor) return [{ ...persistableCandidate, anchor: safeAnchor }];
-
-    // These questions describe permission-wide records rather than a target at
-    // one coordinate. If the representative centre is protected, retain the
-    // insight at a safe point inside the permission and keep location actions off.
-    const permissionWideContext = (
-      candidate.ruleId === 'PUBLIC_RECORD_CONTEXT' || candidate.ruleId === 'COVERAGE_GAP'
-    ) && candidate.locationActionAllowed === false;
-    if (permissionWideContext) {
-      const fallbackAnchor = [candidate.anchor, ...safePermissionAnchors(candidate, gateCtx)]
-        .find(anchor =>
-          isAnchorInsideBoundary(anchor, gateCtx.boundary) &&
-          isAnchorInScanBounds(anchor, gateCtx.scanBounds) &&
-          passesSMGate(gateCtx.smStatus, gateCtx.isAnchorProtected?.(anchor) ?? false) &&
-          passesCoverageFence(gateCtx.smCoverageAvailable)
-        );
-      if (fallbackAnchor) return [{ ...persistableCandidate, anchor: fallbackAnchor }];
-    }
-
-    // This is a non-location safety question, not a detecting target. It may be
-    // retained when its representative anchor is protected, provided the anchor
-    // is still inside the permission and current scan and SM coverage succeeded.
-    const protectedAreaExclusion = candidate.ruleId === 'PROTECTED_AREA_EXCLUSION' &&
-      candidate.locationActionAllowed === false &&
-      gateCtx.smStatus === 'green' &&
-      passesCoverageFence(gateCtx.smCoverageAvailable);
-    if (protectedAreaExclusion) {
-      const contextualAnchor = [candidate.anchor, ...safePermissionAnchors(candidate, gateCtx)]
-        .find(anchor =>
-          isAnchorInsideBoundary(anchor, gateCtx.boundary) &&
-          isAnchorInScanBounds(anchor, gateCtx.scanBounds)
-        );
-      if (contextualAnchor) return [{ ...persistableCandidate, anchor: contextualAnchor }];
-    }
+    if (safeAnchor) return [{
+      ...persistableCandidate,
+      anchor: safeAnchor,
+      metrics: metricsAtAnchor(candidate, safeAnchor, scanCtx),
+    }];
 
     // A Roman-road insight can still be useful when the alignment is protected,
     // but it must not link the user to the protected evidence location. Only use
@@ -103,6 +102,7 @@ export function generateCandidates(
     return [{
       ...persistableCandidate,
       anchor: fallbackAnchor,
+      metrics: metricsAtAnchor(candidate, fallbackAnchor, scanCtx),
       status: 'NEEDS_EVIDENCE' as const,
       locationActionAllowed: false,
       description: `${candidate.description} Part of this context overlaps protected archaeology; the scheduled monument must remain excluded from detecting.`,

@@ -68,10 +68,15 @@ export function PermissionPulseCard({
 
   // Header: "SINCE YOUR LAST VISIT" if any session-derived facts exist,
   // else "THIS PERMISSION" (e.g. obligation on a session-less permission).
-  const hasSessionFacts = facts.some(
-    (f) =>
-      f.severity === "delta" || f.severity === "ambient"
-  );
+  const sessionTemplateIds = new Set([
+    "coverage_context",
+    "last_visit",
+    "crop_change_stubble",
+    "crop_change_crop",
+    "last_visit_finds",
+    "seasonal_pattern",
+  ]);
+  const hasSessionFacts = facts.some((fact) => sessionTemplateIds.has(fact.templateId));
   const header = hasSessionFacts ? "SINCE YOUR LAST VISIT" : "THIS PERMISSION";
 
   function handleTap(fact: PulseFact) {

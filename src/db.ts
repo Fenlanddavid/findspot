@@ -1,6 +1,6 @@
 import Dexie, { Table } from "dexie";
 import { v4 as uuid } from "uuid";
-import type { OutstandingQuestion } from "./outstandingQuestions/types";
+import type { OutstandingQuestion, QuestionNote } from "./outstandingQuestions/types";
 
 export type GeoJSONPolygon = {
   type: "Polygon";
@@ -79,6 +79,22 @@ export type Permission = {
 
   // Last Historic FieldGuide scan that evaluated this permission for questions.
   questionsEvaluatedAt?: string;
+
+  // Protection banner — fail-safe scheduled monument status (Phase A).
+  // absent = unknown (G2: absence never reads as clear).
+  protectionStatus?: {
+    state: 'present' | 'clear' | 'unknown';
+    evaluatedAt: string;        // ISO — updated on every evaluation
+    monumentCount?: number;     // populated when state is 'present'
+  };
+
+  // PAS density context — permission-level summary of public records.
+  pasContext?: {
+    count: number;
+    topPeriods: string[];       // max 3
+    topTypes: string[];         // max 3
+    evaluatedAt: string;
+  };
 
   // Club Day — organiser side
   sharedPermissionId?: string;   // Merge anchor; set when "Create Club Day Pack" is used
@@ -464,7 +480,7 @@ export type LandscapeInterpretationRecord = {
 // Deterministic archaeological enquiries derived from FieldGuide scan output.
 // Separate table — not stored on Permission; included in user backup/restore.
 
-export type { OutstandingQuestion } from "./outstandingQuestions/types";
+export type { OutstandingQuestion, QuestionNote } from "./outstandingQuestions/types";
 
 // ─── Undug Signals ────────────────────────────────────────────────────────────
 // One-tap logging of detector signals the user chose not to dig.
@@ -516,6 +532,7 @@ export class FindSpotDB extends Dexie {
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
   outstandingQuestions!: Table<OutstandingQuestion, string>;
+  questionNotes!: Table<QuestionNote, string>;
 
   constructor() {
     super("findspot_uk");
@@ -755,6 +772,42 @@ export class FindSpotDB extends Dexie {
     this.version(34).stores({
       outstandingQuestions: 'id, permissionId, ruleId, status',
     });
+
+    // v35: retire PROTECTED_AREA_EXCLUSION, COVERAGE_GAP, PUBLIC_RECORD_CONTEXT
+    // question rules. Their information now lives on the Permission row
+    // (protectionStatus, pasContext) and PermissionPulse context lines.
+    // Delete any persisted question rows with retired ruleIds — they are
+    // derived data, regenerable, and no user notes exist yet.
+    this.version(35).upgrade(async tx => {
+      const RETIRED_RULE_IDS = new Set([
+        'PROTECTED_AREA_EXCLUSION',
+        'COVERAGE_GAP',
+        'PUBLIC_RECORD_CONTEXT',
+      ]);
+      const questions = tx.table('outstandingQuestions');
+      const all = await questions.toArray();
+      const retiredIds = all
+        .filter((q: any) => RETIRED_RULE_IDS.has(q.ruleId))
+        .map((q: any) => q.id);
+      if (retiredIds.length > 0) {
+        await questions.bulkDelete(retiredIds);
+      }
+    });
+
+    // v36: question notes table (Phase B — Dialogue).
+    // User and system notes attached to investigations by questionId.
+    // Additive — no user data migration.
+    this.version(36).stores({
+      questionNotes: 'id, questionId, createdAt',
+    });
+
+    // v37: Phase C investigation state fields on outstandingQuestions.
+    // No indexes change; Dexie persists additive object fields automatically.
+    this.version(37).stores({});
+
+    // v38: Phase E transition history and supersede ancestry metadata.
+    // Existing indexes already cover questionNotes and outstandingQuestions.
+    this.version(38).stores({});
   }
 }
 

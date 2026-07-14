@@ -30,6 +30,7 @@ import {
     buildPack, deletePack, getPackMeta, isPackStale,
     estimatePack, PackMeta, BuildProgress,
 } from "../services/offlinePack";
+import { deleteQuestionsWithNotes } from "../outstandingQuestions/questionNotes";
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
@@ -398,7 +399,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.outstandingQuestions], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.outstandingQuestions, db.questionNotes], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
@@ -407,7 +408,13 @@ export default function PermissionPage(props: {
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
-        await db.outstandingQuestions.where("permissionId").equals(id).delete();
+        // Deleting the permission is an explicit full cascade. User-note
+        // preservation applies to generated-question migrations, not to a
+        // user deleting the parent permission and all of its records.
+        const questionIds = (await db.outstandingQuestions.where("permissionId").equals(id).toArray()).map(q => q.id);
+        if (questionIds.length) {
+          await deleteQuestionsWithNotes(questionIds, { preserveUserNotes: false });
+        }
         await db.permissions.delete(id);
       });
       nav("/");
@@ -450,7 +457,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages, db.outstandingQuestions], async () => {
+      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages, db.outstandingQuestions, db.questionNotes], async () => {
         if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
         if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
         await db.media.where("permissionId").equals(id).delete();
@@ -459,7 +466,11 @@ export default function PermissionPage(props: {
         if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
         await db.sessions.where("permissionId").equals(id).delete();
         await db.fields.where("permissionId").equals(id).delete();
-        await db.outstandingQuestions.where("permissionId").equals(id).delete();
+        // Full parent-record cascade; see the organiser path above.
+        const questionIds = (await db.outstandingQuestions.where("permissionId").equals(id).toArray()).map(q => q.id);
+        if (questionIds.length) {
+          await deleteQuestionsWithNotes(questionIds, { preserveUserNotes: false });
+        }
         await db.permissions.delete(id);
         // Remove the join record so the member can re-scan the QR if needed
         if (perm?.sharedPermissionId) {

@@ -97,6 +97,14 @@ export function diffQuestions(
       supportingEvidence: candidate.supportingEvidence,
       contradictingEvidence: candidate.contradictingEvidence,
       locationActionAllowed: candidate.locationActionAllowed,
+      hypothesisId: candidate.hypothesisId,
+      // The matched anchor may drift within 100m, so latest metrics follow the
+      // candidate while initialMetrics remains tied to the original baseline.
+      metrics: candidate.metrics,
+      // A pre-C row has no initial baseline. Its last persisted metrics are the
+      // best available starting point; otherwise stamp the current candidate.
+      initialMetrics: ex.initialMetrics ?? ex.metrics ?? candidate.metrics,
+      contextGeometry: candidate.contextGeometry,
       consecutiveMisses: 0,
       // Preserve id, createdAt, permissionId, ruleId, category
       resolvedReason: undefined,
@@ -122,6 +130,10 @@ export function diffQuestions(
       supportingEvidence: candidate.supportingEvidence,
       contradictingEvidence: candidate.contradictingEvidence,
       locationActionAllowed: candidate.locationActionAllowed,
+      hypothesisId: candidate.hypothesisId,
+      metrics: candidate.metrics,
+      initialMetrics: candidate.metrics,
+      contextGeometry: candidate.contextGeometry,
       consecutiveMisses: 0,
     });
   }
@@ -159,7 +171,7 @@ export function diffQuestions(
 
   // 5. Dedupe: if two candidates fire on overlapping evidence (≥ 2 shared labels),
   // keep higher confidence and resolve any active question it supersedes.
-  const deduped = deduplicateCandidates(updatedQuestions);
+  const { kept: deduped, supersededBy } = deduplicateCandidates(updatedQuestions);
   const dedupedIds = new Set(deduped.map(q => q.id));
   const superseded = updatedQuestions
     .filter(q => !dedupedIds.has(q.id))
@@ -169,6 +181,7 @@ export function diffQuestions(
       resolvedReason: 'superseded' as const,
       resolvedAt: now,
       updatedAt: now,
+      supersededByIds: supersededBy.get(q.id) ? [supersededBy.get(q.id)!] : undefined,
     }));
 
   // 6. Apply cap — rank by confidence, evict excess
@@ -185,9 +198,13 @@ export function diffQuestions(
 
 // ─── Deduplication ──────────────────────────────────────────────────────────
 
-function deduplicateCandidates(questions: OutstandingQuestion[]): OutstandingQuestion[] {
+function deduplicateCandidates(questions: OutstandingQuestion[]): {
+  kept: OutstandingQuestion[];
+  supersededBy: Map<string, string>;
+} {
   const result: OutstandingQuestion[] = [];
   const evictedIds = new Set<string>();
+  const supersededBy = new Map<string, string>();
 
   // Sort by confidence desc for greedy selection
   const sorted = [...questions].sort((a, b) => b.confidence - a.confidence);
@@ -206,6 +223,7 @@ function deduplicateCandidates(questions: OutstandingQuestion[]): OutstandingQue
       }
       if (shared >= DEDUPE_SHARED_LABELS && kept.ruleId !== q.ruleId) {
         isDuplicate = true;
+        supersededBy.set(q.id, kept.id);
         break;
       }
     }
@@ -217,7 +235,7 @@ function deduplicateCandidates(questions: OutstandingQuestion[]): OutstandingQue
     }
   }
 
-  return result;
+  return { kept: result, supersededBy };
 }
 
 // ─── Cap enforcement ────────────────────────────────────────────────────────
