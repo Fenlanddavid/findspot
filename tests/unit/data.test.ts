@@ -1,9 +1,9 @@
 // ─── Backup integrity tests ───────────────────────────────────────────────────
 // Tests validateBackupData with valid and invalid inputs.
 // Tests that the JSON structure exportData produces is accepted by validateBackupData.
+// Tests zip-format backup validation (v5+).
 //
-// Full DB round-trip (exportData → importData) requires IndexedDB and is
-// documented as a follow-up requiring fake-indexeddb setup.
+// A mocked DB binary zip round-trip is covered in outstandingQuestionsBackup.test.ts.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -35,6 +35,12 @@ function makeValidBackup(overrides: Record<string, unknown> = {}) {
     importedPackages: [{ id: 'pkg-1' }],
     savedPoints:      [{ id: 'sp-1', projectId: 'proj-1', label: 'NE corner', lat: 52.5, lon: -1.5, zoom: 16, note: '', createdAt: '2024-01-01' }],
     undugSignals:     [{ id: 'us-1', createdAt: 1_700_000_000_000, lat: 51.5, lng: -1.2, status: 'open' }],
+    findHotspotSignals: [{
+      signalKey: 'perm-1:gcpuuz', permissionId: 'perm-1', geohash6: 'gcpuuz',
+      findCount: 1, findIds: ['find-1'], periodCounts: { Roman: 1 },
+      lastFindAt: '2024-01-01', lastHotspotClassification: 'Settlement Edge Candidate',
+      lastHotspotScore: 70, updatedAt: 1_700_000_000_000,
+    }],
     outstandingQuestions: [{
       id: 'oq-1', permissionId: 'perm-1', ruleId: 'MOVEMENT_NO_FINDS',
       anchor: { lat: 52.5, lon: -1.5 }, title: 'Question', description: 'Description',
@@ -72,6 +78,7 @@ describe('validateBackupData — accepts valid backups', () => {
     expect(Array.isArray(result.settings)).toBe(true);
     expect(Array.isArray(result.importedPackages)).toBe(true);
     expect(Array.isArray(result.savedPoints)).toBe(true);
+    expect(Array.isArray(result.findHotspotSignals)).toBe(true);
     expect(Array.isArray(result.outstandingQuestions)).toBe(true);
     expect(Array.isArray(result.questionNotes)).toBe(true);
   });
@@ -91,6 +98,7 @@ describe('validateBackupData — accepts valid backups', () => {
       settings: undefined,
       importedPackages: undefined,
       savedPoints: undefined,
+      findHotspotSignals: undefined,
       outstandingQuestions: undefined,
       questionNotes: undefined,
     });
@@ -421,13 +429,27 @@ describe('validateBackupData — undugSignals', () => {
   });
 });
 
+describe('validateBackupData — findHotspotSignals', () => {
+  it('accepts a pre-v29 backup without hotspot history', () => {
+    const backup = makeValidBackup({ findHotspotSignals: undefined });
+    expect(validateBackupData(backup).findHotspotSignals).toEqual([]);
+  });
+
+  it('rejects malformed matched find IDs', () => {
+    const signal = makeValidBackup().findHotspotSignals[0];
+    expect(() => validateBackupData(makeValidBackup({
+      findHotspotSignals: [{ ...signal, findIds: ['find-1', ''] }],
+    }))).toThrow(/findIds/i);
+  });
+});
+
 // ─── Table coverage guard ─────────────────────────────────────────────────────
 // Fails when a new user-authored table is added to db.ts but not exported.
 // If this test fails: add the table to exportData/BackupData/validateBackupData
 // in src/services/data.ts (and check importData's transaction table list).
 //
 // Tables intentionally excluded (regenerable caches — not user data):
-//   fieldGuideCache, geologyContext, findHotspotSignals,
+//   fieldGuideCache, geologyContext,
 //   landscapeInterpretations, diagnosticLog
 
 describe('table coverage guard', () => {
@@ -444,6 +466,7 @@ describe('table coverage guard', () => {
     'importedPackages',
     'savedPoints',
     'undugSignals',
+    'findHotspotSignals',
     'outstandingQuestions',
   ] as const;
 
@@ -461,5 +484,69 @@ describe('table coverage guard', () => {
     expect(result.projects.length).toBeGreaterThan(0);
     expect(result.savedPoints.length).toBeGreaterThan(0);
     expect(result.outstandingQuestions.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Zip-format (v5) backup validation ──────────────────────────────────────
+
+function makeZipBackup(overrides: Record<string, unknown> = {}) {
+  const base = makeValidBackup(overrides);
+  // Convert media from legacy blob format to zip _zipEntry format
+  base.media = base.media.map((m: any) => {
+    const { blob: _blob, ...rest } = m;
+    return { ...rest, _zipEntry: `media/${m.id}.jpg` };
+  });
+  return base;
+}
+
+describe('validateBackupData — zip mode (v5)', () => {
+  it('accepts a valid zip-format backup with _zipEntry media', () => {
+    const backup = makeZipBackup();
+    expect(() => validateBackupData(backup, { zipMode: true })).not.toThrow();
+  });
+
+  it('returns media with _zipEntry intact for zip format', () => {
+    const backup = makeZipBackup();
+    const result = validateBackupData(backup, { zipMode: true });
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0]._zipEntry).toBe('media/media-1.jpg');
+  });
+
+  it('accepts a zip backup with empty media (data-only)', () => {
+    const backup = makeZipBackup({ media: [] });
+    expect(() => validateBackupData(backup, { zipMode: true })).not.toThrow();
+  });
+
+  it('rejects zip media with missing _zipEntry', () => {
+    const backup = makeZipBackup();
+    delete backup.media[0]._zipEntry;
+    expect(() => validateBackupData(backup, { zipMode: true })).toThrow(/_zipEntry/);
+  });
+
+  it('rejects zip media with _zipEntry not under media/', () => {
+    const backup = makeZipBackup();
+    backup.media[0]._zipEntry = 'other/media-1.jpg';
+    expect(() => validateBackupData(backup, { zipMode: true })).toThrow(/_zipEntry/);
+  });
+
+  it('still validates referential integrity in zip mode', () => {
+    const backup = makeZipBackup();
+    backup.media[0].findId = 'GHOST-FIND';
+    expect(() => validateBackupData(backup, { zipMode: true })).toThrow(/media/i);
+  });
+});
+
+// ─── Backward compatibility: legacy JSON still accepted ─────────────────────
+
+describe('validateBackupData — legacy JSON backward compatibility', () => {
+  it('accepts v4 backup with data: URI blobs (no zipMode)', () => {
+    const backup = makeValidBackup();
+    expect(() => validateBackupData(backup)).not.toThrow();
+    expect(validateBackupData(backup).media[0].blob).toMatch(/^data:/);
+  });
+
+  it('rejects zip-format media when zipMode is not set', () => {
+    const backup = makeZipBackup();
+    expect(() => validateBackupData(backup)).toThrow(/blob/i);
   });
 });

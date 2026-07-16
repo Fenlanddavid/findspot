@@ -5,6 +5,7 @@ import {
   REPORT_PROTECTION_NOTICE,
   TERMS_OF_USE_VERSION,
 } from "../utils/legalCopy";
+import { Zip, ZipDeflate, ZipPassThrough, unzipSync, strToU8, strFromU8 } from "fflate";
 
 export async function markExternalBackupSaved() {
   const now = new Date().toISOString();
@@ -13,45 +14,52 @@ export async function markExternalBackupSaved() {
 }
 
 // Threshold above which a media-included export triggers a UI size warning.
-export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB (base64-inflated estimate)
+// Stored photo formats are already compressed, so the raw blob total is also a
+// useful approximation of the resulting pass-through zip size.
+export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB raw blob total
 
 export async function estimateMediaSizeBytes(): Promise<{ count: number; bytes: number }> {
   const media = await db.media.toArray();
-  // Sum raw blob sizes. Base64 encoding adds ~37% overhead; caller multiplies if needed.
+  // Sum raw blob sizes — no base64 inflation with zip format.
   const bytes = media.reduce((sum, m) => sum + (m.blob instanceof Blob ? m.blob.size : 0), 0);
   return { count: media.length, bytes };
 }
 
-export async function exportData(options: { includeMedia?: boolean } = {}): Promise<string> {
-  // Default is data-only to avoid OOM on mobile when photo libraries are large.
-  // Pass { includeMedia: true } explicitly to include photos.
-  const includeMedia = options.includeMedia === true;
+/** File extension for a media record (falls back to bin for unknown MIME). */
+function mediaExt(mime: string | undefined): string {
+  if (!mime) return "bin";
+  const sub = mime.split("/")[1]?.split(";")[0]?.toLowerCase();
+  if (sub === "jpeg") return "jpg";
+  if (sub && /^[a-z0-9]{1,8}$/.test(sub)) return sub;
+  return "bin";
+}
 
-  const projects = await db.projects.toArray();
-  const permissions = await db.permissions.toArray();
-  const sessions = await db.sessions.toArray();
-  const finds = await db.finds.toArray();
-  const tracks = await db.tracks.toArray();
-  const settings = await db.settings.toArray();
-  const importedPackages = await db.importedPackages.toArray();
-  const fields = await db.fields.toArray();
-  const significantFinds = await db.significantFinds.toArray();
-  const savedPoints = await db.savedPoints.toArray();
-  const undugSignals = await db.undugSignals.toArray();
-  const outstandingQuestions = await db.outstandingQuestions.toArray();
-  const questionNotes = await db.questionNotes.toArray();
+// ─── Export ──────────────────────────────────────────────────────────────────
 
-  let mediaExport: any[] = [];
-  if (includeMedia) {
-    const media = await db.media.toArray();
-    mediaExport = await Promise.all(media.map(async (m) => ({
-      ...m,
-      blob: await blobToBase64(m.blob)
-    })));
-  }
+async function collectManifestData() {
+  const [
+    projects, permissions, sessions, finds, tracks, settings,
+    importedPackages, fields, significantFinds, savedPoints,
+    undugSignals, findHotspotSignals, outstandingQuestions, questionNotes,
+  ] = await Promise.all([
+    db.projects.toArray(),
+    db.permissions.toArray(),
+    db.sessions.toArray(),
+    db.finds.toArray(),
+    db.tracks.toArray(),
+    db.settings.toArray(),
+    db.importedPackages.toArray(),
+    db.fields.toArray(),
+    db.significantFinds.toArray(),
+    db.savedPoints.toArray(),
+    db.undugSignals.toArray(),
+    db.findHotspotSignals.toArray(),
+    db.outstandingQuestions.toArray(),
+    db.questionNotes.toArray(),
+  ]);
 
-  const data = {
-    version: 4,
+  return {
+    version: 5,
     exportedAt: new Date().toISOString(),
     generatedBy: "FindSpot",
     termsVersion: TERMS_OF_USE_VERSION,
@@ -64,16 +72,96 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
     finds,
     significantFinds,
     tracks,
-    media: mediaExport,
+    media: [] as any[],      // placeholder — media stored as separate zip entries
     settings,
     importedPackages,
     savedPoints,
     undugSignals,
+    findHotspotSignals,
     outstandingQuestions,
     questionNotes,
   };
+}
 
-  return JSON.stringify(data, null, 2);
+/**
+ * Export data as a Blob.
+ *
+ * - `{ includeMedia: false }` (default): returns a JSON blob (same as legacy v4).
+ * - `{ includeMedia: true }`: returns a zip containing `manifest.json` plus
+ *   each media blob stored as raw binary under `media/{id}.{ext}`. The archive
+ *   is emitted incrementally, retaining the output plus at most one raw media
+ *   item instead of retaining a second copy of the entire library.
+ */
+export async function exportData(options: { includeMedia?: boolean } = {}): Promise<Blob> {
+  const includeMedia = options.includeMedia === true;
+  const manifest = await collectManifestData();
+
+  if (!includeMedia) {
+    // Data-only: plain JSON, same shape as before (but version 5).
+    return new Blob([JSON.stringify(manifest)], { type: "application/json" });
+  }
+
+  // ── Full backup: streamed zip ──────────────────────────────────────────
+
+  // Media metadata (everything except the blob) is written to the manifest
+  // after each binary entry has been emitted.
+  const outputParts: Blob[] = [];
+  const mediaMeta: any[] = [];
+  let resolveArchive!: (blob: Blob) => void;
+  let rejectArchive!: (reason: unknown) => void;
+  let settled = false;
+  const archiveReady = new Promise<Blob>((resolve, reject) => {
+    resolveArchive = resolve;
+    rejectArchive = reject;
+  });
+  const zip = new Zip((error, chunk, final) => {
+    if (settled) return;
+    if (error) {
+      settled = true;
+      rejectArchive(error);
+      return;
+    }
+    // Move completed chunks into Blob-backed storage promptly rather than
+    // retaining the whole archive as JavaScript Uint8Arrays.
+    outputParts.push(new Blob([new Uint8Array(chunk)]));
+    if (final) {
+      settled = true;
+      resolveArchive(new Blob(outputParts, { type: "application/zip" }));
+    }
+  });
+
+  try {
+    // Fetch keys first, then read and emit one media row at a time. Dexie's
+    // Collection.each() does not await async callbacks and must not be used here.
+    const mediaIds = await db.media.toCollection().primaryKeys();
+    for (const id of mediaIds) {
+      const m = await db.media.get(id);
+      if (!m) continue;
+      const filename = `media/${encodeURIComponent(String(m.id))}.${mediaExt(m.mime)}`;
+      const { blob: _blob, ...meta } = m as any;
+      mediaMeta.push({ ...meta, _zipEntry: filename });
+
+      // Photos are already compressed in practice; pass-through avoids a large
+      // synchronous recompression and emits each entry immediately.
+      const entry = new ZipPassThrough(filename);
+      zip.add(entry);
+      entry.push(new Uint8Array(await m.blob.arrayBuffer()), true);
+    }
+
+    manifest.media = mediaMeta;
+    const manifestEntry = new ZipDeflate("manifest.json", { level: 1 });
+    zip.add(manifestEntry);
+    manifestEntry.push(strToU8(JSON.stringify(manifest)), true);
+    zip.end();
+  } catch (error) {
+    zip.terminate();
+    if (!settled) {
+      settled = true;
+      rejectArchive(error);
+    }
+  }
+
+  return archiveReady;
 }
 
 export async function exportToCSV(): Promise<string> {
@@ -134,6 +222,7 @@ type BackupData = {
   importedPackages: any[];
   savedPoints: any[];
   undugSignals: any[];
+  findHotspotSignals: any[];
   outstandingQuestions: any[];
   questionNotes: any[];
 };
@@ -297,7 +386,7 @@ function assertOutstandingQuestion(question: any, index: number) {
   }
 }
 
-export function validateBackupData(data: any): BackupData {
+export function validateBackupData(data: any, options?: { zipMode?: boolean }): BackupData {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid backup file: expected an object.");
   }
@@ -315,6 +404,7 @@ export function validateBackupData(data: any): BackupData {
     importedPackages: requireArray(data, "importedPackages"),
     savedPoints: requireArray(data, "savedPoints"),
     undugSignals: requireArray(data, "undugSignals"),
+    findHotspotSignals: requireArray(data, "findHotspotSignals"),
     outstandingQuestions: requireArray(data, "outstandingQuestions"),
     questionNotes: requireArray(data, "questionNotes"),
   };
@@ -390,8 +480,16 @@ export function validateBackupData(data: any): BackupData {
   });
 
   backup.media.forEach((media, index) => {
-    if (typeof media.blob !== "string" || !media.blob.startsWith("data:")) {
-      throw new Error(`Invalid format: media[${index}] has an invalid blob`);
+    if (options?.zipMode) {
+      // Zip format: media has _zipEntry string pointing to zip entry, no blob field.
+      if (typeof media._zipEntry !== "string" || !media._zipEntry.startsWith("media/")) {
+        throw new Error(`Invalid format: media[${index}] has an invalid _zipEntry`);
+      }
+    } else {
+      // Legacy JSON: blob must be a data: URI.
+      if (typeof media.blob !== "string" || !media.blob.startsWith("data:")) {
+        throw new Error(`Invalid format: media[${index}] has an invalid blob`);
+      }
     }
     if (media.findId && !findIds.has(media.findId) && !significantFindIds.has(media.findId)) {
       throw new Error(`Invalid format: media[${index}] references an unknown find or significant find`);
@@ -410,6 +508,19 @@ export function validateBackupData(data: any): BackupData {
   backup.savedPoints.forEach((sp, index) => {
     if (!projectIds.has(sp.projectId)) {
       throw new Error(`Invalid format: savedPoints[${index}] references an unknown project`);
+    }
+  });
+
+  backup.findHotspotSignals.forEach((signal, index) => {
+    const invalid = (field: string) => new Error(`Invalid format: findHotspotSignals[${index}] has an invalid ${field}`);
+    if (!signal || typeof signal !== "object") throw invalid("row");
+    if (typeof signal.signalKey !== "string" || !signal.signalKey.trim()) throw invalid("signalKey");
+    if (typeof signal.permissionId !== "string" || !signal.permissionId.trim()) throw invalid("permissionId");
+    if (typeof signal.geohash6 !== "string" || !signal.geohash6.trim()) throw invalid("geohash6");
+    if (!Number.isInteger(signal.findCount) || signal.findCount < 0) throw invalid("findCount");
+    if (signal.findIds !== undefined &&
+        (!Array.isArray(signal.findIds) || signal.findIds.some((id: unknown) => typeof id !== "string" || !id.trim()))) {
+      throw invalid("findIds");
     }
   });
 
@@ -444,27 +555,114 @@ export function validateBackupData(data: any): BackupData {
   return backup;
 }
 
-export async function importData(json: string) {
+// ─── Format detection ────────────────────────────────────────────────────────
+// Zip files start with PK (0x50 0x4b). Legacy JSON starts with { or whitespace.
+
+function isZipBuffer(buf: ArrayBuffer): boolean {
+  if (buf.byteLength < 2) return false;
+  const header = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  return header[0] === 0x50 && header[1] === 0x4b; // PK
+}
+
+function extractZipEntry(zipBytes: Uint8Array, entryName: string): Uint8Array | undefined {
+  const entries = unzipSync(zipBytes, { filter: file => file.name === entryName });
+  return entries[entryName];
+}
+
+function listZipEntries(zipBytes: Uint8Array): Set<string> {
+  const names = new Set<string>();
+  unzipSync(zipBytes, {
+    filter: file => {
+      names.add(file.name);
+      return false;
+    },
+  });
+  return names;
+}
+
+/**
+ * Import a backup from either:
+ *  - A legacy JSON string (v4 and earlier)
+ *  - A zip ArrayBuffer (v5+)
+ *
+ * Accepts `string | ArrayBuffer` so the caller can pass whichever the file
+ * yields. Format is auto-detected; both feed into the same validated restore
+ * transaction.
+ */
+export async function importData(input: string | ArrayBuffer) {
   let data: any;
-  try {
-    data = JSON.parse(json);
-  } catch {
-    throw new Error("Invalid backup file: could not parse JSON.");
+  let zipBytes: Uint8Array | null = null;
+
+  if (typeof input === "string") {
+    // Legacy JSON path
+    try {
+      data = JSON.parse(input);
+    } catch {
+      throw new Error("Invalid backup file: could not parse JSON.");
+    }
+  } else if (input instanceof ArrayBuffer) {
+    if (isZipBuffer(input)) {
+      // Zip path
+      zipBytes = new Uint8Array(input);
+      let manifestBytes: Uint8Array | undefined;
+      try {
+        manifestBytes = extractZipEntry(zipBytes, "manifest.json");
+      } catch {
+        throw new Error("Invalid backup file: could not read zip archive.");
+      }
+      if (!manifestBytes) {
+        throw new Error("Invalid backup zip: missing manifest.json.");
+      }
+      try {
+        data = JSON.parse(strFromU8(manifestBytes));
+      } catch {
+        throw new Error("Invalid backup zip: could not parse manifest.json.");
+      }
+    } else {
+      // ArrayBuffer containing JSON (user selected a .json but we read as ArrayBuffer)
+      try {
+        data = JSON.parse(new TextDecoder().decode(input));
+      } catch {
+        throw new Error("Invalid backup file: could not parse JSON.");
+      }
+    }
+  } else {
+    throw new Error("Invalid backup file: unexpected input type.");
   }
 
-  const backup = validateBackupData(data);
+  const backup = validateBackupData(data, { zipMode: !!zipBytes });
 
-  // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
-  // IndexedDB operation and awaiting it inside a transaction causes IDB to
-  // auto-commit, silently dropping everything written afterwards.
-  const mediaItems: Media[] = backup.media.length
-    ? await Promise.all(backup.media.map(async (m: any) => ({
-        ...m,
-        blob: await base64ToBlob(m.blob)
-      })))
-    : [];
+  if (zipBytes) {
+    let entryNames: Set<string>;
+    try {
+      entryNames = listZipEntries(zipBytes);
+    } catch {
+      throw new Error("Invalid backup file: could not read zip archive.");
+    }
+    for (const media of backup.media) {
+      if (!entryNames.has(media._zipEntry)) {
+        throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
+      }
+    }
+  }
 
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.outstandingQuestions, db.questionNotes], async () => {
+  // ── Reconstruct media blobs ────────────────────────────────────────────
+  let mediaItems: Media[] = [];
+
+  if (!zipBytes) {
+    // Legacy JSON path: base64 data URIs
+    // Convert BEFORE opening the transaction — fetch() is not an IndexedDB
+    // operation and awaiting it inside a transaction causes IDB to auto-commit,
+    // silently dropping everything written afterwards.
+    mediaItems = backup.media.length
+      ? await Promise.all(backup.media.map(async (m: any) => ({
+          ...m,
+          blob: await base64ToBlob(m.blob)
+        })))
+      : [];
+  }
+
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.findHotspotSignals, db.outstandingQuestions, db.questionNotes], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -480,6 +678,7 @@ export async function importData(json: string) {
     await db.importedPackages.clear();
     await db.savedPoints.clear();
     await db.undugSignals.clear();
+    await db.findHotspotSignals.clear();
     await db.outstandingQuestions.clear();
     await db.questionNotes.clear();
 
@@ -492,9 +691,24 @@ export async function importData(json: string) {
     if (backup.tracks.length) await db.tracks.bulkPut(backup.tracks);
     if (backup.settings.length) await db.settings.bulkPut(backup.settings);
     if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
-    if (mediaItems.length) await db.media.bulkPut(mediaItems as Media[]);
+    if (zipBytes) {
+      // Extract and persist one item at a time so restore does not retain a
+      // second uncompressed copy of the entire photo library.
+      for (const item of backup.media) {
+        const bytes = extractZipEntry(zipBytes, item._zipEntry);
+        if (!bytes) throw new Error(`Invalid backup zip: missing media entry ${item._zipEntry}`);
+        const { _zipEntry, ...rest } = item;
+        await db.media.put({
+          ...rest,
+          blob: new Blob([new Uint8Array(bytes)], { type: rest.mime || "application/octet-stream" }),
+        } as Media);
+      }
+    } else if (mediaItems.length) {
+      await db.media.bulkPut(mediaItems as Media[]);
+    }
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
     if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
+    if (backup.findHotspotSignals.length) await db.findHotspotSignals.bulkPut(backup.findHotspotSignals);
     const activeQuestions = backup.outstandingQuestions.filter(
       (q: any) => !RETIRED_QUESTION_RULE_IDS.has(q.ruleId)
     );

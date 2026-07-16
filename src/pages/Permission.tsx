@@ -22,6 +22,7 @@ import PermissionProofModal from "../components/PermissionProofModal";
 import { PermissionActivityColumn } from "../components/PermissionActivityColumn";
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
 import { OutstandingQuestionsCard } from "../components/OutstandingQuestionsCard";
+import { ScanAccuracyCard } from "../components/ScanAccuracyCard";
 import { RallyPersonaChip } from "../components/RallyPersonaChip";
 import { rallyPersona } from "../utils/rallyPersona";
 import { useConfirmDialog } from "../components/ConfirmModal";
@@ -1642,6 +1643,12 @@ export default function PermissionPage(props: {
                         )}
                     </div>
                 </div>
+            )}
+
+            {isEdit && id && (
+              <div className="lg:col-span-3">
+                <ScanAccuracyCard permissionId={id} />
+              </div>
             )}
 
             {isEdit && id && (

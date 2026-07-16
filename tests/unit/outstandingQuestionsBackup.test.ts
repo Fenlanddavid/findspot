@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { strFromU8, unzipSync } from 'fflate';
 
 type Row = Record<string, any>;
 
@@ -7,6 +8,17 @@ const { tables, db } = vi.hoisted(() => {
     let rows = initial;
     return {
       toArray: vi.fn(async () => structuredClone(rows)),
+      toCollection: vi.fn(() => ({
+        primaryKeys: vi.fn(async () => rows.map(row => row.id ?? row.signalKey ?? row.key)),
+      })),
+      get: vi.fn(async (key: string) => structuredClone(rows.find(row => (row.id ?? row.signalKey ?? row.key) === key))),
+      put: vi.fn(async (item: Row) => {
+        const key = item.id ?? item.signalKey ?? item.key;
+        const index = rows.findIndex(row => (row.id ?? row.signalKey ?? row.key) === key);
+        if (index >= 0) rows[index] = structuredClone(item);
+        else rows.push(structuredClone(item));
+        return key;
+      }),
       clear: vi.fn(async () => { rows = []; }),
       bulkPut: vi.fn(async (items: Row[]) => { rows = structuredClone(items); }),
       _set(items: Row[]) { rows = structuredClone(items); },
@@ -18,7 +30,8 @@ const { tables, db } = vi.hoisted(() => {
     projects: table(), permissions: table(), fields: table(), sessions: table(),
     finds: table(), significantFinds: table(), media: table(), tracks: table(),
     settings: table(), importedPackages: table(), savedPoints: table(),
-    undugSignals: table(), outstandingQuestions: table(), questionNotes: table(),
+    undugSignals: table(), findHotspotSignals: table(),
+    outstandingQuestions: table(), questionNotes: table(),
   };
   return {
     tables,
@@ -94,7 +107,8 @@ describe('outstanding questions backup round-trip', () => {
   });
 
   it('exports and restores permission context, question state, dismissals and notes', async () => {
-    const json = await exportData();
+    const blob = await exportData();
+    const json = await blob.text();
     const exported = JSON.parse(json);
     expect(exported.outstandingQuestions).toEqual(tables.outstandingQuestions._get());
     expect(exported.questionNotes).toEqual(tables.questionNotes._get());
@@ -113,7 +127,8 @@ describe('outstanding questions backup round-trip', () => {
   });
 
   it('accepts an old export but filters retired rule rows before insertion', async () => {
-    const exported = JSON.parse(await exportData());
+    const blob = await exportData();
+    const exported = JSON.parse(await blob.text());
     exported.questionNotes = [];
     exported.outstandingQuestions.push({
       ...exported.outstandingQuestions[0],
@@ -129,5 +144,41 @@ describe('outstanding questions backup round-trip', () => {
     expect(tables.outstandingQuestions.bulkPut).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'question-1', ruleId: 'MOVEMENT_NO_FINDS' }),
     ]);
+  });
+
+  it('round-trips binary media and hotspot accuracy history through a full zip backup', async () => {
+    const mediaBytes = new Uint8Array([0, 1, 2, 127, 255]);
+    tables.media._set([{
+      id: 'media-1', projectId: 'project-1', permissionId: 'permission-1',
+      type: 'photo', filename: 'field.jpg', mime: 'image/jpeg',
+      blob: new Blob([mediaBytes], { type: 'image/jpeg' }), caption: '',
+      scalePresent: false, createdAt: '2026-07-16T12:00:00.000Z',
+    }]);
+    tables.findHotspotSignals._set([{
+      signalKey: 'permission-1:gcpuuz', permissionId: 'permission-1', geohash6: 'gcpuuz',
+      findCount: 1, findIds: ['find-1'], periodCounts: { Roman: 1 },
+      lastFindAt: '2026-07-16T12:00:00.000Z',
+      lastHotspotClassification: 'Settlement Edge Candidate', lastHotspotScore: 72,
+      updatedAt: 1_768_476_000_000,
+    }]);
+
+    const backup = await exportData({ includeMedia: true });
+    const entries = unzipSync(new Uint8Array(await backup.arrayBuffer()));
+    const manifest = JSON.parse(strFromU8(entries['manifest.json']));
+    expect(manifest.media).toEqual([
+      expect.objectContaining({ id: 'media-1', _zipEntry: 'media/media-1.jpg' }),
+    ]);
+    expect(Array.from(entries['media/media-1.jpg'])).toEqual(Array.from(mediaBytes));
+    expect(manifest.findHotspotSignals).toEqual(tables.findHotspotSignals._get());
+
+    tables.media._set([]);
+    tables.findHotspotSignals._set([]);
+    await importData(await backup.arrayBuffer());
+
+    const [restoredMedia] = tables.media._get();
+    expect(restoredMedia.blob).toBeInstanceOf(Blob);
+    expect(Array.from(new Uint8Array(await restoredMedia.blob.arrayBuffer()))).toEqual(Array.from(mediaBytes));
+    expect(restoredMedia.mime).toBe('image/jpeg');
+    expect(tables.findHotspotSignals._get()).toEqual(manifest.findHotspotSignals);
   });
 });

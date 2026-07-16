@@ -157,6 +157,7 @@ export async function recordFindHotspotSignals(
             for (const [permissionId, permissionFinds] of groupFindsByPermission(matched)) {
                 const signalKey = `${permissionId}:${geohash6}`;
                 const newPeriodCounts = periodCountsFrom(permissionFinds);
+                const matchedFindIds = permissionFinds.map(find => find.id);
                 const latestFind = permissionFinds.reduce((a, b) =>
                     (a.createdAt > b.createdAt ? a : b)
                 );
@@ -176,12 +177,17 @@ export async function recordFindHotspotSignals(
                             periodCounts:              newPeriodCounts,
                             lastHotspotClassification: hotspot.classification,
                             lastHotspotScore:          hotspot.score,
+                            findIds:                   matchedFindIds,
                             updatedAt:                 now,
                         });
                     } else {
                         // Older than 24h: add only finds newer than lastFindAt
                         const newFinds = permissionFinds.filter(f => f.createdAt > existing.lastFindAt);
                         const addedPeriodCounts = periodCountsFrom(newFinds);
+                        const findIds = Array.from(new Set([
+                            ...(existing.findIds ?? []),
+                            ...matchedFindIds,
+                        ]));
                         await db.findHotspotSignals.put({
                             signalKey,
                             geohash6,
@@ -189,10 +195,11 @@ export async function recordFindHotspotSignals(
                             lastFindAt:                latestFind.createdAt > existing.lastFindAt
                                                          ? latestFind.createdAt
                                                          : existing.lastFindAt,
-                            findCount:                 existing.findCount + newFinds.length,
+                            findCount:                 findIds.length,
                             periodCounts:              mergePeriodCounts(existing.periodCounts, addedPeriodCounts),
                             lastHotspotClassification: hotspot.classification,
                             lastHotspotScore:          hotspot.score,
+                            findIds,
                             updatedAt:                 now,
                         });
                     }
@@ -206,6 +213,7 @@ export async function recordFindHotspotSignals(
                         periodCounts:              newPeriodCounts,
                         lastHotspotClassification: hotspot.classification,
                         lastHotspotScore:          hotspot.score,
+                        findIds:                   matchedFindIds,
                         updatedAt:                 now,
                     });
                 }

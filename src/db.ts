@@ -408,6 +408,7 @@ export type FindHotspotSignal = {
     periodCounts:               Record<string, number>; // e.g. { "Roman": 3, "Medieval": 1 }
     lastHotspotClassification:  string;              // Classification of the matched hotspot
     lastHotspotScore:           number;              // Score of matched hotspot at time of recording
+    findIds?:                   string[];             // Matched find IDs; deduplicates overlapping hotspots
     updatedAt:                  number;              // Unix ms — for TTL sweep
 };
 

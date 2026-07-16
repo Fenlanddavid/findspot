@@ -16,6 +16,7 @@ import {
   MEDIA_EXPORT_WARN_BYTES,
 } from "../services/data";
 import { exportDiagLog } from "../services/diagLog";
+import { strFromU8, unzipSync } from "fflate";
 import { db } from "../db";
 import {
   FIELDGUIDE_PROPRIETARY_NOTICE,
@@ -59,8 +60,7 @@ function countBackupRows(value: unknown) {
   return Array.isArray(value) ? value.length : 0;
 }
 
-function previewBackup(json: string): RestorePreview {
-  const parsed = JSON.parse(json) as Record<string, unknown>;
+function previewBackupFromParsed(parsed: Record<string, unknown>): RestorePreview {
   return {
     exportedAt: typeof parsed.exportedAt === "string" ? parsed.exportedAt : undefined,
     projects: countBackupRows(parsed.projects),
@@ -72,6 +72,21 @@ function previewBackup(json: string): RestorePreview {
     media: countBackupRows(parsed.media),
     tracks: countBackupRows(parsed.tracks),
   };
+}
+
+function previewBackup(buf: ArrayBuffer): RestorePreview {
+  const header = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  if (header[0] === 0x50 && header[1] === 0x4b) {
+    // Zip — extract manifest.json for preview
+    const entries = unzipSync(new Uint8Array(buf), {
+      filter: file => file.name === "manifest.json",
+    });
+    const manifestBytes = entries["manifest.json"];
+    if (!manifestBytes) throw new Error("Invalid backup zip: missing manifest.json.");
+    return previewBackupFromParsed(JSON.parse(strFromU8(manifestBytes)));
+  }
+  // Legacy JSON
+  return previewBackupFromParsed(JSON.parse(new TextDecoder().decode(buf)));
 }
 
 async function getCurrentDataCounts(): Promise<RestoreCounts> {
@@ -335,8 +350,8 @@ export default function Settings() {
     setExporting(true);
     try {
       // Data-only by default — photos excluded to avoid OOM on mobile.
-      const json = await exportData({ includeMedia: false });
-      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      const blob = await exportData({ includeMedia: false });
+      triggerDownload(blob, `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
       const savedAt = await markExternalBackupSaved();
       setLastBackup(savedAt);
     } catch (e) {
@@ -348,7 +363,7 @@ export default function Settings() {
 
   function requestExportWithMedia() {
     // If estimated export size exceeds threshold, require explicit confirmation.
-    const estimatedBytes = (mediaSizeBytes ?? 0) * 1.37; // base64 overhead
+    const estimatedBytes = mediaSizeBytes ?? 0;
     if (estimatedBytes > MEDIA_EXPORT_WARN_BYTES) {
       setMediaWarnPending(true);
     } else {
@@ -360,8 +375,8 @@ export default function Settings() {
     setMediaWarnPending(false);
     setExportingWithMedia(true);
     try {
-      const json = await exportData({ includeMedia: true });
-      triggerDownload(new Blob([json], { type: "application/json" }), `findspot-full-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      const blob = await exportData({ includeMedia: true });
+      triggerDownload(blob, `findspot-full-backup-${new Date().toISOString().slice(0, 10)}.zip`);
       const savedAt = await markExternalBackupSaved();
       setLastBackup(savedAt);
     } catch (e) {
@@ -406,7 +421,7 @@ export default function Settings() {
     e.target.value = "";
     getCurrentDataCounts().then(setCurrentDataCounts).catch(() => setCurrentDataCounts(null));
     try {
-      setRestorePreview(previewBackup(await file.text()));
+      setRestorePreview(previewBackup(await file.arrayBuffer()));
     } catch {
       setRestorePreviewError("Preview unavailable. FindSpot will still validate the backup before replacing any data.");
     }
@@ -419,8 +434,8 @@ export default function Settings() {
     setDataError(null);
     setImporting(true);
     try {
-      const text = await file.text();
-      await importData(text);
+      const buf = await file.arrayBuffer();
+      await importData(buf);
       setImportPendingFile(null);
       setRestorePreview(null);
       setRestorePreviewError(null);
@@ -624,7 +639,7 @@ export default function Settings() {
           </button>
           <label className={`flex items-center justify-center rounded-xl border border-gray-200 bg-white py-3 text-xs font-black uppercase tracking-widest text-gray-700 shadow-sm transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
             {importing ? "Restoring…" : "Restore"}
-            {!importing && <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />}
+            {!importing && <input type="file" accept=".json,.zip" onChange={handleImportFile} className="hidden" />}
           </label>
           <button
             onClick={handleCSVExport}
