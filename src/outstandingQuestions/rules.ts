@@ -146,6 +146,11 @@ export function corridorContextGeometry(
   }
 }
 
+/**
+ * Build a display axis through the hotspot's longest bounding-box dimension.
+ * This is synthetic geometry, not a mapped route or feature: sectional stats
+ * derived from it describe positions along the hotspot extent only.
+ */
 function hotspotCorridorGeometry(hotspot: Hotspot): [number, number][] {
   const [[west, south], [east, north]] = hotspot.bounds;
   const [lon, lat] = hotspot.center;
@@ -426,7 +431,7 @@ const ruleRomanRouteActivity: RuleFn = (ctx) => {
     evidence.splice(1, 0, snap(`Public PAS records in the surrounding density cell: ${pasRecordCount}`, ctx.scanId));
   }
   if (coveragePct != null) {
-    evidence.push(snap(`Recorded coverage within 250m: ${Math.round(coveragePct)}%`, ctx.scanId));
+    evidence.push(snap(`Recorded coverage within ${bufferM}m: ${Math.round(coveragePct)}%`, ctx.scanId));
   }
 
   const anchor = { lat, lon };

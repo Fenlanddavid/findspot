@@ -125,7 +125,7 @@ export function generateCandidates(
     return [{
       ...persistableCandidate,
       anchor: fallbackAnchor,
-      metrics: metricsAtAnchor(candidate, fallbackAnchor, scanCtx),
+      metrics: { bufferM: candidate.metrics.bufferM, findsNearCount: 0 },
       status: 'NEEDS_EVIDENCE' as const,
       locationActionAllowed: false,
       description: `${candidate.description} Part of this context overlaps protected archaeology; the scheduled monument must remain excluded from detecting.`,

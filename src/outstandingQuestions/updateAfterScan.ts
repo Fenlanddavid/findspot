@@ -159,7 +159,7 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
       // B1: SM source unavailable — preserve previous state, never write clear.
       // evaluatedAt still updates to record "we checked, source was unavailable".
     } else if (protectedAreaPresent) {
-      // B2: Intersection found on a green scan — sticky present.
+      // B2: Intersection found on a green scan — present until a fully-contained green scan shows otherwise.
       protectionState = 'present';
       monumentCount = scheduledMonuments.features.filter(f => {
         if (!f.geometry || !boundary) return false;

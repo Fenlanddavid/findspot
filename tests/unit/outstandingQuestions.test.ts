@@ -231,6 +231,31 @@ describe('Rules — positive fixtures', () => {
     expect(question!.alternativeAnchors).toBeUndefined();
   });
 
+  it('keeps protected Roman fallback metrics non-actionable at the synthetic safe anchor', () => {
+    const candidates = generateCandidates(
+      baseScanCtx({
+        historicRoutes: [makeRoute({ type: 'roman_road', source: 'itinere' })],
+        pasRecordCountInScanCell: 18,
+        localCoverageAtAnchor: () => 73,
+      }),
+      {
+        boundary: testBoundary,
+        smStatus: 'green',
+        smCoverageAvailable: true,
+        scanBounds: { west: -0.51, south: 52.49, east: -0.49, north: 52.51 },
+        isAnchorProtected: anchor => Math.abs(anchor.lat - 52.5) < 0.0001,
+      },
+    );
+
+    const question = candidates.find(candidate => candidate.ruleId === 'ROMAN_ROUTE_ACTIVITY');
+    expect(question).toMatchObject({
+      locationActionAllowed: false,
+      status: 'NEEDS_EVIDENCE',
+      metrics: { bufferM: 250, findsNearCount: 0 },
+    });
+    expect(question!.metrics.localCoveragePct).toBeUndefined();
+  });
+
   it('keeps a Roman road within 2km as non-actionable surrounding context', () => {
     const nearbyRoad = makeRoute({
       type: 'roman_road',
