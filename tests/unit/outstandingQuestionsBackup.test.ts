@@ -162,8 +162,16 @@ describe('outstanding questions backup round-trip', () => {
       updatedAt: 1_768_476_000_000,
     }]);
 
-    const backup = await exportData({ includeMedia: true });
-    const entries = unzipSync(new Uint8Array(await backup.arrayBuffer()));
+    const progress = vi.fn();
+    const backup = await exportData({ includeMedia: true, onProgress: progress });
+    const backupBytes = new Uint8Array(await backup.arrayBuffer());
+    // The first local-file header must be manifest.json, allowing previews of
+    // very large photo archives without scanning through their media payloads.
+    const filenameLength = new DataView(backupBytes.buffer).getUint16(26, true);
+    expect(strFromU8(backupBytes.slice(30, 30 + filenameLength))).toBe('manifest.json');
+    expect(progress).toHaveBeenLastCalledWith({ processedMedia: 1, totalMedia: 1, percent: 100 });
+
+    const entries = unzipSync(backupBytes);
     const manifest = JSON.parse(strFromU8(entries['manifest.json']));
     expect(manifest.media).toEqual([
       expect.objectContaining({ id: 'media-1', _zipEntry: 'media/media-1.jpg' }),

@@ -1,6 +1,12 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+
+const pasDensityRevision = createHash('sha256')
+  .update(readFileSync(new URL('./public/pas-density-gb.json', import.meta.url)))
+  .digest('hex')
 
 export default defineConfig({
   base: '/findspot/',
@@ -38,9 +44,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,geojson}'],
         // Explicitly precache the PAS density index (not covered by glob above
         // which excludes .json to avoid caching clubs.json / events.json).
-        // revision: null means the SW re-fetches when the file content changes.
+        // Content-hash the fixed URL so Workbox replaces it when data changes.
         additionalManifestEntries: [
-          { url: '/findspot/pas-density-gb.json', revision: null },
+          { url: '/findspot/pas-density-gb.json', revision: pasDensityRevision },
         ],
         // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
         // so the app works fully offline after installation.

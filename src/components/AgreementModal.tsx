@@ -90,7 +90,7 @@ export function AgreementModal(props: {
   const [savedAgreement, setSavedAgreement] = useState<SavedAgreement | null>(null);
   const [clubRallyEditorOpen, setClubRallyEditorOpen] = useState(false);
   const clubRallyOrganiserName = isClubRallyAgreement
-    ? (props.permission.collector || "")
+    ? (props.permission.collector || props.permission.landownerName || "")
     : props.permission.collector || "";
   const [clubRallyDetails, setClubRallyDetails] = useState<ClubRallyDetails>({
     landownerName: isClubRallyAgreement ? "" : props.permission.landownerName || "",

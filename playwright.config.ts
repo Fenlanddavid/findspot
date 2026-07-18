@@ -4,6 +4,11 @@ export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
   timeout: 30_000,
+  forbidOnly: !!process.env.CI,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: process.env.CI
+    ? [["dot"], ["html", { open: "never" }]]
+    : "list",
   expect: {
     timeout: 5_000,
   },
@@ -29,4 +34,12 @@ export default defineConfig({
       },
     },
   ],
+  webServer: process.env.FINDSPOT_BASE_URL
+    ? undefined
+    : {
+        command: "npm run dev -- --host 127.0.0.1 --port 5174",
+        url: "http://127.0.0.1:5174/findspot/",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

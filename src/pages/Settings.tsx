@@ -14,9 +14,10 @@ import {
   markExternalBackupSaved,
   estimateMediaSizeBytes,
   MEDIA_EXPORT_WARN_BYTES,
+  readBackupManifest,
+  type BackupImportProgress,
 } from "../services/data";
 import { exportDiagLog } from "../services/diagLog";
-import { strFromU8, unzipSync } from "fflate";
 import { db } from "../db";
 import {
   FIELDGUIDE_PROPRIETARY_NOTICE,
@@ -74,19 +75,8 @@ function previewBackupFromParsed(parsed: Record<string, unknown>): RestorePrevie
   };
 }
 
-function previewBackup(buf: ArrayBuffer): RestorePreview {
-  const header = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
-  if (header[0] === 0x50 && header[1] === 0x4b) {
-    // Zip — extract manifest.json for preview
-    const entries = unzipSync(new Uint8Array(buf), {
-      filter: file => file.name === "manifest.json",
-    });
-    const manifestBytes = entries["manifest.json"];
-    if (!manifestBytes) throw new Error("Invalid backup zip: missing manifest.json.");
-    return previewBackupFromParsed(JSON.parse(strFromU8(manifestBytes)));
-  }
-  // Legacy JSON
-  return previewBackupFromParsed(JSON.parse(new TextDecoder().decode(buf)));
+async function previewBackup(file: File): Promise<RestorePreview> {
+  return previewBackupFromParsed(await readBackupManifest(file));
 }
 
 async function getCurrentDataCounts(): Promise<RestoreCounts> {
@@ -176,8 +166,10 @@ export default function Settings() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportingWithMedia, setExportingWithMedia] = useState(false);
+  const [fullBackupProgress, setFullBackupProgress] = useState<number | null>(null);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [restoreProgress, setRestoreProgress] = useState<BackupImportProgress | null>(null);
   const [mediaPhotoCount, setMediaPhotoCount] = useState<number | null>(null);
   const [mediaSizeBytes, setMediaSizeBytes] = useState<number | null>(null);
   const [mediaWarnPending, setMediaWarnPending] = useState(false);
@@ -374,8 +366,12 @@ export default function Settings() {
   async function doExportWithMedia() {
     setMediaWarnPending(false);
     setExportingWithMedia(true);
+    setFullBackupProgress(0);
     try {
-      const blob = await exportData({ includeMedia: true });
+      const blob = await exportData({
+        includeMedia: true,
+        onProgress: progress => setFullBackupProgress(progress.percent),
+      });
       triggerDownload(blob, `findspot-full-backup-${new Date().toISOString().slice(0, 10)}.zip`);
       const savedAt = await markExternalBackupSaved();
       setLastBackup(savedAt);
@@ -383,6 +379,7 @@ export default function Settings() {
       setDataError("Full backup failed: " + e);
     } finally {
       setExportingWithMedia(false);
+      setFullBackupProgress(null);
     }
   }
 
@@ -413,17 +410,20 @@ export default function Settings() {
   async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
+    setDataError(null);
     setImportPendingFile(file);
     setRestorePreview(null);
     setRestorePreviewError(null);
     setCurrentDataCounts(null);
     setRestoreConfirmText("");
-    e.target.value = "";
+    setRestoreProgress(null);
     getCurrentDataCounts().then(setCurrentDataCounts).catch(() => setCurrentDataCounts(null));
     try {
-      setRestorePreview(previewBackup(await file.arrayBuffer()));
-    } catch {
-      setRestorePreviewError("Preview unavailable. FindSpot will still validate the backup before replacing any data.");
+      setRestorePreview(await previewBackup(file));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "The backup could not be read.";
+      setRestorePreviewError(`${reason} FindSpot will validate the backup again before replacing any data.`);
     }
   }
 
@@ -433,14 +433,15 @@ export default function Settings() {
     const file = importPendingFile;
     setDataError(null);
     setImporting(true);
+    setRestoreProgress(null);
     try {
-      const buf = await file.arrayBuffer();
-      await importData(buf);
+      await importData(file, { onProgress: setRestoreProgress });
       setImportPendingFile(null);
       setRestorePreview(null);
       setRestorePreviewError(null);
       setCurrentDataCounts(null);
       setRestoreConfirmText("");
+      setRestoreProgress(null);
       window.location.assign(new URL("./", window.location.href).toString());
     } catch (e) {
       setDataError("Import failed: " + e);
@@ -549,7 +550,7 @@ export default function Settings() {
           <div className="min-w-0">
             <span><strong>Restore "{importPendingFile.name}"?</strong> This restore will replace current FindSpot data on this device.</span>
             <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/75">
-              Treat this like replacing an archive: finds, significant finds, permissions, sessions, tracks and media currently on this device will be cleared before the backup is loaded.
+              FindSpot validates and stages the complete backup first. Current finds, photos and permissions are replaced only when the new archive is ready; a failed restore leaves them untouched.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
@@ -600,10 +601,21 @@ export default function Settings() {
                 spellCheck={false}
               />
             </label>
+            {importing && restoreProgress && (
+              <div className="mt-4" aria-live="polite">
+                <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-200">
+                  <span>{restoreProgress.phase === "reading" ? "Reading and staging backup" : restoreProgress.phase === "validating" ? "Validating backup" : "Replacing local archive"}</span>
+                  <span>{restoreProgress.percent}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-amber-200 dark:bg-amber-900">
+                  <div className="h-full bg-amber-700 transition-[width] duration-200 dark:bg-amber-400" style={{ width: `${restoreProgress.percent}%` }} />
+                </div>
+              </div>
+            )}
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={confirmImport} disabled={importing || !restoreCanConfirm} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? "Importing..." : "Confirm Import"}</button>
-            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); setCurrentDataCounts(null); setRestoreConfirmText(""); }} className="text-amber-800 dark:text-amber-300 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
+            <button onClick={confirmImport} disabled={importing || !restoreCanConfirm} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? `Restoring${restoreProgress ? ` ${restoreProgress.percent}%` : ""}…` : "Confirm Import"}</button>
+            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); setCurrentDataCounts(null); setRestoreConfirmText(""); setRestoreProgress(null); }} className="text-amber-800 dark:text-amber-300 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
       )}
@@ -612,12 +624,12 @@ export default function Settings() {
         <div className="mb-4 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/20 p-4 text-sm text-amber-900 dark:text-amber-200">
           <p className="font-black mb-1">Large backup — confirm before proceeding</p>
           <p className="mb-3 text-amber-800/80 dark:text-amber-300/80">
-            Estimated export size is {mediaSizeBytes !== null ? `~${Math.round((mediaSizeBytes * 1.37) / (1024 * 1024))} MB` : "large"}.
-            On older devices this may be slow or run out of memory.
+            Estimated export size is {mediaSizeBytes !== null ? `~${Math.round(mediaSizeBytes / (1024 * 1024))} MB` : "large"}.
+            Large photo libraries may take several minutes and need matching free device storage. Keep FindSpot open until the download starts.
           </p>
           <div className="flex gap-2">
             <button onClick={doExportWithMedia} disabled={exportingWithMedia} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">
-              {exportingWithMedia ? "Saving…" : "Proceed with full backup"}
+              {exportingWithMedia ? `Saving${fullBackupProgress !== null ? ` ${fullBackupProgress}%` : ""}…` : "Proceed with full backup"}
             </button>
             <button onClick={() => setMediaWarnPending(false)} className="text-amber-800 dark:text-amber-300 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
@@ -667,7 +679,7 @@ export default function Settings() {
             disabled={exportingWithMedia || mediaWarnPending}
             className="shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest px-3 py-2 rounded-lg hover:border-emerald-400 disabled:opacity-60 transition-colors"
           >
-            {exportingWithMedia ? "Saving…" : "Backup + Photos"}
+            {exportingWithMedia ? `Saving ${fullBackupProgress ?? 0}%…` : "Backup + Photos"}
           </button>
         )}
       </div>

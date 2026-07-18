@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import { strToU8, zipSync } from "fflate";
 
 function encodePack(pack: object): string {
   return Buffer.from(JSON.stringify(pack), "utf8")
@@ -51,6 +52,7 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page.getByText("Your saved finds")).toBeVisible();
 
   await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "App" }).click();
   await expect(page.getByText("Privacy Guarantee")).toBeVisible();
   await expect(page.getByText("Saved finds, permissions")).toBeVisible();
 
@@ -101,20 +103,28 @@ test("organiser rally setup continues to share link generation", async ({ page }
   await expect(page.getByText(/\/findspot\/join\?pack=/)).toBeVisible();
 });
 
-test("saved organiser rally opens to the organiser hub before link generation", async ({ page }) => {
+test("saved solo rally becomes an organiser hub after link generation", async ({ page }) => {
   await page.goto("./permission?type=rally");
   await page.getByLabel("Rally / Event Name").fill("Smoke Hub Rally");
   await page.getByLabel("Organiser / Contact Name").fill("Smoke Rally Club");
   await page.getByRole("button", { name: "Save Rally" }).click();
   await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
 
+  await expect(page.getByRole("region", { name: "Organiser Hub" })).toHaveCount(0);
+  await page.getByRole("button", { name: /Create a join pack/ }).click();
+  const shareDialog = page.getByRole("dialog");
+  await shareDialog.getByLabel("Landowner details, agreements and private notes will not be shared with members.").check();
+  await shareDialog.getByRole("button", { name: "Generate Share Link" }).click();
+  await expect(page.getByText("Share Join Link")).toBeVisible();
+  await shareDialog.locator("button").first().click();
+
   const hub = page.getByRole("region", { name: "Organiser Hub" });
   await expect(hub).toBeVisible();
-  await expect(hub).toContainText("Setup needed");
+  await expect(hub).toContainText("Join link ready");
   await expect(hub).toContainText("Day Summary");
-  await expect(hub).toContainText("Once members send exports back, the finds summary appears here in the hub.");
-  await expect(hub.getByRole("button", { name: "Generate Join Link" })).toBeVisible();
-  await expect(hub.getByRole("button", { name: "Generate Link First" })).toBeVisible();
+  await expect(hub).toContainText("Import member data to build the finds summary");
+  await expect(hub.getByRole("button", { name: "Share join link" })).toBeVisible();
+  await expect(hub.getByRole("button", { name: "Import member data" })).toBeVisible();
 
   await hub.getByRole("button", { name: "Club/Rally Agreement" }).click();
   const agreement = page.getByRole("dialog", { name: "Club/Rally Agreement" });
@@ -311,7 +321,7 @@ test("settings can export and restore a backup", async ({ page }) => {
   await expect(page.getByText("Backup saved").first()).toBeVisible();
 
   const csvDownloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export CSV" }).click();
+  await page.getByRole("button", { name: "CSV", exact: true }).click();
   const csvDownload = await csvDownloadPromise;
   const csvPath = await csvDownload.path();
   expect(csvPath).toBeTruthy();
@@ -347,7 +357,7 @@ test("settings can export and restore a backup", async ({ page }) => {
     importedPackages: [],
   };
 
-  await page.locator('input[type="file"][accept=".json"]').setInputFiles({
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
     name: "restore.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(restore)),
@@ -360,6 +370,104 @@ test("settings can export and restore a backup", async ({ page }) => {
   ]);
   await dismissNonBlockingPrompts(page);
   await expect(page.getByRole("button", { name: "Restored Meadow" })).toBeVisible();
+});
+
+test("settings streams a full zip restore and preserves live data when staging fails", async ({ page }) => {
+  await createPermission(page, "Data That Must Survive");
+  const now = new Date().toISOString();
+  const manifest = {
+    version: 5,
+    exportedAt: now,
+    projects: [{ id: "zip-project", name: "Zip Project", region: "England", createdAt: now }],
+    permissions: [{
+      id: "zip-permission", projectId: "zip-project", name: "Restored Full Archive",
+      type: "individual", collector: "", landType: "pasture", permissionGranted: true,
+      lat: null, lon: null, gpsAccuracyM: null, notes: "", createdAt: now, updatedAt: now,
+    }],
+    fields: [],
+    sessions: [],
+    finds: [{
+      id: "zip-find", projectId: "zip-project", permissionId: "zip-permission",
+      sessionId: null, fieldId: null, findCode: "ZIP-1", objectType: "Coin", createdAt: now,
+    }],
+    significantFinds: [],
+    tracks: [],
+    media: [{
+      id: "zip-media", projectId: "zip-project", findId: "zip-find", type: "photo",
+      filename: "proof.bin", mime: "application/octet-stream", caption: "", scalePresent: false,
+      createdAt: now, _zipEntry: "media/zip-media.bin",
+    }],
+    settings: [],
+    importedPackages: [],
+    savedPoints: [],
+    undugSignals: [],
+    findHotspotSignals: [],
+    outstandingQuestions: [],
+    questionNotes: [],
+  };
+  // Cross the 4 MB staging-chunk boundary so this exercises incremental media
+  // persistence rather than a single in-memory Blob.
+  const mediaBytes = new Uint8Array(5 * 1024 * 1024 + 17);
+  for (let index = 0; index < mediaBytes.length; index += 1) mediaBytes[index] = index % 251;
+  const expectedChecksum = mediaBytes.reduce((sum, value) => (sum + value) % 65_521, 0);
+  // Media-first matches the older full-backup layout; new exports are
+  // manifest-first, but existing user archives must remain restorable.
+  const validZip = zipSync({
+    "media/zip-media.bin": mediaBytes,
+    "manifest.json": strToU8(JSON.stringify(manifest)),
+  });
+
+  await page.goto("./settings");
+  await page.locator('input[type="file"][accept*=".zip"]').setInputFiles({
+    name: "full-restore.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(validZip),
+  });
+  await expect(page.getByText(/Restore "full-restore\.zip"\?/)).toBeVisible();
+  await page.getByLabel(/Type RESTORE/).fill("RESTORE");
+  await Promise.all([
+    page.waitForURL(/\/$/),
+    page.getByRole("button", { name: "Confirm Import" }).click(),
+  ]);
+  await dismissNonBlockingPrompts(page);
+  await expect(page.getByRole("button", { name: "Restored Full Archive" })).toBeVisible();
+  const restoredMedia = await page.evaluate(() => new Promise<{ size: number; checksum: number }>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const mediaRequest = request.result.transaction("media", "readonly").objectStore("media").get("zip-media");
+      mediaRequest.onerror = () => reject(mediaRequest.error);
+      mediaRequest.onsuccess = async () => {
+        const bytes = new Uint8Array(await mediaRequest.result.blob.arrayBuffer());
+        let checksum = 0;
+        for (const value of bytes) checksum = (checksum + value) % 65_521;
+        resolve({ size: bytes.byteLength, checksum });
+      };
+    };
+  }));
+  expect(restoredMedia).toEqual({ size: mediaBytes.byteLength, checksum: expectedChecksum });
+
+  // The manifest is valid but its media payload is absent. Staging must fail
+  // before the live replacement transaction, leaving the restored archive intact.
+  const missingMediaZip = zipSync({ "manifest.json": strToU8(JSON.stringify(manifest)) });
+  await page.goto("./settings");
+  await page.locator('input[type="file"][accept*=".zip"]').setInputFiles({
+    name: "missing-media.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(missingMediaZip),
+  });
+  await page.getByLabel(/Type RESTORE/).fill("RESTORE");
+  await page.getByRole("button", { name: "Confirm Import" }).click();
+  await expect(page.getByText(/missing media entry media\/zip-media\.bin/)).toBeVisible();
+  const permissions = await readIndexedDbStore(page, "permissions") as any[];
+  expect(permissions.some(row => row.name === "Restored Full Archive")).toBe(true);
+  const stagingDatabases = await page.evaluate(async () => {
+    if (!indexedDB.databases) return [];
+    return (await indexedDB.databases())
+      .map(database => database.name ?? "")
+      .filter(name => name.startsWith("findspot_restore_staging_"));
+  });
+  expect(stagingDatabases).toEqual([]);
 });
 
 test("Club Day join links can import an embedded pack with a mapped field", async ({ page }) => {

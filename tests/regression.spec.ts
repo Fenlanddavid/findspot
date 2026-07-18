@@ -270,7 +270,7 @@ async function putPendingFindWithMedia(page: Page, projectId: string, permission
 
 async function importSettingsBackup(page: Page, filename: string, data: object) {
   await page.goto("./settings");
-  await page.locator('input[type="file"][accept=".json"]').setInputFiles({
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
     name: filename,
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(data)),
@@ -531,7 +531,7 @@ test("invalid backup import is rejected without wiping existing local data", asy
   };
 
   await page.goto("./settings");
-  await page.locator('input[type="file"][accept=".json"]').setInputFiles({
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
     name: "invalid-restore.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(invalidBackup)),

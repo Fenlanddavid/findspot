@@ -1,3 +1,4 @@
+import Dexie, { type Table } from "dexie";
 import { db, Media, Field, ImportedPackage, SignificantFind } from "../db";
 import { v4 as uuid } from "uuid";
 import {
@@ -5,7 +6,7 @@ import {
   REPORT_PROTECTION_NOTICE,
   TERMS_OF_USE_VERSION,
 } from "../utils/legalCopy";
-import { Zip, ZipDeflate, ZipPassThrough, unzipSync, strToU8, strFromU8 } from "fflate";
+import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, unzipSync, strToU8, strFromU8 } from "fflate";
 
 export async function markExternalBackupSaved() {
   const now = new Date().toISOString();
@@ -18,11 +19,30 @@ export async function markExternalBackupSaved() {
 // useful approximation of the resulting pass-through zip size.
 export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB raw blob total
 
+// Full backups may contain user photos, but imports still need firm limits so a
+// malformed JSON file or zip bomb cannot exhaust the browser's memory. These
+// caps are deliberately above the export warning threshold to keep ordinary
+// photo archives restorable while rejecting unreasonable inputs early.
+// In-memory callers retain a ceiling because a compressed zip bomb has already
+// consumed a contiguous ArrayBuffer. The Settings UI passes File objects and
+// uses the streaming path below, so legitimate photo archives are not subject
+// to a whole-backup size cap.
+export const MAX_BACKUP_IN_MEMORY_BYTES = 512 * 1024 * 1024;
+export const MAX_BACKUP_MANIFEST_BYTES = 50 * 1024 * 1024;
+export const MAX_BACKUP_MEDIA_ENTRY_BYTES = 1024 * 1024 * 1024;
+export const MAX_BACKUP_UNCOMPRESSED_BYTES = 768 * 1024 * 1024;
+export const MAX_BACKUP_RECORDS = 100_000;
+export const MAX_BACKUP_ZIP_ENTRIES = MAX_BACKUP_RECORDS + 1; // media rows plus manifest.json
+
 export async function estimateMediaSizeBytes(): Promise<{ count: number; bytes: number }> {
-  const media = await db.media.toArray();
-  // Sum raw blob sizes — no base64 inflation with zip format.
-  const bytes = media.reduce((sum, m) => sum + (m.blob instanceof Blob ? m.blob.size : 0), 0);
-  return { count: media.length, bytes };
+  let count = 0;
+  let bytes = 0;
+  // Walk records without retaining a year of Blob handles in an array.
+  await db.media.each(m => {
+    count += 1;
+    if (m.blob instanceof Blob) bytes += m.blob.size;
+  });
+  return { count, bytes };
 }
 
 /** File extension for a media record (falls back to bin for unknown MIME). */
@@ -92,7 +112,16 @@ async function collectManifestData() {
  *   is emitted incrementally, retaining the output plus at most one raw media
  *   item instead of retaining a second copy of the entire library.
  */
-export async function exportData(options: { includeMedia?: boolean } = {}): Promise<Blob> {
+export type BackupExportProgress = {
+  processedMedia: number;
+  totalMedia: number;
+  percent: number;
+};
+
+export async function exportData(options: {
+  includeMedia?: boolean;
+  onProgress?: (progress: BackupExportProgress) => void;
+} = {}): Promise<Blob> {
   const includeMedia = options.includeMedia === true;
   const manifest = await collectManifestData();
 
@@ -131,27 +160,56 @@ export async function exportData(options: { includeMedia?: boolean } = {}): Prom
   });
 
   try {
-    // Fetch keys first, then read and emit one media row at a time. Dexie's
+    // Fetch keys first, then read one media row at a time. Dexie's
     // Collection.each() does not await async callbacks and must not be used here.
     const mediaIds = await db.media.toCollection().primaryKeys();
+
+    // Put the manifest first so a future restore can preview and validate a
+    // multi-gigabyte archive without reading through every photo. This metadata
+    // pass never calls blob.arrayBuffer(), so photo bytes remain out of JS heap.
     for (const id of mediaIds) {
       const m = await db.media.get(id);
-      if (!m) continue;
+      if (!m) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
+      if (m.blob.size > MAX_BACKUP_MEDIA_ENTRY_BYTES) {
+        throw new Error(`${m.filename || "A media file"} exceeds the supported 1 GB per-file backup limit.`);
+      }
       const filename = `media/${encodeURIComponent(String(m.id))}.${mediaExt(m.mime)}`;
       const { blob: _blob, ...meta } = m as any;
       mediaMeta.push({ ...meta, _zipEntry: filename });
-
-      // Photos are already compressed in practice; pass-through avoids a large
-      // synchronous recompression and emits each entry immediately.
-      const entry = new ZipPassThrough(filename);
-      zip.add(entry);
-      entry.push(new Uint8Array(await m.blob.arrayBuffer()), true);
     }
 
     manifest.media = mediaMeta;
     const manifestEntry = new ZipDeflate("manifest.json", { level: 1 });
     zip.add(manifestEntry);
     manifestEntry.push(strToU8(JSON.stringify(manifest)), true);
+
+    options.onProgress?.({ processedMedia: 0, totalMedia: mediaIds.length, percent: mediaIds.length ? 0 : 100 });
+    let processedMedia = 0;
+    for (const id of mediaIds) {
+      const m = await db.media.get(id);
+      if (!m) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
+      const filename = `media/${encodeURIComponent(String(m.id))}.${mediaExt(m.mime)}`;
+
+      // Photos are already compressed in practice; pass-through avoids a large
+      // synchronous recompression and emits each entry immediately.
+      const entry = new ZipPassThrough(filename);
+      zip.add(entry);
+      const reader = m.blob.stream().getReader();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (value?.byteLength) entry.push(value, false);
+        if (done) {
+          entry.push(new Uint8Array(), true);
+          break;
+        }
+      }
+      processedMedia += 1;
+      options.onProgress?.({
+        processedMedia,
+        totalMedia: mediaIds.length,
+        percent: mediaIds.length ? Math.round((processedMedia / mediaIds.length) * 100) : 100,
+      });
+    }
     zip.end();
   } catch (error) {
     zip.terminate();
@@ -409,6 +467,11 @@ export function validateBackupData(data: any, options?: { zipMode?: boolean }): 
     questionNotes: requireArray(data, "questionNotes"),
   };
 
+  const recordCount = Object.values(backup).reduce((total, rows) => total + rows.length, 0);
+  if (recordCount > MAX_BACKUP_RECORDS) {
+    throw new Error(`Invalid backup file: contains more than ${MAX_BACKUP_RECORDS.toLocaleString()} records.`);
+  }
+
   assertRowsHaveId(backup.projects, "projects");
   assertRowsHaveId(backup.permissions, "permissions");
   assertRowsHaveId(backup.fields, "fields");
@@ -564,104 +627,481 @@ function isZipBuffer(buf: ArrayBuffer): boolean {
   return header[0] === 0x50 && header[1] === 0x4b; // PK
 }
 
+class BackupLimitError extends Error {}
+
+type DecodedBackup = {
+  data: any;
+  zipBytes: Uint8Array | null;
+  entryNames: Set<string> | null;
+};
+
+type StagedZipEntry = {
+  name: string;
+  size: number;
+  chunkCount: number;
+};
+
+type StagedZipChunk = {
+  id: string;
+  name: string;
+  index: number;
+  blob: Blob;
+};
+
+class RestoreStageDB extends Dexie {
+  entries!: Table<StagedZipEntry, string>;
+  chunks!: Table<StagedZipChunk, string>;
+
+  constructor(name: string) {
+    super(name);
+    this.version(1).stores({
+      entries: "&name",
+      chunks: "&id,name,[name+index]",
+    });
+  }
+}
+
+const RESTORE_STAGE_PREFIX = "findspot_restore_staging_";
+
+async function cleanupStaleRestoreStages() {
+  const staleBefore = Date.now() - 24 * 60 * 60 * 1000;
+  try {
+    const names = await Dexie.getDatabaseNames();
+    await Promise.all(names
+      .filter(name => name.startsWith(RESTORE_STAGE_PREFIX))
+      .filter(name => {
+        const timestamp = Number(name.slice(RESTORE_STAGE_PREFIX.length).split("_")[0]);
+        return !Number.isFinite(timestamp) || timestamp < staleBefore;
+      })
+      .map(name => Dexie.delete(name)));
+  } catch {
+    // Database enumeration is not available in every browser. The active stage
+    // still has an explicit finally cleanup below.
+  }
+}
+
+export type BackupImportProgress = {
+  phase: "reading" | "validating" | "restoring";
+  processedBytes: number;
+  totalBytes: number;
+  percent: number;
+};
+
+type BackupImportOptions = {
+  onProgress?: (progress: BackupImportProgress) => void;
+};
+
+type StreamedZipBackup = {
+  data: any;
+  entryNames: Set<string>;
+};
+
+function formatMiB(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))} MB`;
+}
+
+function isQuotaExceeded(error: unknown): boolean {
+  return !!error && typeof error === "object" && "name" in error && error.name === "QuotaExceededError";
+}
+
+function emitImportProgress(
+  options: BackupImportOptions | undefined,
+  phase: BackupImportProgress["phase"],
+  processedBytes: number,
+  totalBytes: number,
+  percent: number,
+) {
+  options?.onProgress?.({ phase, processedBytes, totalBytes, percent });
+}
+
+async function isZipBlob(blob: Blob): Promise<boolean> {
+  if (blob.size < 2) return false;
+  const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  return header[0] === 0x50 && header[1] === 0x4b;
+}
+
+/**
+ * Read a zip incrementally. Media entries are written to a temporary IndexedDB
+ * as each one completes, keeping memory bounded to a single photo. The live
+ * FindSpot database is not opened for writing here.
+ */
+async function streamZipBackup(
+  blob: Blob,
+  options: BackupImportOptions | undefined,
+  config: { stage?: RestoreStageDB; stopAfterManifest?: boolean } = {},
+): Promise<StreamedZipBackup> {
+  const entryNames = new Set<string>();
+  let data: any;
+  let streamError: Error | null = null;
+  let pendingWrite: Promise<unknown> = Promise.resolve();
+  let processedBytes = 0;
+  let lastProgressPercent = -1;
+
+  const unzip = new Unzip(file => {
+    if (entryNames.has(file.name)) {
+      streamError = new BackupLimitError(`Invalid backup zip: duplicate entry ${file.name}.`);
+    }
+    entryNames.add(file.name);
+    if (entryNames.size > MAX_BACKUP_ZIP_ENTRIES) {
+      streamError = new BackupLimitError(`Invalid backup zip: contains more than ${MAX_BACKUP_ZIP_ENTRIES.toLocaleString()} entries.`);
+    }
+
+    const isManifest = file.name === "manifest.json";
+    const isMedia = file.name.startsWith("media/");
+    if (!isManifest && !isMedia) {
+      streamError = new BackupLimitError(`Invalid backup zip: unexpected entry ${file.name}.`);
+    }
+
+    const manifestChunks: ArrayBuffer[] = [];
+    let stagedChunkParts: ArrayBuffer[] = [];
+    let stagedChunkBytes = 0;
+    let stagedChunkIndex = 0;
+    let expandedBytes = 0;
+
+    const flushStagedChunk = () => {
+      if (!config.stage || !stagedChunkBytes) return;
+      const parts = stagedChunkParts;
+      const index = stagedChunkIndex++;
+      stagedChunkParts = [];
+      stagedChunkBytes = 0;
+      const chunkBlob = new Blob(parts);
+      pendingWrite = pendingWrite.then(() => config.stage!.chunks.put({
+        id: `${file.name}\u0000${index}`,
+        name: file.name,
+        index,
+        blob: chunkBlob,
+      }));
+    };
+
+    file.ondata = (error, chunk, final) => {
+      if (streamError) return;
+      if (error) {
+        streamError = error instanceof Error ? error : new Error(String(error));
+        return;
+      }
+
+      expandedBytes += chunk.byteLength;
+      const entryLimit = isManifest
+        ? MAX_BACKUP_MANIFEST_BYTES
+        : config.stopAfterManifest && !config.stage
+          ? 64 * 1024 * 1024
+          : MAX_BACKUP_MEDIA_ENTRY_BYTES;
+      if (expandedBytes > entryLimit) {
+        streamError = new BackupLimitError(isManifest
+          ? `Invalid backup zip: manifest.json exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`
+          : `Invalid backup zip: media entry ${file.name} exceeds ${formatMiB(MAX_BACKUP_MEDIA_ENTRY_BYTES)}.`);
+        manifestChunks.length = 0;
+        stagedChunkParts.length = 0;
+        return;
+      }
+      if (chunk.byteLength) {
+        const ownedChunk = new Uint8Array(chunk).slice().buffer as ArrayBuffer;
+        if (isManifest) {
+          manifestChunks.push(ownedChunk);
+        } else if (isMedia && config.stage) {
+          stagedChunkParts.push(ownedChunk);
+          stagedChunkBytes += ownedChunk.byteLength;
+          if (stagedChunkBytes >= 4 * 1024 * 1024) flushStagedChunk();
+        }
+      }
+
+      if (!final) return;
+      if (isManifest) {
+        const manifestBytes = new Uint8Array(expandedBytes);
+        let offset = 0;
+        for (const part of manifestChunks) {
+          manifestBytes.set(new Uint8Array(part), offset);
+          offset += part.byteLength;
+        }
+        data = parseJsonBackup(strFromU8(manifestBytes), true);
+      } else if (isMedia && config.stage) {
+        flushStagedChunk();
+        const chunkCount = stagedChunkIndex;
+        pendingWrite = pendingWrite.then(() => config.stage!.entries.put({
+          name: file.name,
+          size: expandedBytes,
+          chunkCount,
+        }));
+      }
+    };
+    file.start();
+  });
+  unzip.register(UnzipInflate);
+
+  const reader = blob.stream().getReader();
+  try {
+    while (true) {
+      await pendingWrite;
+      if (streamError) throw streamError;
+
+      const { value, done } = await reader.read();
+      if (value?.byteLength) {
+        processedBytes += value.byteLength;
+        unzip.push(value, false);
+      }
+      if (done) unzip.push(new Uint8Array(), true);
+      await pendingWrite;
+      if (streamError) throw streamError;
+
+      const percent = blob.size ? Math.min(90, Math.floor((processedBytes / blob.size) * 90)) : 90;
+      if (percent !== lastProgressPercent) {
+        lastProgressPercent = percent;
+        emitImportProgress(options, "reading", processedBytes, blob.size, percent);
+      }
+      if (config.stopAfterManifest && data !== undefined) {
+        await reader.cancel();
+        break;
+      }
+      if (done) break;
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    if (isQuotaExceeded(error)) {
+      throw new Error("Not enough free device storage to stage this backup. Existing FindSpot data has not been changed.");
+    }
+    if (error instanceof BackupLimitError) throw error;
+    throw new Error(`Invalid backup file: could not read zip archive. ${error instanceof Error ? error.message : ""}`.trim());
+  }
+
+  if (data === undefined) throw new Error("Invalid backup zip: missing manifest.json.");
+  return { data, entryNames };
+}
+
+function inspectZipEntries(zipBytes: Uint8Array): Set<string> {
+  const names = new Set<string>();
+  let totalUncompressedBytes = 0;
+
+  try {
+    unzipSync(zipBytes, {
+      filter: file => {
+        if (names.has(file.name)) {
+          throw new BackupLimitError(`Invalid backup zip: duplicate entry ${file.name}.`);
+        }
+        names.add(file.name);
+        if (names.size > MAX_BACKUP_ZIP_ENTRIES) {
+          throw new BackupLimitError(`Invalid backup zip: contains more than ${MAX_BACKUP_ZIP_ENTRIES.toLocaleString()} entries.`);
+        }
+        if (!Number.isSafeInteger(file.originalSize) || file.originalSize < 0) {
+          throw new BackupLimitError("Invalid backup zip: an entry has an invalid size.");
+        }
+        totalUncompressedBytes += file.originalSize;
+        if (totalUncompressedBytes > MAX_BACKUP_UNCOMPRESSED_BYTES) {
+          throw new BackupLimitError(`Invalid backup zip: expanded content exceeds ${formatMiB(MAX_BACKUP_UNCOMPRESSED_BYTES)}.`);
+        }
+        if (file.name === "manifest.json" && file.originalSize > MAX_BACKUP_MANIFEST_BYTES) {
+          throw new BackupLimitError(`Invalid backup zip: manifest.json exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`);
+        }
+        if (file.name.startsWith("media/") && file.originalSize > MAX_BACKUP_MEDIA_ENTRY_BYTES) {
+          throw new BackupLimitError(`Invalid backup zip: media entry ${file.name} exceeds ${formatMiB(MAX_BACKUP_MEDIA_ENTRY_BYTES)}.`);
+        }
+        return false;
+      },
+    });
+  } catch (error) {
+    if (error instanceof BackupLimitError) throw error;
+    throw new Error("Invalid backup file: could not read zip archive.");
+  }
+
+  return names;
+}
+
 function extractZipEntry(zipBytes: Uint8Array, entryName: string): Uint8Array | undefined {
   const entries = unzipSync(zipBytes, { filter: file => file.name === entryName });
   return entries[entryName];
 }
 
-function listZipEntries(zipBytes: Uint8Array): Set<string> {
-  const names = new Set<string>();
-  unzipSync(zipBytes, {
-    filter: file => {
-      names.add(file.name);
-      return false;
-    },
-  });
-  return names;
+function parseJsonBackup(text: string, zipMode: boolean): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(zipMode
+      ? "Invalid backup zip: could not parse manifest.json."
+      : "Invalid backup file: could not parse JSON.");
+  }
+}
+
+function decodeBackupInput(input: string | ArrayBuffer): DecodedBackup {
+  if (typeof input === "string") {
+    if (new TextEncoder().encode(input).byteLength > MAX_BACKUP_MANIFEST_BYTES) {
+      throw new BackupLimitError(`Invalid backup file: JSON exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`);
+    }
+    return { data: parseJsonBackup(input, false), zipBytes: null, entryNames: null };
+  }
+
+  if (!(input instanceof ArrayBuffer)) {
+    throw new Error("Invalid backup file: unexpected input type.");
+  }
+  if (input.byteLength > MAX_BACKUP_IN_MEMORY_BYTES) {
+    throw new BackupLimitError(`Invalid in-memory backup: exceeds ${formatMiB(MAX_BACKUP_IN_MEMORY_BYTES)}. Pass the File directly for streaming restore.`);
+  }
+
+  if (!isZipBuffer(input)) {
+    if (input.byteLength > MAX_BACKUP_MANIFEST_BYTES) {
+      throw new BackupLimitError(`Invalid backup file: JSON exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`);
+    }
+    return {
+      data: parseJsonBackup(new TextDecoder().decode(input), false),
+      zipBytes: null,
+      entryNames: null,
+    };
+  }
+
+  const zipBytes = new Uint8Array(input);
+  const entryNames = inspectZipEntries(zipBytes);
+  if (!entryNames.has("manifest.json")) {
+    throw new Error("Invalid backup zip: missing manifest.json.");
+  }
+
+  let manifestBytes: Uint8Array | undefined;
+  try {
+    manifestBytes = extractZipEntry(zipBytes, "manifest.json");
+  } catch {
+    throw new Error("Invalid backup file: could not read zip archive.");
+  }
+  if (!manifestBytes) {
+    throw new Error("Invalid backup zip: missing manifest.json.");
+  }
+  return {
+    data: parseJsonBackup(strFromU8(manifestBytes), true),
+    zipBytes,
+    entryNames,
+  };
+}
+
+/** Safely decode only the manifest used by the restore preview UI. */
+export async function readBackupManifest(input: string | ArrayBuffer | Blob): Promise<Record<string, unknown>> {
+  let data: any;
+  if (input instanceof Blob) {
+    if (await isZipBlob(input)) {
+      data = (await streamZipBackup(input, undefined, { stopAfterManifest: true })).data;
+    } else {
+      if (input.size > MAX_BACKUP_MANIFEST_BYTES) {
+        throw new BackupLimitError(`Invalid backup file: JSON exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`);
+      }
+      data = parseJsonBackup(await input.text(), false);
+    }
+  } else {
+    data = decodeBackupInput(input).data;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Invalid backup file: expected an object.");
+  }
+  return data as Record<string, unknown>;
 }
 
 /**
  * Import a backup from either:
  *  - A legacy JSON string (v4 and earlier)
- *  - A zip ArrayBuffer (v5+)
+ *  - A zip File/Blob (v5+, streamed and staged outside the live database)
+ *  - A zip ArrayBuffer (v5+, retained for programmatic backwards compatibility)
  *
- * Accepts `string | ArrayBuffer` so the caller can pass whichever the file
- * yields. Format is auto-detected; both feed into the same validated restore
- * transaction.
+ * File/Blob is the preferred path: total photo-library size is not capped and
+ * memory stays bounded to one media entry. Both paths feed into the same atomic
+ * replacement transaction only after validation is complete.
  */
-export async function importData(input: string | ArrayBuffer) {
+export async function importData(
+  input: string | ArrayBuffer | Blob,
+  options: BackupImportOptions = {},
+) {
   let data: any;
   let zipBytes: Uint8Array | null = null;
+  let entryNames: Set<string> | null = null;
+  let stagedMediaItems: Media[] | null = null;
+  let stage: RestoreStageDB | null = null;
 
-  if (typeof input === "string") {
-    // Legacy JSON path
-    try {
-      data = JSON.parse(input);
-    } catch {
-      throw new Error("Invalid backup file: could not parse JSON.");
-    }
-  } else if (input instanceof ArrayBuffer) {
-    if (isZipBuffer(input)) {
-      // Zip path
-      zipBytes = new Uint8Array(input);
-      let manifestBytes: Uint8Array | undefined;
-      try {
-        manifestBytes = extractZipEntry(zipBytes, "manifest.json");
-      } catch {
-        throw new Error("Invalid backup file: could not read zip archive.");
-      }
-      if (!manifestBytes) {
-        throw new Error("Invalid backup zip: missing manifest.json.");
-      }
-      try {
-        data = JSON.parse(strFromU8(manifestBytes));
-      } catch {
-        throw new Error("Invalid backup zip: could not parse manifest.json.");
+  try {
+    if (input instanceof Blob) {
+      if (await isZipBlob(input)) {
+        await cleanupStaleRestoreStages();
+        stage = new RestoreStageDB(`${RESTORE_STAGE_PREFIX}${Date.now()}_${uuid()}`);
+        const streamed = await streamZipBackup(input, options, { stage });
+        data = streamed.data;
+        entryNames = streamed.entryNames;
+      } else {
+        if (input.size > MAX_BACKUP_MANIFEST_BYTES) {
+          throw new BackupLimitError(`Invalid backup file: JSON exceeds ${formatMiB(MAX_BACKUP_MANIFEST_BYTES)}.`);
+        }
+        emitImportProgress(options, "reading", input.size, input.size, 90);
+        data = parseJsonBackup(await input.text(), false);
       }
     } else {
-      // ArrayBuffer containing JSON (user selected a .json but we read as ArrayBuffer)
-      try {
-        data = JSON.parse(new TextDecoder().decode(input));
-      } catch {
-        throw new Error("Invalid backup file: could not parse JSON.");
+      const decoded = decodeBackupInput(input);
+      data = decoded.data;
+      zipBytes = decoded.zipBytes;
+      entryNames = decoded.entryNames;
+      const inputBytes = typeof input === "string" ? new TextEncoder().encode(input).byteLength : input.byteLength;
+      emitImportProgress(options, "reading", inputBytes, inputBytes, 90);
+    }
+
+    emitImportProgress(options, "validating", input instanceof Blob ? input.size : 0, input instanceof Blob ? input.size : 0, 92);
+    const zipMode = !!zipBytes || !!stage;
+    const backup = validateBackupData(data, { zipMode });
+
+    if (zipMode && entryNames) {
+      const referencedEntries = new Set<string>();
+      for (const media of backup.media) {
+        if (!entryNames.has(media._zipEntry)) {
+          throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
+        }
+        if (referencedEntries.has(media._zipEntry)) {
+          throw new Error(`Invalid backup zip: media entry ${media._zipEntry} is referenced more than once.`);
+        }
+        referencedEntries.add(media._zipEntry);
+      }
+      for (const entryName of entryNames) {
+        if (entryName.startsWith("media/") && !referencedEntries.has(entryName)) {
+          throw new Error(`Invalid backup zip: unreferenced media entry ${entryName}.`);
+        }
       }
     }
-  } else {
-    throw new Error("Invalid backup file: unexpected input type.");
-  }
 
-  const backup = validateBackupData(data, { zipMode: !!zipBytes });
+    // Reconstruct media before opening the live replacement transaction. For
+    // streamed zips these are lightweight Blob handles backed by the temporary
+    // IndexedDB, not a second in-memory copy of the photo library.
+    if (stage) {
+      stagedMediaItems = [];
+      for (const item of backup.media) {
+        const staged = await stage.entries.get(item._zipEntry);
+        if (!staged) throw new Error(`Invalid backup zip: missing media entry ${item._zipEntry}`);
+        const chunks = await stage.chunks.where("name").equals(item._zipEntry).sortBy("index");
+        if (chunks.length !== staged.chunkCount || chunks.reduce((sum, chunk) => sum + chunk.blob.size, 0) !== staged.size) {
+          throw new Error(`Invalid backup zip: incomplete media entry ${item._zipEntry}`);
+        }
+        const { _zipEntry, ...rest } = item;
+        const stagedBlob = new Blob(chunks.map(chunk => chunk.blob));
+        stagedMediaItems.push({
+          ...rest,
+          blob: stagedBlob.slice(0, stagedBlob.size, rest.mime || "application/octet-stream"),
+        } as Media);
+      }
+    } else if (!zipBytes) {
+      stagedMediaItems = backup.media.length
+        ? await Promise.all(backup.media.map(async (m: any) => ({
+            ...m,
+            blob: await base64ToBlob(m.blob),
+          })))
+        : [];
+    }
 
-  if (zipBytes) {
-    let entryNames: Set<string>;
+    emitImportProgress(options, "restoring", input instanceof Blob ? input.size : 0, input instanceof Blob ? input.size : 0, 95);
     try {
-      entryNames = listZipEntries(zipBytes);
-    } catch {
-      throw new Error("Invalid backup file: could not read zip archive.");
-    }
-    for (const media of backup.media) {
-      if (!entryNames.has(media._zipEntry)) {
-        throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
+      await applyValidatedBackup(backup, zipBytes, stagedMediaItems ?? []);
+    } catch (error) {
+      if (isQuotaExceeded(error)) {
+        throw new Error("Not enough free device storage to complete this restore. Existing FindSpot data has not been changed.");
       }
+      throw error;
+    }
+    emitImportProgress(options, "restoring", input instanceof Blob ? input.size : 0, input instanceof Blob ? input.size : 0, 100);
+  } finally {
+    if (stage) {
+      stage.close();
+      await Dexie.delete(stage.name).catch(() => {});
     }
   }
+}
 
-  // ── Reconstruct media blobs ────────────────────────────────────────────
-  let mediaItems: Media[] = [];
-
-  if (!zipBytes) {
-    // Legacy JSON path: base64 data URIs
-    // Convert BEFORE opening the transaction — fetch() is not an IndexedDB
-    // operation and awaiting it inside a transaction causes IDB to auto-commit,
-    // silently dropping everything written afterwards.
-    mediaItems = backup.media.length
-      ? await Promise.all(backup.media.map(async (m: any) => ({
-          ...m,
-          blob: await base64ToBlob(m.blob)
-        })))
-      : [];
-  }
-
+async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | null, mediaItems: Media[]) {
   await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.findHotspotSignals, db.outstandingQuestions, db.questionNotes], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
@@ -704,7 +1144,9 @@ export async function importData(input: string | ArrayBuffer) {
         } as Media);
       }
     } else if (mediaItems.length) {
-      await db.media.bulkPut(mediaItems as Media[]);
+      // One request per Blob avoids asking IndexedDB to serialise a year of
+      // photos as one giant bulkPut payload while keeping the transaction atomic.
+      for (const media of mediaItems) await db.media.put(media);
     }
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
     if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
@@ -1029,7 +1471,10 @@ export async function createClubDayPack(
     sharedPermissionId,
     eventName: permission.name,
     eventDate: permission.validFrom ?? now.slice(0, 10),
-    organiserName: permission.collector || undefined,
+    // The rally form historically stored its "Organiser / Contact Name" in
+    // landownerName. Prefer the dedicated collector field, but retain that
+    // legacy/current-form fallback in shared packs.
+    organiserName: permission.collector || permission.landownerName || undefined,
     organiserContactNumber: permission.organiserContactNumber,
     organiserEmail: permission.organiserEmail,
     significantFindInstructions: permission.significantFindInstructions,

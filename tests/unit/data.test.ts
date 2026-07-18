@@ -14,7 +14,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import AFTER the mock is registered.
-import { validateBackupData } from '../../src/services/data';
+import { MAX_BACKUP_RECORDS, validateBackupData } from '../../src/services/data';
 
 // ─── Minimal valid backup fixture ─────────────────────────────────────────────
 
@@ -196,6 +196,28 @@ describe('validateBackupData — rejects invalid structure', () => {
   it('rejects a settings row missing a key', () => {
     const data = makeValidBackup({ settings: [{ value: 'no key here' }] });
     expect(() => validateBackupData(data)).toThrow(/key/i);
+  });
+
+  it('rejects backups with an excessive total record count before row validation', () => {
+    const settings = new Array(MAX_BACKUP_RECORDS + 1).fill({ key: 'repeated', value: true });
+    const data = makeValidBackup({
+      projects: [],
+      permissions: [],
+      fields: [],
+      sessions: [],
+      finds: [],
+      significantFinds: [],
+      tracks: [],
+      media: [],
+      importedPackages: [],
+      savedPoints: [],
+      undugSignals: [],
+      findHotspotSignals: [],
+      outstandingQuestions: [],
+      questionNotes: [],
+      settings,
+    });
+    expect(() => validateBackupData(data)).toThrow(/100,000 records/);
   });
 });
 
