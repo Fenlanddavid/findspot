@@ -1,14 +1,17 @@
 // ─── Quick Start onboarding overlay ──────────────────────────────────────────
-// Shown only to new users (no existing data + flag not set).
+// Shown only to new users (no meaningful existing data + flag not set).
 // Self-contained — touching nothing in core workflows.
-// Dismiss sets fs_onboarding_done in localStorage; will not appear again.
+// Dismiss sets the versioned completion flag; it will not appear again.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 
-const FLAG = 'fs_onboarding_done';
+// v2 recovers fresh installs that were incorrectly marked complete when the
+// automatically-created default permission was counted as user data.
+const FLAG = 'fs_onboarding_v2_done';
+const LEGACY_FLAG = 'fs_onboarding_done';
 
 // Read and consume the force flag at module load time — runs exactly once per
 // page load, immune to React StrictMode's double-invocation of effects/inits.
@@ -18,26 +21,71 @@ if (FORCED_THIS_LOAD) localStorage.removeItem('fs_onboarding_force');
 type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'clubday' | 'done';
 
 export default function OnboardingFlow() {
-    // Fast sync check — avoids any flash for returning users
-    const [visible, setVisible]               = useState(() => !localStorage.getItem(FLAG) || FORCED_THIS_LOAD);
+    // Stay hidden until the async data guard confirms this is genuinely a new
+    // user. Forced replays can render immediately.
+    const [visible, setVisible]               = useState(FORCED_THIS_LOAD);
     const [step, setStep]                     = useState<Step>('welcome');
     const [pendingDestination, setPending]    = useState('/');
     const [demoExpanded, setDemoExpanded]     = useState(false);
+    const dialogRef                           = useRef<HTMLDivElement>(null);
     const nav = useNavigate();
 
-    // Async guard — skip if user already has meaningful data.
+    // Async guard — skip if the user already has meaningful data. The default
+    // "General Detecting" permission is app scaffolding, not user-created data.
     // Bypassed when forced (e.g. "Show Quick Start again" in Settings).
     useEffect(() => {
-        if (!visible || FORCED_THIS_LOAD) return;
-        Promise.all([db.permissions.count(), db.finds.count()]).then(([p, f]) => {
-            if (p > 0 || f > 0) dismiss();
-        }).catch(() => {
-            dismiss();
+        if (FORCED_THIS_LOAD || localStorage.getItem(FLAG)) return;
+
+        let cancelled = false;
+        Promise.all([
+            db.permissions.filter(permission => !permission.isDefault).count(),
+            db.finds.count(),
+        ]).then(([permissions, finds]) => {
+            if (cancelled) return;
+            if (permissions > 0 || finds > 0) {
+                markDone();
+                return;
+            }
+            setVisible(true);
+        }).catch((error) => {
+            // A transient storage failure should not permanently mark the guide
+            // complete. Keep it hidden for this load and retry next time.
+            console.error('Could not determine onboarding eligibility', error);
         });
+
+        return () => { cancelled = true; };
     }, []);
+
+    // Treat the overlay as a real modal: prevent background scrolling, restore
+    // the user's prior focus on close, and move focus inside on every step.
+    useEffect(() => {
+        if (!visible) return;
+        const previousFocus = document.activeElement as HTMLElement | null;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            previousFocus?.focus();
+        };
+    }, [visible]);
+
+    useEffect(() => {
+        if (!visible) return;
+        const frame = window.requestAnimationFrame(() => {
+            const firstControl = dialogRef.current?.querySelector<HTMLElement>(
+                'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+            );
+            (firstControl ?? dialogRef.current)?.focus();
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [visible, step]);
 
     function markDone() {
         localStorage.setItem(FLAG, '1');
+        // Keep older quick-find behavior in sync while the app migrates to the
+        // versioned onboarding flag.
+        localStorage.setItem(LEGACY_FLAG, '1');
     }
 
     function dismiss() {
@@ -56,6 +104,35 @@ export default function OnboardingFlow() {
         nav(pendingDestination);
     }
 
+    function handleDialogKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            dismiss();
+            return;
+        }
+
+        if (event.key !== 'Tab' || !dialogRef.current) return;
+        const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )).filter(element => element.getClientRects().length > 0);
+        if (focusable.length === 0) {
+            event.preventDefault();
+            dialogRef.current.focus();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (event.shiftKey && (active === first || !dialogRef.current.contains(active))) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && (active === last || !dialogRef.current.contains(active))) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
 
     if (!visible) return null;
 
@@ -72,13 +149,21 @@ export default function OnboardingFlow() {
             onClick={dismiss}
             className="mt-6 text-xs text-white/60 hover:text-white transition-colors duration-150 cursor-pointer"
         >
-            Skip for now
+            Skip Quick Start
         </button>
     );
 
     return (
         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="w-full sm:max-w-md bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-8 flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-300 max-h-[90vh] overflow-y-auto">
+            <div
+                ref={dialogRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="onboarding-title"
+                tabIndex={-1}
+                onKeyDown={handleDialogKeyDown}
+                className="w-full sm:max-w-md bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-8 flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-300 max-h-[90vh] overflow-y-auto outline-none"
+            >
 
                 {/* ── Step 1: Welcome ─────────────────────────────────────── */}
                 {step === 'welcome' && (
@@ -92,7 +177,7 @@ export default function OnboardingFlow() {
                                     <circle cx="256" cy="256" r="48" fill="#10b981" />
                                 </svg>
                             </div>
-                            <h1 className="text-2xl font-black text-white tracking-tight mb-3">Understand where people used the landscape</h1>
+                            <h1 id="onboarding-title" className="text-2xl font-black text-white tracking-tight mb-3">Understand where people used the landscape</h1>
                             <p className="text-sm text-white/70 leading-relaxed">
                                 Not just maps. Scan the land, record finds, and create reports from the same field record.
                             </p>
@@ -135,7 +220,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(1)}
                         <div className="text-center mb-7">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-2">What brought you here?</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-2">What brought you here?</h2>
                             <p className="text-sm text-white/60">Pick a starting point — you can do everything else later.</p>
                         </div>
 
@@ -237,7 +322,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Install FindSpot</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Install FindSpot</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 FindSpot is a Progressive Web App — no app store needed. Add it to your home screen for the best experience.
                             </p>
@@ -245,11 +330,11 @@ export default function OnboardingFlow() {
                             <div className="space-y-2.5 mb-4">
                                 <div className="bg-white/5 rounded-2xl px-4 py-3">
                                     <p className="text-[12px] font-black text-white mb-1">iPhone / iPad</p>
-                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Safari</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">Share button</span> (the box with an arrow pointing up), then tap <span className="text-white/70 font-bold">Add to Home Screen</span>. Must be Safari — Chrome on iOS won't work.</p>
+                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Safari or Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">Share button</span> (the box with an arrow pointing up), then tap <span className="text-white/70 font-bold">Add to Home Screen</span>. In Safari, turn on <span className="text-white/70 font-bold">Open as Web App</span> when shown, then tap <span className="text-white/70 font-bold">Add</span>.</p>
                                 </div>
                                 <div className="bg-white/5 rounded-2xl px-4 py-3">
                                     <p className="text-[12px] font-black text-white mb-1">Android</p>
-                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">three-dot menu</span>, then tap <span className="text-white/70 font-bold">Add to Home Screen</span> or <span className="text-white/70 font-bold">Install App</span>. A prompt may also appear automatically at the bottom of the screen.</p>
+                                    <p className="text-2xs text-white/45 leading-snug">Open <span className="text-white/70 font-bold">Chrome</span> and visit findspot.uk. Tap the <span className="text-white/70 font-bold">three-dot menu</span>, then tap <span className="text-white/70 font-bold">Add to Home screen</span> and <span className="text-white/70 font-bold">Install</span>. Follow the on-screen instructions.</p>
                                 </div>
 
                             </div>
@@ -280,7 +365,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-5">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Recording a find</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Recording a find</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 The typical workflow in FindSpot is straightforward:
                             </p>
@@ -369,7 +454,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Read the land first</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Read the land first</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 FieldGuide gives you a quick way to understand why one part of a field may be worth checking before another.
                             </p>
@@ -448,7 +533,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Set up your profile</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Set up your profile</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 A few details in Settings make the rest of the app work properly. It only takes a minute and you can update everything later.
                             </p>
@@ -503,7 +588,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-7">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Managing permissions</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Managing permissions</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 In the UK, you need the landowner's permission before you detect anywhere. FindSpot helps you store that proof properly.
                             </p>
@@ -563,7 +648,7 @@ export default function OnboardingFlow() {
                     <>
                         {dots(2)}
                         <div className="mb-6">
-                            <h2 className="text-xl font-black text-white tracking-tight mb-3">Club / Rally dig</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Club / Rally dig</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
                                 FindSpot supports organised club digs and rallies — both for members attending and organisers running the event.
                             </p>
@@ -633,7 +718,7 @@ export default function OnboardingFlow() {
                             <div className="w-12 h-12 mx-auto mb-5 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                             </div>
-                            <h2 className="text-xl font-black text-white tracking-tight mb-2">You're all set</h2>
+                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-2">You're all set</h2>
                             <p className="text-[13px] text-white/50 leading-relaxed">
                                 Good luck out there.
                             </p>
@@ -642,7 +727,7 @@ export default function OnboardingFlow() {
                         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-4 py-4 mb-6">
                             <p className="text-[12px] font-black text-amber-400 mb-1.5">Before you go</p>
                             <p className="text-[12px] text-white/55 leading-snug">
-                                You can return to this guide at any time from the <span className="text-amber-400 font-bold">Settings</span> page — look for <span className="text-amber-400 font-bold">Show Quick Start again</span> at the bottom.
+                                You can return to this guide at any time from <span className="text-amber-400 font-bold">Settings → App</span>. In the <span className="text-amber-400 font-bold">Quick Start Guide</span> section, choose <span className="text-amber-400 font-bold">Show again</span>.
                             </p>
                         </div>
 

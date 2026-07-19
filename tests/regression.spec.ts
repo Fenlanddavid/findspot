@@ -343,6 +343,10 @@ function regressionFind(id: string, projectId: string, permissionId: string, fie
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
+    localStorage.setItem("fs_onboarding_done", "1");
+  });
   page.on("pageerror", (error) => {
     throw error;
   });
@@ -674,6 +678,7 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await page.setViewportSize({ width: 390, height: 844 });
   await mockFieldGuideHistoricScan(page);
   await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
     localStorage.setItem("fs_onboarding_done", "1");
     localStorage.setItem("fs_fg_helpers_seen", "1");
     localStorage.setItem("fs_fg_sheet", "1");

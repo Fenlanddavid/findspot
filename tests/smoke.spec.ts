@@ -37,6 +37,10 @@ async function readIndexedDbStore(page: Page, storeName: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
+    localStorage.setItem("fs_onboarding_done", "1");
+  });
   page.on("pageerror", (error) => {
     throw error;
   });
