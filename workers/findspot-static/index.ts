@@ -7,6 +7,7 @@
  * Datasets served:
  *   sm-index/_meta.json        — SM index build metadata
  *   sm-index/{geohash6}.json   — per-cell SM index shards (sparse; empty cell → [])
+ *   aim-index/_meta.json       — AIM index build metadata
  *   aim-index/{geohash6}.json  — per-cell AIM index shards (same pattern as SM)
  *   pas-h3/{key}               — PAS H3 density tiles (future W4)
  *
@@ -14,6 +15,8 @@
  *   Scheduled Monuments data: NHLE © Historic England, CC BY 4.0
  *   AIM data: © Historic England
  */
+
+import { STATIC_DATASET_KEYS } from '../../src/shared/staticDatasetContract';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':   '*',
@@ -23,13 +26,12 @@ const CORS_HEADERS = {
 };
 
 // Regex patterns for allowed keys
-const SM_META_KEY    = 'sm-index/_meta.json';
 const SM_SHARD_RE    = /^sm-index\/[0-9bcdefghjkmnpqrstuvwxyz]{6}\.json$/;
 const AIM_SHARD_RE   = /^aim-index\/[0-9bcdefghjkmnpqrstuvwxyz]{6}\.json$/;
 const PAS_H3_PREFIX  = 'pas-h3/';
 
 export default {
-  async fetch(request, env) {
+  async fetch(request: Request, env: Env): Promise<Response> {
     // Preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -44,12 +46,13 @@ export default {
     const key = url.pathname.slice(1);
 
     // ── Key allow-list ────────────────────────────────────────────────────────
-    const isSmMeta   = key === SM_META_KEY;
+    const isSmMeta   = key === STATIC_DATASET_KEYS.smMeta;
+    const isAimMeta  = key === STATIC_DATASET_KEYS.aimMeta;
     const isSmShard  = SM_SHARD_RE.test(key);
     const isAimShard = AIM_SHARD_RE.test(key);
     const isPasH3    = key.startsWith(PAS_H3_PREFIX) && key.length > PAS_H3_PREFIX.length;
 
-    if (!isSmMeta && !isSmShard && !isAimShard && !isPasH3) {
+    if (!isSmMeta && !isAimMeta && !isSmShard && !isAimShard && !isPasH3) {
       return textError('Not found', 404);
     }
 
@@ -66,7 +69,7 @@ export default {
     // request. We must parse and forward explicitly. Required for PMTiles
     // (aim.pmtiles) and usable on any key for resumable downloads.
     const rangeHeader = request.headers.get('Range');
-    const r2Options   = {};
+    const r2Options: R2GetOptions = {};
 
     if (rangeHeader) {
       // Suffix range: bytes=-N (last N bytes)
@@ -120,15 +123,23 @@ export default {
     responseHeaders.set('Cache-Control', cacheControl);
 
     // Enforce content types
-    if (isSmMeta || isSmShard || isAimShard) {
+    if (isSmMeta || isAimMeta || isSmShard || isAimShard) {
       responseHeaders.set('Content-Type', 'application/json');
     }
 
     // ── Partial-content response (range request honoured by R2) ─────────────
     if (object.range && rangeHeader) {
-      const totalSize   = object.size;
-      const rangeOffset = 'offset' in object.range ? object.range.offset : 0;
-      const rangeLength = object.range.length ?? (totalSize - rangeOffset);
+      const totalSize = object.size;
+      let rangeOffset: number;
+      let rangeLength: number;
+
+      if ('suffix' in object.range) {
+        rangeLength = object.range.suffix;
+        rangeOffset = Math.max(0, totalSize - rangeLength);
+      } else {
+        rangeOffset = object.range.offset ?? 0;
+        rangeLength = object.range.length ?? (totalSize - rangeOffset);
+      }
       responseHeaders.set(
         'Content-Range',
         `bytes ${rangeOffset}-${rangeOffset + rangeLength - 1}/${totalSize}`,
@@ -141,11 +152,11 @@ export default {
     responseHeaders.set('Content-Length', String(object.size));
     return new Response(object.body, { status: 200, headers: responseHeaders });
   },
-};
+} satisfies ExportedHandler<Env>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function textError(message, status) {
+function textError(message: string, status: number): Response {
   return new Response(message, {
     status,
     headers: { 'Content-Type': 'text/plain', ...CORS_HEADERS },

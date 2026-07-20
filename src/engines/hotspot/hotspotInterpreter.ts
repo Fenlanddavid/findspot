@@ -4,7 +4,7 @@
 // Variation is seeded from a hash of the hotspot so each hotspot gets consistent
 // but distinct phrasing.
 
-import { Hotspot, HotspotClassification } from '../pages/fieldGuideTypes';
+import { Hotspot, HotspotClassification } from '../../pages/fieldGuideTypes';
 
 // ─── Output type ──────────────────────────────────────────────────────────────
 

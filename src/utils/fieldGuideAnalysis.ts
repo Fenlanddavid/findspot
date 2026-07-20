@@ -704,7 +704,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
 
 // generateHotspots has moved to hotspotEngine.ts.
 // Import { buildTerrainHotspots, enhanceHotspotsWithHistoric, generateHotspots }
-// from '../utils/hotspotEngine' instead.
+// from '../engines/hotspot/hotspotEngine' instead.
 
 // ─── Route movement interpretation ───────────────────────────────────────────
 // Single authoritative model for assessing whether a cluster is a modern route

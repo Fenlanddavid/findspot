@@ -1,9 +1,9 @@
 import React from 'react';
 import maplibregl from 'maplibre-gl';
-import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary } from '../../utils/hotspotInterpreter';
-import { buildTargetInterpretation, getTargetVerdict } from '../../utils/targetInterpreter';
-import type { TargetSignalStrength } from '../../utils/targetInterpreter';
-import type { HotspotSignalStrength } from '../../utils/hotspotInterpreter';
+import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary } from '../../engines/hotspot/hotspotInterpreter';
+import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
+import type { TargetSignalStrength } from '../../engines/hotspot/targetInterpreter';
+import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
 import type { Cluster, Hotspot, HotspotClassification, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 import { ScaledImage } from '../ScaledImage';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
@@ -14,7 +14,7 @@ import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
-import { SMUnavailableBanner } from '../fieldguide/SMUnavailableBanner';
+import { SMUnavailableBanner } from './SMUnavailableBanner';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
 import { usePersistedHotspotSignals } from '../../hooks/usePersistedHotspotSignals';
 

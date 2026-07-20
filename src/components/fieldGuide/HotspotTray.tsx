@@ -1,8 +1,8 @@
 import React from 'react';
 import type maplibregl from 'maplibre-gl';
-import { getHotspotSignalStrength } from '../../utils/hotspotInterpreter';
-import { buildTargetInterpretation, getTargetVerdict } from '../../utils/targetInterpreter';
-import type { HotspotSignalStrength } from '../../utils/hotspotInterpreter';
+import { getHotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
+import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
+import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
 import type { Hotspot, Cluster } from '../../pages/fieldGuideTypes';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES } from './FieldGuideContext';

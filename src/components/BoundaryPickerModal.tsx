@@ -6,6 +6,7 @@ import {
   BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
   type BasemapMode,
 } from "./permission/basemaps";
+import { searchLocations } from "../services/geocode";
 
 interface BoundaryPickerModalProps {
   initialBoundary?: any; // GeoJSON Polygon
@@ -75,8 +76,7 @@ export function BoundaryPickerModal({ initialBoundary, permissionBoundary, initi
     setIsSearching(true);
     setSearchError(null);
     try {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
-      const data = await resp.json();
+      const data = await searchLocations(searchQuery, { limit: 1 });
       if (data && data.length > 0) {
         const { lat, lon } = data[0];
         if (mapRef.current) {

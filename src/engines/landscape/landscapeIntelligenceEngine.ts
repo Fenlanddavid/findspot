@@ -11,7 +11,7 @@ import type {
     LandscapeIntelligence, LandscapeSummary,
     CrossingType, LandformType, OccupationPotential,
     TransitionType, VisibilityContext, WetlandContext,
-} from '../pages/fieldGuideTypes';
+} from '../../pages/fieldGuideTypes';
 
 // ─── Cluster signal flags ─────────────────────────────────────────────────────
 // Derived in a single pass over hotspot member clusters.

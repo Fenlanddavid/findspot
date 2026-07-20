@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import pkg from './package.json'
 
 const pasDensityRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/pas-density-gb.json', import.meta.url)))
@@ -10,6 +11,10 @@ const pasDensityRevision = createHash('sha256')
 
 export default defineConfig({
   base: '/findspot/',
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -60,6 +65,10 @@ export default defineConfig({
           },
           {
             urlPattern: /^https:\/\/findspot-bgs-proxy\.trials-uk\.workers\.dev\//,
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: /^https:\/\/findspot-geocode\.trials-uk\.workers\.dev\//,
             handler: 'NetworkOnly',
           },
         ],

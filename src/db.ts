@@ -368,6 +368,14 @@ export type Setting = {
   value: string | number | boolean;
 };
 
+// Regenerable Nominatim proxy cache. `response` deliberately remains unknown
+// at the persistence boundary and is validated by services/geocode.ts on read.
+export type GeocodeCacheRecord = {
+  cacheKey: string;
+  response: unknown;
+  fetchedAt: number;
+};
+
 export type ImportedPackage = {
   id: string;
   packageHash: string;
@@ -534,9 +542,10 @@ export class FindSpotDB extends Dexie {
   undugSignals!: Table<UndugSignal, string>;
   outstandingQuestions!: Table<OutstandingQuestion, string>;
   questionNotes!: Table<QuestionNote, string>;
+  geocodeCache!: Table<GeocodeCacheRecord, string>;
 
-  constructor() {
-    super("findspot_uk");
+  constructor(name = "findspot_uk") {
+    super(name);
 
     this.version(1).stores({
       projects: "id, name, region, createdAt",
@@ -809,6 +818,12 @@ export class FindSpotDB extends Dexie {
     // v38: Phase E transition history and supersede ancestry metadata.
     // Existing indexes already cover questionNotes and outstandingQuestions.
     this.version(38).stores({});
+
+    // v39: durable, regenerable geocoding cache. Kept outside backup/restore;
+    // invalid or stale rows are discarded by the geocoding service.
+    this.version(39).stores({
+      geocodeCache: 'cacheKey, fetchedAt',
+    });
   }
 }
 

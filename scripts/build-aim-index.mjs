@@ -171,6 +171,7 @@ async function main() {
 
     // Write meta
     const meta = {
+        schemaVersion: 1,
         builtAt:      new Date().toISOString(),
         featureCount: features.length,
         cellCount:    shards.size,

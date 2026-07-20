@@ -3,7 +3,7 @@
 // Mirrors the structure of hotspotInterpreter.ts but tuned for precise, practical
 // language — "start here" rather than "investigate this zone".
 
-import { Cluster } from '../pages/fieldGuideTypes';
+import { Cluster } from '../../pages/fieldGuideTypes';
 
 // ─── Output types ─────────────────────────────────────────────────────────────
 

@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Modal } from "./Modal";
 import { db } from "../db";
+import { searchLocations } from "../services/geocode";
 
 export function LocationPickerModal(props: {
   initialLat?: number | null;
@@ -32,8 +33,7 @@ export function LocationPickerModal(props: {
         setIsSearching(true);
         setSearchError(null);
         try {
-            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=1`);
-            const data = await resp.json();
+            const data = await searchLocations(searchQuery, { limit: 1 });
             if (data && data.length > 0) {
                 const { lat, lon } = data[0];
                 const newLat = parseFloat(lat);

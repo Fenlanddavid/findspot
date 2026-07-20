@@ -6,7 +6,7 @@ import {
   RallyReviewPoint,
   RallyReviewSession,
   RallyReviewTrack,
-} from "../utils/rallyDayReviewEngine";
+} from "../engines/session/rallyDayReviewEngine";
 
 export async function loadRallyDayReview(permissionId: string): Promise<RallyDayReview> {
   const [finds, sessions, fields, importedPackages] = await Promise.all([

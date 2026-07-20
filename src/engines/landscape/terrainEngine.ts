@@ -2,9 +2,9 @@
 // Each scanDataSource call runs in its own Web Worker (OffscreenCanvas + fetch)
 // so the six source types process in parallel without blocking the main thread.
 
-import { Cluster } from '../pages/fieldGuideTypes';
-import { WaybackIds } from './waybackService';
-import type { WorkerParams, WorkerResult } from '../workers/terrainScanWorker';
+import { Cluster } from '../../pages/fieldGuideTypes';
+import { WaybackIds } from '../../utils/waybackService';
+import type { WorkerParams, WorkerResult } from '../../workers/terrainScanWorker';
 
 type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
 
@@ -28,7 +28,7 @@ export function scanDataSource(
 ): Promise<WorkerResult> {
     return new Promise<WorkerResult>((resolve) => {
         const worker = new Worker(
-            new URL('../workers/terrainScanWorker.ts', import.meta.url),
+            new URL('../../workers/terrainScanWorker.ts', import.meta.url),
             { type: 'module' },
         );
 

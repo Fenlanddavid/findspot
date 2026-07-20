@@ -1,5 +1,5 @@
 import React from "react";
-import { RallyDayReview, RallyReviewConfidence } from "../utils/rallyDayReviewEngine";
+import { RallyDayReview, RallyReviewConfidence } from "../engines/session/rallyDayReviewEngine";
 
 function confidenceClass(confidence: RallyReviewConfidence) {
   if (confidence === "strong") return "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800";

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["@cloudflare/vitest-pool-workers/types", "@cloudflare/workers-types"]
+  },
+  "include": [
+    "./**/*.ts",
+    "../../workers/findspot-static/worker-configuration.d.ts",
+    "../../src/shared/staticDatasetContract.ts"
+  ]
+}

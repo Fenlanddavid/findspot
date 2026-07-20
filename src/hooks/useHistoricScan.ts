@@ -19,14 +19,14 @@ import {
     parseOverpassRoutes,
 } from '../services/historicScanService';
 import { getDistanceKm, getDriftMetres, getHotspotInput } from '../utils/fieldGuideAnalysis';
-import { enhanceHotspotsWithHistoric, buildTerrainHotspots } from '../utils/hotspotEngine';
+import { enhanceHotspotsWithHistoric, buildTerrainHotspots } from '../engines/hotspot/hotspotEngine';
 import { ScanContext } from './useTerrainScan';
 import { toOSGridRef } from '../services/gps';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoadsResult, prefetchRomanRoads } from '../services/romanRoadService';
 import { prefetchPASDensity, getPASDensityNear, pasPeriodLabels } from '../services/pasDensityService';
-import { applyPASDensityModifiers } from '../utils/hotspotEngine';
+import { applyPASDensityModifiers } from '../engines/hotspot/hotspotEngine';
 import type { QuestionSourceAvailability } from '../outstandingQuestions/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

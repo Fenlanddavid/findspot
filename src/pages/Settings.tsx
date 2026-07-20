@@ -172,6 +172,7 @@ export default function Settings() {
   const [restoreProgress, setRestoreProgress] = useState<BackupImportProgress | null>(null);
   const [mediaPhotoCount, setMediaPhotoCount] = useState<number | null>(null);
   const [mediaSizeBytes, setMediaSizeBytes] = useState<number | null>(null);
+  const [damagedMediaCount, setDamagedMediaCount] = useState<number | null>(null);
   const [mediaWarnPending, setMediaWarnPending] = useState(false);
   const [exportingDiagLog, setExportingDiagLog] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
@@ -207,9 +208,10 @@ export default function Settings() {
     });
     getSetting("defaultDetector", "").then(setDefaultDetector);
     getSetting("fs_geology_enabled", true).then(v => setGeologyEnabled(v !== false));
-    estimateMediaSizeBytes().then(({ count, bytes }) => {
+    estimateMediaSizeBytes().then(({ count, bytes, damaged }) => {
       setMediaPhotoCount(count);
       setMediaSizeBytes(bytes);
+      setDamagedMediaCount(damaged);
     }).catch(() => {});
 
   }, []);
@@ -672,6 +674,11 @@ export default function Settings() {
               ({Math.round(mediaSizeBytes / (1024 * 1024))} MB raw).</>
           )}
           {mediaPhotoCount === 0 && ' No photos stored.'}
+          {damagedMediaCount !== null && damagedMediaCount > 0 && (
+            <span className="ml-1 font-bold text-red-700 dark:text-red-300">
+              {damagedMediaCount} damaged media record{damagedMediaCount !== 1 ? 's' : ''}; a full backup cannot include {damagedMediaCount === 1 ? 'it' : 'them'}.
+            </span>
+          )}
         </p>
         {mediaPhotoCount !== null && mediaPhotoCount > 0 && (
           <button
@@ -1151,7 +1158,7 @@ export default function Settings() {
                 }
               }}
             >
-              Version&nbsp;&nbsp;4.0
+              Version&nbsp;&nbsp;{__APP_VERSION__}
             </button>
             {easterEggUnlocked ? (
               typeof installCount === 'number' && (

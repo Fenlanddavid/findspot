@@ -1,5 +1,6 @@
 
 import { Find } from "../db";
+import { reverseGeocode } from "./geocode";
 
 /**
  * Synthesizes a professional PAS-style description based on find data.
@@ -72,9 +73,7 @@ export const calculateRecordingScore = (find: Find, photoCount: number): { score
  */
 export const getParishAndCounty = async (lat: number, lon: number): Promise<{ parish: string; county: string }> => {
   try {
-    const resp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`);
-    if (!resp.ok) throw new Error(`Nominatim error: ${resp.status}`);
-    const data = await resp.json();
+    const data = await reverseGeocode(lat, lon, { zoom: 10 });
     const address = data.address || {};
     
     return {

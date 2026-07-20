@@ -9,9 +9,9 @@
 //
 // Output cap: 8 signals (devMode can relax to 20).
 
-import type { Cluster, ModernWay } from '../pages/fieldGuideTypes';
-import type { TraceTarget, TraceType, TraceRejectionReason } from '../pages/fieldGuideTypes';
-import { getDistance, getDistanceToLine } from './fieldGuideAnalysis';
+import type { Cluster, ModernWay } from '../../pages/fieldGuideTypes';
+import type { TraceTarget, TraceType, TraceRejectionReason } from '../../pages/fieldGuideTypes';
+import { getDistance, getDistanceToLine } from '../../utils/fieldGuideAnalysis';
 
 // ─── Gate mirrors (must exactly match FieldGuide.tsx) ────────────────────────
 

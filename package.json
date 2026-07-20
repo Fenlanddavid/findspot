@@ -1,24 +1,28 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "4.0.0",
+  "version": "4.5.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
   },
   "scripts": {
     "dev": "vite",
+    "check:casing": "node scripts/checkCasing.mjs",
     "typefloor": "node scripts/checkTypeFloor.mjs",
     "typecheck": "tsc -b --pretty false",
-    "test": "npm run typecheck && npm run typefloor",
+    "typecheck:worker": "tsc -p workers/findspot-static/tsconfig.json --pretty false && tsc -p workers/geocode-proxy/tsconfig.json --pretty false",
+    "test": "npm run typecheck && npm run typefloor && npm run check:casing && npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "test:worker": "npm run typecheck:worker && vitest run -c vitest.worker.config.ts",
+    "test:worker:nix": "nix shell nixpkgs#glibc.bin -c bash scripts/testWorkerNix.sh",
     "smoke": "playwright test tests/smoke.spec.ts",
     "regression": "playwright test tests/regression.spec.ts",
     "test:e2e": "playwright test",
-    "test:all": "npm run typecheck && npm run test:e2e",
+    "test:all": "npm test && npm run test:worker && npm run test:e2e",
     "test:e2e:nix": "nix shell nixpkgs#chromium -c bash -lc 'export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"$(which chromium)\"; npm run test:e2e'",
-    "test:all:nix": "npm run typecheck && npm run test:e2e:nix",
+    "test:all:nix": "npm test && npm run test:worker:nix && npm run test:e2e:nix",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "gh-pages -d dist"
@@ -26,8 +30,6 @@
   "dependencies": {
     "@geomatico/maplibre-cog-protocol": "^0.9.0",
     "@turf/turf": "^7.3.4",
-    "@types/qrcode": "^1.5.6",
-    "@types/turf": "^3.5.32",
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^1.1.7",
     "fflate": "^0.8.3",
@@ -42,12 +44,14 @@
     "uuid": "^11.1.1"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.6",
+    "@cloudflare/workers-types": "^5.20260719.1",
     "@playwright/test": "^1.60.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.1",
-    "@vitest/coverage-v8": "^3.2.6",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.18",
     "gh-pages": "^6.3.0",
     "postcss": "^8.4.35",
@@ -55,6 +59,7 @@
     "typescript": "^5.5.4",
     "vite": "^8.0.12",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.112.0"
   }
 }

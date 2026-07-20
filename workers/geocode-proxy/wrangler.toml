@@ -1,0 +1,18 @@
+name = "findspot-geocode"
+main = "index.ts"
+compatibility_date = "2026-07-20"
+
+[durable_objects]
+bindings = [
+  { name = "GEOCODE_COORDINATOR", class_name = "GeocodeCoordinator" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GeocodeCoordinator"]
+
+[vars]
+ALLOWED_ORIGINS = "https://fenlanddavid.github.io,http://localhost:5173,http://127.0.0.1:5173"
+
+[observability]
+enabled = true

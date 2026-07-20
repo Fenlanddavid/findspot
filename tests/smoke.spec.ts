@@ -37,6 +37,16 @@ async function readIndexedDbStore(page: Page, storeName: string) {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.route('https://findspot-geocode.trials-uk.workers.dev/**', route => {
+    const url = new URL(route.request().url());
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(url.pathname === '/search'
+        ? []
+        : { address: { parish: 'Smoke Parish', county: 'Smokeshire' } }),
+    });
+  });
   await page.addInitScript(() => {
     localStorage.setItem("fs_onboarding_v2_done", "1");
     localStorage.setItem("fs_onboarding_done", "1");

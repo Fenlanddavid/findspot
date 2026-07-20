@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Cluster, Hotspot, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
-import { applyGeologyModifiers } from "../src/utils/hotspotEngine";
+import { applyGeologyModifiers } from "../src/engines/hotspot/hotspotEngine";
 import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier";
 import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
 import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
@@ -131,7 +131,7 @@ async function mockFieldGuideHistoricScan(page: Page) {
     contentType: "application/json",
     body: JSON.stringify({ type: "FeatureCollection", features: [] }),
   }));
-  await page.route("https://nominatim.openstreetmap.org/reverse**", route => route.fulfill({
+  await page.route("https://findspot-geocode.trials-uk.workers.dev/reverse**", route => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({

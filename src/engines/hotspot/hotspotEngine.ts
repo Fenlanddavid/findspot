@@ -5,12 +5,12 @@
 //
 // generateHotspots is the combined entry point kept for call-site compatibility.
 
-import { Cluster, Hotspot, HotspotClassification, SoilMechanics, HistoricFind, PlaceSignal, HistoricRoute } from '../pages/fieldGuideTypes';
-import type { PASCellLookup } from '../services/pasDensityService';
-import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from './fieldGuideAnalysis';
-import { computeLandscapeReading } from './landscapeReadingEngine';
-import type { GeologyContext } from '../engines/geologyContext/geologyContextTypes';
-import { netGeologyScore } from '../engines/geologyContext/geologyModifiers';
+import { Cluster, Hotspot, HotspotClassification, SoilMechanics, HistoricFind, PlaceSignal, HistoricRoute } from '../../pages/fieldGuideTypes';
+import type { PASCellLookup } from '../../services/pasDensityService';
+import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from '../../utils/fieldGuideAnalysis';
+import { computeLandscapeReading } from '../landscape/landscapeReadingEngine';
+import type { GeologyContext } from '../geologyContext/geologyContextTypes';
+import { netGeologyScore } from '../geologyContext/geologyModifiers';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,

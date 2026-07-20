@@ -15,7 +15,7 @@
 //   (e) ALIE pipeline — record-rich signals (higher-confidence path)
 
 import { describe, it, expect } from 'vitest';
-import { generateHotspots } from '../../src/utils/hotspotEngine';
+import { generateHotspots } from '../../src/engines/hotspot/hotspotEngine';
 
 import { extractSignals }                                              from '../../src/services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../../src/services/fieldguide/landscapeInterpretation/regionalCalibration';

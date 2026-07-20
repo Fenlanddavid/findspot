@@ -1,8 +1,17 @@
 // ─── External API fetch helpers for the Field Guide terrain/heritage scanner ──
 import { USE_R2_DESIGNATIONS, FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
+import {
+    AIM_INDEX_SCHEMA_VERSION,
+    SM_INDEX_SCHEMA_VERSION,
+    STATIC_DATASET_KEYS,
+    aimShardKey,
+    smShardKey,
+    staticDatasetUrl,
+} from '../shared/staticDatasetContract';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { cachedFetchAny } from '../utils/cachedFetch';
 import { bboxIntersectsWales, bboxRequiredSMJurisdictions, type SMJurisdiction } from '../utils/jurisdictionDetect';
+import { reverseGeocode } from './geocode';
 
 // ─── Typed API response shapes ────────────────────────────────────────────────
 
@@ -251,10 +260,7 @@ export async function fetchLocationLabel(
 ): Promise<NominatimResponse | null> {
     const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
-        const res = await fetch(url, { signal: timed.signal });
-        if (!res.ok) return null;
-        return await res.json() as NominatimResponse;
+        return await reverseGeocode(lat, lng, { signal: timed.signal });
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
         return null;
@@ -508,7 +514,7 @@ async function _fetchSMFromR2(
     options: DesignationFetchOptions = {},
 ): Promise<NHLEResponse> {
     // ── 1. Coverage sentinel ──────────────────────────────────────────────────
-    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`;
+    const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta);
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
@@ -519,7 +525,7 @@ async function _fetchSMFromR2(
                 return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
             }
             const meta = await metaRes.json().catch(() => null);
-            if (!meta || meta.schemaVersion !== 2 || meta.geometryMode !== 'full-geojson') {
+            if (!meta || meta.schemaVersion !== SM_INDEX_SCHEMA_VERSION || meta.geometryMode !== 'full-geojson') {
                 return { features: [], available: false, error: 'SM index requires full-geometry schema v2' };
             }
             const coverage: string[] = Array.isArray(meta.coverage) ? meta.coverage : ['england', 'wales'];
@@ -543,7 +549,7 @@ async function _fetchSMFromR2(
 
     try {
         await Promise.all(cells.map(async (cell) => {
-            const url = `${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`;
+            const url = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, smShardKey(cell));
             const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
             try {
                 // cachedFetchAny serves from any open offline pack before network
@@ -612,7 +618,7 @@ async function _fetchAIMFromR2(
     // ── 1. Coverage sentinel ──────────────────────────────────────────────────
     // aim-index/_meta.json must exist before shard arrays are trusted.
     // A missing meta means the index has not been built/deployed yet.
-    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.aimMeta);
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
@@ -623,8 +629,8 @@ async function _fetchAIMFromR2(
                 return { features: [], available: false, error: `AIM index not built (${metaRes.status})` };
             }
             const meta = await metaRes.json().catch(() => null);
-            if (!meta || typeof meta.schemaVersion !== 'number') {
-                return { features: [], available: false, error: 'AIM index meta invalid' };
+            if (!meta || meta.schemaVersion !== AIM_INDEX_SCHEMA_VERSION) {
+                return { features: [], available: false, error: `AIM index requires schema v${AIM_INDEX_SCHEMA_VERSION}` };
             }
         } finally {
             metaTimed.clear();
@@ -642,7 +648,7 @@ async function _fetchAIMFromR2(
 
     try {
         await Promise.all(cells.map(async (cell) => {
-            const url = `${FINDSPOT_STATIC_BASE_URL}/aim-index/${cell}.json`;
+            const url = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, aimShardKey(cell));
             const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
             try {
                 const res = await cachedFetchAny(url, { signal: timed.signal }, { cacheOnly: options.cacheOnly });

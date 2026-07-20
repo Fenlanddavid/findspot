@@ -10,8 +10,8 @@
 //
 // Performance: all member flags are derived in a single pass before scoring.
 
-import { Cluster, HistoricRoute } from '../pages/fieldGuideTypes';
-import { getDistance, getDistanceToLine } from './fieldGuideAnalysis';
+import { Cluster, HistoricRoute } from '../../pages/fieldGuideTypes';
+import { getDistance, getDistanceToLine } from '../../utils/fieldGuideAnalysis';
 
 export interface LandscapeReading {
     score:   number;    // capped at 6 — only microTopo + dryMargin

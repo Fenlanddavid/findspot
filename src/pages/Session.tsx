@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { computeSessionOutcomeResult, SessionOutcomeResult } from "../utils/sessionOutcomeEngine";
+import { computeSessionOutcomeResult, SessionOutcomeResult } from "../engines/session/sessionOutcomeEngine";
 import { db, Permission, Session, Find, Media, Track } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";

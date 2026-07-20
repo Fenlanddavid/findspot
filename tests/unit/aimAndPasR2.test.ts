@@ -113,6 +113,24 @@ describe('AIM gate — _meta.json sentinel', () => {
         expect(result.features).toHaveLength(0);
     });
 
+    it('returns available:false when the AIM schema version is not the supported version', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (url.includes('aim-index/_meta.json')) {
+                return Promise.resolve({
+                    ok: true,
+                    status: 200,
+                    json: () => Promise.resolve({ schemaVersion: 999 }),
+                });
+            }
+            return emptyShard();
+        }));
+        const { fetchAIMData } = await import('../../src/services/historicScanService');
+        const result = await fetchAIMData(BBOX.west, BBOX.south, BBOX.east, BBOX.north);
+
+        expect(result.available).toBe(false);
+        expect(result.error).toContain('schema v1');
+    });
+
     it('returns available:true with empty features when meta present and shards are empty', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('aim-index/_meta.json')) return okMeta();
@@ -267,35 +285,35 @@ describe('PAS density service — module-level cache', () => {
 
 describe('applyPASDensityModifiers', () => {
     it('returns hotspots unchanged when pasCell is null', async () => {
-        const { applyPASDensityModifiers } = await import('../../src/utils/hotspotEngine');
+        const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], null);
         expect(result[0].score).toBe(60);
     });
 
     it('returns hotspots unchanged when pasCell.c is 0', async () => {
-        const { applyPASDensityModifiers } = await import('../../src/utils/hotspotEngine');
+        const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 0, p: [], t: [] });
         expect(result[0].score).toBe(60);
     });
 
     it('does not boost a hotspot with no primary signal', async () => {
-        const { applyPASDensityModifiers } = await import('../../src/utils/hotspotEngine');
+        const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 40, explanation: [], metrics: { anomaly: 0, context: 0, signalCount: 1, behaviour: 0.3, convergence: 0.2 }, confidence: 'Subtle' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 200, p: ['ROMAN'], t: ['COIN'] });
         expect(result[0].score).toBe(40);
     });
 
     it('adds +4 boost for high density (>=200) with primary signal', async () => {
-        const { applyPASDensityModifiers } = await import('../../src/utils/hotspotEngine');
+        const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 220, p: ['MEDIEVAL'], t: ['COIN'] });
         expect(result[0].score).toBe(64);
     });
 
     it('adds +6 boost for very high density (>=500) with period match', async () => {
-        const { applyPASDensityModifiers } = await import('../../src/utils/hotspotEngine');
+        const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 600, p: ['ROMAN'] }, 'Roman');
         expect(result[0].score).toBe(66);

@@ -13,13 +13,13 @@ import {
     parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
     fetchScheduledMonuments, fetchAIMData,
 } from '../services/historicScanService';
-import { scanDataSource } from '../utils/terrainEngine';
+import { scanDataSource } from '../engines/landscape/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment, getDistance,
     applyRouteAssessments, applyRouteUnavailableFallback, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
 } from '../utils/fieldGuideAnalysis';
-import { buildTerrainHotspots } from '../utils/hotspotEngine';
+import { buildTerrainHotspots } from '../engines/hotspot/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';

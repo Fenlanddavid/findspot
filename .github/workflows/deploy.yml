@@ -19,9 +19,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run typefloor
-      - run: npm run test:unit
+      - run: npm test
+      - run: npm run test:worker
 
   browser:
     timeout-minutes: 30

@@ -20,7 +20,7 @@ import {
     Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
     HotspotClassification, HOTSPOT_INTERPRETATION,
 } from './fieldGuideTypes';
-import { computeTraceTargets } from '../utils/traceTargetEngine';
+import { computeTraceTargets } from '../engines/hotspot/traceTargetEngine';
 import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
@@ -34,18 +34,19 @@ import {
     DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence,
     EngineContextAtPoint, ANNOTATION_TYPE_LABELS, LANDSCAPE_TYPE_LABELS,
 } from '../utils/devAnnotation';
-import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary, HotspotSignalStrength } from '../utils/hotspotInterpreter';
-import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../utils/targetInterpreter';
+import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary, HotspotSignalStrength } from '../engines/hotspot/hotspotInterpreter';
+import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../engines/hotspot/targetInterpreter';
 import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyContext';
 import type { GeologyContext } from '../engines/geologyContext';
-import { applyGeologyModifiers } from '../utils/hotspotEngine';
-import { computeHotspotLandscapeIntelligence, computeLandscapeSummary } from '../utils/landscapeIntelligenceEngine';
+import { applyGeologyModifiers } from '../engines/hotspot/hotspotEngine';
+import { computeHotspotLandscapeIntelligence, computeLandscapeSummary } from '../engines/landscape/landscapeIntelligenceEngine';
 import type { LandscapeIntelligence, LandscapeSummary } from './fieldGuideTypes';
 import { getSetting } from '../services/data';
 import type { SMUnavailableReason } from '../services/historicScanService';
 import { recordFindHotspotSignals } from '../services/findHotspotService';
+import { searchLocations } from '../services/geocode';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -1471,8 +1472,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             return;
         }
         try {
-            const res  = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
-            const data = await res.json();
+            const data = await searchLocations(searchQuery);
             if (data[0]) { mapRef.current?.flyTo({ center: [parseFloat(data[0].lon), parseFloat(data[0].lat)], zoom: 16 }); setIsSearchOpen(false); }
         } catch { addLog('> Search failed.', 'system', 'warn'); }
     };

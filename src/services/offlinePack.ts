@@ -22,6 +22,14 @@ import type { NHLEFeature, NHLEGeometry } from './historicScanService';
 import { romanRoadsAssetUrl } from './romanRoadService';
 import { pasDensityAssetUrl } from './pasDensityService';
 import { osmTileUrl, worldImageryTileUrl } from '../utils/mapTileCache';
+import {
+    AIM_INDEX_SCHEMA_VERSION,
+    SM_INDEX_SCHEMA_VERSION,
+    STATIC_DATASET_KEYS,
+    aimShardKey,
+    smShardKey,
+    staticDatasetUrl,
+} from '../shared/staticDatasetContract';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -240,16 +248,16 @@ function isValidSMShardEntry(entry: unknown): entry is SMShardEntry {
 }
 
 async function cacheSMIndexFromR2(cache: Cache, cells: string[]): Promise<boolean> {
-    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`;
+    const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta);
     const metaRes = await fetch(metaUrl);
     if (!metaRes.ok) return false;
     const meta = await metaRes.clone().json().catch(() => null);
-    if (!meta || meta.schemaVersion !== 2 || meta.geometryMode !== 'full-geojson') return false;
+    if (!meta || meta.schemaVersion !== SM_INDEX_SCHEMA_VERSION || meta.geometryMode !== 'full-geojson') return false;
     await cache.put(metaUrl, metaRes);
 
     let ok = 0;
     for (const cell of cells) {
-        const url = `${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`;
+        const url = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, smShardKey(cell));
         try {
             const res = await fetch(url);
             if (!res.ok) continue;
@@ -309,9 +317,9 @@ async function cacheSMIndexFromLive(
             }
         }
 
-        await cache.put(`${FINDSPOT_STATIC_BASE_URL}/sm-index/_meta.json`, new Response(JSON.stringify({
+        await cache.put(staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta), new Response(JSON.stringify({
             builtAt: new Date().toISOString(),
-            schemaVersion: 2,
+            schemaVersion: SM_INDEX_SCHEMA_VERSION,
             geometryMode: 'full-geojson',
             featureCount: features.length,
             coverage: ['england'],
@@ -323,7 +331,7 @@ async function cacheSMIndexFromLive(
         }));
 
         for (const [cell, entries] of shards) {
-            await cache.put(`${FINDSPOT_STATIC_BASE_URL}/sm-index/${cell}.json`, new Response(JSON.stringify(entries), {
+            await cache.put(staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, smShardKey(cell)), new Response(JSON.stringify(entries), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
             }));
@@ -613,17 +621,17 @@ export async function buildPack(
 
     // 5 — Cache AIM index shards for the bbox (same geohash cells as SM)
     // Meta must be cached first: the runtime refuses to trust shards without a
-    // valid _meta.json sentinel (typeof schemaVersion === 'number'). Caching
+    // valid, exact-version _meta.json sentinel. Caching
     // shards the reader would reject wastes quota and still leaves AIM amber.
     const aimCells = smCells;
     let aimOk = 0;
     let aimMetaOk = false;
-    const aimMetaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    const aimMetaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.aimMeta);
     try {
         const metaRes = await fetch(aimMetaUrl);
         if (metaRes.ok) {
             const meta = await metaRes.clone().json().catch(() => null);
-            if (meta && typeof meta.schemaVersion === 'number') {
+            if (meta?.schemaVersion === AIM_INDEX_SCHEMA_VERSION) {
                 await cache.put(aimMetaUrl, metaRes);
                 aimMetaOk = true;
             }
@@ -632,7 +640,7 @@ export async function buildPack(
 
     if (aimMetaOk && aimCells.length <= AIM_PACK_MAX_SHARDS) {
         for (const cell of aimCells) {
-            const url = `${FINDSPOT_STATIC_BASE_URL}/aim-index/${cell}.json`;
+            const url = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, aimShardKey(cell));
             try {
                 const res = await fetch(url);
                 if (res.status === 404) {
@@ -744,7 +752,7 @@ export async function healAimMeta(): Promise<void> {
     const packs = await listPacks();
     if (packs.length === 0) return;
 
-    const metaUrl = `${FINDSPOT_STATIC_BASE_URL}/aim-index/_meta.json`;
+    const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.aimMeta);
     const alreadyCached = await caches.match(metaUrl).catch(() => null);
     if (alreadyCached) return;
 
@@ -755,7 +763,7 @@ export async function healAimMeta(): Promise<void> {
             const res = await fetch(metaUrl, { signal: controller.signal });
             if (!res.ok) return;
             const meta = await res.clone().json().catch(() => null);
-            if (!meta || typeof meta.schemaVersion !== 'number') return;
+            if (meta?.schemaVersion !== AIM_INDEX_SCHEMA_VERSION) return;
             const healCache = await caches.open(AIM_META_HEAL_CACHE);
             await healCache.put(metaUrl, res);
         } finally {
