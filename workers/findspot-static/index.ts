@@ -16,7 +16,10 @@
  *   AIM data: © Historic England
  */
 
-import { STATIC_DATASET_KEYS } from '../../src/shared/staticDatasetContract';
+import {
+  STATIC_DATASET_KEYS,
+  aimBundleKey,
+} from '../../src/shared/staticDatasetContract';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':   '*',
@@ -54,6 +57,13 @@ export default {
 
     if (!isSmMeta && !isAimMeta && !isSmShard && !isAimShard && !isPasH3) {
       return textError('Not found', 404);
+    }
+
+    // AIM shards are stored as four-character geohash bundles in R2 so a
+    // complete generation can be uploaded atomically in hundreds of objects,
+    // while the public client contract remains one six-character cell per URL.
+    if (isAimShard) {
+      return serveAimShard(key, request.method, env);
     }
 
     // ── Determine cache-control for this key ─────────────────────────────────
@@ -161,4 +171,26 @@ function textError(message: string, status: number): Response {
     status,
     headers: { 'Content-Type': 'text/plain', ...CORS_HEADERS },
   });
+}
+
+async function serveAimShard(key: string, method: string, env: Env): Promise<Response> {
+  const cell = key.slice('aim-index/'.length, -'.json'.length);
+  const bundle = await env.STATIC_BUCKET.get(aimBundleKey(cell));
+  if (!bundle) return jsonResponse('[]', method);
+
+  try {
+    const cells = await bundle.json<Record<string, unknown>>();
+    const value = Array.isArray(cells[cell]) ? cells[cell] : [];
+    return jsonResponse(JSON.stringify(value), method);
+  } catch {
+    return textError('AIM bundle unavailable', 503);
+  }
+}
+
+function jsonResponse(body: string, method: string): Response {
+  const headers = new Headers(CORS_HEADERS);
+  headers.set('Content-Type', 'application/json');
+  headers.set('Cache-Control', 'public, max-age=86400');
+  headers.set('Content-Length', String(new TextEncoder().encode(body).byteLength));
+  return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
 }

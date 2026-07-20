@@ -783,7 +783,7 @@ export async function fetchAIMData(
     // Legacy live ArcGIS path — REMOVE_AFTER_RELEASE: v4.3.0
     const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
     try {
-        const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/1/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
+        const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/0/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         const res = await fetch(url, { signal: timed.signal });
         if (!res.ok) return { features: [], available: false };
         const data = await res.json() as Partial<AIMResponse>;

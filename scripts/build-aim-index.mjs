@@ -2,7 +2,7 @@
  * build-aim-index.mjs
  *
  * Fetches all HE AIM (Aerial Investigation and Mapping) features from the
- * ArcGIS FeatureServer/1, buckets them by geohash6 cell, and writes a sparse
+ * ArcGIS FeatureServer/0, buckets them by geohash6 cell, and writes a sparse
  * shard-per-cell index to scripts/out/aim-index/ — the same structure as the
  * SM index so the findspot-static worker can serve them identically.
  *
@@ -27,9 +27,11 @@ const OUT_DIR   = join(__dirname, 'out', 'aim-index');
 
 const FEATURE_SERVER =
     'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
-    'HE_AIM_data/FeatureServer/1/query';
+    'HE_AIM_data/FeatureServer/0/query';
 
-const PAGE_SIZE = 1000;
+const PAGE_SIZE = 2000;
+const FETCH_CONCURRENCY = 4;
+const MAX_FETCH_ATTEMPTS = 3;
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 
@@ -95,69 +97,129 @@ function bboxCells(west, south, east, north) {
 
 // ─── Fetch all features ───────────────────────────────────────────────────────
 
-async function fetchAllFeatures() {
-    const features = [];
-    let offset = 0;
-
-    while (true) {
-        const url = new URL(FEATURE_SERVER);
-        url.searchParams.set('where', '1=1');
-        url.searchParams.set('geometryType', 'esriGeometryEnvelope');
-        url.searchParams.set('outSR', '4326');
-        url.searchParams.set('f', 'geojson');
-        url.searchParams.set('outFields', 'MONUMENT_TYPE,PERIOD,EVIDENCE_1');
-        url.searchParams.set('resultOffset', String(offset));
-        url.searchParams.set('resultRecordCount', String(PAGE_SIZE));
-
-        const res = await fetch(url.toString());
-        if (!res.ok) throw new Error(`FeatureServer/1 HTTP ${res.status} at offset ${offset}`);
-        const data = await res.json();
-
-        const page = data.features ?? [];
-        features.push(...page);
-
-        if (offset % 5000 === 0 && offset > 0) {
-            console.log(`  … fetched ${features.length} AIM features so far`);
+async function fetchJson(params, label) {
+    for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
+        try {
+            const res = await fetch(FEATURE_SERVER, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params,
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data?.error) {
+                const detail = data.error.details?.filter(Boolean).join('; ')
+                    || data.error.message
+                    || 'Unknown ArcGIS error';
+                throw new Error(detail);
+            }
+            return data;
+        } catch (error) {
+            if (attempt === MAX_FETCH_ATTEMPTS) {
+                throw new Error(`FeatureServer/0 ${label} failed: ${error.message}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
         }
+    }
+}
 
-        if (page.length < PAGE_SIZE) break;
-        offset += PAGE_SIZE;
+async function fetchAllFeatures(onPage) {
+    const idParams = new URLSearchParams({
+        where: '1=1',
+        returnIdsOnly: 'true',
+        f: 'json',
+    });
+    const idData = await fetchJson(idParams, 'object ID query');
+    const objectIds = [...(idData.objectIds ?? [])].sort((a, b) => a - b);
+    if (objectIds.length === 0) {
+        throw new Error('FeatureServer/0 returned no object IDs');
     }
 
-    return features;
+    console.log(`Source contains ${objectIds.length} AIM features`);
+    const chunks = [];
+    for (let i = 0; i < objectIds.length; i += PAGE_SIZE) {
+        chunks.push(objectIds.slice(i, i + PAGE_SIZE));
+    }
+
+    let nextPage = 0;
+    let fetched = 0;
+
+    async function fetchFeatureChunk(ids, label) {
+        const params = new URLSearchParams({
+            objectIds: ids.join(','),
+            outSR: '4326',
+            f: 'geojson',
+            outFields: 'OBJECTID,MONUMENT_TYPE,PERIOD,EVIDENCE_1',
+            orderByFields: 'OBJECTID',
+            returnGeometry: 'true',
+        });
+        try {
+            const data = await fetchJson(params, label);
+            const page = data.features;
+            if (!Array.isArray(page) || page.length !== ids.length) {
+                throw new Error(
+                    `${label} returned ${page?.length ?? 'invalid'} features; expected ${ids.length}`,
+                );
+            }
+            onPage(page);
+            return page.length;
+        } catch (error) {
+            if (ids.length <= 100) throw error;
+            const midpoint = Math.ceil(ids.length / 2);
+            console.warn(`  … ${label} was too large; retrying as smaller verified chunks`);
+            const first = await fetchFeatureChunk(ids.slice(0, midpoint), `${label}a`);
+            const second = await fetchFeatureChunk(ids.slice(midpoint), `${label}b`);
+            return first + second;
+        }
+    }
+
+    async function worker() {
+        while (true) {
+            const pageIndex = nextPage++;
+            if (pageIndex >= chunks.length) return;
+            const ids = chunks[pageIndex];
+            const pageCount = await fetchFeatureChunk(ids, `page ${pageIndex + 1}/${chunks.length}`);
+            fetched += pageCount;
+            if (fetched % 10000 < PAGE_SIZE) {
+                console.log(`  … fetched ${fetched} AIM features so far`);
+            }
+        }
+    }
+
+    await Promise.all(Array.from({ length: FETCH_CONCURRENCY }, () => worker()));
+    return objectIds.length;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-    console.log('Building AIM index from live FeatureServer/1…');
+    console.log('Building AIM index from live FeatureServer/0…');
     await mkdir(OUT_DIR, { recursive: true });
-
-    const features = await fetchAllFeatures();
-    console.log(`Fetched ${features.length} AIM features`);
 
     // Build shard map: cell → array of entries
     const shards = new Map(); // cell → SMShardEntry[]
+    const featureCount = await fetchAllFeatures((features) => {
+        for (const feature of features) {
+            const bbox = geomBbox(feature.geometry);
+            if (!bbox) continue;
 
-    for (const feature of features) {
-        const bbox = geomBbox(feature.geometry);
-        if (!bbox) continue;
+            const [west, south, east, north] = bbox;
+            const cells = bboxCells(west, south, east, north);
 
-        const [west, south, east, north] = bbox;
-        const cells = bboxCells(west, south, east, north);
+            const entry = {
+                monumentType: feature.properties?.MONUMENT_TYPE ?? '',
+                period:       feature.properties?.PERIOD ?? '',
+                evidence:     feature.properties?.EVIDENCE_1 ?? '',
+                bbox:         [west, south, east, north],
+            };
 
-        const entry = {
-            monumentType: feature.properties?.MONUMENT_TYPE ?? '',
-            period:       feature.properties?.PERIOD ?? '',
-            evidence:     feature.properties?.EVIDENCE_1 ?? '',
-            bbox:         [west, south, east, north],
-        };
-
-        for (const cell of cells) {
-            if (!shards.has(cell)) shards.set(cell, []);
-            shards.get(cell).push(entry);
+            for (const cell of cells) {
+                if (!shards.has(cell)) shards.set(cell, []);
+                shards.get(cell).push(entry);
+            }
         }
-    }
+    });
+    console.log(`Fetched ${featureCount} AIM features`);
 
     // Write shards
     let written = 0;
@@ -173,14 +235,14 @@ async function main() {
     const meta = {
         schemaVersion: 1,
         builtAt:      new Date().toISOString(),
-        featureCount: features.length,
+        featureCount,
         cellCount:    shards.size,
         maxShardSize,
-        source:       'FeatureServer/1 live',
+        source:       'FeatureServer/0 live',
     };
     await writeFile(join(OUT_DIR, '_meta.json'), JSON.stringify(meta, null, 2));
 
-    console.log(`Done. ${features.length} features → ${written} cells`);
+    console.log(`Done. ${featureCount} features → ${written} cells`);
     console.log(`Max shard size: ${maxShardSize} entries`);
     console.log(`Output: ${OUT_DIR}`);
 }
