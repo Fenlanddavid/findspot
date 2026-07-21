@@ -7,6 +7,8 @@ import {
   STATIC_DATASET_KEYS,
   aimBundleKey,
   aimShardKey,
+  smBundleIndexKey,
+  smBundleKey,
   smShardKey,
 } from '../../src/shared/staticDatasetContract';
 
@@ -21,7 +23,6 @@ const fixtures = [
     key: STATIC_DATASET_KEYS.aimMeta,
     value: { generationVersion: STATIC_DATA_GENERATION, schemaVersion: AIM_INDEX_SCHEMA_VERSION },
   },
-  { key: smShardKey(CELL), value: [] },
 ] as const;
 
 beforeEach(async () => {
@@ -36,6 +37,8 @@ beforeEach(async () => {
       JSON.stringify({ [CELL]: [{ monumentType: 'ENCLOSURE' }] }),
       { httpMetadata: { contentType: 'application/json' } },
     ),
+    env.STATIC_BUCKET.put(smBundleIndexKey(CELL), JSON.stringify({ [CELL]: [2, 39] })),
+    env.STATIC_BUCKET.put(smBundleKey(CELL), '[][{"listEntry":"1000001","name":"Test"}]'),
   ]);
 });
 
@@ -56,6 +59,14 @@ describe('findspot-static dataset contract', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/json');
     expect(await response.json()).toEqual([{ monumentType: 'ENCLOSURE' }]);
+  });
+
+  it('serves only the requested SM cell range from its R2 prefix bundle', async () => {
+    const response = await exports.default.fetch(`https://static.test/${smShardKey(CELL)}`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(await response.json()).toEqual([{ listEntry: '1000001', name: 'Test' }]);
   });
 
   it('treats a missing known shard as an empty dataset', async () => {

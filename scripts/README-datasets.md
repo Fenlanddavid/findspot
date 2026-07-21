@@ -25,13 +25,19 @@ node scripts/build-sm-index.mjs
 # Output: scripts/out/sm-index/_meta.json  +  scripts/out/sm-index/{geohash6}.json
 ```
 
-**Step 2 — Bulk-upload all shards except `_meta.json`:**
+**Step 2 — Bundle the cell shards, then upload the bundle data and indexes:**
 ```bash
-find scripts/out/sm-index -name '*.json' ! -name '_meta.json' | while read f; do
-  key="v2/sm-index/$(basename $f)"
-  wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
+node scripts/bundle-sm-index.mjs
+
+find scripts/out/sm-index/bundles -type f | while read f; do
+  key="v2/sm-index/bundles/$(basename $f)"
+  wrangler r2 object put "findspot-static/$key" --file "$f"
 done
 ```
+
+Use the `v2/sm-index/bundles/` prefix for the destination key. The Worker reads
+the small `.index.json` object and requests only the byte range for the public
+cell URL, so it never parses a complete data bundle in memory.
 
 **Step 3 — Verify Scottish shard URLs directly, then upload `_meta.json` last:**
 ```bash
@@ -40,7 +46,8 @@ wrangler r2 object put findspot-static/v2/sm-index/_meta.json \
   --content-type application/json
 ```
 
-Total upload time: ~2–5 minutes for ~20,000 features across ~4,000 cells.
+The current v2 generation contains 43,359 occupied cells in 1,380 bundle
+objects. The metadata file is deliberately excluded until verification passes.
 
 ---
 

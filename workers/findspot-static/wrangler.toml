@@ -13,13 +13,13 @@ enabled = true
 #   cd workers/findspot-static
 #   wrangler deploy
 #
-# Upload SM index shards (after running build-sm-index.mjs):
+# Upload SM index metadata only after uploading and verifying range bundles:
 #   wrangler r2 object put findspot-static/v2/sm-index/_meta.json --file scripts/out/sm-index/_meta.json --content-type application/json
-# Upload AIM index shards (after running build-aim-index.mjs):
+# Upload AIM index metadata only after uploading and verifying bundles:
 #   wrangler r2 object put findspot-static/v2/aim-index/_meta.json --file scripts/out/aim-index/_meta.json --content-type application/json
 #
-# Bulk-upload all SM shards (bash):
-#   find scripts/out/sm-index -name '*.json' | while read f; do
-#     key="v2/sm-index/$(basename $f)"
-#     wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
+# Bulk-upload all SM range-bundle objects (bash):
+#   find scripts/out/sm-index/bundles -type f | while read f; do
+#     key="v2/sm-index/bundles/$(basename $f)"
+#     wrangler r2 object put "findspot-static/$key" --file "$f"
 #   done

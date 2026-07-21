@@ -1,5 +1,6 @@
 export const SM_INDEX_SCHEMA_VERSION = 2;
 export const AIM_INDEX_SCHEMA_VERSION = 1;
+export const SM_BUNDLE_PREFIX_LENGTH = 4;
 export const AIM_BUNDLE_PREFIX_LENGTH = 4;
 export const STATIC_DATA_GENERATION = 'v2';
 export const SUPPORTED_STATIC_DATA_GENERATIONS = ['v1', STATIC_DATA_GENERATION] as const;
@@ -46,6 +47,14 @@ export const STATIC_DATASET_KEYS = {
 
 export function smShardKey(cell: string, generation = STATIC_DATA_GENERATION): string {
   return generationKey(`sm-index/${cell}.json`, generation);
+}
+
+export function smBundleKey(cell: string, generation = STATIC_DATA_GENERATION): string {
+  return generationKey(`sm-index/bundles/${cell.slice(0, SM_BUNDLE_PREFIX_LENGTH)}.bin`, generation);
+}
+
+export function smBundleIndexKey(cell: string, generation = STATIC_DATA_GENERATION): string {
+  return generationKey(`sm-index/bundles/${cell.slice(0, SM_BUNDLE_PREFIX_LENGTH)}.index.json`, generation);
 }
 
 export function aimShardKey(cell: string, generation = STATIC_DATA_GENERATION): string {

@@ -7,8 +7,10 @@
  * Datasets served:
  *   v{n}/sm-index/_meta.json        — SM index build metadata
  *   v{n}/sm-index/{geohash6}.json   — per-cell SM index shards
+ *   v{n}/sm-index/bundles/*         — private range-bundle storage (not public)
  *   v{n}/aim-index/_meta.json       — AIM index build metadata
  *   v{n}/aim-index/{geohash6}.json  — per-cell AIM index shards
+ *   v{n}/aim-index/bundles/*        — private prefix-bundle storage (not public)
  *   v{n}/pas-h3/{key}               — PAS H3 density tiles (future W4)
  *
  * Attribution:
@@ -19,6 +21,8 @@
 import {
   SUPPORTED_STATIC_DATA_GENERATIONS,
   aimBundleKey,
+  smBundleIndexKey,
+  smBundleKey,
 } from '../../src/shared/staticDatasetContract';
 
 const CORS_HEADERS = {
@@ -65,9 +69,12 @@ export default {
       return textError('Not found', 404);
     }
 
-    // AIM shards are stored as four-character geohash bundles in R2 so a
-    // complete generation can be uploaded atomically in hundreds of objects,
-    // while the public client contract remains one six-character cell per URL.
+    // The public client contract remains one six-character cell per URL while
+    // the generation is stored in upload-friendly prefix bundles.
+    if (isSmShard) {
+      return serveSmShard(key, request.method, env);
+    }
+
     if (isAimShard) {
       return serveAimShard(key, request.method, env);
     }
@@ -206,10 +213,56 @@ async function serveAimShard(key: string, method: string, env: Env): Promise<Res
   }
 }
 
+async function serveSmShard(key: string, method: string, env: Env): Promise<Response> {
+  const parts = key.split('/');
+  const versioned = SUPPORTED_STATIC_DATA_GENERATIONS.includes(parts[0] as typeof SUPPORTED_STATIC_DATA_GENERATIONS[number]);
+  const generation = versioned ? parts[0] : undefined;
+  const filename = parts.at(-1)!;
+  const cell = filename.slice(0, -'.json'.length);
+  const indexKey = generation
+    ? smBundleIndexKey(cell, generation)
+    : `sm-index/bundles/${cell.slice(0, 4)}.index.json`;
+  const indexObject = await env.STATIC_BUCKET.get(indexKey);
+
+  // Older generations were uploaded as one object per cell.
+  if (!indexObject) {
+    const direct = await env.STATIC_BUCKET.get(key);
+    return direct ? jsonResponse(await direct.text(), method) : jsonResponse('[]', method);
+  }
+
+  try {
+    const index = await indexObject.json<Record<string, unknown>>();
+    const location = index[cell];
+    if (!Array.isArray(location)
+      || location.length !== 2
+      || !location.every(Number.isSafeInteger)
+      || location.some(value => value < 0)) {
+      return jsonResponse('[]', method);
+    }
+    const [offset, length] = location as [number, number];
+    const bundleKey = generation
+      ? smBundleKey(cell, generation)
+      : `sm-index/bundles/${cell.slice(0, 4)}.bin`;
+    const bundle = await env.STATIC_BUCKET.get(bundleKey, { range: { offset, length } });
+    if (!bundle) return textError('SM bundle unavailable', 503);
+    return jsonStreamResponse(bundle.body, method, length);
+  } catch {
+    return textError('SM bundle unavailable', 503);
+  }
+}
+
 function jsonResponse(body: string, method: string): Response {
   const headers = new Headers(CORS_HEADERS);
   headers.set('Content-Type', 'application/json');
   headers.set('Cache-Control', 'public, max-age=86400');
   headers.set('Content-Length', String(new TextEncoder().encode(body).byteLength));
+  return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
+}
+
+function jsonStreamResponse(body: ReadableStream, method: string, length: number): Response {
+  const headers = new Headers(CORS_HEADERS);
+  headers.set('Content-Type', 'application/json');
+  headers.set('Cache-Control', 'public, max-age=86400');
+  headers.set('Content-Length', String(length));
   return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
 }

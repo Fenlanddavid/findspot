@@ -5,6 +5,8 @@ import {
   STATIC_DATA_GENERATION,
   isCurrentAimIndexMeta,
   isCurrentSmIndexMeta,
+  smBundleIndexKey,
+  smBundleKey,
 } from '../../src/shared/staticDatasetContract';
 
 describe('static dataset generation metadata', () => {
@@ -36,5 +38,10 @@ describe('static dataset generation metadata', () => {
       generationVersion: STATIC_DATA_GENERATION,
       schemaVersion: AIM_INDEX_SCHEMA_VERSION + 1,
     })).toBe(false);
+  });
+
+  it('maps SM cells to generation-scoped range bundle objects', () => {
+    expect(smBundleKey('gcpvj0')).toBe('v2/sm-index/bundles/gcpv.bin');
+    expect(smBundleIndexKey('gcpvj0')).toBe('v2/sm-index/bundles/gcpv.index.json');
   });
 });
