@@ -489,7 +489,10 @@ describe('table coverage guard', () => {
     'savedPoints',
     'undugSignals',
     'findHotspotSignals',
+    'hotspotPredictions',
+    'hotspotPredictionAggregates',
     'outstandingQuestions',
+    'questionNotes',
   ] as const;
 
   it('validateBackupData returns every user table as an array', () => {
@@ -502,7 +505,7 @@ describe('table coverage guard', () => {
   it('every user table accepts a non-empty value from the fixture', () => {
     const backup = makeValidBackup();
     const result = validateBackupData(backup);
-    // projects is required; the others default to [] if absent but must be present in a v4 export
+    // projects is required; the others default to [] for backward-compatible imports.
     expect(result.projects.length).toBeGreaterThan(0);
     expect(result.savedPoints.length).toBeGreaterThan(0);
     expect(result.outstandingQuestions.length).toBeGreaterThan(0);

@@ -794,9 +794,9 @@ export function FieldGuideMap() {
                                 <p className="text-[0.625rem] font-black text-white/60 uppercase tracking-widest mb-2.5">Evidence summary</p>
                                 <div className="space-y-2">
                                     {h.explanation.slice(0, 3).map((reason, idx) => (
-                                        <div key={idx} className="flex items-start gap-3">
+                                        <div key={`${reason.tag}:${reason.qualifier ?? idx}`} className="flex items-start gap-3">
                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-                                            <p className="text-sm lg:text-sm font-bold text-white leading-tight flex-1">{reason}</p>
+                                            <p className="text-sm lg:text-sm font-bold text-white leading-tight flex-1">{reason.text}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -1341,7 +1341,7 @@ export function FieldGuideMap() {
                                                         disturbanceRisk:      h.disturbanceRisk,
                                                         passedPrimaryEvidence: true,
                                                         survivedDisturbanceGate: h.disturbanceRisk === 'High',
-                                                        explanation:          h.explanation,
+                                                        explanation:          h.explanation.map(item => item.text),
                                                     })),
                                                     targets: displayTargets.map(t => ({
                                                         id:            t.id,

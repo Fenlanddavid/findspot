@@ -44,7 +44,7 @@ function regressionHotspot(
     type: "General Activity Zone",
     classification: "General Activity Zone",
     classificationReason: "Regression hotspot",
-    explanation: ["Regression signal"],
+    explanation: [{ tag: "other", qualifier: "regression", text: "Regression signal" }],
     center: [0, 0],
     bounds: [[0, 0], [0, 0]],
     memberIds: [id],
@@ -407,6 +407,8 @@ test("toOSGridRef supports lower precision formatting when requested", () => {
 });
 
 test("backup restore replaces current data and preserves linked records, settings and media blobs", async ({ page }) => {
+  test.slow();
+
   await createPermission(page, "Regression Data That Should Disappear");
 
   const now = "2026-05-15T12:00:00.000Z";

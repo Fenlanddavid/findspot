@@ -102,7 +102,7 @@ export default {
     const normalised = normaliseRequest(new URL(request.url));
     if ('error' in normalised) return jsonError(normalised.error, 400, origin);
 
-    const edgeCache = (caches as unknown as { default: Cache }).default;
+    const edgeCache = caches.default;
     const edgeKey = new Request(`https://geocode-cache.findspot/${normalised.cacheKey}`);
     const edgeHit = await edgeCache.match(edgeKey);
     if (edgeHit) return withPublicHeaders(edgeHit, origin, 'edge-cache');

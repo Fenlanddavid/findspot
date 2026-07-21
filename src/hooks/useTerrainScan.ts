@@ -19,12 +19,13 @@ import {
     applyNHLEProtection, applyAIMEnrichment, getDistance,
     applyRouteAssessments, applyRouteUnavailableFallback, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
 } from '../utils/fieldGuideAnalysis';
-import { buildTerrainHotspots } from '../engines/hotspot/hotspotEngine';
+import { buildTerrainHotspots, HOTSPOT_ENGINE_VERSION } from '../engines/hotspot/hotspotEngine';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds } from '../utils/waybackService';
 import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoadsResult } from '../services/romanRoadService';
 import { findPackMatchForBbox, PackMeta } from '../services/offlinePack';
+import { safeParseFieldGuideScanCache } from '../services/persistenceValidation';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -194,7 +195,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
-        const ENGINE_VERSION = 'FG-2026.06.29a';
+        const ENGINE_VERSION = HOTSPOT_ENGINE_VERSION;
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
         const bounds = map.getBounds();
@@ -236,11 +237,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         const MODERN_WAYS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
         let rescuedModernWays: import('../pages/fieldGuideTypes').ModernWay[] | null = null;
         try {
-            const stale = await db.fieldGuideCache.get(tileKey);
-            if (stale && Array.isArray(stale.modernWays) && stale.modernWays.length > 0 &&
+            const persisted = await db.fieldGuideCache.get(tileKey);
+            const stale = safeParseFieldGuideScanCache(persisted);
+            if (persisted && !stale) await db.fieldGuideCache.delete(tileKey);
+            if (stale && stale.modernWays && stale.modernWays.length > 0 &&
                 typeof stale.modernWaysFetchedAt === 'number' &&
                 (Date.now() - stale.modernWaysFetchedAt) < MODERN_WAYS_TTL_MS) {
-                rescuedModernWays = stale.modernWays as import('../pages/fieldGuideTypes').ModernWay[];
+                rescuedModernWays = stale.modernWays;
             }
         } catch { /* non-fatal */ }
 
@@ -265,7 +268,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 .catch(() => ({ ways: [], available: false }));
 
         try {
-            const cached = await db.fieldGuideCache.get(tileKey);
+            const persisted = await db.fieldGuideCache.get(tileKey);
+            const cached = safeParseFieldGuideScanCache(persisted);
+            if (persisted && !cached) await db.fieldGuideCache.delete(tileKey);
             if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
                 const ageMin = Math.round((Date.now() - cached.createdAt) / 60000);
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
@@ -278,7 +283,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 ]);
                 if (tokenRef.current !== token || signal.aborted || !mountedRef.current) { setIsScanning(false); return null; }
 
-                const rawCombined = cached.rawClusters as Cluster[];
+                const rawCombined = cached.rawClusters;
                 const monumentPoints = extractMonumentPoints(nhleData.features || []);
                 const heritageCount = nhleData.features?.length ?? 0;
                 if (nhleData.available === false) {

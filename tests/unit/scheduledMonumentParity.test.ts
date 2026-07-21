@@ -170,7 +170,7 @@ describe('SM gate — _meta.json sentinel', () => {
         // Meta present + shards return [] = genuinely clear area (no SMs in cells)
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) });
         }));
@@ -185,7 +185,7 @@ describe('SM gate — _meta.json sentinel', () => {
     it('returns available:false when a shard returns non-200 (service error after meta ok)', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
         }));
@@ -199,7 +199,7 @@ describe('SM gate — _meta.json sentinel', () => {
     it('returns available:false for populated old-format shards without geometry', async () => {
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             if (url.includes('services-eu1.arcgis.com')) {
                 return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
@@ -233,7 +233,7 @@ describe('SM gate — _meta.json sentinel', () => {
         };
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             return Promise.resolve({
                 ok: true,
@@ -265,7 +265,7 @@ describe('SM gate — _meta.json sentinel', () => {
         };
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             return Promise.resolve({
                 ok: true,
@@ -326,7 +326,7 @@ describe('SM R2 path — Welsh Cadw fixtures', () => {
 
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
             if (url.includes('_meta.json')) {
-                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }) });
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }) });
             }
             return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(entries) });
         }));
@@ -376,7 +376,7 @@ describe('SM R2 path — Scottish HES fixtures', () => {
                     status: 200,
                     json: () => Promise.resolve({
                         builtAt: '2026-01-01',
-                        schemaVersion: 2,
+                        generationVersion: 'v2', schemaVersion: 2,
                         geometryMode: 'full-geojson',
                         coverage: ['england', 'wales', 'scotland'],
                     }),
@@ -410,7 +410,7 @@ describe('SM R2 path — no ArcGIS FeatureServer calls', () => {
                 return Promise.resolve({
                     ok: true,
                     status: 200,
-                    json: () => Promise.resolve({ builtAt: '2026-01-01', schemaVersion: 2, geometryMode: 'full-geojson' }),
+                    json: () => Promise.resolve({ builtAt: '2026-01-01', generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }),
                 });
             }
             return Promise.resolve({

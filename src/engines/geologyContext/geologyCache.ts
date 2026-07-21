@@ -5,6 +5,7 @@ import {
     GEOLOGY_SOURCE_VERSION,
 } from './geologyContextTypes';
 import type { GeologyContext } from './geologyContextTypes';
+import { safeParseGeologyContextRecord } from '../../services/persistenceValidation';
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 // Minimal inline implementation — avoids adding a dependency for ~50 lines.
@@ -56,8 +57,13 @@ export async function getCachedGeologyContext(
     tileKey: string,
 ): Promise<GeologyContext | null> {
     try {
-        const record = await db.geologyContext.get(tileKey);
-        if (!record) return null;
+        const persisted = await db.geologyContext.get(tileKey);
+        if (!persisted) return null;
+        const record = safeParseGeologyContextRecord(persisted);
+        if (!record) {
+            await db.geologyContext.delete(tileKey);
+            return null;
+        }
 
         const age = Date.now() - record.fetchedAt;
         if (age > GEOLOGY_CACHE_TTL_MS) {
@@ -66,7 +72,7 @@ export async function getCachedGeologyContext(
             return null;
         }
 
-        return record.context as GeologyContext;
+        return record.context;
     } catch {
         return null;
     }

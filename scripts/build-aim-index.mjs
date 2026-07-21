@@ -18,7 +18,7 @@
  * Attribution: © Historic England
  */
 
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, rm, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -32,6 +32,7 @@ const FEATURE_SERVER =
 const PAGE_SIZE = 2000;
 const FETCH_CONCURRENCY = 4;
 const MAX_FETCH_ATTEMPTS = 3;
+const FETCH_TIMEOUT_MS = 60_000;
 
 // ─── Geohash encoder (precision 6) ───────────────────────────────────────────
 
@@ -99,11 +100,14 @@ function bboxCells(west, south, east, north) {
 
 async function fetchJson(params, label) {
     for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
             const res = await fetch(FEATURE_SERVER, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: params,
+                signal: controller.signal,
             });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
@@ -119,6 +123,8 @@ async function fetchJson(params, label) {
                 throw new Error(`FeatureServer/0 ${label} failed: ${error.message}`);
             }
             await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+        } finally {
+            clearTimeout(timeout);
         }
     }
 }
@@ -194,7 +200,6 @@ async function fetchAllFeatures(onPage) {
 
 async function main() {
     console.log('Building AIM index from live FeatureServer/0…');
-    await mkdir(OUT_DIR, { recursive: true });
 
     // Build shard map: cell → array of entries
     const shards = new Map(); // cell → SMShardEntry[]
@@ -221,6 +226,12 @@ async function main() {
     });
     console.log(`Fetched ${featureCount} AIM features`);
 
+    // Publish a clean local generation only after the complete live source has
+    // been fetched. This preserves the previous artifacts on fetch failure and
+    // prevents removed cells from leaking into the next bundle generation.
+    await rm(OUT_DIR, { recursive: true, force: true });
+    await mkdir(OUT_DIR, { recursive: true });
+
     // Write shards
     let written = 0;
     let maxShardSize = 0;
@@ -233,6 +244,7 @@ async function main() {
 
     // Write meta
     const meta = {
+        generationVersion: 'v2',
         schemaVersion: 1,
         builtAt:      new Date().toISOString(),
         featureCount,

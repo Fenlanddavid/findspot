@@ -8,6 +8,10 @@ import { setSetting, getSetting } from "./services/data";
 import { ensureProtectionOnStartup } from "./services/storagePersistence";
 import { closeStaleActiveTracks } from "./services/tracking";
 import { healAimMeta } from "./services/offlinePack";
+import {
+  aggregateAndSweepHotspotPredictions,
+  refreshHotspotPredictionOutcomes,
+} from './services/hotspotPredictionService';
 import { UPDATE_NOTES } from "./version";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -27,6 +31,7 @@ import { toOSGridRef } from "./services/gps";
 import { findResumable, buildResumeContext, PATH_STEP_ORDER } from "./services/significantFindResume";
 import { PATH_LABELS } from "./components/significant/significantFindDisplay";
 import type { SignificantFind } from "./db";
+import { migrateLegacyClientStorage } from './services/clientStorage';
 import {
   DiscoverIcon,
   FieldGuideIcon,
@@ -115,25 +120,24 @@ function Shell() {
     void ensureProtectionOnStartup();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
     healAimMeta().catch(() => {}); // silently backfill AIM meta into pre-A packs
+    refreshHotspotPredictionOutcomes()
+      .then(() => aggregateAndSweepHotspotPredictions())
+      .catch(() => {}); // derived calibration maintenance is always non-blocking
 
     // Track unique installation (one-time per device).
     // Flag lives in IndexedDB (durable) with a one-time migration from localStorage.
     const trackInstallation = async () => {
-      const inLocalStorage = !!localStorage.getItem("fs_installed");
       const inDB = await getSetting<boolean>("fs_installed", false);
-      if (!inLocalStorage && !inDB) {
+      if (!inDB) {
         try {
           await fetch("https://findspot-counter.trials-uk.workers.dev/up");
           await setSetting("fs_installed", true);
         } catch (e) {
           // silent fail — will retry on next launch
         }
-      } else if (inLocalStorage && !inDB) {
-        // Migrate existing users without re-firing the counter
-        await setSetting("fs_installed", true);
       }
     };
-    trackInstallation();
+    migrateLegacyClientStorage().then(trackInstallation).catch(() => trackInstallation());
 
     // Detect Standalone mode
     try {

@@ -69,7 +69,7 @@ describe('SM coverage gate', () => {
     it('coverage England/Wales + Edinburgh ambers before shard fetches', async () => {
         const fetchSpy = vi.fn((url: string) => {
             if (url.includes('/sm-index/_meta.json')) {
-                return Promise.resolve(jsonResponse({ schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england', 'wales'] }));
+                return Promise.resolve(jsonResponse({ generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england', 'wales'] }));
             }
             return Promise.resolve(jsonResponse([]));
         });
@@ -87,7 +87,7 @@ describe('SM coverage gate', () => {
     it('coverage including Scotland proceeds to shard fetches', async () => {
         const fetchSpy = vi.fn((url: string) => {
             if (url.includes('/sm-index/_meta.json')) {
-                return Promise.resolve(jsonResponse({ schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england', 'wales', 'scotland'] }));
+                return Promise.resolve(jsonResponse({ generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england', 'wales', 'scotland'] }));
             }
             return Promise.resolve(jsonResponse([]));
         });
@@ -103,7 +103,7 @@ describe('SM coverage gate', () => {
     it('missing coverage field defaults to current England/Wales truth', async () => {
         const fetchSpy = vi.fn((url: string) => {
             if (url.includes('/sm-index/_meta.json')) {
-                return Promise.resolve(jsonResponse({ schemaVersion: 2, geometryMode: 'full-geojson' }));
+                return Promise.resolve(jsonResponse({ generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson' }));
             }
             return Promise.resolve(jsonResponse([]));
         });
@@ -119,7 +119,7 @@ describe('SM coverage gate', () => {
     it('England-only coverage + Cardiff reports incomplete coverage, not Scotland border', async () => {
         const fetchSpy = vi.fn((url: string) => {
             if (url.includes('/sm-index/_meta.json')) {
-                return Promise.resolve(jsonResponse({ schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england'] }));
+                return Promise.resolve(jsonResponse({ generationVersion: 'v2', schemaVersion: 2, geometryMode: 'full-geojson', coverage: ['england'] }));
             }
             return Promise.resolve(jsonResponse([]));
         });
@@ -138,7 +138,7 @@ describe('SM coverage gate', () => {
             match: vi.fn((url: string) => {
                 if (url.includes('/sm-index/_meta.json')) {
                     return Promise.resolve(new Response(JSON.stringify({
-                        schemaVersion: 2,
+                        generationVersion: 'v2', schemaVersion: 2,
                         geometryMode: 'full-geojson',
                         coverage: ['england', 'wales'],
                     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -166,7 +166,7 @@ describe('SM coverage gate', () => {
             match: vi.fn((url: string) => {
                 if (url.includes('/sm-index/_meta.json')) {
                     return Promise.resolve(new Response(JSON.stringify({
-                        schemaVersion: 2,
+                        generationVersion: 'v2', schemaVersion: 2,
                         geometryMode: 'full-geojson',
                         coverage: ['england', 'wales'],
                     }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
@@ -181,7 +181,7 @@ describe('SM coverage gate', () => {
         const fetchSpy = vi.fn((url: string) => {
             if (url.includes('/sm-index/_meta.json')) {
                 return Promise.resolve(jsonResponse({
-                    schemaVersion: 2,
+                    generationVersion: 'v2', schemaVersion: 2,
                     geometryMode: 'full-geojson',
                     coverage: ['england', 'wales', 'scotland'],
                 }));

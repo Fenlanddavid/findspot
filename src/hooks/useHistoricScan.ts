@@ -28,6 +28,10 @@ import { fetchRomanRoadsResult, prefetchRomanRoads } from '../services/romanRoad
 import { prefetchPASDensity, getPASDensityNear, pasPeriodLabels } from '../services/pasDensityService';
 import { applyPASDensityModifiers } from '../engines/hotspot/hotspotEngine';
 import type { QuestionSourceAvailability } from '../outstandingQuestions/types';
+import {
+    safeParseFieldGuideScanCache,
+    type HistoricLookupCache,
+} from '../services/persistenceValidation';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,15 +78,6 @@ async function timedRecord<T>(promise: Promise<T>): Promise<{ value: T; elapsed:
     const start = performance.now();
     const value = await promise;
     return { value, elapsed: seconds(start) };
-}
-
-interface HistoricLookupCache {
-    geoData:     NominatimResponse | null;
-    contextData: OverpassResponse  | null;
-    nhleData:    NHLEResponse      | null;
-    aimData:     AIMResponse       | null;
-    routeRaw:    OverpassResponse  | null;
-    romanRoads:  HistoricRoute[]   | null;
 }
 
 const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.06.15a';
@@ -199,8 +194,10 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
         try {
             let cachedLookup: HistoricLookupCache | null = null;
             try {
-                const cached = await db.fieldGuideCache.get(historicCacheKey);
-                const lookup = cached?.historicLookup as HistoricLookupCache | undefined;
+                const persisted = await db.fieldGuideCache.get(historicCacheKey);
+                const cached = safeParseFieldGuideScanCache(persisted);
+                if (persisted && !cached) await db.fieldGuideCache.delete(historicCacheKey);
+                const lookup = cached?.historicLookup;
                 if (
                     cached &&
                     lookup &&

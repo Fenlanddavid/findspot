@@ -1,5 +1,24 @@
 import Dexie, { type Table } from "dexie";
-import { db, Media, Field, ImportedPackage, SignificantFind } from "../db";
+import {
+  db,
+  type Field,
+  type Find,
+  type FindHotspotSignal,
+  type HotspotPrediction,
+  type HotspotPredictionAggregate,
+  type ImportedPackage,
+  type Media,
+  type Permission,
+  type Project,
+  type QuestionNote,
+  type SavedPoint,
+  type Session,
+  type Setting,
+  type SignificantFind,
+  type Track,
+  type UndugSignal,
+  type OutstandingQuestion,
+} from "../db";
 import { v4 as uuid } from "uuid";
 import {
   FINDSPOT_COPYRIGHT_NOTICE,
@@ -84,7 +103,8 @@ async function collectManifestData() {
   const [
     projects, permissions, sessions, finds, tracks, settings,
     importedPackages, fields, significantFinds, savedPoints,
-    undugSignals, findHotspotSignals, outstandingQuestions, questionNotes,
+    undugSignals, findHotspotSignals, hotspotPredictions,
+    hotspotPredictionAggregates, outstandingQuestions, questionNotes,
   ] = await Promise.all([
     db.projects.toArray(),
     db.permissions.toArray(),
@@ -98,12 +118,14 @@ async function collectManifestData() {
     db.savedPoints.toArray(),
     db.undugSignals.toArray(),
     db.findHotspotSignals.toArray(),
+    db.hotspotPredictions.toArray(),
+    db.hotspotPredictionAggregates.toArray(),
     db.outstandingQuestions.toArray(),
     db.questionNotes.toArray(),
   ]);
 
   return {
-    version: 5,
+    version: 6,
     exportedAt: new Date().toISOString(),
     generatedBy: "FindSpot",
     termsVersion: TERMS_OF_USE_VERSION,
@@ -122,6 +144,8 @@ async function collectManifestData() {
     savedPoints,
     undugSignals,
     findHotspotSignals,
+    hotspotPredictions,
+    hotspotPredictionAggregates,
     outstandingQuestions,
     questionNotes,
   };
@@ -293,32 +317,61 @@ export async function exportToCSV(): Promise<string> {
   return "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
 }
 
-type BackupData = {
-  projects: any[];
-  permissions: any[];
-  fields: any[];
-  sessions: any[];
-  finds: any[];
-  significantFinds: any[];
-  tracks: any[];
-  media: any[];
-  settings: any[];
-  importedPackages: any[];
-  savedPoints: any[];
-  undugSignals: any[];
-  findHotspotSignals: any[];
-  outstandingQuestions: any[];
-  questionNotes: any[];
+/** Untrusted bytes/JSON entering from outside IndexedDB. */
+export type RawBackupData = unknown;
+
+/** Validated manifest media before its Blob is reconstructed. */
+export type ValidatedBackupMedia = Omit<Media, "blob"> & (
+  | { format: "legacy"; blob: string }
+  | { format: "zip"; _zipEntry: string }
+);
+
+/**
+ * The only backup shape accepted by the write pipeline. Raw input cannot be
+ * passed to applyValidatedBackup without first going through validateBackupData.
+ */
+export type ValidatedBackupData = {
+  version: number;
+  projects: Project[];
+  permissions: Permission[];
+  fields: Field[];
+  sessions: Session[];
+  finds: Find[];
+  significantFinds: SignificantFind[];
+  tracks: Track[];
+  media: ValidatedBackupMedia[];
+  settings: Setting[];
+  importedPackages: ImportedPackage[];
+  savedPoints: SavedPoint[];
+  undugSignals: UndugSignal[];
+  findHotspotSignals: FindHotspotSignal[];
+  hotspotPredictions: HotspotPrediction[];
+  hotspotPredictionAggregates: HotspotPredictionAggregate[];
+  outstandingQuestions: OutstandingQuestion[];
+  questionNotes: QuestionNote[];
 };
 
-function requireArray(data: any, key: keyof BackupData, required = false): any[] {
+type BackupTableKey = Exclude<keyof ValidatedBackupData, "version">;
+type UnvalidatedRow = Record<string, any>;
+type UnvalidatedBackupTables = Record<BackupTableKey, UnvalidatedRow[]>;
+
+function requireArray(
+  data: Record<string, unknown>,
+  key: BackupTableKey,
+  required = false,
+): UnvalidatedRow[] {
   const value = data[key];
   if (value === undefined || value === null) {
     if (required) throw new Error(`Invalid format: missing ${key}`);
     return [];
   }
   if (!Array.isArray(value)) throw new Error(`Invalid format: ${key} must be an array`);
-  return value;
+  value.forEach((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error(`Invalid format: ${key}[${index}] must be an object`);
+    }
+  });
+  return value as UnvalidatedRow[];
 }
 
 function assertRowsHaveId(rows: any[], table: string) {
@@ -470,27 +523,33 @@ function assertOutstandingQuestion(question: any, index: number) {
   }
 }
 
-export function validateBackupData(data: any, options?: { zipMode?: boolean }): BackupData {
+export function validateBackupData(
+  data: RawBackupData,
+  options?: { zipMode?: boolean },
+): ValidatedBackupData {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Invalid backup file: expected an object.");
   }
 
-  const backup: BackupData = {
-    projects: requireArray(data, "projects", true),
-    permissions: requireArray(data, "permissions"),
-    fields: requireArray(data, "fields"),
-    sessions: requireArray(data, "sessions"),
-    finds: requireArray(data, "finds"),
-    significantFinds: requireArray(data, "significantFinds"),
-    tracks: requireArray(data, "tracks"),
-    media: requireArray(data, "media"),
-    settings: requireArray(data, "settings"),
-    importedPackages: requireArray(data, "importedPackages"),
-    savedPoints: requireArray(data, "savedPoints"),
-    undugSignals: requireArray(data, "undugSignals"),
-    findHotspotSignals: requireArray(data, "findHotspotSignals"),
-    outstandingQuestions: requireArray(data, "outstandingQuestions"),
-    questionNotes: requireArray(data, "questionNotes"),
+  const raw = data as Record<string, unknown>;
+  const backup: UnvalidatedBackupTables = {
+    projects: requireArray(raw, "projects", true),
+    permissions: requireArray(raw, "permissions"),
+    fields: requireArray(raw, "fields"),
+    sessions: requireArray(raw, "sessions"),
+    finds: requireArray(raw, "finds"),
+    significantFinds: requireArray(raw, "significantFinds"),
+    tracks: requireArray(raw, "tracks"),
+    media: requireArray(raw, "media"),
+    settings: requireArray(raw, "settings"),
+    importedPackages: requireArray(raw, "importedPackages"),
+    savedPoints: requireArray(raw, "savedPoints"),
+    undugSignals: requireArray(raw, "undugSignals"),
+    findHotspotSignals: requireArray(raw, "findHotspotSignals"),
+    hotspotPredictions: requireArray(raw, "hotspotPredictions"),
+    hotspotPredictionAggregates: requireArray(raw, "hotspotPredictionAggregates"),
+    outstandingQuestions: requireArray(raw, "outstandingQuestions"),
+    questionNotes: requireArray(raw, "questionNotes"),
   };
 
   const recordCount = Object.values(backup).reduce((total, rows) => total + rows.length, 0);
@@ -613,6 +672,26 @@ export function validateBackupData(data: any, options?: { zipMode?: boolean }): 
     }
   });
 
+  backup.hotspotPredictions.forEach((prediction, index) => {
+    const invalid = (field: string) => new Error(`Invalid format: hotspotPredictions[${index}] has an invalid ${field}`);
+    if (typeof prediction.id !== "string" || !prediction.id.trim()) throw invalid("id");
+    if (typeof prediction.engineVersion !== "string" || !prediction.engineVersion.trim()) throw invalid("engineVersion");
+    if (!Number.isFinite(prediction.surfacedAt)) throw invalid("surfacedAt");
+    if (!['hit', 'searched_no_find', 'unvisited'].includes(prediction.outcome)) throw invalid("outcome");
+    if (!Array.isArray(prediction.center) || prediction.center.length !== 2 || prediction.center.some((value: unknown) => !Number.isFinite(value))) throw invalid("center");
+    if (!Array.isArray(prediction.bounds) || prediction.bounds.length !== 2) throw invalid("bounds");
+  });
+
+  backup.hotspotPredictionAggregates.forEach((aggregate, index) => {
+    const invalid = (field: string) => new Error(`Invalid format: hotspotPredictionAggregates[${index}] has an invalid ${field}`);
+    if (typeof aggregate.id !== "string" || !aggregate.id.trim()) throw invalid("id");
+    if (typeof aggregate.engineVersion !== "string" || !aggregate.engineVersion.trim()) throw invalid("engineVersion");
+    for (const field of ['surfacedCount', 'searchedCount', 'hitCount'] as const) {
+      if (!Number.isInteger(aggregate[field]) || aggregate[field] < 0) throw invalid(field);
+    }
+    if (aggregate.hitCount > aggregate.searchedCount || aggregate.searchedCount > aggregate.surfacedCount) throw invalid("counts");
+  });
+
   backup.outstandingQuestions.forEach((question, index) => {
     if (!permissionIds.has(question.permissionId)) {
       throw new Error(`Invalid format: outstandingQuestions[${index}] references an unknown permission`);
@@ -641,7 +720,33 @@ export function validateBackupData(data: any, options?: { zipMode?: boolean }): 
     }
   });
 
-  return backup;
+  // This is the single assertion bridge from untrusted records to domain
+  // records. All structural, table-specific and referential checks above have
+  // completed; downstream write functions accept only this concrete type.
+  return {
+    version: typeof raw.version === "number" && Number.isFinite(raw.version)
+      ? raw.version
+      : 1,
+    projects: backup.projects as Project[],
+    permissions: backup.permissions as Permission[],
+    fields: backup.fields as Field[],
+    sessions: backup.sessions as Session[],
+    finds: backup.finds as Find[],
+    significantFinds: backup.significantFinds as SignificantFind[],
+    tracks: backup.tracks as Track[],
+    media: backup.media.map((media) => options?.zipMode
+      ? { ...media, format: "zip" as const } as ValidatedBackupMedia
+      : { ...media, format: "legacy" as const } as ValidatedBackupMedia),
+    settings: backup.settings as Setting[],
+    importedPackages: backup.importedPackages as ImportedPackage[],
+    savedPoints: backup.savedPoints as SavedPoint[],
+    undugSignals: backup.undugSignals as UndugSignal[],
+    findHotspotSignals: backup.findHotspotSignals as FindHotspotSignal[],
+    hotspotPredictions: backup.hotspotPredictions as HotspotPrediction[],
+    hotspotPredictionAggregates: backup.hotspotPredictionAggregates as HotspotPredictionAggregate[],
+    outstandingQuestions: backup.outstandingQuestions as OutstandingQuestion[],
+    questionNotes: backup.questionNotes as QuestionNote[],
+  };
 }
 
 // ─── Format detection ────────────────────────────────────────────────────────
@@ -656,7 +761,7 @@ function isZipBuffer(buf: ArrayBuffer): boolean {
 class BackupLimitError extends Error {}
 
 type DecodedBackup = {
-  data: any;
+  data: RawBackupData;
   zipBytes: Uint8Array | null;
   entryNames: Set<string> | null;
 };
@@ -718,7 +823,7 @@ type BackupImportOptions = {
 };
 
 type StreamedZipBackup = {
-  data: any;
+  data: RawBackupData;
   entryNames: Set<string>;
 };
 
@@ -936,7 +1041,7 @@ function extractZipEntry(zipBytes: Uint8Array, entryName: string): Uint8Array | 
   return entries[entryName];
 }
 
-function parseJsonBackup(text: string, zipMode: boolean): any {
+function parseJsonBackup(text: string, zipMode: boolean): RawBackupData {
   try {
     return JSON.parse(text);
   } catch {
@@ -996,7 +1101,7 @@ function decodeBackupInput(input: string | ArrayBuffer): DecodedBackup {
 
 /** Safely decode only the manifest used by the restore preview UI. */
 export async function readBackupManifest(input: string | ArrayBuffer | Blob): Promise<Record<string, unknown>> {
-  let data: any;
+  let data: RawBackupData;
   if (input instanceof Blob) {
     if (await isZipBlob(input)) {
       data = (await streamZipBackup(input, undefined, { stopAfterManifest: true })).data;
@@ -1066,6 +1171,7 @@ export async function importData(
     if (zipMode && entryNames) {
       const referencedEntries = new Set<string>();
       for (const media of backup.media) {
+        if (media.format !== "zip") throw new Error("Invalid backup zip: legacy media manifest entry");
         if (!entryNames.has(media._zipEntry)) {
           throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
         }
@@ -1087,13 +1193,14 @@ export async function importData(
     if (stage) {
       stagedMediaItems = [];
       for (const item of backup.media) {
+        if (item.format !== "zip") throw new Error("Invalid backup zip: legacy media manifest entry");
         const staged = await stage.entries.get(item._zipEntry);
         if (!staged) throw new Error(`Invalid backup zip: missing media entry ${item._zipEntry}`);
         const chunks = await stage.chunks.where("name").equals(item._zipEntry).sortBy("index");
         if (chunks.length !== staged.chunkCount || chunks.reduce((sum, chunk) => sum + chunk.blob.size, 0) !== staged.size) {
           throw new Error(`Invalid backup zip: incomplete media entry ${item._zipEntry}`);
         }
-        const { _zipEntry, ...rest } = item;
+        const { _zipEntry, format: _format, ...rest } = item;
         const stagedBlob = new Blob(chunks.map(chunk => chunk.blob));
         stagedMediaItems.push({
           ...rest,
@@ -1102,10 +1209,13 @@ export async function importData(
       }
     } else if (!zipBytes) {
       stagedMediaItems = backup.media.length
-        ? await Promise.all(backup.media.map(async (m: any) => ({
-            ...m,
-            blob: await base64ToBlob(m.blob),
-          })))
+        ? await Promise.all(backup.media.map(async (media) => {
+            if (media.format !== "legacy") {
+              throw new Error("Invalid JSON backup: zip media manifest entry");
+            }
+            const { format: _format, blob, ...rest } = media;
+            return { ...rest, blob: await base64ToBlob(blob) } as Media;
+          }))
         : [];
     }
 
@@ -1127,8 +1237,12 @@ export async function importData(
   }
 }
 
-async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | null, mediaItems: Media[]) {
-  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.findHotspotSignals, db.outstandingQuestions, db.questionNotes], async () => {
+async function applyValidatedBackup(
+  backup: ValidatedBackupData,
+  zipBytes: Uint8Array | null,
+  mediaItems: Media[],
+) {
+  await db.transaction("rw", [db.projects, db.permissions, db.fields, db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.settings, db.importedPackages, db.savedPoints, db.undugSignals, db.findHotspotSignals, db.hotspotPredictions, db.hotspotPredictionAggregates, db.outstandingQuestions, db.questionNotes], async () => {
     // Clear all existing data first — prevents orphaned placeholder records
     // (e.g. the fresh-install project created before the restore) from
     // surviving alongside the backup data and causing projectId mismatches.
@@ -1145,6 +1259,8 @@ async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | n
     await db.savedPoints.clear();
     await db.undugSignals.clear();
     await db.findHotspotSignals.clear();
+    await db.hotspotPredictions.clear();
+    await db.hotspotPredictionAggregates.clear();
     await db.outstandingQuestions.clear();
     await db.questionNotes.clear();
 
@@ -1153,7 +1269,7 @@ async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | n
     if (backup.fields.length) await db.fields.bulkPut(backup.fields);
     if (backup.sessions.length) await db.sessions.bulkPut(backup.sessions);
     if (backup.finds.length) await db.finds.bulkPut(backup.finds);
-    if (backup.significantFinds.length) await db.significantFinds.bulkPut(backup.significantFinds as SignificantFind[]);
+    if (backup.significantFinds.length) await db.significantFinds.bulkPut(backup.significantFinds);
     if (backup.tracks.length) await db.tracks.bulkPut(backup.tracks);
     if (backup.settings.length) await db.settings.bulkPut(backup.settings);
     if (backup.importedPackages.length) await db.importedPackages.bulkPut(backup.importedPackages);
@@ -1161,9 +1277,10 @@ async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | n
       // Extract and persist one item at a time so restore does not retain a
       // second uncompressed copy of the entire photo library.
       for (const item of backup.media) {
+        if (item.format !== "zip") throw new Error("Invalid backup zip: legacy media manifest entry");
         const bytes = extractZipEntry(zipBytes, item._zipEntry);
         if (!bytes) throw new Error(`Invalid backup zip: missing media entry ${item._zipEntry}`);
-        const { _zipEntry, ...rest } = item;
+        const { _zipEntry, format: _format, ...rest } = item;
         await db.media.put({
           ...rest,
           blob: new Blob([new Uint8Array(bytes)], { type: rest.mime || "application/octet-stream" }),
@@ -1177,6 +1294,8 @@ async function applyValidatedBackup(backup: BackupData, zipBytes: Uint8Array | n
     if (backup.savedPoints.length) await db.savedPoints.bulkPut(backup.savedPoints);
     if (backup.undugSignals.length) await db.undugSignals.bulkPut(backup.undugSignals);
     if (backup.findHotspotSignals.length) await db.findHotspotSignals.bulkPut(backup.findHotspotSignals);
+    if (backup.hotspotPredictions.length) await db.hotspotPredictions.bulkPut(backup.hotspotPredictions);
+    if (backup.hotspotPredictionAggregates.length) await db.hotspotPredictionAggregates.bulkPut(backup.hotspotPredictionAggregates);
     const activeQuestions = backup.outstandingQuestions.filter(
       (q: any) => !RETIRED_QUESTION_RULE_IDS.has(q.ruleId)
     );

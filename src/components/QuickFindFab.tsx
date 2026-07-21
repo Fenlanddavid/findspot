@@ -7,6 +7,7 @@ import { fileToBlob } from "../services/photos";
 import { v4 as uuid } from "uuid";
 import type { WorkflowState } from "../types/significantFind";
 import { UndugSignalSheet } from "./UndugSignalSheet";
+import { useDurableSetting } from '../services/clientStorage';
 
 export type QuickFindLocation = {
   lat: number;
@@ -57,13 +58,9 @@ export function QuickFindFab({
   const [noGpsWarning, setNoGpsWarning] = React.useState(false);
   const [fabError, setFabError] = React.useState<string | null>(null);
   const [confirmSignificant, setConfirmSignificant] = React.useState(false);
-  const [fabIntroduced, setFabIntroduced] = React.useState(() => {
-    try {
-      return !!localStorage.getItem("fs_fab_used") || !!localStorage.getItem("fs_onboarding_done");
-    } catch {
-      return false;
-    }
-  });
+  const [fabUsed, setFabUsed] = useDurableSetting('fs_fab_used', false);
+  const [onboardingDone] = useDurableSetting('fs_onboarding_done', false);
+  const fabIntroduced = fabUsed || onboardingDone;
   const [showSignalSheet, setShowSignalSheet] = React.useState(false);
   const [signalToast, setSignalToast] = React.useState<{ openCount: number } | null>(null);
   const signalToastTimerRef = React.useRef<number | null>(null);
@@ -108,8 +105,7 @@ export function QuickFindFab({
       if (navigator.vibrate) navigator.vibrate(50);
 
       if (!fabIntroduced) {
-        try { localStorage.setItem("fs_fab_used", "1"); } catch {}
-        setFabIntroduced(true);
+        setFabUsed(true);
       }
 
       const id = uuid();

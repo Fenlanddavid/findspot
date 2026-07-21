@@ -25,8 +25,11 @@ import { osmTileUrl, worldImageryTileUrl } from '../utils/mapTileCache';
 import {
     AIM_INDEX_SCHEMA_VERSION,
     SM_INDEX_SCHEMA_VERSION,
+    STATIC_DATA_GENERATION,
     STATIC_DATASET_KEYS,
     aimShardKey,
+    isCurrentAimIndexMeta,
+    isCurrentSmIndexMeta,
     smShardKey,
     staticDatasetUrl,
 } from '../shared/staticDatasetContract';
@@ -252,7 +255,7 @@ async function cacheSMIndexFromR2(cache: Cache, cells: string[]): Promise<boolea
     const metaRes = await fetch(metaUrl);
     if (!metaRes.ok) return false;
     const meta = await metaRes.clone().json().catch(() => null);
-    if (!meta || meta.schemaVersion !== SM_INDEX_SCHEMA_VERSION || meta.geometryMode !== 'full-geojson') return false;
+    if (!isCurrentSmIndexMeta(meta)) return false;
     await cache.put(metaUrl, metaRes);
 
     let ok = 0;
@@ -319,6 +322,7 @@ async function cacheSMIndexFromLive(
 
         await cache.put(staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta), new Response(JSON.stringify({
             builtAt: new Date().toISOString(),
+            generationVersion: STATIC_DATA_GENERATION,
             schemaVersion: SM_INDEX_SCHEMA_VERSION,
             geometryMode: 'full-geojson',
             featureCount: features.length,
@@ -631,7 +635,7 @@ export async function buildPack(
         const metaRes = await fetch(aimMetaUrl);
         if (metaRes.ok) {
             const meta = await metaRes.clone().json().catch(() => null);
-            if (meta?.schemaVersion === AIM_INDEX_SCHEMA_VERSION) {
+            if (isCurrentAimIndexMeta(meta)) {
                 await cache.put(aimMetaUrl, metaRes);
                 aimMetaOk = true;
             }
@@ -735,7 +739,7 @@ export function isPackStale(meta: PackMeta): boolean {
 
 /**
  * Startup one-shot: packs built before SPINE-CLOSEOUT-A (Jul 2026) do not
- * contain aim-index/_meta.json. Without it, _fetchAIMFromR2 returns
+ * contain the current generation's AIM metadata URL. Without it, _fetchAIMFromR2 returns
  * available:false, leaving all AIM enrichment amber on offline scans.
  *
  * If online and any pack exists, fetch the ~200-byte meta and store it in a
@@ -763,7 +767,7 @@ export async function healAimMeta(): Promise<void> {
             const res = await fetch(metaUrl, { signal: controller.signal });
             if (!res.ok) return;
             const meta = await res.clone().json().catch(() => null);
-            if (meta?.schemaVersion !== AIM_INDEX_SCHEMA_VERSION) return;
+            if (!isCurrentAimIndexMeta(meta)) return;
             const healCache = await caches.open(AIM_META_HEAL_CACHE);
             await healCache.put(metaUrl, res);
         } finally {

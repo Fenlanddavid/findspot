@@ -8,7 +8,10 @@ const hs = (o: Partial<any> = {}): any => ({
     confidence: 'Strong Signal',
     classification: 'Route-Side Activity Zone',
     classificationReason: 'On a historic route',
-    explanation: ['a', 'b'],
+    explanation: [
+        { tag: 'other', qualifier: 'a', text: 'a' },
+        { tag: 'other', qualifier: 'b', text: 'b' },
+    ],
     metrics: { convergence: 3, signalClassCount: 3 },
     ...o,
 });

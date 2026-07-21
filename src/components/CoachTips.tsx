@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useDurableSetting } from '../services/clientStorage';
 
 export type CoachTip = {
   title: string;
@@ -27,11 +28,8 @@ export function CoachTips({
   onDismiss?: () => void;
   onStepChange?: (index: number) => void;
 }) {
-  const [visible, setVisible] = useState(() => {
-    if ((!enabled && !forceShow) || tips.length === 0) return false;
-    if (forceShow) return true;
-    try { return localStorage.getItem(storageKey) !== "1"; } catch { return true; }
-  });
+  const [dismissed, setDismissed, storageReady] = useDurableSetting(`coach:${storageKey}`, false, storageKey);
+  const [visible, setVisible] = useState(forceShow);
   const [stepIndex, setStepIndex] = useState(0);
 
   useEffect(() => {
@@ -44,8 +42,8 @@ export function CoachTips({
       setVisible(true);
       return;
     }
-    try { setVisible(localStorage.getItem(storageKey) !== "1"); } catch { setVisible(true); }
-  }, [enabled, forceShow, storageKey, tips.length]);
+    if (storageReady) setVisible(!dismissed);
+  }, [dismissed, enabled, forceShow, storageReady, tips.length]);
 
   useEffect(() => {
     if (visible) onStepChange?.(stepIndex);
@@ -57,7 +55,7 @@ export function CoachTips({
 
   const tip = tips[Math.min(stepIndex, tips.length - 1)];
   const dismiss = () => {
-    try { localStorage.setItem(storageKey, "1"); } catch {}
+    setDismissed(true);
     setStepIndex(0);
     setVisible(false);
     onDismiss?.();

@@ -32,6 +32,7 @@ import {
     estimatePack, PackMeta, BuildProgress,
 } from "../services/offlinePack";
 import { deleteQuestionsWithNotes } from "../outstandingQuestions/questionNotes";
+import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
@@ -73,6 +74,7 @@ export default function PermissionPage(props: {
   projectId: string;
   onSaved: (id: string) => void;
 }) {
+  const [hasCreatedPermission, setHasCreatedPermission] = useDurableSetting('fs_first_permission', false);
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const nav = useNavigate();
@@ -296,9 +298,9 @@ export default function PermissionPage(props: {
 
   useEffect(() => {
     if (isEdit) {
-      const msg = sessionStorage.getItem('fs_pending_toast');
+      const msg = ephemeralSession.get('fs_pending_toast');
       if (msg) {
-        sessionStorage.removeItem('fs_pending_toast');
+        ephemeralSession.remove('fs_pending_toast');
         setMilestoneMsg(msg);
         setTimeout(() => setMilestoneMsg(null), 4000);
       }
@@ -685,9 +687,9 @@ export default function PermissionPage(props: {
         await db.permissions.add(permission);
 
         setIsEditing(false);
-        if (!localStorage.getItem('fs_first_permission')) {
-          localStorage.setItem('fs_first_permission', '1');
-          sessionStorage.setItem('fs_pending_toast', 'Nice — your first permission is set!');
+        if (!hasCreatedPermission) {
+          setHasCreatedPermission(true);
+          ephemeralSession.set('fs_pending_toast', 'Nice — your first permission is set!');
         }
         if (organiserSetupParam && type === "rally") {
           nav(`/permission/${finalId}?openClubDay=true`);

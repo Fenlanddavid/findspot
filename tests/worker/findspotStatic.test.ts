@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AIM_INDEX_SCHEMA_VERSION,
   SM_INDEX_SCHEMA_VERSION,
+  STATIC_DATA_GENERATION,
   STATIC_DATASET_KEYS,
   aimBundleKey,
   aimShardKey,
@@ -14,11 +15,11 @@ const CELL = 'gcpvj0';
 const fixtures = [
   {
     key: STATIC_DATASET_KEYS.smMeta,
-    value: { schemaVersion: SM_INDEX_SCHEMA_VERSION, geometryMode: 'full-geojson' },
+    value: { generationVersion: STATIC_DATA_GENERATION, schemaVersion: SM_INDEX_SCHEMA_VERSION, geometryMode: 'full-geojson' },
   },
   {
     key: STATIC_DATASET_KEYS.aimMeta,
-    value: { schemaVersion: AIM_INDEX_SCHEMA_VERSION },
+    value: { generationVersion: STATIC_DATA_GENERATION, schemaVersion: AIM_INDEX_SCHEMA_VERSION },
   },
   { key: smShardKey(CELL), value: [] },
 ] as const;
@@ -58,7 +59,7 @@ describe('findspot-static dataset contract', () => {
   });
 
   it('treats a missing known shard as an empty dataset', async () => {
-    const response = await exports.default.fetch('https://static.test/aim-index/zzzzzz.json');
+    const response = await exports.default.fetch(`https://static.test/${aimShardKey('zzzzzz')}`);
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/json');
@@ -66,7 +67,35 @@ describe('findspot-static dataset contract', () => {
   });
 
   it('rejects unknown keys', async () => {
-    const response = await exports.default.fetch('https://static.test/aim-index/not-a-cell.json');
+    const response = await exports.default.fetch(`https://static.test/${STATIC_DATA_GENERATION}/aim-index/not-a-cell.json`);
     expect(response.status).toBe(404);
+  });
+
+  it('retains v1 paths during the generation grace window', async () => {
+    const key = smShardKey(CELL, 'v1');
+    await env.STATIC_BUCKET.put(key, '[]', { httpMetadata: { contentType: 'application/json' } });
+    const response = await exports.default.fetch(`https://static.test/${key}`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+
+  it('retains v1 metadata during the generation grace window', async () => {
+    const key = 'v1/aim-index/_meta.json';
+    await env.STATIC_BUCKET.put(key, '{"generationVersion":"v1"}', {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    const response = await exports.default.fetch(`https://static.test/${key}`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/json');
+  });
+
+  it('retains pre-versioning AIM cell URLs during the grace window', async () => {
+    const key = `aim-index/${CELL}.json`;
+    await env.STATIC_BUCKET.put(key, '[{"monumentType":"LEGACY"}]', {
+      httpMetadata: { contentType: 'application/json' },
+    });
+    const response = await exports.default.fetch(`https://static.test/${key}`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([{ monumentType: 'LEGACY' }]);
   });
 });

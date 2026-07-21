@@ -50,9 +50,9 @@ export type SignalTypeSummary = 'Terrain-led' | 'Multi-source' | 'Spectral-led' 
 export function getSignalTypeSummary(h: Hotspot): SignalTypeSummary {
     const signalClassCount = h.metrics.signalClassCount ?? 0;
     if (signalClassCount >= 3) return 'Multi-source';
-    const hasLidar     = h.explanation.some(e => e.includes('LiDAR') || e.includes('relief') || e.includes('earthwork'));
-    const hasSatellite = h.explanation.some(e => e.includes('cropmark') || e.includes('Spectral') || e.includes('vegetation anomaly'));
-    const hasHistoric  = h.explanation.some(e => e.includes('heritage') || e.includes('monument') || e.includes('period') || e.includes('Roman') || e.includes('Place-name'));
+    const hasLidar     = h.explanation.some(e => ['lidar_hydrology', 'lidar_spectral', 'lidar_relief', 'subtle_earthwork'].includes(e.tag));
+    const hasSatellite = h.explanation.some(e => ['multi_season_cropmark', 'spectral_anomaly'].includes(e.tag));
+    const hasHistoric  = h.explanation.some(e => ['historic_overlap', 'roman_proximity', 'historic_movement'].includes(e.tag));
     if (hasHistoric && !hasLidar && !hasSatellite) return 'Historic-led';
     if (hasSatellite && !hasLidar) return 'Spectral-led';
     return 'Terrain-led';
@@ -345,7 +345,7 @@ function joinLines(lines: string[]): string {
 }
 
 function buildReasoning(h: Hotspot, tier: ConfidenceTier, seed: number): string {
-    const cleaned = h.explanation.slice(0, 3).map(cleanLine);
+    const cleaned = h.explanation.slice(0, 3).map(item => cleanLine(item.text));
     const starter = pick(reasoningStarters[tier], seed);
     let reasoning = `${starter} ${joinLines(cleaned)}.`;
     if (tier === 'High') {

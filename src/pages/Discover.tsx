@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { v4 as uuid } from "uuid";
+import {
+  ephemeralLocal,
+  getDurableSetting,
+  setDurableSetting,
+  useDurableSetting,
+} from '../services/clientStorage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -211,14 +217,6 @@ function getQualityLabel(event: DetectingEvent): { label: string; style: string 
   return { label: "Unverified", style: verificationStyle("unconfirmed") };
 }
 
-function loadGoingIds(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(GOING_KEY) || "[]") as string[]);
-  } catch {
-    return new Set();
-  }
-}
-
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-GB", {
     weekday: "short",
@@ -267,17 +265,17 @@ function hasClubPublicLink(club: ClubListing): boolean {
 
 async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
   try {
-    const cached = localStorage.getItem(cacheKey);
+    const cached = ephemeralLocal.get(cacheKey as 'fs_events_cache' | 'fs_clubs_cache');
     if (cached) {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed?.data) && typeof parsed?.ts === "number") {
         if (Date.now() - parsed.ts < CACHE_TTL) return parsed.data as T[];
       } else {
-        localStorage.removeItem(cacheKey);
+        ephemeralLocal.remove(cacheKey as 'fs_events_cache' | 'fs_clubs_cache');
       }
     }
   } catch {
-    localStorage.removeItem(cacheKey);
+    ephemeralLocal.remove(cacheKey as 'fs_events_cache' | 'fs_clubs_cache');
   }
 
   const controller = new AbortController();
@@ -288,7 +286,7 @@ async function fetchWithCache<T>(url: string, cacheKey: string): Promise<T[]> {
     if (!res.ok) return [];
     const json = await res.json();
     const data: T[] = Array.isArray(json) ? json : (json.items ?? []);
-    localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
+    ephemeralLocal.set(cacheKey as 'fs_events_cache' | 'fs_clubs_cache', JSON.stringify({ data, ts: Date.now() }));
     return data;
   } catch {
     clearTimeout(tid);
@@ -340,30 +338,22 @@ async function resolveCoordinates<T extends { lat?: number; lon?: number; postco
   });
 }
 
-function loadLocalSubmissions(): DetectingEvent[] {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_SUBMISSIONS_KEY) || "[]");
-  } catch {
-    return [];
-  }
+async function loadLocalSubmissions(): Promise<DetectingEvent[]> {
+  return getDurableSetting(LOCAL_SUBMISSIONS_KEY, [] as DetectingEvent[]);
 }
 
-function saveLocalSubmission(e: DetectingEvent) {
-  const existing = loadLocalSubmissions();
-  localStorage.setItem(LOCAL_SUBMISSIONS_KEY, JSON.stringify([...existing, e]));
+async function saveLocalSubmission(e: DetectingEvent) {
+  const existing = await loadLocalSubmissions();
+  await setDurableSetting(LOCAL_SUBMISSIONS_KEY, [...existing, e]);
 }
 
-function loadLocalClubSubmissions(): ClubListing[] {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_CLUB_SUBMISSIONS_KEY) || "[]");
-  } catch {
-    return [];
-  }
+async function loadLocalClubSubmissions(): Promise<ClubListing[]> {
+  return getDurableSetting(LOCAL_CLUB_SUBMISSIONS_KEY, [] as ClubListing[]);
 }
 
-function saveLocalClubSubmission(c: ClubListing) {
-  const existing = loadLocalClubSubmissions();
-  localStorage.setItem(LOCAL_CLUB_SUBMISSIONS_KEY, JSON.stringify([...existing, c]));
+async function saveLocalClubSubmission(c: ClubListing) {
+  const existing = await loadLocalClubSubmissions();
+  await setDurableSetting(LOCAL_CLUB_SUBMISSIONS_KEY, [...existing, c]);
 }
 
 // ─── EventCard ────────────────────────────────────────────────────────────────
@@ -852,7 +842,7 @@ function SubmitEventModal({
         fromName: newEvent.organiserName || "FindSpot User",
       });
 
-      if (!isUpdate) saveLocalSubmission(newEvent);
+      if (!isUpdate) await saveLocalSubmission(newEvent);
       setReviewQueued(queued);
       setDone(true);
     } catch (e: any) {
@@ -1131,7 +1121,7 @@ function SubmitClubModal({
         fromName: newClub.contactName || "FindSpot User",
       });
 
-      if (!isUpdate) saveLocalClubSubmission(newClub);
+      if (!isUpdate) await saveLocalClubSubmission(newClub);
       setReviewQueued(queued);
       setDone(true);
     } catch (e: any) {
@@ -1325,19 +1315,12 @@ export default function Discover({ projectId }: { projectId: string }) {
   const [locationError, setLocationError] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
-  const [radius, setRadius] = useState<Radius>(() => {
-    const v = Number(localStorage.getItem("fs_discover_radius"));
-    return (RADIUS_OPTIONS as readonly number[]).includes(v) ? v as Radius : 25;
-  });
-  const [typeFilter, setTypeFilter] = useState<EventType | "all">(() => {
-    const v = localStorage.getItem("fs_discover_type");
-    return (v === "rally" || v === "club_dig" || v === "all") ? v : "all";
-  });
+  const [radius, setRadius] = useDurableSetting<Radius>('fs_discover_radius', 25);
+  const [typeFilter, setTypeFilter] = useDurableSetting<EventType | 'all'>('fs_discover_type', 'all');
   const [distanceBand, setDistanceBand] = useState<DistanceBand>("all");
-  const [goingIds, setGoingIds] = useState<Set<string>>(() => loadGoingIds());
-  const [discoverTab, setDiscoverTab] = useState<"events" | "clubs">(() =>
-    localStorage.getItem("fs_discover_tab") === "clubs" ? "clubs" : "events"
-  );
+  const [goingIdList, setGoingIdList] = useDurableSetting<string[]>(GOING_KEY, []);
+  const goingIds = useMemo(() => new Set(goingIdList), [goingIdList]);
+  const [discoverTab, setDiscoverTab] = useDurableSetting<'events' | 'clubs'>('fs_discover_tab', 'events');
 
   const [remoteEvents, setRemoteEvents] = useState<DetectingEvent[]>([]);
   const [remoteClubs, setRemoteClubs] = useState<ClubListing[]>([]);
@@ -1361,11 +1344,10 @@ export default function Discover({ projectId }: { projectId: string }) {
   }, [projectId]) ?? new Set<string>();
 
   function toggleGoingId(id: string) {
-    setGoingIds((prev) => {
+    setGoingIdList((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      localStorage.setItem(GOING_KEY, JSON.stringify([...next]));
-      return next;
+      return [...next];
     });
   }
 
@@ -1445,8 +1427,8 @@ export default function Discover({ projectId }: { projectId: string }) {
     });
   }, []);
 
-  useEffect(() => { setLocalEvents(loadLocalSubmissions()); }, [submissionTick]);
-  useEffect(() => { setLocalClubs(loadLocalClubSubmissions()); }, [clubSubmissionTick]);
+  useEffect(() => { void loadLocalSubmissions().then(setLocalEvents); }, [submissionTick]);
+  useEffect(() => { void loadLocalClubSubmissions().then(setLocalClubs); }, [clubSubmissionTick]);
 
   const radiusKm = radius * 1.60934;
 
@@ -1550,7 +1532,6 @@ export default function Discover({ projectId }: { projectId: string }) {
             onClick={() => {
               const next = tab.key as "events" | "clubs";
               setDiscoverTab(next);
-              localStorage.setItem("fs_discover_tab", next);
             }}
             className={`min-h-11 rounded-lg px-3 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
               discoverTab === tab.key
@@ -1582,7 +1563,7 @@ export default function Discover({ projectId }: { projectId: string }) {
         <div className="flex items-center justify-between mb-3">
           <SectionHeader>Local Clubs</SectionHeader>
           <div className="relative shrink-0 -mt-3">
-            <select value={radius} onChange={(e) => { const v = Number(e.target.value) as Radius; setRadius(v); localStorage.setItem("fs_discover_radius", String(v)); setShowAllClubs(false); }} className={selectClass}>
+            <select value={radius} onChange={(e) => { const v = Number(e.target.value) as Radius; setRadius(v); setShowAllClubs(false); }} className={selectClass}>
               {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{r} miles</option>)}
             </select>
             <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-[8px]">▼</span>
@@ -1634,7 +1615,7 @@ export default function Discover({ projectId }: { projectId: string }) {
           {TYPE_OPTIONS.map((o) => (
             <button
               key={o.value}
-              onClick={() => { setTypeFilter(o.value); localStorage.setItem("fs_discover_type", o.value); }}
+              onClick={() => setTypeFilter(o.value)}
               className={`${chipBase} ${typeFilter === o.value ? chipActive : chipInactive}`}
             >
               {o.label}

@@ -5,6 +5,8 @@ import {
     SM_INDEX_SCHEMA_VERSION,
     STATIC_DATASET_KEYS,
     aimShardKey,
+    isCurrentAimIndexMeta,
+    isCurrentSmIndexMeta,
     smShardKey,
     staticDatasetUrl,
 } from '../shared/staticDatasetContract';
@@ -525,7 +527,7 @@ async function _fetchSMFromR2(
                 return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
             }
             const meta = await metaRes.json().catch(() => null);
-            if (!meta || meta.schemaVersion !== SM_INDEX_SCHEMA_VERSION || meta.geometryMode !== 'full-geojson') {
+            if (!isCurrentSmIndexMeta(meta)) {
                 return { features: [], available: false, error: 'SM index requires full-geometry schema v2' };
             }
             const coverage: string[] = Array.isArray(meta.coverage) ? meta.coverage : ['england', 'wales'];
@@ -629,7 +631,7 @@ async function _fetchAIMFromR2(
                 return { features: [], available: false, error: `AIM index not built (${metaRes.status})` };
             }
             const meta = await metaRes.json().catch(() => null);
-            if (!meta || meta.schemaVersion !== AIM_INDEX_SCHEMA_VERSION) {
+            if (!isCurrentAimIndexMeta(meta)) {
                 return { features: [], available: false, error: `AIM index requires schema v${AIM_INDEX_SCHEMA_VERSION}` };
             }
         } finally {

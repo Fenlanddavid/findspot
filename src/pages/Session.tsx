@@ -1,17 +1,16 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { computeSessionOutcomeResult, SessionOutcomeResult } from "../engines/session/sessionOutcomeEngine";
-import { db, Permission, Session, Find, Media, Track } from "../db";
+import { db, Permission, Session, Find, Media } from "../db";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting, getOrCreateRecorderId } from "../services/data";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";
 import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording } from "../services/tracking";
-import { calculateCoverage, CoverageResult } from "../services/coverage";
+import { calculateCoverage } from "../services/coverage";
 import { Modal } from "../components/Modal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
@@ -24,8 +23,12 @@ import { CoachTip, CoachTips } from "../components/CoachTips";
 import { getNotableFindScore } from "../components/ReportChrome";
 import type { WorkflowState } from "../types/significantFind";
 import { area as turfArea } from "@turf/turf";
-import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { useDurableSetting } from '../services/clientStorage';
+import { useSessionData } from '../hooks/useSessionData';
+import { useSessionTracking } from '../hooks/useSessionTracking';
+import { useSessionModalState } from '../hooks/useSessionModalState';
+import { useSessionMap } from '../hooks/useSessionMap';
 
 const FIRST_SESSION_KEY = "fs_first_session";
 const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
@@ -206,19 +209,8 @@ function SessionSummary({
   );
 }
 
-const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
-const DEFAULT_ZOOM = 13;
-
 function formatDeleteCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function formatElapsed(ms: number): string {
@@ -262,33 +254,27 @@ export default function SessionPage(props: {
   const [loading, setLoading] = useState(isEdit);
   const [isEditing, setIsEditing] = useState(!isEdit);
   
-  const [openFindId, setOpenFindId] = useState<string | null>(null);
-  
-  const [isTracking, setIsTracking] = useState(isTrackingActiveForSession(sessionId));
-  const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
-  const [showCoverage, setShowCoverage] = useState(false);
-  const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
-  const [coverageError, setCoverageError] = useState(false);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
-  const [hasStartedSessionBefore, setHasStartedSessionBefore] = useState(() => {
-    try { return localStorage.getItem(FIRST_SESSION_KEY) === "1"; } catch { return false; }
-  });
+  const [hasStartedSessionBefore, setHasStartedSessionBefore] = useDurableSetting(FIRST_SESSION_KEY, false);
   const [sessionCoachActive, setSessionCoachActive] = useState(false);
   const [sessionCoachStep, setSessionCoachStep] = useState(0);
-  const [showFieldNotes, setShowFieldNotes] = useState(false);
-  const [showSignalSheet, setShowSignalSheet] = useState(false);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
-  const [showTrimUI, setShowTrimUI] = useState(false);
   const [trimStartMins, setTrimStartMins] = useState(0);
   const [trimEndMins, setTrimEndMins] = useState(0);
   const [trimming, setTrimming] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
-  const [showExportClubDay, setShowExportClubDay] = useState(false);
-  const [summaryData, setSummaryData] = useState<{ coverage: number, findsCount: number, durationMins: number | null, totalTime: string | null, outcomeResult: SessionOutcomeResult | null, openSignalCount: number }>({ coverage: 0, findsCount: 0, durationMins: null, totalTime: null, outcomeResult: null, openSignalCount: 0 });
-  const [showFieldReport, setShowFieldReport] = useState(false);
-  const [showLandownerReport, setShowLandownerReport] = useState(false);
-  const [landownerReportForField, setLandownerReportForField] = useState(false);
+  const {
+    openFindId, setOpenFindId,
+    showFieldNotes, setShowFieldNotes,
+    showSignalSheet, setShowSignalSheet,
+    showTrimUI, setShowTrimUI,
+    showSummary, setShowSummary,
+    showExportClubDay, setShowExportClubDay,
+    summaryData, setSummaryData,
+    showFieldReport, setShowFieldReport,
+    showLandownerReport, setShowLandownerReport,
+    landownerReportForField, setLandownerReportForField,
+  } = useSessionModalState();
   const [detectoristName, setDetectoristName] = useState("Detectorist");
   const [highlightPhotoUrl, setHighlightPhotoUrl] = useState<string | null>(null);
   const landownerCardRef = useRef<HTMLDivElement>(null);
@@ -297,46 +283,16 @@ export default function SessionPage(props: {
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
   const isActiveSessionMode = isEdit && !isEditing && !isFinished;
 
-  const permission = useLiveQuery(
-    async () => (permissionId ? db.permissions.get(permissionId) : (sessionId ? db.sessions.get(sessionId).then(s => s ? db.permissions.get(s.permissionId) : null) : null)),
-    [permissionId, sessionId]
-  );
-
-  const fields = useLiveQuery(async () => {
-    const pId = permissionId || (sessionId ? await db.sessions.get(sessionId).then(s => s?.permissionId) : null);
-    if (!pId) return [];
-    return db.fields.where("permissionId").equals(pId).toArray();
-  }, [permissionId, sessionId]);
-
-  const selectedField = useLiveQuery(async () => {
-    if (!fieldId) return null;
-    return db.fields.get(fieldId);
-  }, [fieldId]);
-
-  const session = useLiveQuery(async () => {
-    if (!sessionId) return null;
-    return db.sessions.get(sessionId);
-  }, [sessionId]);
-
-  const finds = useLiveQuery(async () => {
-    if (!sessionId) return [];
-    return db.finds.where("sessionId").equals(sessionId).filter(f => !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
-  }, [sessionId]);
-
-  const allMedia = useLiveQuery(async () => {
-    if (!sessionId || !finds) return [];
-    const ids = finds.map(s => s.id);
-    return db.media.where("findId").anyOf(ids).toArray();
-  }, [sessionId, finds]);
-
-  const tracks = useLiveQuery(async () => {
-    if (!sessionId) return [];
-    return db.tracks.where("sessionId").equals(sessionId).toArray();
-  }, [sessionId]);
-
-  useEffect(() => {
-    setIsTracking(isTrackingActiveForSession(sessionId));
-  }, [sessionId, tracks]);
+  const { permission, fields, selectedField, session, finds, allMedia, tracks } = useSessionData({
+    sessionId, permissionId, fieldId,
+  });
+  const {
+    isTracking, setIsTracking,
+    showTrackingOverlay, setShowTrackingOverlay,
+    showCoverage, setShowCoverage,
+    coverageResult, coverageError,
+    activeDistanceKm, activeCoverage,
+  } = useSessionTracking(sessionId, selectedField?.boundary || permission?.boundary, tracks);
 
   useEffect(() => {
     if (!isActiveSessionMode) return;
@@ -344,18 +300,6 @@ export default function SessionPage(props: {
     const timer = window.setInterval(() => setNowTick(Date.now()), 30000);
     return () => window.clearInterval(timer);
   }, [isActiveSessionMode]);
-
-  useEffect(() => {
-    const boundary = selectedField?.boundary || permission?.boundary;
-    if (!showCoverage || !boundary) {
-        setCoverageResult(null);
-        setCoverageError(false);
-        return;
-    }
-    const result = calculateCoverage(boundary, tracks || []);
-    setCoverageResult(result);
-    setCoverageError(result === null);
-  }, [showCoverage, selectedField, permission, tracks]);
 
   // Load the landowner-facing detectorist name for the update card.
   useEffect(() => {
@@ -437,231 +381,14 @@ export default function SessionPage(props: {
     }
     return info;
   }, [allMedia, finds]);
-
-  const activeDistanceKm = useMemo(() => {
-    if (!tracks || tracks.length === 0) return null;
-    let total = 0;
-    for (const track of tracks) {
-      if (!track.points || track.points.length < 2) continue;
-      const sorted = [...track.points].sort((a, b) => a.timestamp - b.timestamp);
-      for (let i = 1; i < sorted.length; i++) {
-        total += haversineKm(sorted[i - 1].lat, sorted[i - 1].lon, sorted[i].lat, sorted[i].lon);
-      }
-    }
-    return total > 0 ? total : null;
-  }, [tracks]);
-
-  const activeCoverage = useMemo(() => {
-    const boundary = selectedField?.boundary || permission?.boundary;
-    if (!boundary || !tracks || tracks.length === 0) return null;
-    return calculateCoverage(boundary, tracks);
-  }, [selectedField, permission, tracks]);
-
-  const mapDivRef = React.useRef<HTMLDivElement | null>(null);
-  const mapRef = React.useRef<maplibregl.Map | null>(null);
-
-  // Destroy the map when the component unmounts to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const boundary = selectedField?.boundary || permission?.boundary;
-    const hasBoundary = !!boundary;
-    if (!mapDivRef.current || (!hasBoundary && (!tracks || tracks.length === 0) && !isTracking)) return;
-
-    if (!mapRef.current) {
-      let map: maplibregl.Map;
-      try {
-        map = new maplibregl.Map({
-          container: mapDivRef.current,
-          style: {
-            version: 8,
-            sources: {
-              "raster-tiles": {
-                type: "raster",
-                tiles: ["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],
-                tileSize: 256,
-                attribution: "© OpenStreetMap"
-              }
-            },
-            layers: [{ id: "simple-tiles", type: "raster", source: "raster-tiles", minzoom: 0, maxzoom: 22 }]
-          },
-          center: DEFAULT_CENTER,
-          zoom: DEFAULT_ZOOM,
-        });
-      } catch (mapErr) {
-        console.error("Map init failed:", mapErr);
-        return;
-      }
-
-      map.on("load", () => {
-        map.addSource("boundary", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] }
-        });
-
-        map.addLayer({
-            id: "boundary-outline",
-            type: "line",
-            source: "boundary",
-            paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1] }
-        });
-
-        map.addSource("tracks", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] }
-        });
-
-        map.addSource("coverage", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] }
-        });
-
-        map.addLayer({
-            id: "undetected-fill",
-            type: "fill",
-            source: "coverage",
-            layout: { "visibility": "none" },
-            paint: {
-              "fill-color": "#ea580c",
-              "fill-opacity": 0.68,
-              "fill-outline-color": "#ea580c"
-            }
-        });
-
-        map.addLayer({
-            id: "undetected-outline",
-            type: "line",
-            source: "coverage",
-            layout: { "visibility": "none" },
-            paint: {
-              "line-color": "#ea580c",
-              "line-width": 2,
-              "line-opacity": 0.8
-            }
-        });
-
-        map.addLayer({
-          id: "tracks-line",
-          type: "line",
-          source: "tracks",
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": ["get", "color"],
-            "line-width": 4,
-            "line-opacity": 0.8
-          }
-        });
-
-        // Initial fit when data arrives
-        updateMapData(map, tracks || []);
-      });
-      mapRef.current = map;
-    } else {
-      const map = mapRef.current;
-      if (map.isStyleLoaded()) {
-        updateMapData(map, tracks || []);
-      }
-    }
-
-    function updateMapData(map: maplibregl.Map, tracksData: Track[]) {
-      const source = map.getSource("tracks") as maplibregl.GeoJSONSource;
-      if (source) {
-        const geojson = {
-          type: "FeatureCollection",
-          features: tracksData
-            .filter(t => t.points && Array.isArray(t.points) && t.points.length >= 2)
-            .map(t => ({
-              type: "Feature",
-              geometry: {
-                type: "LineString",
-                coordinates: t.points.map(p => [p.lon, p.lat])
-              },
-              properties: { color: t.color }
-            }))
-        };
-        source.setData(geojson as any);
-      }
-
-      const boundarySource = map.getSource("boundary") as maplibregl.GeoJSONSource;
-      const boundary = selectedField?.boundary || permission?.boundary;
-      if (boundarySource && boundary) {
-          boundarySource.setData(boundary);
-      }
-
-      // Fit bounds
-      const allPoints = (tracksData || []).flatMap(t => t.points || []).filter(p => !!p && typeof p.lat === 'number');
-      const bounds = new maplibregl.LngLatBounds();
-      
-      let hasDataForBounds = false;
-      if (boundary && boundary.coordinates?.[0] && Array.isArray(boundary.coordinates[0])) {
-          boundary.coordinates[0].forEach((p) => {
-              if (Array.isArray(p) && p.length >= 2) {
-                  bounds.extend(p as [number, number]);
-                  hasDataForBounds = true;
-              }
-          });
-      }
-      
-      if (allPoints.length > 0) {
-          allPoints.forEach(p => {
-              bounds.extend([p.lon, p.lat]);
-              hasDataForBounds = true;
-          });
-      }
-
-      if (hasDataForBounds && !bounds.isEmpty()) {
-          map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
-      }
-    }
-  }, [tracks, isFinished, selectedField, permission]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const syncCoverage = () => {
-      const src = map.getSource("coverage") as maplibregl.GeoJSONSource | undefined;
-      if (!src) return;
-
-        if (showCoverage && coverageResult) {
-            src.setData(coverageResult.undetectionsGeoJSON);
-        } else {
-            src.setData({ type: "FeatureCollection", features: [] });
-        }
-
-      if (map.getLayer("undetected-fill")) {
-        map.setLayoutProperty("undetected-fill", "visibility", showCoverage ? "visible" : "none");
-        if (showCoverage) map.moveLayer("undetected-fill");
-      }
-      if (map.getLayer("undetected-outline")) {
-        map.setLayoutProperty("undetected-outline", "visibility", showCoverage ? "visible" : "none");
-        if (showCoverage) map.moveLayer("undetected-outline");
-      }
-      if (map.getLayer("tracks-line")) {
-        map.setPaintProperty("tracks-line", "line-opacity", showCoverage ? 0.35 : 0.8);
-      }
-      if (map.getLayer("boundary-outline") && showCoverage) {
-        map.moveLayer("boundary-outline");
-      }
-    };
-
-    if (map.getSource("coverage")) {
-      syncCoverage();
-      return;
-    }
-
-    map.once("idle", syncCoverage);
-    return () => {
-      map.off("idle", syncCoverage);
-    };
-  }, [showCoverage, coverageResult]);
+  const mapDivRef = useSessionMap({
+    boundary: selectedField?.boundary || permission?.boundary,
+    tracks,
+    isTracking,
+    isFinished,
+    showCoverage,
+    coverageResult,
+  });
 
   useEffect(() => {
     if (sessionId) {
@@ -854,11 +581,8 @@ export default function SessionPage(props: {
       } else {
         await db.sessions.add(newSessionRecord);
         setIsEditing(false);
-        let isFirstSession = !hasStartedSessionBefore;
-        try {
-          isFirstSession = !localStorage.getItem(FIRST_SESSION_KEY);
-          if (isFirstSession) localStorage.setItem(FIRST_SESSION_KEY, "1");
-        } catch {}
+        const isFirstSession = !hasStartedSessionBefore;
+        if (isFirstSession) setHasStartedSessionBefore(true);
         if (isFirstSession) {
           setHasStartedSessionBefore(true);
           setMilestoneMsg('First session started — enjoy the dig!');

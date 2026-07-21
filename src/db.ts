@@ -1,4 +1,4 @@
-import Dexie, { Table } from "dexie";
+import Dexie, { Table, type Transaction } from "dexie";
 import { v4 as uuid } from "uuid";
 import type { OutstandingQuestion, QuestionNote } from "./outstandingQuestions/types";
 
@@ -365,7 +365,11 @@ export type Track = {
 
 export type Setting = {
   key: string;
-  value: string | number | boolean;
+  // Settings are a heterogeneous persistence boundary (strings, booleans,
+  // arrays and nullable values are all currently stored). Consumers must
+  // validate/narrow the value they request rather than trusting the row;
+  // clientStorage.ts performs that validation for UI preferences.
+  value: unknown;
 };
 
 // Regenerable Nominatim proxy cache. `response` deliberately remains unknown
@@ -394,7 +398,7 @@ export type ImportedPackage = {
 export type GeologyContextRecord = {
     tileKey:           string;   // Primary key — geology:{geohash6}:classifier:{v}:source:{sv}
     centroid:          { lat: number; lon: number };
-    context:           any;      // GeologyContext
+    context:           unknown;  // validated by the geology engine on read
     fetchedAt:         number;   // Unix ms — used for 90-day TTL sweep
     classifierVersion: number;
     sourceVersion:     string;
@@ -418,6 +422,37 @@ export type FindHotspotSignal = {
     lastHotspotScore:           number;              // Score of matched hotspot at time of recording
     findIds?:                   string[];             // Matched find IDs; deduplicates overlapping hotspots
     updatedAt:                  number;              // Unix ms — for TTL sweep
+};
+
+export type HotspotPredictionOutcome = 'hit' | 'searched_no_find' | 'unvisited';
+
+/** Raw surfaced hotspot needed to measure the engine's denominator honestly. */
+export type HotspotPrediction = {
+  id: string;
+  engineVersion: string;
+  confidence: 'Weak Signal' | 'Developing Signal' | 'Strong Signal' | 'Strongest Signal';
+  classification: string;
+  surfacedAt: number;
+  permissionId: string | null;
+  sessionId: string | null;
+  center: [number, number];
+  bounds: [[number, number], [number, number]];
+  geohash6: string;
+  outcome: HotspotPredictionOutcome;
+  searchedCoverage?: number;
+  matchedFindId?: string;
+  resolvedAt?: number;
+};
+
+/** Long-lived evidence retained after raw prediction records expire. */
+export type HotspotPredictionAggregate = {
+  id: string; // `${engineVersion}:${confidence}`
+  engineVersion: string;
+  confidence: HotspotPrediction['confidence'];
+  surfacedCount: number;
+  searchedCount: number;
+  hitCount: number;
+  updatedAt: number;
 };
 
 // ─── Saved Points ─────────────────────────────────────────────────────────────
@@ -447,13 +482,13 @@ export type SavedPoint = {
 export type FieldGuideScanCache = {
   id: string;           // '${zoom}-${tX_start}-${tY_start}' — deterministic tile key
   createdAt: number;    // Unix ms
-  rawClusters: any[];
+  rawClusters: unknown;
   sourceAvailability: Record<string, boolean>;
   sourceCompleteness?: Record<string, boolean>;
-  modernWays?: any[];
+  modernWays?: unknown;
   modernWaysFetchedAt?: number;
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch
-  historicLookup?: any;   // standalone Historic button source cache
+  historicLookup?: unknown; // standalone Historic button source cache
 };
 
 // ─── On-device diagnostic ring buffer ────────────────────────────────────────
@@ -482,7 +517,7 @@ export type LandscapeInterpretationRecord = {
     engineVersion?: string;
     geologyTileKey?: string;
     inputSignature?: string;
-    interpretation: any;    // LandscapeInterpretation
+    interpretation: unknown; // validated by ALIE on read
 };
 
 // ─── Outstanding Questions ───────────────────────────────────────────────────
@@ -522,6 +557,46 @@ export type UndugSignal = {
   dugNothingCause?: UndugSignalDugNothingCause;
 };
 
+export type FindSpotVersionSpec = {
+  version: number;
+  stores: Record<string, string | null>;
+  upgrade?: (transaction: Transaction) => void | PromiseLike<void>;
+};
+
+/**
+ * Canonical Dexie history. The production declarations below populate this
+ * registry once; migration fixtures replay the same stores and upgrade
+ * callbacks rather than maintaining a hand-copied native IndexedDB schema.
+ */
+export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
+export const FINDSPOT_CURRENT_VERSION = 40;
+
+function declareFindSpotVersion(versionNumber: number) {
+  return {
+    stores(stores: Record<string, string | null>) {
+      let spec = FINDSPOT_VERSION_SPECS.find(({ version }) => version === versionNumber);
+      if (!spec) {
+        spec = { version: versionNumber, stores };
+        FINDSPOT_VERSION_SPECS.push(spec);
+      }
+
+      return {
+        upgrade(upgrade: NonNullable<FindSpotVersionSpec["upgrade"]>) {
+          if (!spec!.upgrade) spec!.upgrade = upgrade;
+        },
+      };
+    },
+  };
+}
+
+export function applyFindSpotVersions(database: Dexie, upTo = FINDSPOT_CURRENT_VERSION): void {
+  for (const spec of FINDSPOT_VERSION_SPECS) {
+    if (spec.version > upTo) break;
+    const version = database.version(spec.version).stores(spec.stores);
+    if (spec.upgrade) version.upgrade(spec.upgrade);
+  }
+}
+
 export class FindSpotDB extends Dexie {
   projects!: Table<Project, string>;
   permissions!: Table<Permission, string>;
@@ -537,6 +612,8 @@ export class FindSpotDB extends Dexie {
   savedPoints!: Table<SavedPoint, string>;
   geologyContext!: Table<GeologyContextRecord, string>;
   findHotspotSignals!: Table<FindHotspotSignal, string>;
+  hotspotPredictions!: Table<HotspotPrediction, string>;
+  hotspotPredictionAggregates!: Table<HotspotPredictionAggregate, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
@@ -547,14 +624,14 @@ export class FindSpotDB extends Dexie {
   constructor(name = "findspot_uk") {
     super(name);
 
-    this.version(1).stores({
+    declareFindSpotVersion(1).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, observedAt, permissionGranted, createdAt",
       finds: "id, projectId, permissionId, findCode, objectType, createdAt",
       media: "id, projectId, findId, createdAt",
     });
 
-    this.version(2).stores({
+    declareFindSpotVersion(2).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, createdAt",
@@ -562,7 +639,7 @@ export class FindSpotDB extends Dexie {
       media: "id, projectId, findId, createdAt",
     });
 
-    this.version(3).stores({
+    declareFindSpotVersion(3).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, createdAt",
@@ -572,7 +649,7 @@ export class FindSpotDB extends Dexie {
     });
 
     // v4: schema identical to v3 — no-op bump kept for continuity with deployed clients
-    this.version(4).stores({
+    declareFindSpotVersion(4).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, createdAt",
@@ -581,7 +658,7 @@ export class FindSpotDB extends Dexie {
       settings: "key",
     });
 
-    this.version(5).stores({
+    declareFindSpotVersion(5).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, createdAt",
@@ -591,7 +668,7 @@ export class FindSpotDB extends Dexie {
       settings: "key",
     });
 
-    this.version(6).stores({
+    declareFindSpotVersion(6).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, isFinished, createdAt",
@@ -601,7 +678,7 @@ export class FindSpotDB extends Dexie {
       settings: "key",
     });
 
-    this.version(7).stores({
+    declareFindSpotVersion(7).stores({
       projects: "id, name, region, createdAt",
       permissions: "id, projectId, name, type, permissionGranted, createdAt",
       sessions: "id, projectId, permissionId, date, isFinished, createdAt",
@@ -611,19 +688,19 @@ export class FindSpotDB extends Dexie {
       settings: "key",
     });
 
-    this.version(8).stores({
+    declareFindSpotVersion(8).stores({
       finds: "id, projectId, permissionId, sessionId, findCode, objectType, isFavorite, targetId, detector, createdAt",
     });
 
-    this.version(9).stores({
+    declareFindSpotVersion(9).stores({
       media: "id, projectId, findId, permissionId, createdAt",
     });
 
-    this.version(10).stores({
+    declareFindSpotVersion(10).stores({
       permissions: "id, projectId, name, type, permissionGranted, boundary, createdAt",
     });
 
-    this.version(11).stores({
+    declareFindSpotVersion(11).stores({
       fields: "id, projectId, permissionId, name, createdAt",
       sessions: "id, projectId, permissionId, fieldId, date, isFinished, createdAt",
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, targetId, detector, createdAt",
@@ -655,74 +732,74 @@ export class FindSpotDB extends Dexie {
         }
     });
 
-    this.version(12).stores({
+    declareFindSpotVersion(12).stores({
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, targetId, detector, ruler, dateRange, createdAt",
     });
 
-    this.version(13).stores({
+    declareFindSpotVersion(13).stores({
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, createdAt",
     });
 
-    this.version(14).stores({
+    declareFindSpotVersion(14).stores({
       permissions: "id, projectId, name, type, permissionGranted, boundary, validFrom, createdAt",
     });
 
-    this.version(15).stores({
+    declareFindSpotVersion(15).stores({
       sessions: "id, projectId, permissionId, fieldId, date, isFinished, startTime, endTime, createdAt",
     });
 
-    this.version(16).stores({
+    declareFindSpotVersion(16).stores({
       sessions: "id, projectId, permissionId, fieldId, date, isFinished, startTime, endTime, createdAt",
     });
 
-    this.version(17).stores({
+    declareFindSpotVersion(17).stores({
       permissions: "id, projectId, name, type, permissionGranted, boundary, validFrom, isPinned, createdAt",
     });
 
-    this.version(18).stores({
+    declareFindSpotVersion(18).stores({
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, createdAt",
     });
 
-    this.version(19).stores({}).upgrade(async tx => {
+    declareFindSpotVersion(19).stores({}).upgrade(async tx => {
       const permissionIds = new Set((await tx.table("permissions").toArray()).map((p: any) => p.id));
       const orphanedFields = await tx.table("fields").filter((f: any) => !permissionIds.has(f.permissionId)).toArray();
       await tx.table("fields").bulkDelete(orphanedFields.map((f: any) => f.id));
     });
 
-    this.version(20).stores({
+    declareFindSpotVersion(20).stores({
       importedPackages: "id, packageHash, sharedPermissionId, importedAt",
     });
 
-    this.version(21).stores({
+    declareFindSpotVersion(21).stores({
       fieldGuideCache: "id, createdAt",
     });
 
     // v22: engineVersion added to FieldGuideScanCache — stale caches are
     // discarded when scoring logic changes rather than silently serving old results.
     // No schema change needed; Dexie stores the field automatically.
-    this.version(22).stores({});
+    declareFindSpotVersion(22).stores({});
 
-    this.version(23).stores({
+    declareFindSpotVersion(23).stores({
       fieldGuideInvestigations: "id, projectId, hotspotId, status, updatedAt",
     });
 
-    this.version(24).stores({
+    declareFindSpotVersion(24).stores({
       autoBackups: "id, createdAt, reason",
     });
 
     // v25: remove the unused FieldGuide investigation status store.
-    this.version(25).stores({
+    declareFindSpotVersion(25).stores({
       fieldGuideInvestigations: null,
     });
 
     // v26: significant finds workflow — new table + scatterId index on finds.
-    this.version(26).stores({
+    declareFindSpotVersion(26).stores({
       significantFinds: "id, projectId, permissionId, sessionId, path, status, scatterId, createdAt",
       finds: "id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, scatterId, createdAt",
     });
 
     // v27: saved map points — bookmarked positions in FieldGuide, scoped to project.
-    this.version(27).stores({
+    declareFindSpotVersion(27).stores({
       savedPoints: "id, projectId, createdAt",
     });
 
@@ -730,7 +807,7 @@ export class FindSpotDB extends Dexie {
     // Existing user data (finds, permissions, sessions) is untouched.
     // Missing geology records regenerate automatically on next scan.
     // fetchedAt is indexed to support the 90-day TTL sweep in sweepStaleGeologyCache().
-    this.version(28).stores({
+    declareFindSpotVersion(28).stores({
       geologyContext: "tileKey, fetchedAt",
     });
 
@@ -739,14 +816,14 @@ export class FindSpotDB extends Dexie {
     // user has logged finds that fall inside or near a FieldGuide hotspot. Used by
     // future on-device compounding to calibrate persistence scoring. No upgrade()
     // handler needed — new empty table; existing user data is untouched.
-    this.version(29).stores({
+    declareFindSpotVersion(29).stores({
       findHotspotSignals: "signalKey, permissionId, geohash6, updatedAt",
     });
 
     // v30: Drop the unused autoBackups object store (added in v24, feature
     // removed May 2026). No user data — snapshots excluded photo blobs and the
     // feature was pulled before any meaningful data accumulated.
-    this.version(30).stores({
+    declareFindSpotVersion(30).stores({
       autoBackups: null,
     });
 
@@ -754,14 +831,14 @@ export class FindSpotDB extends Dexie {
     // Stores the most recent LandscapeInterpretation result per geohash6 cell.
     // Last-write-wins — new results overwrite old ones. No upgrade() handler
     // needed — new empty table; existing user data is untouched.
-    this.version(31).stores({
+    declareFindSpotVersion(31).stores({
       landscapeInterpretations: "&geohash6, generatedAt",
     });
 
     // v32: on-device diagnostic ring buffer (2,000 entry cap).
     // Additive — no user data migration. Existing records untouched.
     // Privacy: never transmitted; user-exportable from Settings.
-    this.version(32).stores({
+    declareFindSpotVersion(32).stores({
       diagnosticLog: 'id, ts, level, scope',
     });
 
@@ -771,7 +848,7 @@ export class FindSpotDB extends Dexie {
     // Compound index [permissionId+status] supports the permission-scoped
     // revisit list query. sourceSignalId on finds is a TypeScript-only
     // additive field — no index change needed there.
-    this.version(33).stores({
+    declareFindSpotVersion(33).stores({
       undugSignals: 'id, [permissionId+status], sessionId, status, createdAt',
     });
 
@@ -779,7 +856,7 @@ export class FindSpotDB extends Dexie {
     // Deterministic archaeological enquiries derived from FieldGuide scans.
     // Additive — no user data migration. Existing records untouched.
     // Indexed by permissionId for permission-scoped queries and deletion cascade.
-    this.version(34).stores({
+    declareFindSpotVersion(34).stores({
       outstandingQuestions: 'id, permissionId, ruleId, status',
     });
 
@@ -788,7 +865,7 @@ export class FindSpotDB extends Dexie {
     // (protectionStatus, pasContext) and PermissionPulse context lines.
     // Delete any persisted question rows with retired ruleIds — they are
     // derived data, regenerable, and no user notes exist yet.
-    this.version(35).upgrade(async tx => {
+    declareFindSpotVersion(35).stores({}).upgrade(async tx => {
       const RETIRED_RULE_IDS = new Set([
         'PROTECTED_AREA_EXCLUSION',
         'COVERAGE_GAP',
@@ -807,23 +884,34 @@ export class FindSpotDB extends Dexie {
     // v36: question notes table (Phase B — Dialogue).
     // User and system notes attached to investigations by questionId.
     // Additive — no user data migration.
-    this.version(36).stores({
+    declareFindSpotVersion(36).stores({
       questionNotes: 'id, questionId, createdAt',
     });
 
     // v37: Phase C investigation state fields on outstandingQuestions.
     // No indexes change; Dexie persists additive object fields automatically.
-    this.version(37).stores({});
+    declareFindSpotVersion(37).stores({});
 
     // v38: Phase E transition history and supersede ancestry metadata.
     // Existing indexes already cover questionNotes and outstandingQuestions.
-    this.version(38).stores({});
+    declareFindSpotVersion(38).stores({});
 
     // v39: durable, regenerable geocoding cache. Kept outside backup/restore;
     // invalid or stale rows are discarded by the geocoding service.
-    this.version(39).stores({
+    declareFindSpotVersion(39).stores({
       geocodeCache: 'cacheKey, fetchedAt',
     });
+
+    // v40: honest hotspot calibration denominator. Raw surfaced predictions
+    // retain explicit unvisited/searched/hit outcomes; aggregates survive the
+    // raw-record TTL sweep by engine version and confidence label.
+    declareFindSpotVersion(40).stores({
+      hotspotPredictions: 'id, engineVersion, confidence, surfacedAt, permissionId, sessionId, outcome',
+      hotspotPredictionAggregates: 'id, engineVersion, confidence, updatedAt',
+    });
+
+    // Production and migration fixtures both replay this exact registry.
+    applyFindSpotVersions(this);
   }
 }
 

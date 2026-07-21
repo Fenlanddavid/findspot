@@ -46,7 +46,10 @@ import type { LandscapeIntelligence, LandscapeSummary } from './fieldGuideTypes'
 import { getSetting } from '../services/data';
 import type { SMUnavailableReason } from '../services/historicScanService';
 import { recordFindHotspotSignals } from '../services/findHotspotService';
+import { recordHotspotPredictions } from '../services/hotspotPredictionService';
 import { searchLocations } from '../services/geocode';
+import { safeParseFieldGuideScanCache } from '../services/persistenceValidation';
+import { useDurableSetting } from '../services/clientStorage';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -148,22 +151,6 @@ function clampOpacity(value: unknown, fallback: number): number {
     return typeof value === 'number' && Number.isFinite(value)
         ? Math.max(0, Math.min(1, value))
         : fallback;
-}
-
-function readRasterOverlayOpacity(): RasterOverlayOpacity {
-    try {
-        const raw = localStorage.getItem(RASTER_OVERLAY_STORAGE_KEY);
-        if (!raw) return DEFAULT_RASTER_OVERLAY_OPACITY;
-        const parsed = JSON.parse(raw) as Partial<RasterOverlayOpacity>;
-        return {
-            lidar:         clampOpacity(parsed.lidar,  DEFAULT_RASTER_OVERLAY_OPACITY.lidar),
-            'lidar-wales': clampOpacity(parsed['lidar-wales'], DEFAULT_RASTER_OVERLAY_OPACITY['lidar-wales']),
-            os1880:        clampOpacity(parsed.os1880, DEFAULT_RASTER_OVERLAY_OPACITY.os1880),
-            os1930:        clampOpacity(parsed.os1930, DEFAULT_RASTER_OVERLAY_OPACITY.os1930),
-        };
-    } catch {
-        return DEFAULT_RASTER_OVERLAY_OPACITY;
-    }
 }
 
 // ─── Engine state (reducer) ───────────────────────────────────────────────────
@@ -424,9 +411,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [systemLog,              setSystemLog]              = useState<LogEntry[]>([makeLog('READY. Run scan to read landscape signals.')]);
     const [zoomWarning,            setZoomWarning]            = useState(false);
     const [isSatellite,            setIsSatellite]            = useState(false);
-    const [scanCount,              setScanCount]              = useState(() => {
-        try { return parseInt(localStorage.getItem('fs_fg_scan_count') || '0', 10); } catch { return 0; }
-    });
+    const [scanCount,              setScanCount]              = useDurableSetting('fs_fg_scan_count', 0);
     const [searchQuery,            setSearchQuery]            = useState('');
     const [isSearchOpen,           setIsSearchOpen]           = useState(false);
     const [isIntelOpen,            setIsIntelOpen]            = useState(false);
@@ -438,7 +423,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [historicMode,           setHistoricMode]           = useState(false);
     const [historicScanCompleted,  setHistoricScanCompleted]  = useState(false);
     const [historicLayerToggles,   setHistoricLayerToggles]   = useState({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
-    const [historicLayerOpacity,   setHistoricLayerOpacity]   = useState<RasterOverlayOpacity>(readRasterOverlayOpacity);
+    const [historicLayerOpacity,   setHistoricLayerOpacity]   = useDurableSetting<RasterOverlayOpacity>(RASTER_OVERLAY_STORAGE_KEY, DEFAULT_RASTER_OVERLAY_OPACITY);
     const [activeOpacityLayer,     setActiveOpacityLayer]     = useState<RasterOverlayKey | null>(null);
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: false });
     const [showFields,             setShowFields]             = useState<false | 'all' | string>(false);
@@ -450,8 +435,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     const [mapClickLabel,          setMapClickLabel]          = useState<string | null>(null);
     const [expandedInterpretationId, setExpandedInterpretationId] = useState<string | null>(null);
     const [expandedTargetId,         setExpandedTargetId]         = useState<string | null>(null);
-    const [sheetExpanded,          setSheetExpanded]          = useState(() => { try { return localStorage.getItem('fs_fg_sheet') === '1'; } catch { return false; } });
-    const [devMode,                setDevMode]                = useState(() => { try { return localStorage.getItem('fs_fg_devmode') === '1'; } catch { return false; } });
+    const [sheetExpanded,          setSheetExpanded]          = useDurableSetting('fs_fg_sheet', false);
+    const [devMode,                setDevMode]                = useDurableSetting('fs_fg_devmode', false);
     const [annotationMode,         setAnnotationMode]         = useState(false);
     const [devAnnotations,         setDevAnnotations]         = useState<DevAnnotation[]>([]);
     const [pendingAnnotation,      setPendingAnnotation]      = useState<{ lat: number; lon: number } | null>(null);
@@ -659,8 +644,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
     const persistSheetExpanded = useCallback((expanded: boolean) => {
         setSheetExpanded(expanded);
-        try { localStorage.setItem('fs_fg_sheet', expanded ? '1' : '0'); } catch {}
-    }, []);
+    }, [setSheetExpanded]);
 
     const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
         sheetDragStartY.current = e.touches[0].clientY;
@@ -807,10 +791,6 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     useLayoutEffect(() => {
         if (logContainerRef.current) logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }, [systemLog]);
-
-    useEffect(() => {
-        try { localStorage.setItem(RASTER_OVERLAY_STORAGE_KEY, JSON.stringify(historicLayerOpacity)); } catch {}
-    }, [historicLayerOpacity]);
 
     useEffect(() => {
         if (activeOpacityLayer && !historicLayerToggles[activeOpacityLayer]) setActiveOpacityLayer(null);
@@ -1075,6 +1055,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
             // Non-blocking feedback signal — does not affect scan result
             recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(() => {});
+            recordHotspotPredictions(result.enhancedHotspots, {
+                permissionId: requestedQuestionPermissionId ?? null,
+            }).catch(() => {});
         }
 
         let questionsUpdated = false;
@@ -1206,7 +1189,6 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         setScanCount(prev => {
             const next = prev + 1;
-            try { localStorage.setItem('fs_fg_scan_count', String(next)); } catch {}
             return next;
         });
         clearScan();
@@ -1466,7 +1448,6 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         if (searchQuery.trim().toLowerCase() === 'dev mode') {
             const next = !devMode;
             setDevMode(next);
-            try { localStorage.setItem('fs_fg_devmode', next ? '1' : '0'); } catch {}
             setSearchQuery('');
             setIsSearchOpen(false);
             return;
@@ -1554,7 +1535,9 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
         const cY       = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * n;
         const tileKey  = `${zoom}-${Math.floor(cX) - 1}-${Math.floor(cY) - 1}`;
 
-        const cached = await db.fieldGuideCache.get(tileKey);
+        const persisted = await db.fieldGuideCache.get(tileKey);
+        const cached = safeParseFieldGuideScanCache(persisted);
+        if (persisted && !cached) await db.fieldGuideCache.delete(tileKey);
 
         const payload = {
             exportVersion:    '1',

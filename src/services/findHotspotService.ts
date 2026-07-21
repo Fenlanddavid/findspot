@@ -15,7 +15,7 @@ const IDEMPOTENT_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 
-function geohashEncode(lat: number, lon: number, precision = 6): string {
+export function geohashEncode(lat: number, lon: number, precision = 6): string {
     let hash      = '';
     let minLat    = -90,  maxLat = 90;
     let minLon    = -180, maxLon = 180;

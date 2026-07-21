@@ -9,6 +9,7 @@ import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data"
 import { ScaledImage } from "../components/ScaledImage";
 import { CoachTip, CoachTips } from "../components/CoachTips";
 import type { WorkflowState } from "../types/significantFind";
+import { ephemeralLocal, useDurableSetting } from '../services/clientStorage';
 
 const LocationPickerModal = React.lazy(() =>
   import("../components/LocationPickerModal").then((mod) => ({ default: mod.LocationPickerModal }))
@@ -166,16 +167,20 @@ export default function FindPage(props: {
   const [sessionId, setSessionId] = useState<string | null>(props.sessionId);
 
   // #1 — Quick/Full mode (default: quick for new users, full for existing)
+  const [storedRecordMode, setStoredRecordMode, recordModeReady] = useDurableSetting<'quick' | 'full'>('findRecordMode', 'quick');
+  const [onboardingDone] = useDurableSetting('fs_onboarding_done', false);
   const [recordMode, setRecordMode] = useState<"quick" | "full">(() => {
     if (props.initialMode) return props.initialMode;
     if (props.sessionId && !props.quickId) return "quick";
-    const stored = localStorage.getItem("findRecordMode");
-    if (stored === "quick" || stored === "full") return stored;
-    return localStorage.getItem("fs_onboarding_done") ? "full" : "quick";
+    return 'quick';
   });
+  useEffect(() => {
+    if (!recordModeReady || props.initialMode || (props.sessionId && !props.quickId)) return;
+    setRecordMode(storedRecordMode === 'quick' && onboardingDone ? 'full' : storedRecordMode);
+  }, [onboardingDone, props.initialMode, props.quickId, props.sessionId, recordModeReady, storedRecordMode]);
   const changeMode = (m: "quick" | "full") => {
     setRecordMode(m);
-    if (!props.sessionId) localStorage.setItem("findRecordMode", m);
+    if (!props.sessionId) setStoredRecordMode(m);
   };
 
   const permissions = useLiveQuery(
@@ -270,9 +275,7 @@ export default function FindPage(props: {
   const gpsStartRef = useRef<number | null>(null);
   const gpsElapsedInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
-  const [hasRecordedFindBefore, setHasRecordedFindBefore] = useState(() => {
-    try { return localStorage.getItem(FIRST_FIND_KEY) === "1"; } catch { return false; }
-  });
+  const [hasRecordedFindBefore, setHasRecordedFindBefore] = useDurableSetting(FIRST_FIND_KEY, false);
   const [findCoachActive, setFindCoachActive] = useState(false);
   const [findCoachStep, setFindCoachStep] = useState(0);
 
@@ -321,7 +324,7 @@ export default function FindPage(props: {
   // #14 — restore draft on mount (silent, no prompt)
   useEffect(() => {
     if (props.quickId || props.permissionId || props.sourceSignalId) return;
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = ephemeralLocal.get(DRAFT_KEY);
     if (!raw) return;
     try {
       const { form: draftForm, locationName: draftLoc, sessionId: draftSessionId, fieldId: draftFieldId } = JSON.parse(raw);
@@ -331,7 +334,7 @@ export default function FindPage(props: {
       if (draftFieldId) setFieldId(draftFieldId);
       setDraftRestored(true);
     } catch {
-      localStorage.removeItem(DRAFT_KEY);
+      ephemeralLocal.remove(DRAFT_KEY);
     }
   }, []);
 
@@ -339,13 +342,13 @@ export default function FindPage(props: {
   useEffect(() => {
     if (!userModified || savedId || props.quickId) return;
     const timer = setTimeout(() => {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, locationName, sessionId, fieldId }));
+      ephemeralLocal.set(DRAFT_KEY, JSON.stringify({ form, locationName, sessionId, fieldId }));
     }, 2000);
     return () => clearTimeout(timer);
   }, [form, locationName, userModified, savedId, props.quickId]);
 
   function clearDraft() {
-    localStorage.removeItem(DRAFT_KEY);
+    ephemeralLocal.remove(DRAFT_KEY);
     setDraftRestored(false);
   }
 
@@ -585,11 +588,8 @@ export default function FindPage(props: {
       committedDraftIdsRef.current.add(id);
       setSavedId(id);
 
-      let isFirstFind = !hasRecordedFindBefore;
-      try {
-        isFirstFind = !localStorage.getItem(FIRST_FIND_KEY);
-        if (isFirstFind) localStorage.setItem(FIRST_FIND_KEY, "1");
-      } catch {}
+      const isFirstFind = !hasRecordedFindBefore;
+      if (isFirstFind) setHasRecordedFindBefore(true);
       if (isFirstFind) {
         setHasRecordedFindBefore(true);
         setMilestoneMsg('Nice — your first find recorded!');

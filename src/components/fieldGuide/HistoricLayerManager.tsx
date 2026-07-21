@@ -17,6 +17,7 @@ import { pasPeriodEntries, pasTypeEntries } from '../../services/pasDensityServi
 import { heritageGatewayUrl } from '../../lib/heritageGatewayLink';
 import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput, PersonalFindsInput } from '../../types/landscapeInterpretation';
 import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
+import { safeParseLandscapeInterpretationRecord } from '../../services/persistenceValidation';
 
 const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
 
@@ -784,12 +785,17 @@ function AlieSection({
             terrainSig,
         ].join('|');
 
-        db.landscapeInterpretations.get(geohash6).then(cached => {
+        db.landscapeInterpretations.get(geohash6).then(async persisted => {
             // Guard: bail if the user has panned to a different cell while the
             // cache read was in flight. Same-cell re-requests still update
             // because requestSeq will match alieRequestSeqRef.current.
             if (alieRequestSeqRef.current !== requestSeq) return;
-            const cachedInterpretation = cached?.interpretation as LandscapeInterpretation | undefined;
+            const cached = safeParseLandscapeInterpretationRecord(persisted);
+            if (persisted && !cached) {
+                await db.landscapeInterpretations.delete(geohash6);
+                return;
+            }
+            const cachedInterpretation = cached?.interpretation;
             if (
                 cachedInterpretation?.engineVersion === ALIE_ENGINE_VERSION &&
                 cached?.inputSignature === inputSignature

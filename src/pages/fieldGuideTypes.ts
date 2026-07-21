@@ -1,5 +1,7 @@
 // ─── Shared types & constants for the Field Guide feature ───────────────────
 
+import type { HotspotExplanation } from '../engines/hotspot/hotspotExplanations';
+
 /**
  * Per-layer fetch status for W2 offline-graceful states.
  * - ok:          fetched fresh from network
@@ -267,7 +269,7 @@ export interface Hotspot {
     classificationReason: string;
     secondaryTag?:        string;
     suggestedFocus?:      string;
-    explanation: string[];
+    explanation: HotspotExplanation[];
     center: [number, number];
     bounds: [[number, number], [number, number]];
     memberIds: string[];

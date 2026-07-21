@@ -502,6 +502,7 @@ async function writeIndex(index, allListEntries, counts) {
 
   const meta = {
     builtAt:      builtAt.toISOString(),
+    generationVersion: 'v2',
     schemaVersion: 2,
     geometryMode: 'full-geojson',
     featureCount,

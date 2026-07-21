@@ -106,9 +106,10 @@ function classifyTransition(h: Hotspot, f: SignalFlags): TransitionType | null {
     if (f.bestFlowConv >= 0.55 && f.hasHydro)                    return 'Floodplain Edge';
     if (f.hasHydro && f.hasSlope)                                 return 'Terrace Margin';
     if (f.hasHydro && (f.hasRaised || f.hasSunken))              return 'Environmental Transition Zone';
-    // Geological boundary: inferred from explanation strings when geology has modified this hotspot
+    // Geological boundary: inferred from structured explanation display text
+    // when geology has modified this hotspot.
     const hasGeologySignal = h.explanation.some(e =>
-        /geolog|bedrock|gravel deposit|alluvial|glacial/i.test(e),
+        /geolog|bedrock|gravel deposit|alluvial|glacial/i.test(e.text),
     );
     if (hasGeologySignal) return 'Geological Boundary';
     return null;
@@ -267,9 +268,9 @@ export function computeHotspotLandscapeIntelligence(
     // Match the density language from hotspot scoring so the narrative does
     // not overstate moderate PAS density as numerous records.
     const explanations = h.explanation ?? [];
-    const hasManyPAS   = explanations.some(e => e.startsWith('Numerous PAS'));
-    const hasSomePAS   = explanations.some(e => e.startsWith('Moderate PAS'));
-    const hasFewPAS    = explanations.some(e => e.startsWith('Few PAS'));
+    const hasManyPAS   = explanations.some(e => e.tag === 'pas_density' && e.text.startsWith('Numerous PAS'));
+    const hasSomePAS   = explanations.some(e => e.tag === 'pas_density' && e.text.startsWith('Moderate PAS'));
+    const hasFewPAS    = explanations.some(e => e.tag === 'pas_density' && e.text.startsWith('Few PAS'));
 
     if (hasManyPAS) {
         narrative = narrative

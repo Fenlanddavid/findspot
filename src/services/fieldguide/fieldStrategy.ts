@@ -212,7 +212,7 @@ export function buildFieldStrategy(
             technique: TECHNIQUE[h.classification] ?? TECHNIQUE_DEFAULT,
             approach: soil ? APPROACH[soil] : '',
             focus: h.suggestedFocus || h.classificationReason || '',
-            reasoning: (h.explanation ?? []).slice(0, 4),
+            reasoning: (h.explanation ?? []).slice(0, 4).map(item => item.text),
             caution: h.disturbanceRisk === 'High'
                 ? 'Higher-priority but disturbed ground — material may be displaced.'
                 : undefined,

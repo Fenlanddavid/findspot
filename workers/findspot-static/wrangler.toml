@@ -6,17 +6,20 @@ compatibility_date = "2026-07-20"
 binding     = "STATIC_BUCKET"
 bucket_name = "findspot-static"
 
+[observability]
+enabled = true
+
 # Deploy:
 #   cd workers/findspot-static
 #   wrangler deploy
 #
 # Upload SM index shards (after running build-sm-index.mjs):
-#   wrangler r2 object put findspot-static/sm-index/_meta.json --file scripts/out/sm-index/_meta.json --content-type application/json
+#   wrangler r2 object put findspot-static/v2/sm-index/_meta.json --file scripts/out/sm-index/_meta.json --content-type application/json
 # Upload AIM index shards (after running build-aim-index.mjs):
-#   wrangler r2 object put findspot-static/aim-index/_meta.json --file scripts/out/aim-index/_meta.json --content-type application/json
+#   wrangler r2 object put findspot-static/v2/aim-index/_meta.json --file scripts/out/aim-index/_meta.json --content-type application/json
 #
 # Bulk-upload all SM shards (bash):
 #   find scripts/out/sm-index -name '*.json' | while read f; do
-#     key="sm-index/$(basename $f)"
+#     key="v2/sm-index/$(basename $f)"
 #     wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
 #   done

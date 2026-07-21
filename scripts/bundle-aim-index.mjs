@@ -1,9 +1,9 @@
 /**
  * Converts the generated per-cell AIM index into upload-friendly R2 bundles.
- * The static Worker keeps exposing the same aim-index/{geohash6}.json contract.
+ * The static Worker exposes the generation-versioned v2/aim-index/{geohash6}.json contract.
  */
 
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,9 @@ async function main() {
         groups.get(prefix).push(filename);
     }
 
+    // A bundle prefix can disappear between generations. Start from an empty
+    // directory so the upload set contains only this generation's objects.
+    await rm(BUNDLE_DIR, { recursive: true, force: true });
     await mkdir(BUNDLE_DIR, { recursive: true });
     let bundledCells = 0;
     let maxBundleBytes = 0;
@@ -41,6 +44,9 @@ async function main() {
 
     const metaPath = join(INDEX_DIR, '_meta.json');
     const meta = JSON.parse(await readFile(metaPath, 'utf8'));
+    if (meta.generationVersion !== 'v2') {
+        throw new Error(`Expected v2 AIM metadata, received ${meta.generationVersion ?? 'no generation'}`);
+    }
     if (meta.cellCount !== bundledCells) {
         throw new Error(`Metadata expects ${meta.cellCount} cells but bundled ${bundledCells}`);
     }

@@ -11,6 +11,14 @@ import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, comp
 import { computeLandscapeReading } from '../landscape/landscapeReadingEngine';
 import type { GeologyContext } from '../geologyContext/geologyContextTypes';
 import { netGeologyScore } from '../geologyContext/geologyModifiers';
+import {
+    hotspotExplanation,
+    prioritiseHotspotExplanations,
+    supportingExplanation,
+    type HotspotExplanation,
+} from './hotspotExplanations';
+
+export const HOTSPOT_ENGINE_VERSION = 'FG-2026.07.21a';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,
@@ -48,79 +56,6 @@ function evaluateHotspotConfidence(params: {
     return confidence;
 }
 
-// ─── Explanation prioritisation ───────────────────────────────────────────────
-// Keeps the most important explanations when the list is trimmed.
-// IGNORE notes sit below the strongest positive signals (85) so at least one
-// positive reason always survives when the limit allows.
-
-const EXPLANATION_PRIORITY: [string, number][] = [
-    ['Near Roman',                        90],
-    ['Likely Roman',                      90],
-    ['Likely Roman palaeochannel crossing', 82],
-    ['Palaeochannel',                     78],
-    ['Hydrology + terrain depression',    80],
-    ['Multi-season cropmark agreement',   75],
-    ['LiDAR + Hydrology',                 70],
-    ['Island effect',                     70],
-    ['Repeated detection across scans',   68],
-    ['Historic river crossing',           65],
-    ['Historic crossing',                 65],
-    ['Route junction',                    60],
-    ['Near historic route convergence',   60],
-    ['LiDAR + Spectral',                  55],
-    ['IGNORE:',                           50],  // below positive signals; still visible but does not crowd them out
-    ['Settlement structure',              48],
-    ['Reliable LiDAR',                    45],
-    ['Access route into settlement',      45],
-    ['Historic data overlaps',            44],
-    ['Spectral vegetation',               40],
-    ['Field system indicators',           38],
-    ['Multiple independent sources',      36],
-    ['Raised dry footing',                35],
-    ['Raised dry margin',                 35],
-    ['Historic movement corridor',        25],
-    ['Near probable Roman',               25],
-    ['Subtle earthwork signature',        22],
-    ['Dry ground beside former wet zone', 20],
-    ['Landscape edge detected',           18],
-    ['Likely movement corridor',          16],
-    ['Favourable slope and aspect',       14],
-    ['Observational vantage',             44],
-    ['Raised position overlooking',       42],
-    ['Multi-period activity',             40],
-    ['Offset position beside movement',   38],
-    ['Sheltered raised position',         36],
-    ['Quiet raised ground',               19],
-    ['Part of',                           13],
-    ['Landscape system',                  12],
-];
-
-function prioritiseExplanations(items: string[], limit: number): string[] {
-    const unique = Array.from(new Set(items));
-    unique.sort((a, b) => {
-        const scoreA = EXPLANATION_PRIORITY.find(([k]) => a.includes(k))?.[1] ?? 10;
-        const scoreB = EXPLANATION_PRIORITY.find(([k]) => b.includes(k))?.[1] ?? 10;
-        return scoreB - scoreA;
-    });
-
-    if (unique.length <= limit) return unique;
-
-    // Guarantee at least one positive (non-IGNORE) explanation survives,
-    // so users understand why the hotspot was surfaced even when penalties apply.
-    const sliced    = unique.slice(0, limit);
-    const hasIgnore  = sliced.some(s => s.startsWith('IGNORE:'));
-    const hasPositive = sliced.some(s => !s.startsWith('IGNORE:'));
-
-    if (hasIgnore && !hasPositive) {
-        const firstPositive = unique.find(s => !s.startsWith('IGNORE:'));
-        if (firstPositive) {
-            sliced[sliced.length - 1] = firstPositive;
-        }
-    }
-
-    return sliced;
-}
-
 // ─── A: Landscape Positioning Model ──────────────────────────────────────────
 // Asks: "Is this in the kind of position humans repeatedly chose to use?"
 // Covers three positioning patterns not captured by existing scoring:
@@ -142,13 +77,13 @@ function computeLandscapePositioning(params: {
     hasRomanProximity:      boolean;
     hasHistProximity:       boolean;
     isHighConfidenceCrossing: boolean;
-}): { score: number; explanations: string[] } {
+}): { score: number; explanations: HotspotExplanation[] } {
     const {
         members, routes, center, isRaised, hasHydrology, hasSlope, hasLidar,
         hasRomanProximity, hasHistProximity, isHighConfidenceCrossing,
     } = params;
     let score = 0;
-    const explanations: string[] = [];
+    const explanations: HotspotExplanation[] = [];
     const hasAnyRoute = hasRomanProximity || hasHistProximity;
 
     // 1. Offset positioning: raised ground near a route but not directly on it.
@@ -158,7 +93,7 @@ function computeLandscapePositioning(params: {
         const nearestDist = Math.min(...routes.map(r => getDistanceToLine(center, r.geometry, r.bbox)));
         if (nearestDist > 80 && nearestDist < 350) {
             score += 2;
-            explanations.push('Offset position beside movement corridor');
+            explanations.push(hotspotExplanation('movement_offset', 'Offset position beside movement corridor'));
         }
     }
 
@@ -168,7 +103,7 @@ function computeLandscapePositioning(params: {
     //    on speculative combinations without physical confirmation.
     if (isRaised && hasSlope && hasHydrology && hasLidar) {
         score += 2;
-        explanations.push('Sheltered raised position — slope backing, water nearby');
+        explanations.push(hotspotExplanation('sheltered_position', 'Sheltered raised position — slope backing, water nearby'));
     }
 
     // 3. Negative-space preservation zone: raised, undisturbed, not route-adjacent.
@@ -181,7 +116,7 @@ function computeLandscapePositioning(params: {
         : Infinity;
     if (allLowDisturbance && isRaised && !hasAnyRoute && routeDistance > 250) {
         score += 2;
-        explanations.push('Quiet raised ground — low disturbance, away from main routes');
+        explanations.push(hotspotExplanation('quiet_preservation', 'Quiet raised ground — low disturbance, away from main routes'));
     }
 
     return { score: Math.min(score, 6), explanations };
@@ -531,7 +466,7 @@ export function buildTerrainHotspots(
         }
 
         let anomaly = 0, context = 0, convergence = 0, behaviour = 0, penalty = 0;
-        const explanation: string[] = [];
+        const explanation: HotspotExplanation[] = [];
 
         const sources = new Set(members.flatMap(m => m.sources));
 
@@ -559,10 +494,10 @@ export function buildTerrainHotspots(
         if (hasLidar) {
             const bestLidar = members.find(m => m.sources.includes('terrain') || m.sources.includes('terrain_global'));
             let lidarScore = bestLidar?.confidence === 'High' ? 18 : (bestLidar?.confidence === 'Medium' ? 10 : 5);
-            if (hasHydrology)            { lidarScore += 5; explanation.push('LiDAR + Hydrology correlation'); }
-            if (satelliteIsSupporting && sources.has('satellite_summer')) { lidarScore += 4; explanation.push('LiDAR + Spectral agreement'); }
+            if (hasHydrology)            { lidarScore += 5; explanation.push(hotspotExplanation('lidar_hydrology', 'LiDAR + Hydrology correlation')); }
+            if (satelliteIsSupporting && sources.has('satellite_summer')) { lidarScore += 4; explanation.push(hotspotExplanation('lidar_spectral', 'LiDAR + Spectral agreement')); }
             anomaly += lidarScore;
-            explanation.push('Reliable LiDAR relief signature');
+            explanation.push(hotspotExplanation('lidar_relief', 'Reliable LiDAR relief signature'));
         }
 
         if (satelliteIsPrimary) {
@@ -570,7 +505,7 @@ export function buildTerrainHotspots(
             const hasSpring = sources.has('satellite_spring');
             // Summer = 7 (raised: +8 → 15, clears hotspot threshold without needing routes)
             anomaly += (hasSummer && hasSpring) ? 10 : (hasSummer ? 7 : 3);
-            explanation.push('Spectral vegetation anomaly');
+            explanation.push(hotspotExplanation('spectral_anomaly', 'Spectral vegetation anomaly'));
         }
 
         const center        = c.center;
@@ -580,8 +515,8 @@ export function buildTerrainHotspots(
 
         if (isRaised) {
             context += 8;
-            explanation.push('Raised dry footing');
-            if (hasHydrology) { context += 4; explanation.push('Raised dry margin near water'); }
+            explanation.push(hotspotExplanation('raised_footing', 'Raised dry footing'));
+            if (hasHydrology) { context += 4; explanation.push(hotspotExplanation('raised_water_margin', 'Raised dry margin near water')); }
         }
 
         if (hasHydrology) {
@@ -589,11 +524,11 @@ export function buildTerrainHotspots(
             anomaly += isRaised ? 5 : 2;
             if (isRaised) {
                 behaviour += 6 + (hasLidar ? 4 : 0);
-                explanation.push('Island effect: Dry ground in wet zone');
+                explanation.push(hotspotExplanation('raised_wetland_island', 'Island effect: Dry ground in wet zone'));
             }
             if (members.some(m => m.type.includes('Corridor'))) {
                 behaviour += 5 + (hasLidar ? 3 : 0);
-                explanation.push('Historic river crossing / Ford potential');
+                explanation.push(hotspotExplanation('historic_crossing', 'Historic river crossing / Ford potential'));
             }
         }
 
@@ -602,7 +537,7 @@ export function buildTerrainHotspots(
         // Capped at +8 anomaly — supports but does not dominate a hotspot.
         if (hasPalaeoChannel) {
             anomaly += 8;
-            explanation.push('Palaeochannel — ancient watercourse signal');
+            explanation.push(hotspotExplanation('palaeochannel', 'Palaeochannel — ancient watercourse signal'));
         }
 
         // ── Hydrology + terrain depression agreement (Refinement 3) ──────────
@@ -616,7 +551,7 @@ export function buildTerrainHotspots(
             );
             if (hydroSunken && terrainSunken) {
                 anomaly += 5;
-                explanation.push('Hydrology + terrain depression agreement');
+                explanation.push(hotspotExplanation('terrain_hydrology_depression', 'Hydrology + terrain depression agreement'));
             } else if (hydroSunken || terrainSunken) {
                 anomaly += 2;
             }
@@ -629,13 +564,13 @@ export function buildTerrainHotspots(
         // season (+3 extra); only the supporting-LiDAR case adds anomaly here.
         if (hasMultiSeasonSat) {
             if (!satelliteIsPrimary) anomaly += 4;
-            explanation.push('Multi-season cropmark agreement');
+            explanation.push(hotspotExplanation('multi_season_cropmark', 'Multi-season cropmark agreement'));
         }
 
         // ── Persistence (verified signal via repeat detection) ────────────────────
         if (members.some(m => (m.rescanCount || 0) >= 3)) {
             context += 3;
-            explanation.push('Repeated detection across scans');
+            explanation.push(hotspotExplanation('repeated_detection', 'Repeated detection across scans'));
         }
 
         // ── Context labels from cluster analysis ──────────────────────────────────
@@ -646,14 +581,14 @@ export function buildTerrainHotspots(
             l === 'Enclosed Settlement / Farmstead' || l === 'Habitation Cluster / Settlement Nucleus',
         )) {
             context += 5;
-            explanation.push('Settlement structure indicators');
+            explanation.push(hotspotExplanation('settlement_structure', 'Settlement structure indicators'));
         }
         if (memberContextLabels.some(l => l === 'Primary Access Route into Settlement')) {
             behaviour += 3;
-            explanation.push('Access route into settlement detected');
+            explanation.push(hotspotExplanation('settlement_access', 'Access route into settlement detected'));
         }
         if (memberContextLabels.some(l => l === 'Organized Field System / Celtic Fields')) {
-            explanation.push('Field system indicators');
+            explanation.push(hotspotExplanation('field_system', 'Field system indicators'));
         }
 
         // ── Route scoring ─────────────────────────────────────────────────────
@@ -726,9 +661,9 @@ export function buildTerrainHotspots(
             else if (hasHistProximity) { convergence += 4; routeReasons.push('Raised ground beside movement corridor'); }
         }
 
-        if (hasRomanProximity && routeScore > 5)     explanation.push('Near probable Roman road corridor');
-        else if (hasHistProximity && routeScore > 3)  explanation.push('Historic movement corridor nearby');
-        routeReasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
+        if (hasRomanProximity && routeScore > 5)     explanation.push(hotspotExplanation('roman_proximity', 'Near probable Roman road corridor'));
+        else if (hasHistProximity && routeScore > 3) explanation.push(hotspotExplanation('historic_movement', 'Historic movement corridor nearby'));
+        routeReasons.forEach(r => explanation.push(supportingExplanation(r)));
         behaviour += routeScore;
 
         // ── Signal class diversity ─────────────────────────────────────────────
@@ -756,7 +691,7 @@ export function buildTerrainHotspots(
             const slopeArea = bestSlope?.metrics?.area ?? 0;
             if (slopeArea >= 80) {
                 anomaly += 5;
-                explanation.push('Slope break / terrace edge detected');
+                explanation.push(hotspotExplanation('landscape_edge', 'Slope break / terrace edge detected'));
             } else {
                 anomaly += 1; // noisy / tiny slope cluster — minimal contribution
             }
@@ -771,7 +706,7 @@ export function buildTerrainHotspots(
         if (isSouthFacing) {
             context += 3;
             if (hasLidar || hasHydrology || hasRomanProximity || hasHistProximity) {
-                explanation.push('South-facing slope supports activity potential');
+                explanation.push(hotspotExplanation('slope_aspect', 'South-facing slope supports activity potential'));
             }
         }
 
@@ -781,7 +716,7 @@ export function buildTerrainHotspots(
         // indicators should not outweigh a physical LiDAR or satellite detection.
         const landscape = computeLandscapeReading(members, routes);
         if (landscape.score > 0) context += Math.min(landscape.score, 10);
-        landscape.reasons.forEach(r => { if (!explanation.includes(r)) explanation.push(r); });
+        landscape.reasons.forEach(r => explanation.push(supportingExplanation(r)));
 
         // ── A: Landscape Positioning Model ────────────────────────────────────
         // Asks whether this is in a position humans repeatedly chose.
@@ -792,7 +727,7 @@ export function buildTerrainHotspots(
             hasRomanProximity, hasHistProximity, isHighConfidenceCrossing,
         });
         if (positioning.score > 0) context += positioning.score;
-        positioning.explanations.forEach(e => { if (!explanation.includes(e)) explanation.push(e); });
+        explanation.push(...positioning.explanations);
 
         // ── D: Viewshed Proxy ─────────────────────────────────────────────────
         // Cheap observational advantage: raised + LiDAR-confirmed point that
@@ -804,13 +739,13 @@ export function buildTerrainHotspots(
                 : Infinity;
             if (isHighConfidenceCrossing) {
                 context += 4;
-                explanation.push('Observational vantage over crossing point');
+                explanation.push(hotspotExplanation('observational_vantage', 'Observational vantage over crossing point'));
             } else if (hasHydrology && nearestRouteDist < 150) {
                 context += 3;
-                explanation.push('Raised position overlooking route and water');
+                explanation.push(hotspotExplanation('raised_overlook', 'Raised position overlooking route and water', 'route_water'));
             } else if (nearestRouteDist < 200) {
                 context += 2;
-                explanation.push('Raised position overlooking movement corridor');
+                explanation.push(hotspotExplanation('raised_overlook', 'Raised position overlooking movement corridor', 'movement'));
             }
         }
 
@@ -824,11 +759,11 @@ export function buildTerrainHotspots(
         // protect multi-source results where several independent layers agree.
         if (highDisturbanceCount > 0) {
             penalty += sources.size >= 3 ? -3 : sources.size >= 2 ? -6 : -8;
-            explanation.push('IGNORE: High risk of modern disturbance');
+            explanation.push(hotspotExplanation('ignore_modern_disturbance', 'IGNORE: High risk of modern disturbance'));
         }
         if (featurelessCount > 0) {
             penalty += sources.size >= 3 ? -2 : sources.size >= 2 ? -4 : -6;
-            if (featurelessCount / members.length > 0.5) explanation.push('IGNORE: Uniform/Featureless terrain');
+            if (featurelessCount / members.length > 0.5) explanation.push(hotspotExplanation('ignore_featureless', 'IGNORE: Uniform/Featureless terrain'));
         }
 
         // ── Negative evidence penalties ───────────────────────────────────────
@@ -853,7 +788,7 @@ export function buildTerrainHotspots(
                 !_hasCircularFeature && !_hasSettlementContext && !isHighConfidenceCrossing &&
                 !hasHydrology && anomaly < 12) {
                 penalty -= 4;
-                explanation.push('IGNORE: Route proximity without archaeological form');
+                explanation.push(hotspotExplanation('ignore_route_only', 'IGNORE: Route proximity without archaeological form'));
             }
 
             // All linear signals, no circular or structural, no hydrology — field grid or drainage.
@@ -933,7 +868,7 @@ export function buildTerrainHotspots(
             if      (confidence === 'Strongest Signal')  confidence = 'Strong Signal';
             else if (confidence === 'Strong Signal')     confidence = 'Developing Signal';
             else if (confidence === 'Developing Signal') confidence = 'Weak Signal';
-            explanation.push('Feature near scan edge — wider scan may improve confidence');
+            explanation.push(hotspotExplanation('scan_edge', 'Feature near scan edge — wider scan may improve confidence'));
         }
 
         // ── Steep-slope confidence suppressor ─────────────────────────────────
@@ -1060,7 +995,7 @@ export function buildTerrainHotspots(
             classificationReason,
             secondaryTag,
             suggestedFocus,
-            explanation:          prioritiseExplanations(explanation, 4),
+            explanation:          prioritiseHotspotExplanations(explanation, 4),
             center:               [(minLon + maxLon) / 2, (minLat + maxLat) / 2],
             bounds:               [[minLon - 0.0004, minLat - 0.0004], [maxLon + 0.0004, maxLat + 0.0004]],
             memberIds:            members.map(m => m.id),
@@ -1109,7 +1044,7 @@ export function enhanceHotspotsWithHistoric(
 ): Hotspot[] {
     const enhanced = hotspots.map(h => {
         let boost = 0;
-        const notes: string[] = [];
+        const notes: HotspotExplanation[] = [];
 
         // Historic evidence points within 500m
         const nearbyFinds = historicFinds.filter(f =>
@@ -1117,12 +1052,19 @@ export function enhanceHotspotsWithHistoric(
         );
         if (nearbyFinds.length > 0) {
             boost += Math.min(8, nearbyFinds.length * 3);
-            notes.push(`${nearbyFinds.length} heritage site${nearbyFinds.length > 1 ? 's' : ''} within 500m`);
+            notes.push(hotspotExplanation(
+                'historic_overlap',
+                `${nearbyFinds.length} heritage site${nearbyFinds.length > 1 ? 's' : ''} within 500m`,
+                `count_${nearbyFinds.length}`,
+            ));
             if (targetPeriod !== 'All') {
                 const periodMatch = nearbyFinds.some(f =>
                     f.broadperiod.toLowerCase().includes(targetPeriod.toLowerCase()),
                 );
-                if (periodMatch) { boost += 4; notes.push(`${targetPeriod} period activity recorded nearby`); }
+                if (periodMatch) {
+                    boost += 4;
+                    notes.push(hotspotExplanation('historic_overlap', `${targetPeriod} period activity recorded nearby`, `period_${targetPeriod.toLowerCase()}`));
+                }
             }
         }
 
@@ -1132,15 +1074,15 @@ export function enhanceHotspotsWithHistoric(
         );
         if (nearbyMonuments.length > 0) {
             boost += 5;
-            notes.push('Near recorded scheduled monument');
+            notes.push(hotspotExplanation('historic_overlap', 'Near recorded scheduled monument', 'scheduled_monument'));
         }
 
         // AIM cropmark polygons within 200m
         // Only fires when Stage 1 did not already enrich this hotspot via direct
-        // cluster overlap — checked via explanation strings since members are not
-        // available in Stage 2.
+        // cluster overlap — checked via structured explanation text since members
+        // are not available in Stage 2.
         const alreadyAimEnriched = h.explanation.some(e =>
-            /cropmark|aerial.*monument|AIM/i.test(e)
+            /cropmark|aerial.*monument|AIM/i.test(e.text)
         );
         if (!alreadyAimEnriched && aimFeatures.length > 0) {
             const nearbyAIM = aimFeatures.filter(f =>
@@ -1150,10 +1092,11 @@ export function enhanceHotspotsWithHistoric(
                 boost += Math.min(6, nearbyAIM.length * 3);
                 const topType   = nearbyAIM[0].type;
                 const topPeriod = nearbyAIM[0].period;
-                notes.push(
-                    `AIM cropmark within 200m — ${topType}` +
-                    (topPeriod ? ` (${topPeriod})` : '')
-                );
+                notes.push(hotspotExplanation(
+                    'historic_overlap',
+                    `AIM cropmark within 200m — ${topType}` + (topPeriod ? ` (${topPeriod})` : ''),
+                    `aim_${topType.toLowerCase().replace(/\W+/g, '_')}_${topPeriod.toLowerCase().replace(/\W+/g, '_')}`,
+                ));
             }
         }
 
@@ -1161,7 +1104,11 @@ export function enhanceHotspotsWithHistoric(
         const strongSignals = placeSignals.filter(s => s.confidence >= 0.8 && s.distance < 1.0);
         if (strongSignals.length > 0) {
             boost += Math.min(4, strongSignals.length * 2);
-            notes.push(`Place-name signal: "${strongSignals[0].name}" (${strongSignals[0].meaning})`);
+            notes.push(hotspotExplanation(
+                'historic_overlap',
+                `Place-name signal: "${strongSignals[0].name}" (${strongSignals[0].meaning})`,
+                `place_${strongSignals[0].name.toLowerCase().replace(/\W+/g, '_')}`,
+            ));
         }
 
         if (boost === 0) return h;
@@ -1178,7 +1125,7 @@ export function enhanceHotspotsWithHistoric(
             convergence: h.metrics.convergence,
         });
 
-        const allNotes = prioritiseExplanations([...h.explanation, ...notes], 5);
+        const allNotes = prioritiseHotspotExplanations([...h.explanation, ...notes], 5);
         return { ...h, score: newScore, confidence, explanation: allNotes };
     });
 
@@ -1253,11 +1200,11 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
     const isRaisedType = (h: Hotspot): boolean =>
         ['Raised Activity Area', 'Settlement Edge Candidate', 'Terrain Structure Candidate',
          'Multi-Period Occupation Zone'].includes(h.classification) ||
-        h.explanation.some(e => e.includes('Raised dry') || e.includes('Island effect'));
+        h.explanation.some(e => e.tag === 'raised_footing' || e.tag === 'raised_wetland_island');
 
     const isLowlandType = (h: Hotspot): boolean =>
         ['Lowland Activity Zone', 'Wetland Margin Activity Zone'].includes(h.classification) ||
-        (!isRaisedType(h) && h.explanation.some(e => e.includes('Hydrology') || e.includes('wet zone')));
+        (!isRaisedType(h) && h.explanation.some(e => e.tag === 'lidar_hydrology' || e.tag === 'raised_wetland_island'));
 
     const colluvialAnnotations = new Map<string, SoilMechanics>();
 
@@ -1331,9 +1278,8 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
         const newSecondaryTag = keepExisting ? result.secondaryTag : systemTag;
 
         // Append system note to explanation if not already present (capped at 5)
-        const newExplanation = result.explanation.includes(systemNote)
-            ? result.explanation
-            : prioritiseExplanations([...result.explanation, systemNote], 5);
+        const systemExplanation = hotspotExplanation('landscape_system', systemNote, systemTag.toLowerCase().replace(/\W+/g, '_'));
+        const newExplanation = prioritiseHotspotExplanations([...result.explanation, systemExplanation], 5);
 
         return { ...result, secondaryTag: newSecondaryTag, explanation: newExplanation };
     });
@@ -1459,7 +1405,10 @@ export function applyPASDensityModifiers(
             ...h,
             score,
             confidence,
-            explanation: [...(h.explanation ?? []), explanation],
+            explanation: prioritiseHotspotExplanations([
+                ...(h.explanation ?? []),
+                hotspotExplanation('pas_density', explanation, `score_${scoreBoost}`),
+            ], 5),
         };
     });
 

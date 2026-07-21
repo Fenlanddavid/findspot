@@ -13,6 +13,7 @@ import { useConfirmDialog } from "../components/ConfirmModal";
 import { getPackMeta, isPackStale } from "../services/offlinePack";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { LockIcon, SearchIcon } from "../components/AppIcons";
+import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -55,17 +56,15 @@ export default function Home(props: {
   const [showClubRallyModal, setShowClubRallyModal] = useState(false);
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [clubRallyCardDismissed, setClubRallyCardDismissed] = useState(() => {
-    try { return localStorage.getItem(CLUB_RALLY_HOME_CARD_DISMISSED_KEY) === "1"; } catch { return false; }
-  });
+  const [clubRallyCardDismissed, setClubRallyCardDismissed] = useDurableSetting(CLUB_RALLY_HOME_CARD_DISMISSED_KEY, false);
   const [installNextStepDismissed, setInstallNextStepDismissed] = useState(() => {
     try {
-      return sessionStorage.getItem('fs_install_next_step_dismissed') === 'true';
+      return ephemeralSession.get('fs_install_next_step_dismissed') === 'true';
     } catch { return false; }
   });
   const [usedActions, setUsedActions] = useState<Set<string>>(() => {
     try {
-      const stored = sessionStorage.getItem('fs_used_actions');
+      const stored = ephemeralSession.get('fs_used_actions');
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
@@ -77,31 +76,14 @@ export default function Home(props: {
   React.useEffect(() => {
     return () => { if (homeSignalToastTimerRef.current !== null) window.clearTimeout(homeSignalToastTimerRef.current); };
   }, []);
-  const [dismissedNextMoves, setDismissedNextMoves] = useState<Record<string, number>>(() => {
-    try {
-      const stored = localStorage.getItem('fs_nextmove_dismissed');
-      if (!stored) return {};
-      const parsed = JSON.parse(stored);
-      // Migrate old array format to timestamp object
-      if (Array.isArray(parsed)) {
-        const migrated: Record<string, number> = {};
-        for (const k of parsed) migrated[k] = Date.now();
-        return migrated;
-      }
-      return parsed;
-    } catch { return {}; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem('fs_nextmove_dismissed', JSON.stringify(dismissedNextMoves)); } catch {}
-  }, [dismissedNextMoves]);
+  const [dismissedNextMoves, setDismissedNextMoves] = useDurableSetting<Record<string, number>>('fs_nextmove_dismissed', {});
 
   const dismissNextMove = useCallback((key: string) => {
     setDismissedNextMoves(prev => ({ ...prev, [key]: Date.now() }));
   }, []);
 
   const dismissInstallNextStep = useCallback(() => {
-    try { sessionStorage.setItem('fs_install_next_step_dismissed', 'true'); } catch {}
+    try { ephemeralSession.set('fs_install_next_step_dismissed', 'true'); } catch {}
     setInstallNextStepDismissed(true);
   }, []);
 
@@ -113,7 +95,6 @@ export default function Home(props: {
       cancelLabel: "Keep It",
     });
     if (!confirmed) return;
-    try { localStorage.setItem(CLUB_RALLY_HOME_CARD_DISMISSED_KEY, "1"); } catch {}
     setClubRallyCardDismissed(true);
   }, [confirmAction]);
 
@@ -192,12 +173,7 @@ export default function Home(props: {
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending && !f.scatterId && !f.isNotableFind), [finds]);
   const completedFindCount = recentFinds?.length ?? 0;
   const isFirstRun = !!permissions && realPermissions.length === 0 && completedFindCount === 0;
-  const fieldGuideScanCount = (() => {
-    try {
-      const parsed = parseInt(localStorage.getItem('fs_fg_scan_count') || '0', 10);
-      return Number.isFinite(parsed) ? parsed : 0;
-    } catch { return 0; }
-  })();
+  const [fieldGuideScanCount] = useDurableSetting('fs_fg_scan_count', 0);
 
   const appSettings = useLiveQuery(async () => {
     const [detectorist, lastBackupDate] = await Promise.all([
@@ -506,9 +482,9 @@ export default function Home(props: {
         ...a,
         action: () => {
           try {
-            const stored = sessionStorage.getItem('fs_used_actions');
+            const stored = ephemeralSession.get('fs_used_actions');
             const current: string[] = stored ? JSON.parse(stored) : [];
-            sessionStorage.setItem('fs_used_actions', JSON.stringify([...new Set([...current, a.label])]));
+            ephemeralSession.set('fs_used_actions', JSON.stringify([...new Set([...current, a.label])]));
           } catch {}
           setUsedActions(prev => new Set(prev).add(a.label));
           a.action();

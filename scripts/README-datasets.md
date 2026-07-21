@@ -8,10 +8,10 @@ Static datasets served from the `findspot-static` R2 bucket via the `findspot-st
 
 | Key prefix | Description | Cache |
 |---|---|---|
-| `sm-index/_meta.json` | SM index build metadata (count, date, source) | 1 day |
-| `sm-index/{geohash6}.json` | Per-cell SM shard (array of `{ listEntry, name, bbox }`). Missing cell = valid empty response (`[]`). | 1 day |
-| `aim-index/{geohash6}.json` | Per-cell AIM shard (array of `{ monumentType, period, evidence, bbox }`). Same sparse pattern as SM. | 1 day |
-| `pas-h3/` | PAS H3 density tiles (future W4). | 7 days |
+| `v2/sm-index/_meta.json` | SM index build metadata (count, date, source) | 1 day |
+| `v2/sm-index/{geohash6}.json` | Per-cell SM shard (array of `{ listEntry, name, bbox }`). Missing cell = valid empty response (`[]`). | 1 day |
+| `v2/aim-index/{geohash6}.json` | Per-cell AIM shard (array of `{ monumentType, period, evidence, bbox }`). Same sparse pattern as SM. | 1 day |
+| `v2/pas-h3/` | PAS H3 density tiles (future W4). | 7 days |
 
 ---
 
@@ -28,14 +28,14 @@ node scripts/build-sm-index.mjs
 **Step 2 — Bulk-upload all shards except `_meta.json`:**
 ```bash
 find scripts/out/sm-index -name '*.json' ! -name '_meta.json' | while read f; do
-  key="sm-index/$(basename $f)"
+  key="v2/sm-index/$(basename $f)"
   wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
 done
 ```
 
 **Step 3 — Verify Scottish shard URLs directly, then upload `_meta.json` last:**
 ```bash
-wrangler r2 object put findspot-static/sm-index/_meta.json \
+wrangler r2 object put findspot-static/v2/sm-index/_meta.json \
   --file scripts/out/sm-index/_meta.json \
   --content-type application/json
 ```
@@ -46,7 +46,7 @@ Total upload time: ~2–5 minutes for ~20,000 features across ~4,000 cells.
 
 ## Rebuilding the AIM Index
 
-The AIM index uses the same geohash-sharded structure as SM, served from `aim-index/`.
+The AIM index uses the same geohash-sharded structure as SM, served from `v2/aim-index/`.
 
 **Step 1 — Generate shards locally:**
 ```bash
@@ -54,17 +54,29 @@ node scripts/build-aim-index.mjs
 # Output: scripts/out/aim-index/_meta.json  +  scripts/out/aim-index/{geohash6}.json
 ```
 
-**Step 2 — Bulk-upload all shards:**
+**Step 2 — Bundle the cell shards, then upload the bundles:**
 ```bash
-wrangler r2 object put findspot-static/aim-index/_meta.json \
-  --file scripts/out/aim-index/_meta.json \
-  --content-type application/json
+node scripts/bundle-aim-index.mjs
 
-find scripts/out/aim-index -name '*.json' | while read f; do
-  key="aim-index/$(basename $f)"
+find scripts/out/aim-index/bundles -name '*.json' | while read f; do
+  key="v2/aim-index/bundles/$(basename $f)"
   wrangler r2 object put "findspot-static/$key" --file "$f" --content-type application/json
 done
 ```
+
+The Worker keeps the public per-cell URL contract and reads each cell from its
+four-character prefix bundle. This makes a generation practical to upload and
+switch atomically.
+
+**Step 3 — Verify a few cell URLs, then upload `_meta.json` last:**
+```bash
+wrangler r2 object put findspot-static/v2/aim-index/_meta.json \
+  --file scripts/out/aim-index/_meta.json \
+  --content-type application/json
+```
+
+Keep the `v1/` objects and the old unversioned objects in R2 for the documented
+grace window; the Worker continues to serve both while installed clients update.
 
 ---
 

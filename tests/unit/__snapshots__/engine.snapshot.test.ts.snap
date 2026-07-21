@@ -1490,10 +1490,22 @@ exports[`hotspotEngine — (a) terrain cluster produces a hotspot > snapshot 1`]
     "confidence": "Developing Signal",
     "disturbanceRisk": undefined,
     "explanation": [
-      "Multi-season cropmark agreement",
-      "LiDAR + Hydrology correlation",
-      "LiDAR + Spectral agreement",
-      "Reliable LiDAR relief signature",
+      {
+        "tag": "multi_season_cropmark",
+        "text": "Multi-season cropmark agreement",
+      },
+      {
+        "tag": "lidar_hydrology",
+        "text": "LiDAR + Hydrology correlation",
+      },
+      {
+        "tag": "lidar_spectral",
+        "text": "LiDAR + Spectral agreement",
+      },
+      {
+        "tag": "lidar_relief",
+        "text": "Reliable LiDAR relief signature",
+      },
     ],
     "id": "hs-5250000--150000",
     "isHighConfidenceCrossing": false,

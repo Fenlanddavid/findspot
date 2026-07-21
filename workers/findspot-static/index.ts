@@ -5,11 +5,11 @@
  * and HTTP range-request support for PMTiles consumers.
  *
  * Datasets served:
- *   sm-index/_meta.json        — SM index build metadata
- *   sm-index/{geohash6}.json   — per-cell SM index shards (sparse; empty cell → [])
- *   aim-index/_meta.json       — AIM index build metadata
- *   aim-index/{geohash6}.json  — per-cell AIM index shards (same pattern as SM)
- *   pas-h3/{key}               — PAS H3 density tiles (future W4)
+ *   v{n}/sm-index/_meta.json        — SM index build metadata
+ *   v{n}/sm-index/{geohash6}.json   — per-cell SM index shards
+ *   v{n}/aim-index/_meta.json       — AIM index build metadata
+ *   v{n}/aim-index/{geohash6}.json  — per-cell AIM index shards
+ *   v{n}/pas-h3/{key}               — PAS H3 density tiles (future W4)
  *
  * Attribution:
  *   Scheduled Monuments data: NHLE © Historic England, CC BY 4.0
@@ -17,7 +17,7 @@
  */
 
 import {
-  STATIC_DATASET_KEYS,
+  SUPPORTED_STATIC_DATA_GENERATIONS,
   aimBundleKey,
 } from '../../src/shared/staticDatasetContract';
 
@@ -29,9 +29,15 @@ const CORS_HEADERS = {
 };
 
 // Regex patterns for allowed keys
-const SM_SHARD_RE    = /^sm-index\/[0-9bcdefghjkmnpqrstuvwxyz]{6}\.json$/;
-const AIM_SHARD_RE   = /^aim-index\/[0-9bcdefghjkmnpqrstuvwxyz]{6}\.json$/;
-const PAS_H3_PREFIX  = 'pas-h3/';
+const GENERATION_RE  = SUPPORTED_STATIC_DATA_GENERATIONS.join('|');
+// The optional generation prefix preserves the pre-versioning URLs for one
+// grace window. New clients always use the shared v2 contract.
+const OPTIONAL_GENERATION_PREFIX = `(?:(?:${GENERATION_RE})/)?`;
+const SM_META_RE     = new RegExp(`^${OPTIONAL_GENERATION_PREFIX}sm-index/_meta\\.json$`);
+const AIM_META_RE    = new RegExp(`^${OPTIONAL_GENERATION_PREFIX}aim-index/_meta\\.json$`);
+const SM_SHARD_RE    = new RegExp(`^${OPTIONAL_GENERATION_PREFIX}sm-index/[0-9bcdefghjkmnpqrstuvwxyz]{6}\\.json$`);
+const AIM_SHARD_RE   = new RegExp(`^${OPTIONAL_GENERATION_PREFIX}aim-index/[0-9bcdefghjkmnpqrstuvwxyz]{6}\\.json$`);
+const PAS_H3_RE      = new RegExp(`^${OPTIONAL_GENERATION_PREFIX}pas-h3/.+`);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -49,11 +55,11 @@ export default {
     const key = url.pathname.slice(1);
 
     // ── Key allow-list ────────────────────────────────────────────────────────
-    const isSmMeta   = key === STATIC_DATASET_KEYS.smMeta;
-    const isAimMeta  = key === STATIC_DATASET_KEYS.aimMeta;
+    const isSmMeta   = SM_META_RE.test(key);
+    const isAimMeta  = AIM_META_RE.test(key);
     const isSmShard  = SM_SHARD_RE.test(key);
     const isAimShard = AIM_SHARD_RE.test(key);
-    const isPasH3    = key.startsWith(PAS_H3_PREFIX) && key.length > PAS_H3_PREFIX.length;
+    const isPasH3    = PAS_H3_RE.test(key);
 
     if (!isSmMeta && !isAimMeta && !isSmShard && !isAimShard && !isPasH3) {
       return textError('Not found', 404);
@@ -174,9 +180,22 @@ function textError(message: string, status: number): Response {
 }
 
 async function serveAimShard(key: string, method: string, env: Env): Promise<Response> {
-  const cell = key.slice('aim-index/'.length, -'.json'.length);
-  const bundle = await env.STATIC_BUCKET.get(aimBundleKey(cell));
-  if (!bundle) return jsonResponse('[]', method);
+  const parts = key.split('/');
+  const versioned = SUPPORTED_STATIC_DATA_GENERATIONS.includes(parts[0] as typeof SUPPORTED_STATIC_DATA_GENERATIONS[number]);
+  const generation = versioned ? parts[0] : undefined;
+  const filename = parts.at(-1)!;
+  const cell = filename.slice(0, -'.json'.length);
+  const bundleKey = generation
+    ? aimBundleKey(cell, generation)
+    : `aim-index/bundles/${cell.slice(0, 4)}.json`;
+  const bundle = await env.STATIC_BUCKET.get(bundleKey);
+
+  // Older generations were uploaded as one R2 object per cell. Keep those
+  // objects readable while v1 and the unversioned client contract age out.
+  if (!bundle) {
+    const direct = await env.STATIC_BUCKET.get(key);
+    return direct ? jsonResponse(await direct.text(), method) : jsonResponse('[]', method);
+  }
 
   try {
     const cells = await bundle.json<Record<string, unknown>>();

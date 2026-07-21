@@ -38,7 +38,7 @@ function okMeta() {
     return Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve({ schemaVersion: 1, builtAt: '2026-01-01' }),
+        json: () => Promise.resolve({ generationVersion: 'v2', schemaVersion: 1, builtAt: '2026-01-01' }),
     });
 }
 
@@ -230,7 +230,7 @@ describe('PAS density service — module-level cache', () => {
             ok: true,
             status: 200,
             json: () => Promise.resolve({
-                schemaVersion: 1,
+                generationVersion: 'v2', schemaVersion: 1,
                 resolution: 6,
                 generatedAt: '',
                 recordCount: 0,
@@ -255,7 +255,7 @@ describe('PAS density service — module-level cache', () => {
             ok: true,
             status: 200,
             json: () => Promise.resolve({
-                schemaVersion: 1,
+                generationVersion: 'v2', schemaVersion: 1,
                 resolution: 6,
                 generatedAt: '',
                 recordCount: 42,
@@ -317,6 +317,9 @@ describe('applyPASDensityModifiers', () => {
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 600, p: ['ROMAN'] }, 'Roman');
         expect(result[0].score).toBe(66);
-        expect(result[0].explanation).toContain('Numerous PAS finds recorded in this landscape, including period-matching types');
+        expect(result[0].explanation).toContainEqual(expect.objectContaining({
+            tag: 'pas_density',
+            text: 'Numerous PAS finds recorded in this landscape, including period-matching types',
+        }));
     });
 });

@@ -20,6 +20,12 @@ import {
 import { exportDiagLog } from "../services/diagLog";
 import { db } from "../db";
 import {
+  ephemeralLocal,
+  removeDurableSetting,
+  setThemeSetting,
+  useDurableSetting,
+} from '../services/clientStorage';
+import {
   FIELDGUIDE_PROPRIETARY_NOTICE,
   FIELDGUIDE_USE_RESTRICTION,
   FINDSPOT_COPYRIGHT_NOTICE,
@@ -131,7 +137,7 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(() => {
     const tabParam = searchParams.get("tab");
-    const savedTab = localStorage.getItem("fs_settings_tab");
+    const savedTab = ephemeralLocal.get("fs_settings_tab");
     const normalizedTab = normalizeSettingsTab(tabParam);
     const normalizedSavedTab = normalizeSettingsTab(savedTab);
     if (normalizedTab) return normalizedTab;
@@ -141,7 +147,7 @@ export default function Settings() {
   const [termsOpen, setTermsOpen] = useState(() => (
     searchParams.get("tab") === "legal" ||
     searchParams.get("section") === "terms" ||
-    localStorage.getItem("fs_settings_tab") === "legal"
+    ephemeralLocal.get("fs_settings_tab") === "legal"
   ));
   const [storageProtection, setStorageProtection] = useState<StorageProtection | null>(null);
   const [detectorist, setDetectorist] = useState("");
@@ -176,7 +182,7 @@ export default function Settings() {
   const [mediaWarnPending, setMediaWarnPending] = useState(false);
   const [exportingDiagLog, setExportingDiagLog] = useState(false);
   const [installCount, setInstallCount] = useState<number | null>(null);
-  const [easterEggUnlocked, setEasterEggUnlocked] = useState(() => localStorage.getItem('fs_dev_egg') === '1');
+  const [easterEggUnlocked, setEasterEggUnlocked] = useDurableSetting('fs_dev_egg', false);
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [geologyEnabled, setGeologyEnabled] = useState(true);
 
@@ -222,7 +228,7 @@ export default function Settings() {
     if (tabParam === "legal") {
       setSettingsTab("app");
       setTermsOpen(true);
-      localStorage.setItem("fs_settings_tab", "app");
+      ephemeralLocal.set("fs_settings_tab", "app");
       setSearchParams(prev => {
         const next = new URLSearchParams(prev);
         next.set("tab", "app");
@@ -233,20 +239,20 @@ export default function Settings() {
     }
     if (isSettingsTab(tabParam) && tabParam !== settingsTab) {
       setSettingsTab(tabParam);
-      localStorage.setItem("fs_settings_tab", tabParam);
+      ephemeralLocal.set("fs_settings_tab", tabParam);
     }
     if (sectionParam === "terms") {
       setTermsOpen(true);
       if (settingsTab !== "app") {
         setSettingsTab("app");
-        localStorage.setItem("fs_settings_tab", "app");
+        ephemeralLocal.set("fs_settings_tab", "app");
       }
     }
   }, [searchParams, setSearchParams, settingsTab]);
 
   function selectSettingsTab(tab: SettingsTab) {
     setSettingsTab(tab);
-    localStorage.setItem("fs_settings_tab", tab);
+    ephemeralLocal.set("fs_settings_tab", tab);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (tab === "data") next.delete("tab");
@@ -259,7 +265,7 @@ export default function Settings() {
   function openTerms() {
     setSettingsTab("app");
     setTermsOpen(true);
-    localStorage.setItem("fs_settings_tab", "app");
+    ephemeralLocal.set("fs_settings_tab", "app");
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.set("tab", "app");
@@ -278,8 +284,7 @@ export default function Settings() {
 
   async function toggleTheme() {
     const newTheme = theme === "dark" ? "light" : "dark";
-    await setSetting("theme", newTheme);
-    localStorage.setItem("fs_theme", newTheme);
+    await setThemeSetting(newTheme);
     setTheme(newTheme);
   }
 
@@ -1023,7 +1028,14 @@ export default function Settings() {
             <p className="text-xs text-amber-600/70 dark:text-amber-500/70">Walk through the app features again from the beginning.</p>
           </div>
           <button
-            onClick={() => { localStorage.removeItem('fs_onboarding_v2_done'); localStorage.removeItem('fs_onboarding_done'); localStorage.setItem('fs_onboarding_force', '1'); window.location.href = import.meta.env.BASE_URL; }}
+            onClick={async () => {
+              await Promise.all([
+                removeDurableSetting('fs_onboarding_v2_done'),
+                removeDurableSetting('fs_onboarding_done'),
+              ]);
+              ephemeralLocal.set('fs_onboarding_force', '1');
+              window.location.href = import.meta.env.BASE_URL;
+            }}
             className="shrink-0 text-xs font-black text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-800/60 border border-amber-300 dark:border-amber-700 px-3 py-2 rounded-lg transition-colors"
           >
             Show again →
@@ -1150,8 +1162,6 @@ export default function Settings() {
                 if (next >= 5) {
                   const newState = !easterEggUnlocked;
                   setEasterEggUnlocked(newState);
-                  if (newState) localStorage.setItem('fs_dev_egg', '1');
-                  else localStorage.removeItem('fs_dev_egg');
                   setVersionTapCount(0);
                 } else {
                   setVersionTapCount(next);

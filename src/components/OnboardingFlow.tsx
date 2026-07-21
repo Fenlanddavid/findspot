@@ -7,6 +7,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../db';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
+import {
+    ephemeralLocal,
+    getDurableSetting,
+    setDurableSetting,
+} from '../services/clientStorage';
 
 // v2 recovers fresh installs that were incorrectly marked complete when the
 // automatically-created default permission was counted as user data.
@@ -15,8 +20,8 @@ const LEGACY_FLAG = 'fs_onboarding_done';
 
 // Read and consume the force flag at module load time — runs exactly once per
 // page load, immune to React StrictMode's double-invocation of effects/inits.
-const FORCED_THIS_LOAD = !!localStorage.getItem('fs_onboarding_force');
-if (FORCED_THIS_LOAD) localStorage.removeItem('fs_onboarding_force');
+const FORCED_THIS_LOAD = !!ephemeralLocal.get('fs_onboarding_force');
+if (FORCED_THIS_LOAD) ephemeralLocal.remove('fs_onboarding_force');
 
 type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'clubday' | 'done';
 
@@ -34,14 +39,16 @@ export default function OnboardingFlow() {
     // "General Detecting" permission is app scaffolding, not user-created data.
     // Bypassed when forced (e.g. "Show Quick Start again" in Settings).
     useEffect(() => {
-        if (FORCED_THIS_LOAD || localStorage.getItem(FLAG)) return;
+        if (FORCED_THIS_LOAD) return;
 
         let cancelled = false;
         Promise.all([
+            getDurableSetting(FLAG, false),
             db.permissions.filter(permission => !permission.isDefault).count(),
             db.finds.count(),
-        ]).then(([permissions, finds]) => {
+        ]).then(([done, permissions, finds]) => {
             if (cancelled) return;
+            if (done) return;
             if (permissions > 0 || finds > 0) {
                 markDone();
                 return;
@@ -82,10 +89,10 @@ export default function OnboardingFlow() {
     }, [visible, step]);
 
     function markDone() {
-        localStorage.setItem(FLAG, '1');
+        void setDurableSetting(FLAG, true);
         // Keep older quick-find behavior in sync while the app migrates to the
         // versioned onboarding flag.
-        localStorage.setItem(LEGACY_FLAG, '1');
+        void setDurableSetting(LEGACY_FLAG, true);
     }
 
     function dismiss() {

@@ -779,9 +779,9 @@ export function MobileBottomSheet() {
                                 <p className="text-[0.5625rem] font-black text-white/40 uppercase tracking-widest mb-2">Evidence</p>
                                 <div className="space-y-1.5">
                                     {h.explanation.slice(0, 3).map((reason, idx) => (
-                                        <div key={idx} className="flex items-start gap-2">
+                                        <div key={`${reason.tag}:${reason.qualifier ?? idx}`} className="flex items-start gap-2">
                                             <div className="w-1 h-1 rounded-full bg-emerald-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                                            <p className="text-sm font-bold text-white/80 leading-tight">{reason}</p>
+                                            <p className="text-sm font-bold text-white/80 leading-tight">{reason.text}</p>
                                         </div>
                                     ))}
                                 </div>

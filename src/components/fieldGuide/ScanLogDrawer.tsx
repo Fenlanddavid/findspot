@@ -1,4 +1,5 @@
 import React from 'react';
+import { setDurableSetting } from '../../services/clientStorage';
 import { ANNOTATION_TYPE_LABELS } from '../../utils/devAnnotation';
 import { useFieldGuideContext } from './FieldGuideContext';
 
@@ -48,7 +49,7 @@ export function ScanLogDrawer() {
                         setAnnotationMode(false);
                         setPendingAnnotation(null);
                         setDevAnnotations([]);
-                        try { localStorage.setItem('fs_fg_devmode', '0'); } catch {}
+                        void setDurableSetting('fs_fg_devmode', false);
                     }}
                     className="text-[0.5rem] font-black text-white/30 hover:text-white/70 uppercase tracking-widest transition-colors px-2 py-1 rounded-lg hover:bg-white/5 active:scale-95"
                 >
