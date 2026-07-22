@@ -29,6 +29,17 @@ import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
 import { useSessionMap } from '../hooks/useSessionMap';
+import {
+  createSessionRecord,
+  deleteSessionCascade,
+  finishSessionRecord,
+  recordSessionTrackingStart,
+  reopenSessionRecord,
+  setSessionGroundConditions,
+  setSessionLocation,
+  trimSessionTrack,
+  updateSessionDetails,
+} from '../services/sessionMutations';
 
 const FIRST_SESSION_KEY = "fs_first_session";
 const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
@@ -435,12 +446,12 @@ export default function SessionPage(props: {
 
   async function quickSetStubble(val: boolean) {
     setIsStubble(val);
-    await db.sessions.update(sessionId, { isStubble: val, updatedAt: new Date().toISOString() });
+    await setSessionGroundConditions(sessionId, { isStubble: val }, new Date().toISOString());
   }
 
   async function quickSetLandUse(val: string) {
     setLandUse(val);
-    await db.sessions.update(sessionId, { landUse: val, updatedAt: new Date().toISOString() });
+    await setSessionGroundConditions(sessionId, { landUse: val }, new Date().toISOString());
   }
 
   async function doGPS() {
@@ -451,12 +462,11 @@ export default function SessionPage(props: {
       setLon(fix.lon);
       setAcc(fix.accuracyM);
       if (isEdit && !isEditing) {
-        await db.sessions.update(sessionId, {
+        await setSessionLocation(sessionId, {
           lat: fix.lat,
           lon: fix.lon,
           gpsAccuracyM: fix.accuracyM,
-          updatedAt: new Date().toISOString(),
-        });
+        }, new Date().toISOString());
       }
     } catch (e: any) {
       setError(e?.message ?? "GPS failed");
@@ -487,25 +497,7 @@ export default function SessionPage(props: {
     
     setSaving(true);
     try {
-      await db.transaction("rw", [db.sessions, db.finds, db.significantFinds, db.media, db.tracks], async () => {
-        // Delete all media for those finds
-        if (findIds.length > 0) {
-          await db.media.where("findId").anyOf(findIds).delete();
-        }
-        if (significantFindIds.length > 0) {
-          await db.media.where("findId").anyOf(significantFindIds).delete();
-        }
-        
-        // Delete the finds
-        await db.finds.where("sessionId").equals(sessionId).delete();
-        await db.significantFinds.where("sessionId").equals(sessionId).delete();
-        
-        // Delete all tracks for this session
-        await db.tracks.where("sessionId").equals(sessionId).delete();
-        
-        // Delete the session itself
-        await db.sessions.delete(sessionId);
-      });
+      await deleteSessionCascade(sessionId);
       
       nav(permission ? `/permission/${permission.id}` : "/");
     } catch (e: any) {
@@ -576,10 +568,10 @@ export default function SessionPage(props: {
       };
 
       if (isEdit) {
-        await db.sessions.update(sessionId, sessionFields);
+        await updateSessionDetails(sessionId, sessionFields);
         setIsEditing(false);
       } else {
-        await db.sessions.add(newSessionRecord);
+        await createSessionRecord(newSessionRecord);
         setIsEditing(false);
         const isFirstSession = !hasStartedSessionBefore;
         if (isFirstSession) setHasStartedSessionBefore(true);
@@ -612,7 +604,7 @@ export default function SessionPage(props: {
             const s = await db.sessions.get(sessionId);
             if (s && !s.startTime) {
                 const startedAt = new Date().toISOString();
-                await db.sessions.update(sessionId, { startTime: startedAt });
+                await recordSessionTrackingStart(sessionId, startedAt);
                 setStartTime(startedAt);
             } else if (s?.startTime) {
                 setStartTime(s.startTime);
@@ -711,10 +703,7 @@ export default function SessionPage(props: {
     
     if (sessionId) {
         try {
-            await db.sessions.update(sessionId, {
-                isFinished: true,
-                endTime: endTimeIso
-            });
+            await finishSessionRecord(sessionId, endTimeIso);
         } catch (e: any) {
             setError("Could not finish session: " + (e?.message ?? "Unknown error"));
             setIsTracking(isTrackingActiveForSession(sessionId));
@@ -738,7 +727,7 @@ export default function SessionPage(props: {
         const startCut = first + trimStartMins * 60 * 1000;
         const endCut = last - trimEndMins * 60 * 1000;
         const trimmed = sorted.filter(p => p.timestamp >= startCut && p.timestamp <= endCut);
-        await db.tracks.update(track.id, { points: trimmed, updatedAt: new Date().toISOString() });
+        await trimSessionTrack(track.id, trimmed, new Date().toISOString());
       }
       setTrimStartMins(0);
       setTrimEndMins(0);
@@ -1143,7 +1132,7 @@ export default function SessionPage(props: {
                                             message: "This will move the session back into your active session queue.",
                                             confirmLabel: "Re-open",
                                         })) {
-                                            await db.sessions.update(sessionId, { isFinished: false });
+                                            await reopenSessionRecord(sessionId);
                                             setIsFinished(false);
                                         }
                                     }}

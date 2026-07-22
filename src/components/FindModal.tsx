@@ -12,6 +12,13 @@ import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
 import { makeFindPhotoFilename, shareElementAsImage, downloadShareCard, shareOrDownloadBlob } from "../services/share";
 import PASReportModal from "./PASReportModal";
+import {
+  deleteFindAndReopenSignal,
+  deleteFindPhoto,
+  replaceFindPhotoSlot,
+  saveFindEdits,
+  setFindFavorite,
+} from "../services/findMutations";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
   const find = useLiveQuery(async () => db.finds.get(props.findId), [props.findId]);
@@ -119,7 +126,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     if (!draft) return;
     setBusy(true);
     const now = new Date().toISOString();
-    await db.finds.update(draft.id, { ...draft, updatedAt: now });
+    await saveFindEdits(draft, now);
     setBusy(false);
     props.onClose();
   }
@@ -127,20 +134,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function del() {
     if (!draft) return;
     setBusy(true);
-    await db.transaction("rw", [db.finds, db.media, db.undugSignals], async () => {
-      await db.media.where("findId").equals(draft.id).delete();
-      await db.finds.delete(draft.id);
-      // Reopen the source un-dug signal — target is still in the ground
-      if (draft.sourceSignalId) {
-        await db.undugSignals
-          .where("id").equals(draft.sourceSignalId)
-          .modify(s => {
-            s.status = "open";
-            delete s.resolvedAt;
-            delete s.resolvedFindId;
-          });
-      }
-    });
+    await deleteFindAndReopenSignal(draft.id, draft.sourceSignalId);
     setBusy(false);
     props.onClose();
   }
@@ -173,18 +167,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         if (photoType && photoType !== "other") break;
       }
 
-      await db.transaction("rw", [db.media], async () => {
-        if (photoType && photoType !== "other") {
-            const existing = await db.media
-                .where("findId").equals(draft.id)
-                .and(m => m.photoType === photoType)
-                .toArray();
-            if (existing.length > 0) {
-                await db.media.bulkDelete(existing.map(m => m.id));
-            }
-        }
-        await db.media.bulkAdd(items);
-      });
+      await replaceFindPhotoSlot(draft.id, photoType, items);
     } catch (err) {
       console.error("addPhotos failed:", err);
     } finally {
@@ -194,7 +177,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
   async function removePhoto(mediaId: string) {
     setBusy(true);
-    await db.media.delete(mediaId);
+    await deleteFindPhoto(mediaId);
     setConfirmingRemoveId(null);
     setBusy(false);
   }
@@ -217,7 +200,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     if (!draft) return;
     const newStatus = !draft.isFavorite;
     setDraft({ ...draft, isFavorite: newStatus });
-    await db.finds.update(draft.id, { isFavorite: newStatus });
+    await setFindFavorite(draft.id, newStatus);
   }
 
   return (

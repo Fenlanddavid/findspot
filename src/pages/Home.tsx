@@ -15,6 +15,7 @@ import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { LockIcon, SearchIcon } from "../components/AppIcons";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 import { getBackupReminderState } from '../services/backupReminder';
+import { setPermissionPinned } from '../services/permissionMutations';
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -866,7 +867,7 @@ export default function Home(props: {
                 onOpenFieldGuide={permission.lat != null && permission.lon != null
                   ? () => nav(`/fieldguide?lat=${permission.lat}&lng=${permission.lon}`)
                   : undefined}
-                onTogglePin={() => db.permissions.update(permission.id, { isPinned: !permission.isPinned }).catch(console.error)}
+                onTogglePin={() => setPermissionPinned(permission.id, !permission.isPinned).catch(console.error)}
               />
             ))}
           </div>

@@ -31,8 +31,16 @@ import {
     buildPack, deletePack, getPackMeta, isPackStale,
     estimatePack, PackMeta, BuildProgress,
 } from "../services/offlinePack";
-import { deleteQuestionsWithNotes } from "../outstandingQuestions/questionNotes";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
+import {
+  attachPermissionAgreement,
+  createPermissionRecord,
+  deleteFieldAndUnlinkRecords,
+  deletePermissionCascade,
+  keepClubDayAsPersonalRecord,
+  removeClubDaySharing,
+  updatePermissionDetails,
+} from '../services/permissionMutations';
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
@@ -402,24 +410,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.outstandingQuestions, db.questionNotes], async () => {
-        if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
-        if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
-        await db.media.where("permissionId").equals(id).delete();
-        await db.finds.where("permissionId").equals(id).delete();
-        await db.significantFinds.where("permissionId").equals(id).delete();
-        if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
-        await db.sessions.where("permissionId").equals(id).delete();
-        await db.fields.where("permissionId").equals(id).delete();
-        // Deleting the permission is an explicit full cascade. User-note
-        // preservation applies to generated-question migrations, not to a
-        // user deleting the parent permission and all of its records.
-        const questionIds = (await db.outstandingQuestions.where("permissionId").equals(id).toArray()).map(q => q.id);
-        if (questionIds.length) {
-          await deleteQuestionsWithNotes(questionIds, { preserveUserNotes: false });
-        }
-        await db.permissions.delete(id);
-      });
+      await deletePermissionCascade(id);
       nav("/");
     } catch (e: any) {
       setError("Delete failed: " + e.message);
@@ -429,7 +420,6 @@ export default function PermissionPage(props: {
 
   async function handleDeleteClubDayPermission() {
     if (!id) return;
-    const perm = await db.permissions.get(id);
     const sessions = await db.sessions.where("permissionId").equals(id).toArray();
     const sessionIds = sessions.map(s => s.id);
     const finds = await db.finds.where("permissionId").equals(id).toArray();
@@ -460,29 +450,7 @@ export default function PermissionPage(props: {
     setSaving(true);
     try {
       await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.significantFinds, db.media, db.fields, db.tracks, db.importedPackages, db.outstandingQuestions, db.questionNotes], async () => {
-        if (findIds.length) await db.media.where("findId").anyOf(findIds).delete();
-        if (significantFindIds.length) await db.media.where("findId").anyOf(significantFindIds).delete();
-        await db.media.where("permissionId").equals(id).delete();
-        await db.finds.where("permissionId").equals(id).delete();
-        await db.significantFinds.where("permissionId").equals(id).delete();
-        if (sessionIds.length) await db.tracks.where("sessionId").anyOf(sessionIds).delete();
-        await db.sessions.where("permissionId").equals(id).delete();
-        await db.fields.where("permissionId").equals(id).delete();
-        // Full parent-record cascade; see the organiser path above.
-        const questionIds = (await db.outstandingQuestions.where("permissionId").equals(id).toArray()).map(q => q.id);
-        if (questionIds.length) {
-          await deleteQuestionsWithNotes(questionIds, { preserveUserNotes: false });
-        }
-        await db.permissions.delete(id);
-        // Remove the join record so the member can re-scan the QR if needed
-        if (perm?.sharedPermissionId) {
-          const joinRecord = await db.importedPackages
-            .filter(p => p.sharedPermissionId === perm.sharedPermissionId)
-            .first();
-          if (joinRecord) await db.importedPackages.delete(joinRecord.id);
-        }
-      });
+      await deletePermissionCascade(id, { removeJoinRecord: true });
       nav("/");
     } catch (e: any) {
       setError("Delete failed: " + e.message);
@@ -500,47 +468,8 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      const perm = await db.permissions.get(id);
       const now = new Date().toISOString();
-      const sharedId = perm?.sharedPermissionId;
-
-      await db.transaction("rw", [db.permissions, db.sessions, db.finds, db.importedPackages], async () => {
-        await db.permissions.update(id, {
-          isClubDayMember: false,
-          isPersonalRallyRecord: true,
-          isSharedPermission: false,
-          sharedPermissionId: undefined,
-          organiserContactNumber: undefined,
-          organiserEmail: undefined,
-          significantFindInstructions: undefined,
-          clubDayPublicNotes: undefined,
-          submittedAt: undefined,
-          landownerPhone: perm?.landownerPhone || perm?.organiserContactNumber,
-          landownerEmail: perm?.landownerEmail || perm?.organiserEmail,
-          notes: perm?.notes || perm?.clubDayPublicNotes || "",
-          updatedAt: now,
-        } as Partial<Permission>);
-
-        await db.sessions.where("permissionId").equals(id).modify((session: any) => {
-          delete session.sharedPermissionId;
-          delete session.recorderId;
-          delete session.recorderName;
-          session.updatedAt = now;
-        });
-
-        await db.finds.where("permissionId").equals(id).modify((find: any) => {
-          delete find.sharedPermissionId;
-          delete find.recorderId;
-          delete find.recorderName;
-          find.updatedAt = now;
-        });
-
-        if (sharedId) {
-          await db.importedPackages
-            .filter(p => p.sharedPermissionId === sharedId)
-            .delete();
-        }
-      });
+      const perm = await keepClubDayAsPersonalRecord(id, now);
 
       setIsClubDayMember(false);
       setIsPersonalRallyRecord(true);
@@ -573,27 +502,8 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      const perm = await db.permissions.get(id);
-      const sharedId = perm?.sharedPermissionId;
       const now = new Date().toISOString();
-
-      await db.transaction("rw", [db.permissions, db.importedPackages], async () => {
-        await db.permissions.update(id, {
-          isSharedPermission: false,
-          sharedPermissionId: undefined,
-          organiserContactNumber: undefined,
-          organiserEmail: undefined,
-          significantFindInstructions: undefined,
-          clubDayPublicNotes: undefined,
-          updatedAt: now,
-        } as Partial<Permission>);
-
-        if (sharedId) {
-          await db.importedPackages
-            .filter(p => p.sharedPermissionId === sharedId)
-            .delete();
-        }
-      });
+      await removeClubDaySharing(id, now);
 
       setIsSharedPermission(false);
       setSharedPermissionId(undefined);
@@ -629,17 +539,7 @@ export default function PermissionPage(props: {
     
     try {
       const now = new Date().toISOString();
-      await db.transaction("rw", [db.fields, db.sessions, db.finds], async () => {
-        await db.sessions.where("fieldId").equals(fieldId).modify({
-          fieldId: null,
-          updatedAt: now,
-        });
-        await db.finds.where("fieldId").equals(fieldId).modify({
-          fieldId: null,
-          updatedAt: now,
-        });
-        await db.fields.delete(fieldId);
-      });
+      await deleteFieldAndUnlinkRecords(fieldId, now);
     } catch (e: any) {
       setError("Delete field failed: " + e.message);
     }
@@ -679,12 +579,12 @@ export default function PermissionPage(props: {
 
       if (isEdit) {
         const { createdAt, ...updates } = permission;
-        await db.permissions.update(id, updates);
+        await updatePermissionDetails(id, updates);
 
         setIsEditing(false);
         setSaved(true);
       } else {
-        await db.permissions.add(permission);
+        await createPermissionRecord(permission);
 
         setIsEditing(false);
         if (!hasCreatedPermission) {
@@ -710,24 +610,20 @@ export default function PermissionPage(props: {
     try {
       const now = new Date().toISOString();
       const mediaId = uuid();
-      await db.transaction("rw", [db.media, db.permissions], async () => {
-        await db.media.add({
-          id: mediaId,
-          projectId: props.projectId,
-          permissionId: id,
-          type: "document",
-          filename: file.name || `${type === "rally" || isSharedPermission ? "club-rally-agreement" : "landowner-agreement"}-${now.slice(0, 10)}`,
-          mime: file.type || "application/octet-stream",
-          blob: file,
-          caption: type === "rally" || isSharedPermission ? "Uploaded club/rally agreement" : "Uploaded landowner agreement",
-          scalePresent: false,
-          createdAt: now,
-        });
-        await db.permissions.update(id, {
-          agreementId: mediaId,
-          permissionGranted: true,
-          updatedAt: now,
-        });
+      await attachPermissionAgreement(id, {
+        id: mediaId,
+        projectId: props.projectId,
+        permissionId: id,
+        type: "document",
+        filename: file.name || `${type === "rally" || isSharedPermission ? "club-rally-agreement" : "landowner-agreement"}-${now.slice(0, 10)}`,
+        mime: file.type || "application/octet-stream",
+        blob: file,
+        caption: type === "rally" || isSharedPermission ? "Uploaded club/rally agreement" : "Uploaded landowner agreement",
+        scalePresent: false,
+        createdAt: now,
+      }, {
+        permissionGranted: true,
+        updatedAt: now,
       });
       setAgreementId(mediaId);
       setPermissionGranted(true);

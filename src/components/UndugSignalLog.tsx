@@ -7,6 +7,7 @@ import React from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { UndugSignal, UndugSignalDirection, UndugSignalStability, UndugSignalConditions, UndugSignalDugNothingCause } from '../db';
+import { dismissUndugSignal, editUndugSignal, resolveUndugSignalAsNothing } from '../services/investigationMutations';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -164,7 +165,7 @@ export function UndugSignalDetailSheet({
     if (isSaving) return;
     setIsSaving(true);
     try {
-      await db.undugSignals.update(signal.id, {
+      await editUndugSignal(signal.id, {
         direction,
         stability,
         conditions,
@@ -181,7 +182,7 @@ export function UndugSignalDetailSheet({
     if (isSaving) return;
     setIsSaving(true);
     try {
-      await db.undugSignals.update(signal.id, { status: 'dismissed', resolvedAt: Date.now() });
+      await dismissUndugSignal(signal.id, Date.now());
       onClose();
     } finally {
       setIsSaving(false);
@@ -192,11 +193,7 @@ export function UndugSignalDetailSheet({
     if (!selectedCause || isSaving) return;
     setIsSaving(true);
     try {
-      await db.undugSignals.update(signal.id, {
-        status: 'dug-nothing',
-        resolvedAt: Date.now(),
-        dugNothingCause: selectedCause,
-      });
+      await resolveUndugSignalAsNothing(signal.id, selectedCause, Date.now());
       onClose();
     } finally {
       setIsSaving(false);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { db, Field } from "../db";
+import type { Field } from "../db";
 import { Modal } from "./Modal";
+import { saveFieldNotes } from "../services/permissionMutations";
 
 export function FieldNotesModal({
   field,
@@ -36,10 +37,7 @@ export function FieldNotesModal({
     setSaving(true);
     setError(null);
     try {
-      await db.fields.update(field.id, {
-        notes: draftNotes.trim(),
-        updatedAt: new Date().toISOString(),
-      });
+      await saveFieldNotes(field.id, draftNotes.trim(), new Date().toISOString());
       onClose();
     } catch (e: any) {
       setError(e?.message ? `Save failed: ${e.message}` : "Save failed.");

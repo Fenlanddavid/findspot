@@ -7,6 +7,7 @@ import { UndugSignalLogSection } from "./UndugSignalLog";
 import { UndugSignalMapSheet } from "./UndugSignalMapSheet";
 import type { RallyPersona } from "../utils/rallyPersona";
 import { RallyPersonaChip } from "./RallyPersonaChip";
+import { linkFindToSession } from "../services/findMutations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -285,11 +286,11 @@ export function PermissionActivityColumn({
                                                                         message: `Link this find to the session on ${new Date(s.date).toLocaleDateString()}?`,
                                                                         confirmLabel: "Link",
                                                                     })) {
-                                                                        await db.finds.update(f.id, {
-                                                                            sessionId: s.id,
-                                                                            fieldId: s.fieldId || f.fieldId,
-                                                                            isPending: false
-                                                                        });
+                                                                        await linkFindToSession(
+                                                                            f.id,
+                                                                            s.id,
+                                                                            s.fieldId || f.fieldId,
+                                                                        );
                                                                     }
                                                                 }}
                                                                 className="w-full text-left p-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0 group/item"

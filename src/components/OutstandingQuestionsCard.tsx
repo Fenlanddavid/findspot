@@ -11,7 +11,6 @@ import {
   hypothesisFor,
   interpretationDirection,
   investigationPriority,
-  isControlledObservation,
 } from "../outstandingQuestions/investigationState";
 import { interpretationCopyFor } from "../outstandingQuestions/interpretationCopy";
 import {
@@ -26,6 +25,7 @@ import { terminalSupersedingQuestionId } from "../outstandingQuestions/transitio
 import { getPermissionScanTarget } from "../outstandingQuestions/permissionScanTarget";
 import { ChevronDownIcon } from "./AppIcons";
 import { PermissionPulseCard } from "./PermissionPulseCard";
+import { saveQuestionInvestigationNote, setQuestionDismissed } from "../services/investigationMutations";
 
 // ─── Protection banner ─────────────────────────────────────────────────────
 
@@ -193,14 +193,7 @@ function NoteComposer({ questionId, permissionId, onSaved }: {
       };
       if (freeform.trim()) note.text = freeform.trim().slice(0, 1000);
       if (selectedTag === 'found_something' && linkedFindIds.length > 0) note.linkedFindIds = linkedFindIds;
-      await db.transaction('rw', [db.questionNotes, db.outstandingQuestions], async () => {
-        await db.questionNotes.put(note);
-        if (isControlledObservation(note)) {
-          await db.outstandingQuestions.update(questionId, {
-            priorityState: { scansSinceEvidenceChange: 0 },
-          });
-        }
-      });
+      await saveQuestionInvestigationNote(note);
       setSelectedTag(null);
       setFreeform('');
       setLinkedFindIds([]);
@@ -397,12 +390,12 @@ function QuestionRow({ q, permission, permissionFinds, tracks, successor, onDism
   };
 
   const dismiss = async () => {
-    await db.outstandingQuestions.update(q.id, { dismissedByUser: true });
+    await setQuestionDismissed(q.id, true);
     onDismissChange?.();
   };
 
   const reopen = async () => {
-    await db.outstandingQuestions.update(q.id, { dismissedByUser: false });
+    await setQuestionDismissed(q.id, false);
     onDismissChange?.();
   };
 

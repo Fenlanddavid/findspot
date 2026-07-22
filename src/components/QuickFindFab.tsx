@@ -8,6 +8,7 @@ import { v4 as uuid } from "uuid";
 import type { WorkflowState } from "../types/significantFind";
 import { UndugSignalSheet } from "./UndugSignalSheet";
 import { useDurableSetting } from '../services/clientStorage';
+import { attachQuickFindPhoto, createQuickFind, discardFindDraft } from '../services/findMutations';
 
 export type QuickFindLocation = {
   lat: number;
@@ -155,7 +156,7 @@ export function QuickFindFab({
         return;
       }
 
-      await db.finds.add({
+      await createQuickFind({
         id,
         projectId,
         permissionId: targetPerm.id,
@@ -208,7 +209,7 @@ export function QuickFindFab({
     try {
       const blob = await fileToBlob(file);
       const now = new Date().toISOString();
-      await db.media.add({
+      await attachQuickFindPhoto({
         id: uuid(),
         projectId,
         findId: lastQuickId,
@@ -238,10 +239,7 @@ export function QuickFindFab({
     setConfirmSignificant(false);
     setLastQuickId(null);
     if (pendingId) {
-      await db.transaction("rw", db.finds, db.media, async () => {
-        await db.media.where("findId").equals(pendingId).delete();
-        await db.finds.delete(pendingId);
-      });
+      await discardFindDraft(pendingId);
     }
     onSignificantFind?.(pendingFind ? {
       permissionId: pendingFind.permissionId,
@@ -362,10 +360,7 @@ export function QuickFindFab({
           <button
             onClick={async () => {
               if (!lastQuickId) return;
-              await db.transaction("rw", db.finds, db.media, async () => {
-                await db.media.where("findId").equals(lastQuickId).delete();
-                await db.finds.delete(lastQuickId);
-              });
+              await discardFindDraft(lastQuickId);
               setLastQuickId(null);
               setShowSuccess(false);
               setConfirmSignificant(false);

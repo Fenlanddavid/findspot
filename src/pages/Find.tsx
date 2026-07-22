@@ -10,6 +10,14 @@ import { ScaledImage } from "../components/ScaledImage";
 import { CoachTip, CoachTips } from "../components/CoachTips";
 import type { WorkflowState } from "../types/significantFind";
 import { ephemeralLocal, useDurableSetting } from '../services/clientStorage';
+import {
+  addFindPhotos,
+  createPhotoDraftFind,
+  discardFindDraft,
+  resolveFindPermission,
+  saveCompletedFind,
+  savePendingFind,
+} from '../services/findMutations';
 
 const LocationPickerModal = React.lazy(() =>
   import("../components/LocationPickerModal").then((mod) => ({ default: mod.LocationPickerModal }))
@@ -303,10 +311,7 @@ export default function FindPage(props: {
     return () => {
       const draftId = dbDraftIdRef.current;
       if (!draftId || committedDraftIdsRef.current.has(draftId)) return;
-      db.transaction("rw", [db.finds, db.media], async () => {
-        await db.media.where("findId").equals(draftId).delete();
-        await db.finds.delete(draftId);
-      }).catch((e) => console.error("Failed to clean up abandoned photo draft", e));
+      discardFindDraft(draftId).catch((e) => console.error("Failed to clean up abandoned photo draft", e));
     };
   }, []);
 
@@ -457,39 +462,15 @@ export default function FindPage(props: {
 
   // Shared permission resolution used by both saveFind and saveAsPending
   async function resolvePermission(trimmedName: string, now: string, preferredPermissionId?: string | null): Promise<string> {
-    if (preferredPermissionId) {
-      const preferred = await db.permissions.get(preferredPermissionId);
-      if (preferred?.projectId === props.projectId) return preferred.id;
-    }
-
     const defaultDetectorist = await getSetting("detectorist", "");
     const newId = uuid();
-    return db.transaction("rw", db.permissions, async () => {
-      const existing = await db.permissions
-        .where("projectId")
-        .equals(props.projectId)
-        .filter(l => l.name.toLowerCase() === trimmedName.toLowerCase())
-        .first();
-      if (existing) return existing.id;
-
-      await db.permissions.add({
-        id: newId,
-        projectId: props.projectId,
-        name: trimmedName,
-        type: "individual",
-        lat: null,
-        lon: null,
-        gpsAccuracyM: null,
-        collector: defaultDetectorist as string,
-        landType: "other",
-        permissionGranted: false,
-        notes: trimmedName === "No Location"
-          ? "Auto-created — location not set at time of recording"
-          : "Automatically created via Club/Rally Dig",
-        createdAt: now,
-        updatedAt: now,
-      });
-      return newId;
+    return resolveFindPermission({
+      projectId: props.projectId,
+      preferredPermissionId,
+      name: trimmedName,
+      collector: defaultDetectorist as string,
+      permissionId: newId,
+      now,
     });
   }
 
@@ -561,20 +542,11 @@ export default function FindPage(props: {
         sourceSignalId: props.sourceSignalId ?? undefined,
       };
 
-      if (props.quickId || isEditMode) {
-        await db.finds.update(id, s);
-      } else {
-        await db.finds.add({ ...s, createdAt: now });
-      }
-
-      // If this find originated from an un-dug signal, close the signal with bidirectional link
-      if (props.sourceSignalId) {
-        await db.undugSignals.update(props.sourceSignalId, {
-          status: 'dug-find',
-          resolvedAt: Date.now(),
-          resolvedFindId: id,
-        }).catch(() => {}); // non-critical — find is saved regardless
-      }
+      await saveCompletedFind(s, {
+        existing: !!(props.quickId || isEditMode),
+        createdAt: now,
+        sourceSignalId: props.sourceSignalId,
+      });
 
       setSetting("lastPeriod", form.period);
       setSetting("lastMaterial", form.material);
@@ -628,7 +600,7 @@ export default function FindPage(props: {
 
       const clubDayAttribution = dbDraftId ? {} : await getClubDayAttribution(targetPermissionId);
 
-      const pendingData = {
+      const pendingData: Omit<Find, 'createdAt'> = {
         id,
         projectId: props.projectId,
         permissionId: targetPermissionId,
@@ -668,11 +640,7 @@ export default function FindPage(props: {
         updatedAt: now,
       };
 
-      if (dbDraftId) {
-        await db.finds.update(id, pendingData);
-      } else {
-        await db.finds.add({ ...pendingData, createdAt: now });
-      }
+      await savePendingFind(pendingData, { existing: !!dbDraftId, createdAt: now });
 
       if (navigator.vibrate) navigator.vibrate([50]);
       committedDraftIdsRef.current.add(id);
@@ -694,7 +662,7 @@ export default function FindPage(props: {
       const now = new Date().toISOString();
       const permId = await resolvePermission(trimmedName, now, currentPermissionId);
       const clubDayAttribution = await getClubDayAttribution(permId);
-      await db.finds.add({
+      await createPhotoDraftFind({
         id,
         projectId: props.projectId,
         permissionId: permId,
@@ -759,7 +727,7 @@ export default function FindPage(props: {
         });
       }
 
-      await db.media.bulkAdd(items);
+      await addFindPhotos(items);
     } catch (e: any) {
       if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
         setError("Device storage full — go to Settings to back up and free space.");

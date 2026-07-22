@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useId } from "react";
 import QRCode from "qrcode";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Field } from "../db";
+import { markClubDayExportSubmitted, saveClubDayShareDetails } from "../services/permissionMutations";
 import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
 import { loadRallyDayReview } from "../services/rallyDayReview";
 import { RallyDayReviewPanel } from "./RallyDayReviewPanel";
@@ -195,7 +196,7 @@ export function CreateClubDayPackModal({
     setError(null);
     try {
       const now = new Date().toISOString();
-      await db.permissions.update(permissionId, {
+      await saveClubDayShareDetails(permissionId, {
         name: eventName.trim() || permissionName,
         type: "rally",
         validFrom: eventDate || undefined,
@@ -433,7 +434,7 @@ export function ExportClubDayModal({
       a.click();
       URL.revokeObjectURL(url);
 
-      await db.permissions.update(permissionId, { submittedAt: new Date().toISOString() });
+      await markClubDayExportSubmitted(permissionId, new Date().toISOString());
       setExportedFile(file);
       setExported(true);
     } catch (e: any) {

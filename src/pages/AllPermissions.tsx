@@ -4,6 +4,7 @@ import { db } from "../db";
 import { useNavigate } from "react-router-dom";
 import { enrichPermissions } from "../services/permissions";
 import { PermissionCard } from "../components/PermissionCard";
+import { setPermissionPinned } from "../services/permissionMutations";
 
 export default function AllPermissions(props: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -136,7 +137,7 @@ export default function AllPermissions(props: { projectId: string }) {
               onOpenFieldGuide={permission.lat != null && permission.lon != null
                 ? () => navigate(`/fieldguide?lat=${permission.lat}&lng=${permission.lon}`)
                 : undefined}
-              onTogglePin={() => db.permissions.update(permission.id, { isPinned: !permission.isPinned })}
+              onTogglePin={() => setPermissionPinned(permission.id, !permission.isPinned)}
             />
           ))}
         </div>

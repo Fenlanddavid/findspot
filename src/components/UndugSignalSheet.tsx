@@ -2,6 +2,7 @@ import React from 'react';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db';
 import type { UndugSignalDirection, UndugSignalStability, UndugSignalConditions } from '../db';
+import { recordUndugSignal } from '../services/investigationMutations';
 
 type Props = {
   sessionId?: string | null;
@@ -68,7 +69,7 @@ export function UndugSignalSheet({ sessionId, permissionId, onSaved, onClose }: 
     setIsSaving(true);
     try {
       const id = uuid();
-      await db.undugSignals.add({
+      await recordUndugSignal({
         id,
         createdAt: Date.now(),
         lat: fix.lat,

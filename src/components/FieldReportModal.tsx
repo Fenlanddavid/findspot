@@ -14,6 +14,7 @@ import {
   DEFAULT_KEY_NOTES,
 } from "../services/fieldReport";
 import { getSetting } from "../services/data";
+import { saveSessionKeyNotes } from "../services/sessionMutations";
 import {
   REPORT,
   ReportFooter,
@@ -347,7 +348,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
   }
 
   async function saveKeyNotes(notes: string[]) {
-    await db.sessions.update(sessionId, { keyNotes: notes });
+    await saveSessionKeyNotes(sessionId, notes);
   }
 
   async function buildPDFBlob(): Promise<{ blob: Blob; filename: string }> {

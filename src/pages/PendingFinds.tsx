@@ -2,6 +2,10 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
+import {
+  deletePendingFind as deletePendingFindRecord,
+  markPendingFindComplete,
+} from "../services/findMutations";
 
 export default function PendingFinds(props: { projectId: string }) {
   const navigate = useNavigate();
@@ -20,17 +24,14 @@ export default function PendingFinds(props: { projectId: string }) {
   async function saveAsIs(id: string) {
     setSavingId(id);
     try {
-      await db.finds.update(id, { isPending: false });
+      await markPendingFindComplete(id);
     } finally {
       setSavingId(null);
     }
   }
 
   async function deletePendingFind(id: string) {
-    await db.transaction("rw", [db.finds, db.media], async () => {
-      await db.media.where("findId").equals(id).delete();
-      await db.finds.delete(id);
-    });
+    await deletePendingFindRecord(id);
     setConfirmingDeleteId(null);
   }
 

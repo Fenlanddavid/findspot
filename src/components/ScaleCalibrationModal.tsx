@@ -1,7 +1,8 @@
 import React, { useState, useRef } from "react";
 import { Modal } from "./Modal";
-import { Media, db } from "../db";
+import type { Media } from "../db";
 import { ScaleBar } from "./ScaleBar";
+import { calibrateFindPhoto } from "../services/findMutations";
 
 export function ScaleCalibrationModal(props: { media: Media; url: string; onClose: () => void }) {
   const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
@@ -39,7 +40,7 @@ export function ScaleCalibrationModal(props: { media: Media; url: string; onClos
 
   async function save() {
     if (calculatedPxPerMm === null || !isFinite(calculatedPxPerMm) || calculatedPxPerMm <= 0) return;
-    await db.media.update(props.media.id, { pxPerMm: calculatedPxPerMm, scalePresent: true });
+    await calibrateFindPhoto(props.media.id, calculatedPxPerMm);
     props.onClose();
   }
 

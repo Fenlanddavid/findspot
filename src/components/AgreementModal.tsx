@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from "react";
 import { Modal } from "./Modal";
-import { db, Permission, Media } from "../db";
+import type { Permission, Media } from "../db";
 import { SignaturePad } from "./SignaturePad";
 import { v4 as uuid } from "uuid";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { getSetting } from "../services/data";
+import { attachPermissionAgreement } from "../services/permissionMutations";
 import {
   REPORT,
   ReportFooter,
@@ -268,10 +269,7 @@ export function AgreementModal(props: {
       createdAt: new Date().toISOString(),
     };
 
-    await db.transaction("rw", [db.media, db.permissions], async () => {
-      await db.media.add(media);
-      await db.permissions.update(props.permission.id, { agreementId: mediaId });
-    });
+    await attachPermissionAgreement(props.permission.id, media);
 
     const saved = { mediaId, filename, blob };
     setSavedAgreement(saved);

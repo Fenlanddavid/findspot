@@ -3,6 +3,7 @@ import { db, Field } from "../db";
 import { v4 as uuid } from "uuid";
 import { Modal } from "./Modal";
 import { BoundaryPickerModal } from "./BoundaryPickerModal";
+import { createFieldRecord, updateFieldDetails } from "../services/permissionMutations";
 
 interface FieldModalProps {
   projectId: string;
@@ -63,9 +64,9 @@ export function FieldModal({ projectId, permissionId, permissionBoundary, permis
       };
 
       if (field) {
-        await db.fields.update(id, newField);
+        await updateFieldDetails(id, newField);
       } else {
-        await db.fields.add(newField);
+        await createFieldRecord(newField);
       }
       onSaved(id);
     } catch (e: any) {
