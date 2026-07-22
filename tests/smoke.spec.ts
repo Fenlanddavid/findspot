@@ -36,6 +36,19 @@ async function readIndexedDbStore(page: Page, storeName: string) {
   }), storeName);
 }
 
+async function putIndexedDbRow(page: Page, storeName: string, row: object) {
+  await page.evaluate(({ name, value }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction(name, "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      tx.objectStore(name).put(value);
+    };
+  }), { name: storeName, value: row });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route('https://findspot-geocode.trials-uk.workers.dev/**', route => {
     const url = new URL(route.request().url());
@@ -384,6 +397,61 @@ test("settings can export and restore a backup", async ({ page }) => {
   ]);
   await dismissNonBlockingPrompts(page);
   await expect(page.getByRole("button", { name: "Restored Meadow" })).toBeVisible();
+});
+
+test("backup reminder respects user data, a recent backup and snooze state", async ({ page }) => {
+  await page.goto("./");
+  await dismissNonBlockingPrompts(page);
+  await expect(page.getByText("Backup Recommended")).toHaveCount(0);
+
+  await createPermission(page, "Reminder Characterization Farm");
+  await page.goto("./");
+  await expect(page.getByText("Backup Recommended")).toBeVisible();
+
+  await putIndexedDbRow(page, "settings", {
+    key: "lastBackupDate",
+    value: new Date().toISOString(),
+  });
+  await page.reload();
+  await expect(page.getByText("Backup Recommended")).toHaveCount(0);
+
+  await putIndexedDbRow(page, "settings", {
+    key: "lastBackupDate",
+    value: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  await putIndexedDbRow(page, "settings", {
+    key: "backupSnoozedUntil",
+    value: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  });
+  await page.reload();
+  await expect(page.getByText("Backup Recommended")).toHaveCount(0);
+});
+
+test("restore preview does not replace current data before confirmation", async ({ page }) => {
+  await createPermission(page, "Preview Must Not Replace");
+  const now = new Date().toISOString();
+  const restore = {
+    version: 6,
+    exportedAt: now,
+    projects: [{ id: "preview-project", name: "Preview Project", region: "England", createdAt: now }],
+    permissions: [{
+      id: "preview-permission", projectId: "preview-project", name: "Preview Backup Permission",
+      type: "individual", createdAt: now, updatedAt: now,
+    }],
+  };
+
+  await page.goto("./settings");
+  await page.locator('input[type="file"][accept*=".json"]').setInputFiles({
+    name: "preview-only.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(restore)),
+  });
+
+  await expect(page.getByText(/Restore "preview-only\.json"\?/)).toBeVisible();
+  await expect(page.getByText("Backup to restore")).toBeVisible();
+  const permissions = await readIndexedDbStore(page, "permissions") as Array<{ name?: string }>;
+  expect(permissions.some(row => row.name === "Preview Must Not Replace")).toBe(true);
+  expect(permissions.some(row => row.name === "Preview Backup Permission")).toBe(false);
 });
 
 test("settings streams a full zip restore and preserves live data when staging fails", async ({ page }) => {
