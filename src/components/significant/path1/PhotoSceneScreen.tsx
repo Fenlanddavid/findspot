@@ -1,8 +1,11 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
 import { fileToBlob } from "../../../services/photos";
 import { v4 as uuid } from "uuid";
+import {
+  addSignificantFindMedia,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -66,7 +69,7 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
     setSaving(true);
     try {
       const blob = await fileToBlob(file);
-      await db.media.add({
+      await addSignificantFindMedia({
         id: uuid(),
         projectId: workflowState.projectId,
         findId: workflowState.significantFindId,
@@ -83,9 +86,8 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
       setSavedSlot(currentSlot.id);
       if (currentSlot.id === "ground_surface") {
         updateState({ groundSurfacePhotoCaptured: true });
-        await db.significantFinds.update(workflowState.significantFindId, {
+        await saveSignificantFindProgress(workflowState.significantFindId, {
           groundSurfacePhotoCaptured: true,
-          updatedAt: new Date().toISOString(),
         });
       }
       setTimeout(() => {

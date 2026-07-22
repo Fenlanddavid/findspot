@@ -51,6 +51,10 @@ import { recordHotspotPredictions } from '../services/hotspotPredictionService';
 import { searchLocations } from '../services/geocode';
 import { safeParseFieldGuideScanCache } from '../services/persistenceValidation';
 import { useDurableSetting } from '../services/clientStorage';
+import {
+    discardFieldGuideScanCache,
+    markPermissionQuestionsEvaluated,
+} from '../services/fieldGuideMutations';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -1286,9 +1290,10 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             // presenting this as an unscanned permission.
             if (requestedQuestionPermissionId && !questionsUpdated) {
                 try {
-                    await db.permissions.update(requestedQuestionPermissionId, {
-                        questionsEvaluatedAt: new Date().toISOString(),
-                    });
+                    await markPermissionQuestionsEvaluated(
+                        requestedQuestionPermissionId,
+                        new Date().toISOString(),
+                    );
                 } catch (error) {
                     void diagLog.error(
                         'outstanding_questions',
@@ -1538,7 +1543,7 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
 
         const persisted = await db.fieldGuideCache.get(tileKey);
         const cached = safeParseFieldGuideScanCache(persisted);
-        if (persisted && !cached) await db.fieldGuideCache.delete(tileKey);
+        if (persisted && !cached) await discardFieldGuideScanCache(tileKey);
 
         const payload = {
             exportVersion:    '1',

@@ -1,8 +1,11 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
 import { fileToBlob } from "../../../services/photos";
 import { v4 as uuid } from "uuid";
+import {
+  addSignificantFindMedia,
+  createSignificantFindRecord,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -54,7 +57,7 @@ export default function PhotoCaptureScreen({ workflowState, updateState, onNext 
     creatingRef.current = true;
     const now = new Date().toISOString();
     const newId = uuid();
-    db.significantFinds.add({
+    createSignificantFindRecord({
       id: newId,
       projectId: workflowState.projectId,
       permissionId: workflowState.permissionId ?? "",
@@ -79,10 +82,7 @@ export default function PhotoCaptureScreen({ workflowState, updateState, onNext 
       findDescription: workflowState.findDescription || undefined,
       createdAt: now,
       updatedAt: now,
-    }).then(() => {
-      if (workflowState.linkedFindId) {
-        db.finds.update(workflowState.linkedFindId, { isNotableFind: true, updatedAt: now });
-      }
+    }, workflowState.linkedFindId).then(() => {
       updateState({ significantFindId: newId });
     }).catch(() => {
       creatingRef.current = false;
@@ -102,7 +102,7 @@ export default function PhotoCaptureScreen({ workflowState, updateState, onNext 
     setPhotoError(null);
     try {
       const blob = await fileToBlob(file);
-      await db.media.add({
+      await addSignificantFindMedia({
         id: uuid(),
         projectId: workflowState.projectId,
         findId: mediaOwnerId,

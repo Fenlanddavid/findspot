@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { db } from '../../db';
 import { useFieldGuideContext } from './FieldGuideContext';
+import { removeSavedPoint } from '../../services/fieldGuideMutations';
 import {
     buildPack, deletePack, getPackMeta, isPackStale,
     estimatePack, PackMeta, BuildProgress,
@@ -199,7 +199,7 @@ export function SavedPointsPanel() {
                             onClick={async () => {
                                 if (pendingDeleteId === sp.id) {
                                     await deletePack({ ownerType: 'savedPoint', ownerId: sp.id });
-                                    await db.savedPoints.delete(sp.id);
+                                    await removeSavedPoint(sp.id);
                                     setPendingDeleteId(null);
                                 } else {
                                     setPendingDeleteId(sp.id);

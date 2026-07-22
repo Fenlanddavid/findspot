@@ -20,6 +20,11 @@ import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../.
 import { safeParseLandscapeInterpretationRecord } from '../../services/persistenceValidation';
 import { WorkerClientError } from '../../workers/client';
 import { runLandscapeInterpretationWorker } from '../../workers/landscapeInterpretationClient';
+import { saveFieldGuideViewMode } from '../../services/mapPreferenceMutations';
+import {
+    discardLandscapeInterpretation,
+    saveLandscapeInterpretation,
+} from '../../services/fieldGuideMutations';
 
 const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
 
@@ -691,12 +696,12 @@ function AlieSection({
 
     function handlePersistDetail() {
         setViewMode('detail');
-        db.settings.put({ key: 'fieldGuideViewMode', value: 'detail' }).catch(() => {});
+        saveFieldGuideViewMode('detail').catch(() => {});
     }
 
     function handleGlance() {
         setViewMode('glance');
-        db.settings.put({ key: 'fieldGuideViewMode', value: 'glance' }).catch(() => {});
+        saveFieldGuideViewMode('glance').catch(() => {});
     }
 
     const fieldStrategy = useMemo(() =>
@@ -794,7 +799,7 @@ function AlieSection({
             if (alieRequestSeqRef.current !== requestSeq) return;
             const cached = safeParseLandscapeInterpretationRecord(persisted);
             if (persisted && !cached) {
-                await db.landscapeInterpretations.delete(geohash6);
+                await discardLandscapeInterpretation(geohash6);
                 return;
             }
             const cachedInterpretation = cached?.interpretation;
@@ -910,7 +915,7 @@ function AlieSection({
             });
             setLandscapeInterpretation(result);
             // Persist to Dexie (last-write-wins)
-            db.landscapeInterpretations.put({
+            saveLandscapeInterpretation({
                 geohash6: result.geohash6,
                 generatedAt: result.generatedAt,
                 engineVersion: result.engineVersion,

@@ -8,6 +8,7 @@ import { deletePack } from '../services/offlinePack';
 import { DevAnnotation } from '../utils/devAnnotation';
 import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../utils/mapTileCache';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
+import { removeSavedPoint } from '../services/fieldGuideMutations';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1121,7 +1122,7 @@ export function useFieldGuideMap({
                     if (deleteConfirmPending) {
                         if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
                         await deletePack({ ownerType: 'savedPoint', ownerId: sp.id }).catch(() => {});
-                        await db.savedPoints.delete(sp.id);
+                        await removeSavedPoint(sp.id);
                     } else {
                         deleteConfirmPending = true;
                         deleteBtn.style.background = 'rgba(239,68,68,0.15)';

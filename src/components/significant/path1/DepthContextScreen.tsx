@@ -1,6 +1,6 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
+import { saveSignificantFindProgress } from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -27,12 +27,11 @@ export default function DepthContextScreen({ workflowState, updateState, onNext 
     updateState(patch);
 
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         depthCm: patch.depthCm ?? undefined,
         periodEstimate: period || undefined,
         preExcavationNotes: spread,
         soilObservations: associated,
-        updatedAt: new Date().toISOString(),
       });
     }
 

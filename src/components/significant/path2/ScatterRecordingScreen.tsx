@@ -7,6 +7,10 @@ import { db, Find } from "../../../db";
 import { fileToBlob } from "../../../services/photos";
 import { v4 as uuid } from "uuid";
 import { detectJurisdiction } from "../../../utils/jurisdictionDetect";
+import {
+  addScatterFind,
+  addSignificantFindMedia,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -275,7 +279,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
         createdAt: now,
         updatedAt: now,
       };
-      await db.finds.add(find);
+      await addScatterFind(find);
 
       const point: ScatterPoint = { findId, lat: fix.lat, lon: fix.lon, label: String(index + 1) };
       pointsRef.current = [...pointsRef.current, point];
@@ -318,7 +322,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
     setPhotoError(null);
     try {
       const blob = await fileToBlob(file);
-      await db.media.add({
+      await addSignificantFindMedia({
         id: uuid(),
         projectId: workflowState.projectId,
         findId,

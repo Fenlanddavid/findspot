@@ -1,6 +1,6 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
+import { saveSignificantFindProgress } from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -15,10 +15,7 @@ export default function DescribeFindScreen({ workflowState, updateState, onNext 
 
   async function saveToDb(patch: { findDescription?: string; firstPersonAccount?: string }) {
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
-        ...patch,
-        updatedAt: new Date().toISOString(),
-      });
+      await saveSignificantFindProgress(workflowState.significantFindId, patch);
     }
   }
 

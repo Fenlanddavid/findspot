@@ -7,6 +7,7 @@ import { getParishAndCounty } from "../../../services/pas";
 import { getSetting } from "../../../services/data";
 import { buildSecureFindEmail, buildMailtoLink } from "../../../utils/floEmail";
 import OrganiserInstructionCard from "../OrganiserInstructionCard";
+import { setSignificantFindStatus } from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -23,11 +24,7 @@ export default function WhatNextScreen({ workflowState, onClose }: Props) {
 
   React.useEffect(() => {
     if (workflowState.significantFindId) {
-      db.significantFinds.update(workflowState.significantFindId, {
-        status: "awaiting_excavation",
-        workflowStep: null,
-        updatedAt: new Date().toISOString(),
-      });
+      void setSignificantFindStatus(workflowState.significantFindId, "awaiting_excavation");
       db.significantFinds.get(workflowState.significantFindId).then(sf => {
         if (sf?.createdAt) setCreatedAt(sf.createdAt);
       });

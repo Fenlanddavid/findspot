@@ -4,6 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { Modal } from "./Modal";
 import { db } from "../db";
 import { searchLocations } from "../services/geocode";
+import { saveLocationMapPreferences } from "../services/mapPreferenceMutations";
 
 export function LocationPickerModal(props: {
   initialLat?: number | null;
@@ -68,8 +69,7 @@ export function LocationPickerModal(props: {
 
     // Save persistent style
     useEffect(() => {
-        db.settings.put({ key: "mapStyle", value: mapStyle });
-        db.settings.put({ key: "showLidar", value: showLidar });
+        void saveLocationMapPreferences(mapStyle, showLidar);
     }, [mapStyle, showLidar]);
   
     useEffect(() => {

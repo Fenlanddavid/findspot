@@ -9,8 +9,8 @@ import type { TargetSignalStrength } from '../../engines/hotspot/targetInterpret
 import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
 import type { Cluster, Hotspot, HotspotClassification } from '../../pages/fieldGuideTypes';
 import { SCAN_CONFIG } from '../../utils/scanConfig';
-import { db } from '../../db';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
+import { createSavedPoint } from '../../services/fieldGuideMutations';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import {
     ANNOTATION_TYPE_LABELS, LANDSCAPE_TYPE_LABELS,
@@ -337,7 +337,7 @@ export function FieldGuideMap() {
                                         hotspotCount:    sortedHotspots.length,
                                         topHotspotTitle: HOTSPOT_TITLES[sortedHotspots[0].classification],
                                     } : undefined;
-                                    await db.savedPoints.add({
+                                    await createSavedPoint({
                                         id:           crypto.randomUUID(),
                                         projectId,
                                         label:        savedPointLabel.trim() || 'Saved point',

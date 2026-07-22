@@ -11,6 +11,10 @@ import { Find } from "../../../db";
 import { v4 as uuid } from "uuid";
 import { toOSGridRef } from "../../../services/gps";
 import OrganiserInstructionCard from "../OrganiserInstructionCard";
+import {
+  completeNotableFindRecord,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -39,9 +43,7 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
         .catch(() => {});
     }
     if (workflowState.significantFindId) {
-      db.significantFinds.update(workflowState.significantFindId, {
-        updatedAt: new Date().toISOString(),
-      });
+      void saveSignificantFindProgress(workflowState.significantFindId, {});
       db.significantFinds.get(workflowState.significantFindId).then(sf => {
         if (sf?.createdAt) setCreatedAt(sf.createdAt);
       });
@@ -67,7 +69,7 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
         (workflowState.lat != null && workflowState.lon != null
           ? toOSGridRef(workflowState.lat, workflowState.lon)
           : "");
-      await db.finds.add({
+      const linkedFind: Find = {
         id: newFindId,
         projectId: workflowState.projectId,
         permissionId: workflowState.permissionId ?? "",
@@ -96,18 +98,12 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
         isNotableFind: true,
         createdAt: now,
         updatedAt: now,
-      });
-      await db.significantFinds.update(workflowState.significantFindId, {
-        linkedFindId: newFindId,
-        workflowStep: null,
-        updatedAt: now,
-      });
+      };
+      await completeNotableFindRecord(workflowState.significantFindId, linkedFind, now);
     } else if (workflowState.significantFindId) {
       // linked find already set (e.g. resumed from an existing record); still clear
-      await db.significantFinds.update(workflowState.significantFindId, {
-        workflowStep: null,
-        updatedAt: new Date().toISOString(),
-      });
+      const now = new Date().toISOString();
+      await completeNotableFindRecord(workflowState.significantFindId, null, now);
     }
     onClose();
     navigate("/finds-box?tab=significant");

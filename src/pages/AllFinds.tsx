@@ -6,6 +6,7 @@ import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { saveFindMapStyle } from "../services/mapPreferenceMutations";
 
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 5;
@@ -362,7 +363,7 @@ export default function AllFinds(props: { projectId: string }) {
         <div className="h-[600px] sm:h-[calc(100vh-250px)] relative border border-gray-200 dark:border-gray-700 rounded-3xl overflow-hidden bg-black shadow-2xl">
             <div ref={mapDivRef} className="absolute inset-0" />
             <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-                <button onClick={() => { const m = mapStyleMode === 'streets' ? 'satellite' : 'streets'; setMapStyleMode(m); db.settings.put({ key: "searchMapStyle", value: m }); }} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest">
+                <button onClick={() => { const m = mapStyleMode === 'streets' ? 'satellite' : 'streets'; setMapStyleMode(m); void saveFindMapStyle(m); }} className="bg-white dark:bg-gray-800 px-4 py-2 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest">
                     {mapStyleMode === 'streets' ? 'Satellite' : 'Streets'}
                 </button>
             </div>

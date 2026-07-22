@@ -5,32 +5,6 @@ import { describe, expect, it } from "vitest";
 const SOURCE_DIRECTORY = new URL("../../src/", import.meta.url);
 const ENGINES_DIRECTORY = new URL("../../src/engines/", import.meta.url);
 
-const DEFERRED_UI_WRITE_FILES = [
-  "components/LocationPickerModal.tsx",
-  "components/fieldGuide/FieldGuideMap.tsx",
-  "components/fieldGuide/HistoricLayerManager.tsx",
-  "components/fieldGuide/SavedPointsPanel.tsx",
-  "components/significant/SignificantFindDetailSheet.tsx",
-  "components/significant/path1/CoverSecureScreen.tsx",
-  "components/significant/path1/DepthContextScreen.tsx",
-  "components/significant/path1/MarkSpotScreen.tsx",
-  "components/significant/path1/ObserveScreen.tsx",
-  "components/significant/path1/PhotoSceneScreen.tsx",
-  "components/significant/path1/WhatNextScreen.tsx",
-  "components/significant/path1/YourAccountScreen.tsx",
-  "components/significant/path2/ScatterCompleteScreen.tsx",
-  "components/significant/path2/ScatterRecordingScreen.tsx",
-  "components/significant/path3/DescribeFindScreen.tsx",
-  "components/significant/path3/FindWhatNextScreen.tsx",
-  "components/significant/path3/PhotoCaptureScreen.tsx",
-  "components/significant/path3/RecordContextScreen.tsx",
-  "hooks/useFieldGuideMap.ts",
-  "hooks/useHistoricScan.ts",
-  "hooks/useTerrainScan.ts",
-  "pages/AllFinds.tsx",
-  "pages/FieldGuide.tsx",
-].sort();
-
 const DATABASE_MUTATION_METHODS = new Set([
   "add",
   "bulkAdd",
@@ -106,7 +80,7 @@ describe("persistence boundaries", () => {
     expect(violations.sort()).toEqual([]);
   });
 
-  it("allows direct UI database writes only in the explicitly deferred v4.8.2 files", async () => {
+  it("keeps direct database writes out of all UI modules", async () => {
     const violations: string[] = [];
     const uiFiles = (await sourceFiles(SOURCE_DIRECTORY)).filter(file => {
       const relative = file.pathname.split("/src/").at(-1) ?? "";
@@ -123,6 +97,6 @@ describe("persistence boundaries", () => {
       }
     }
 
-    expect(violations.sort()).toEqual(DEFERRED_UI_WRITE_FILES);
+    expect(violations.sort()).toEqual([]);
   });
 });

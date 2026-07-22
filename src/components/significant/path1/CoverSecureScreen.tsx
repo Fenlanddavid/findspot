@@ -1,6 +1,6 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
+import { saveSignificantFindProgress } from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -49,9 +49,8 @@ export default function CoverSecureScreen({ workflowState, updateState, onNext }
     setFindDesc(type);
     updateState({ findDescription: type });
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         findDescription: type,
-        updatedAt: new Date().toISOString(),
       });
     }
   }
@@ -60,9 +59,8 @@ export default function CoverSecureScreen({ workflowState, updateState, onNext }
     setFindDesc(value);
     updateState({ findDescription: value });
     if (workflowState.significantFindId && value.trim()) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         findDescription: value,
-        updatedAt: new Date().toISOString(),
       });
     }
   }
@@ -70,9 +68,8 @@ export default function CoverSecureScreen({ workflowState, updateState, onNext }
   async function handleContinue() {
     updateState({ secureCoverNotes: coverNote });
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         secureCoverNotes: coverNote || undefined,
-        updatedAt: new Date().toISOString(),
       });
     }
     onNext();

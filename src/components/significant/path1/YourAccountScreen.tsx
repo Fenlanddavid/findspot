@@ -1,6 +1,6 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
+import { saveSignificantFindProgress } from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -20,9 +20,8 @@ export default function YourAccountScreen({ workflowState, updateState, onNext }
   async function save() {
     updateState({ firstPersonAccount: account });
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         firstPersonAccount: account,
-        updatedAt: new Date().toISOString(),
       });
     }
     setSaved(true);

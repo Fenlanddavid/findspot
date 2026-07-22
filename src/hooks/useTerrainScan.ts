@@ -26,6 +26,11 @@ import { LogSource, LogLevel } from '../utils/scanLogger';
 import { fetchRomanRoadsResult } from '../services/romanRoadService';
 import { findPackMatchForBbox, PackMeta } from '../services/offlinePack';
 import { safeParseFieldGuideScanCache } from '../services/persistenceValidation';
+import {
+    discardFieldGuideScanCache,
+    refreshCachedModernWays,
+    saveTerrainScanCache,
+} from '../services/fieldGuideMutations';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -239,7 +244,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         try {
             const persisted = await db.fieldGuideCache.get(tileKey);
             const stale = safeParseFieldGuideScanCache(persisted);
-            if (persisted && !stale) await db.fieldGuideCache.delete(tileKey);
+            if (persisted && !stale) await discardFieldGuideScanCache(tileKey);
             if (stale && stale.modernWays && stale.modernWays.length > 0 &&
                 typeof stale.modernWaysFetchedAt === 'number' &&
                 (Date.now() - stale.modernWaysFetchedAt) < MODERN_WAYS_TTL_MS) {
@@ -270,7 +275,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
         try {
             const persisted = await db.fieldGuideCache.get(tileKey);
             const cached = safeParseFieldGuideScanCache(persisted);
-            if (persisted && !cached) await db.fieldGuideCache.delete(tileKey);
+            if (persisted && !cached) await discardFieldGuideScanCache(tileKey);
             if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
                 const ageMin = Math.round((Date.now() - cached.createdAt) / 60000);
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
@@ -342,7 +347,7 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                             modernWaysAvailable = modernWayResult.available;
                             if (modernWaysAvailable) {
                                 try {
-                                    await db.fieldGuideCache.update(tileKey, { modernWays: cachedModernWays, modernWaysFetchedAt: Date.now() });
+                                    await refreshCachedModernWays(tileKey, cachedModernWays, Date.now());
                                 } catch { /* cache update failure is non-fatal */ }
                             }
                         }
@@ -570,13 +575,12 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             if (!noSignal) {
                 try {
                     const expiredCutoff = Date.now() - CACHE_TTL_MS;
-                    await db.fieldGuideCache.where('createdAt').below(expiredCutoff).delete();
-                    await db.fieldGuideCache.put({
+                    await saveTerrainScanCache({
                         id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
                         sourceAvailability, sourceCompleteness: questionTerrainAvailability,
                         engineVersion: ENGINE_VERSION,
                         ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
-                    });
+                    }, expiredCutoff);
                 } catch { /* cache failure is non-fatal */ }
             }
 

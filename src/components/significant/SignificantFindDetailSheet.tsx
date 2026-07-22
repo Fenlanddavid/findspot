@@ -17,6 +17,12 @@ import {
   STATUS_COLORS,
 } from "./significantFindDisplay";
 import { useConfirmDialog } from "../ConfirmModal";
+import {
+  addSignificantFindMedia,
+  deleteSignificantFindAggregate,
+  saveSignificantFindProgress,
+  setSignificantFindStatus,
+} from "../../services/significantFindMutations";
 
 function getPeriodColor(period: string): string {
   const p = (period ?? "").toLowerCase();
@@ -110,7 +116,7 @@ function PasRecordUrlField({ sfId, value, onSave, projectId }: {
     setPdfError(null);
     try {
       const blob = await fileToBlob(file);
-      await db.media.add({
+      await addSignificantFindMedia({
         id: uuid(),
         projectId,
         findId: sfId,
@@ -766,15 +772,11 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
   }, [photoUrl]);
 
   async function setStatus(status: SignificantFind["status"]) {
-    await db.significantFinds.update(sfId, {
-      status,
-      updatedAt: new Date().toISOString(),
-      ...(status !== "in_progress" ? { workflowStep: null } : {}),
-    });
+    await setSignificantFindStatus(sfId, status);
   }
 
   async function save(patch: Partial<SignificantFind>) {
-    await db.significantFinds.update(sfId, { ...patch, updatedAt: new Date().toISOString() });
+    await saveSignificantFindProgress(sfId, patch);
   }
 
   async function doDelete() {
@@ -784,19 +786,7 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
       confirmLabel: "Delete",
       danger: true,
     }))) return;
-    const record = await db.significantFinds.get(sfId);
-    const linkedFindIds = [
-      ...(record?.scatterFindIds ?? []),
-      ...(record?.linkedFindId ? [record.linkedFindId] : []),
-    ];
-    await db.transaction("rw", [db.significantFinds, db.finds, db.media], async () => {
-      await db.media.where("findId").equals(sfId).delete();
-      if (linkedFindIds.length) {
-        await db.media.where("findId").anyOf(linkedFindIds).delete();
-        await db.finds.bulkDelete(linkedFindIds);
-      }
-      await db.significantFinds.delete(sfId);
-    });
+    await deleteSignificantFindAggregate(sfId);
     onClose();
   }
 

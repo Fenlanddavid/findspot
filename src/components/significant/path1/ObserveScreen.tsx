@@ -1,7 +1,10 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
 import { v4 as uuid } from "uuid";
+import {
+  createSignificantFindRecord,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -44,7 +47,7 @@ export default function ObserveScreen({ workflowState, updateState, onNext }: Pr
     if (!sfId) {
       sfId = uuid();
       const now = new Date().toISOString();
-      await db.significantFinds.add({
+      await createSignificantFindRecord({
         id: sfId,
         projectId: workflowState.projectId,
         permissionId: workflowState.permissionId ?? "",
@@ -72,9 +75,8 @@ export default function ObserveScreen({ workflowState, updateState, onNext }: Pr
       });
       updateState({ significantFindId: sfId });
     } else {
-      await db.significantFinds.update(sfId, {
+      await saveSignificantFindProgress(sfId, {
         initialObservations: obsText || notes,
-        updatedAt: new Date().toISOString(),
       });
     }
 

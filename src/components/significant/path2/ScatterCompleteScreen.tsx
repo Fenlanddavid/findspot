@@ -9,6 +9,10 @@ import { getParishAndCounty } from "../../../services/pas";
 import { getSetting } from "../../../services/data";
 import { buildScatterEmail, buildMailtoLink } from "../../../utils/floEmail";
 import OrganiserInstructionCard from "../OrganiserInstructionCard";
+import {
+  createSignificantFindRecord,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -53,7 +57,7 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
         const lat = workflowState.lat ?? firstFind?.lat ?? null;
         const lon = workflowState.lon ?? firstFind?.lon ?? null;
         const osGridRef = workflowState.osGridRef || firstFind?.osGridRef || "";
-        await db.significantFinds.add({
+        await createSignificantFindRecord({
           id: newId,
           projectId: workflowState.projectId,
           permissionId: workflowState.permissionId ?? "",
@@ -143,9 +147,8 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
 
   async function saveVoiceNote() {
     if (!voiceNote.trim() || !workflowState.significantFindId) return;
-    await db.significantFinds.update(workflowState.significantFindId, {
+    await saveSignificantFindProgress(workflowState.significantFindId, {
       firstPersonAccount: voiceNote,
-      updatedAt: new Date().toISOString(),
     });
   }
 
@@ -177,9 +180,8 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
             const title = recordTitle.trim();
             updateState({ findDescription: title });
             if (workflowState.significantFindId) {
-              await db.significantFinds.update(workflowState.significantFindId, {
+              await saveSignificantFindProgress(workflowState.significantFindId, {
                 findDescription: title,
-                updatedAt: new Date().toISOString(),
               });
             }
           }}

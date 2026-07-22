@@ -32,6 +32,7 @@ import {
     safeParseFieldGuideScanCache,
     type HistoricLookupCache,
 } from '../services/persistenceValidation';
+import { discardFieldGuideScanCache, saveHistoricScanCache } from '../services/fieldGuideMutations';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -196,7 +197,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             try {
                 const persisted = await db.fieldGuideCache.get(historicCacheKey);
                 const cached = safeParseFieldGuideScanCache(persisted);
-                if (persisted && !cached) await db.fieldGuideCache.delete(historicCacheKey);
+                if (persisted && !cached) await discardFieldGuideScanCache(historicCacheKey);
                 const lookup = cached?.historicLookup;
                 if (
                     cached &&
@@ -525,10 +526,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
             // Cache write — after Roman roads so they can be included
             try {
                 const expiredCutoff = Date.now() - HISTORIC_CACHE_TTL_MS;
-                await db.fieldGuideCache
-                    .filter(row => row.id.startsWith('historic:') && row.createdAt < expiredCutoff)
-                    .delete();
-                await db.fieldGuideCache.put({
+                await saveHistoricScanCache({
                     id: historicCacheKey,
                     createdAt: Date.now(),
                     rawClusters: [],
@@ -542,7 +540,7 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         routeRaw:   routeRaw ?? null,
                         romanRoads: freshRomanRoads.length > 0 ? freshRomanRoads : null,
                     } satisfies HistoricLookupCache,
-                });
+                }, expiredCutoff);
             } catch { /* cache write failure is non-fatal */ }
 
             // ── Drift guard (uses shared utility) ────────────────────────────

@@ -2,9 +2,12 @@ import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
 import { captureGPS, toOSGridRef } from "../../../services/gps";
 import { detectJurisdiction } from "../../../utils/jurisdictionDetect";
-import { db } from "../../../db";
 import { fileToBlob } from "../../../services/photos";
 import { v4 as uuid } from "uuid";
+import {
+  addSignificantFindMedia,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -63,13 +66,12 @@ export default function MarkSpotScreen({ workflowState, updateState, onNext }: P
       });
       // Update the in-progress DB record
       if (workflowState.significantFindId) {
-        await db.significantFinds.update(workflowState.significantFindId, {
+        await saveSignificantFindProgress(workflowState.significantFindId, {
           lat: fix.lat,
           lon: fix.lon,
           gpsAccuracyM: fix.accuracyM,
           osGridRef: gridRef,
           jurisdiction,
-          updatedAt: new Date().toISOString(),
         });
       }
     } catch (e: any) {
@@ -84,7 +86,7 @@ export default function MarkSpotScreen({ workflowState, updateState, onNext }: P
     if (!file || !workflowState.significantFindId) return;
     try {
       const blob = await fileToBlob(file);
-      await db.media.add({
+      await addSignificantFindMedia({
         id: uuid(),
         projectId: workflowState.projectId,
         findId: workflowState.significantFindId,
@@ -108,9 +110,8 @@ export default function MarkSpotScreen({ workflowState, updateState, onNext }: P
 
   async function persistW3w() {
     if (!workflowState.significantFindId) return;
-    await db.significantFinds.update(workflowState.significantFindId, {
+    await saveSignificantFindProgress(workflowState.significantFindId, {
       w3w,
-      updatedAt: new Date().toISOString(),
     });
   }
 

@@ -1,6 +1,9 @@
 import React from "react";
 import { WorkflowState } from "../../../types/significantFind";
-import { db } from "../../../db";
+import {
+  saveLinkedFindDepth,
+  saveSignificantFindProgress,
+} from "../../../services/significantFindMutations";
 
 type Props = {
   workflowState: WorkflowState;
@@ -27,16 +30,15 @@ export default function RecordContextScreen({ workflowState, updateState, onNext
 
     const findId = workflowState.linkedFindId;
     if (findId && patch.depthCm != null) {
-      await db.finds.update(findId, { depthCm: patch.depthCm });
+      await saveLinkedFindDepth(findId, patch.depthCm);
     }
 
     if (workflowState.significantFindId) {
-      await db.significantFinds.update(workflowState.significantFindId, {
+      await saveSignificantFindProgress(workflowState.significantFindId, {
         depthCm: patch.depthCm ?? undefined,
         orientationNotes: orientation || undefined,
         soilObservations: soil,
         preExcavationNotes: associated,
-        updatedAt: new Date().toISOString(),
       });
     }
 
