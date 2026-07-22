@@ -24,6 +24,9 @@ export type RawBackupData = unknown;
 
 export type BackupValidationOptions = { zipMode?: boolean };
 
+/** Media metadata written to manifest.json beside a separate binary entry. */
+export type BackupArchiveMedia = Omit<Media, 'blob'> & { _zipEntry: string };
+
 /** Validated manifest media before its Blob is reconstructed. */
 export type ValidatedBackupMedia = Omit<Media, 'blob'> & (
   | { format: 'legacy'; blob: string }
@@ -56,6 +59,17 @@ export type ValidatedBackupTables = {
  * validation.
  */
 export type ValidatedBackupData = { version: number } & ValidatedBackupTables;
+
+/** Trusted shape assembled from live IndexedDB rows before serialization. */
+export type BackupExportManifest = {
+  version: number;
+  exportedAt: string;
+  generatedBy: 'FindSpot';
+  termsVersion: string;
+  copyrightNotice: string;
+  exportNotice: string;
+  media: BackupArchiveMedia[];
+} & Omit<ValidatedBackupTables, 'media'>;
 
 export type BackupTableKey = keyof ValidatedBackupTables;
 export type UnvalidatedRow = Record<string, unknown>;

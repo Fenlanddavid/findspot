@@ -13,7 +13,17 @@ import {
   BACKUP_TABLE_REGISTRY,
   EXCLUDED_TABLE_NAMES,
 } from '../../src/services/backup/tableRegistry';
-import { validateBackupData } from '../../src/services/data';
+import {
+  estimateMediaSizeBytes,
+  exportData,
+  mediaExt,
+  validateBackupData,
+} from '../../src/services/data';
+import { exportData as exportDataModule } from '../../src/services/backup/export';
+import {
+  estimateMediaSizeBytes as estimateMediaSizeBytesModule,
+  mediaExt as mediaExtModule,
+} from '../../src/services/backup/mediaArchive';
 import { validateBackupData as validateBackupDataModule } from '../../src/services/backup/validation';
 
 const databaseNames = new Set<string>();
@@ -40,6 +50,14 @@ describe('backup format registry', () => {
 describe('backup validation boundary', () => {
   it('keeps the data service compatibility export wired to the extracted validator', () => {
     expect(validateBackupData).toBe(validateBackupDataModule);
+  });
+});
+
+describe('backup export boundaries', () => {
+  it('keeps data service compatibility exports wired to the extracted modules', () => {
+    expect(exportData).toBe(exportDataModule);
+    expect(estimateMediaSizeBytes).toBe(estimateMediaSizeBytesModule);
+    expect(mediaExt).toBe(mediaExtModule);
   });
 });
 

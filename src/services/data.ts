@@ -10,13 +10,8 @@ import {
   type SignificantFind,
 } from "../db";
 import { v4 as uuid } from "uuid";
-import {
-  FINDSPOT_COPYRIGHT_NOTICE,
-  REPORT_PROTECTION_NOTICE,
-  TERMS_OF_USE_VERSION,
-} from "../utils/legalCopy";
-import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, unzipSync, strToU8, strFromU8 } from "fflate";
-import { CURRENT_BACKUP_FORMAT_VERSION } from "./backup/backupVersion";
+import { Unzip, UnzipInflate, unzipSync, strFromU8 } from "fflate";
+import { MAX_BACKUP_MEDIA_ENTRY_BYTES } from "./backup/mediaArchive";
 import {
   MAX_BACKUP_RECORDS,
   type RawBackupData,
@@ -26,6 +21,14 @@ import { validateBackupData } from "./backup/validation";
 import { RETIRED_QUESTION_RULE_IDS } from "./persistenceValidation/backup";
 
 export { MAX_BACKUP_RECORDS, validateBackupData };
+export { exportData } from "./backup/export";
+export type { BackupExportOptions, BackupExportProgress } from "./backup/export";
+export {
+  estimateMediaSizeBytes,
+  MAX_BACKUP_MEDIA_ENTRY_BYTES,
+  MEDIA_EXPORT_WARN_BYTES,
+  mediaExt,
+} from "./backup/mediaArchive";
 export type {
   RawBackupData,
   ValidatedBackupData,
@@ -38,11 +41,6 @@ export async function markExternalBackupSaved() {
   return now;
 }
 
-// Threshold above which a media-included export triggers a UI size warning.
-// Stored photo formats are already compressed, so the raw blob total is also a
-// useful approximation of the resulting pass-through zip size.
-export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB raw blob total
-
 // Full backups may contain user photos, but imports still need firm limits so a
 // malformed JSON file or zip bomb cannot exhaust the browser's memory. These
 // caps are deliberately above the export warning threshold to keep ordinary
@@ -53,228 +51,8 @@ export const MEDIA_EXPORT_WARN_BYTES = 150 * 1024 * 1024; // 150 MB raw blob tot
 // to a whole-backup size cap.
 export const MAX_BACKUP_IN_MEMORY_BYTES = 512 * 1024 * 1024;
 export const MAX_BACKUP_MANIFEST_BYTES = 50 * 1024 * 1024;
-export const MAX_BACKUP_MEDIA_ENTRY_BYTES = 1024 * 1024 * 1024;
 export const MAX_BACKUP_UNCOMPRESSED_BYTES = 768 * 1024 * 1024;
 export const MAX_BACKUP_ZIP_ENTRIES = MAX_BACKUP_RECORDS + 1; // media rows plus manifest.json
-
-export async function estimateMediaSizeBytes(): Promise<{ count: number; bytes: number; damaged: number }> {
-  let count = 0;
-  let bytes = 0;
-  let damaged = 0;
-  // Walk records without retaining a year of Blob handles in an array.
-  await db.media.each(m => {
-    count += 1;
-    const persistedBlob: unknown = (m as { blob?: unknown }).blob;
-    if (persistedBlob instanceof Blob) bytes += persistedBlob.size;
-    else damaged += 1;
-  });
-  return { count, bytes, damaged };
-}
-
-/** File extension for a media record (falls back to bin for unknown MIME). */
-export function mediaExt(mime: string | undefined): string {
-  const normalised = mime?.split(';', 1)[0].trim().toLowerCase();
-  if (!normalised) return 'bin';
-  return MEDIA_MIME_EXTENSIONS[normalised] ?? 'bin';
-}
-
-const MEDIA_MIME_EXTENSIONS: Readonly<Record<string, string>> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
-  'image/gif': 'gif',
-  'application/pdf': 'pdf',
-  'application/msword': 'doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/rtf': 'rtf',
-  'text/rtf': 'rtf',
-  'text/plain': 'txt',
-};
-
-function requireMediaBlob(media: Media): Blob {
-  const persistedBlob: unknown = (media as { blob?: unknown }).blob;
-  if (!(persistedBlob instanceof Blob)) {
-    throw new Error(`${media.filename || `Media ${media.id}`} is damaged and cannot be included in a full backup.`);
-  }
-  return persistedBlob;
-}
-
-// ─── Export ──────────────────────────────────────────────────────────────────
-
-async function collectManifestData() {
-  const [
-    projects, permissions, sessions, finds, tracks, settings,
-    importedPackages, fields, significantFinds, savedPoints,
-    undugSignals, findHotspotSignals, hotspotPredictions,
-    hotspotPredictionAggregates, outstandingQuestions, questionNotes,
-  ] = await Promise.all([
-    db.projects.toArray(),
-    db.permissions.toArray(),
-    db.sessions.toArray(),
-    db.finds.toArray(),
-    db.tracks.toArray(),
-    db.settings.toArray(),
-    db.importedPackages.toArray(),
-    db.fields.toArray(),
-    db.significantFinds.toArray(),
-    db.savedPoints.toArray(),
-    db.undugSignals.toArray(),
-    db.findHotspotSignals.toArray(),
-    db.hotspotPredictions.toArray(),
-    db.hotspotPredictionAggregates.toArray(),
-    db.outstandingQuestions.toArray(),
-    db.questionNotes.toArray(),
-  ]);
-
-  return {
-    version: CURRENT_BACKUP_FORMAT_VERSION,
-    exportedAt: new Date().toISOString(),
-    generatedBy: "FindSpot",
-    termsVersion: TERMS_OF_USE_VERSION,
-    copyrightNotice: FINDSPOT_COPYRIGHT_NOTICE,
-    exportNotice: `User records in this backup remain owned by the user. ${REPORT_PROTECTION_NOTICE}`,
-    projects,
-    permissions,
-    fields,
-    sessions,
-    finds,
-    significantFinds,
-    tracks,
-    media: [] as any[],      // placeholder — media stored as separate zip entries
-    settings,
-    importedPackages,
-    savedPoints,
-    undugSignals,
-    findHotspotSignals,
-    hotspotPredictions,
-    hotspotPredictionAggregates,
-    outstandingQuestions,
-    questionNotes,
-  };
-}
-
-/**
- * Export data as a Blob.
- *
- * - `{ includeMedia: false }` (default): returns a JSON blob (same as legacy v4).
- * - `{ includeMedia: true }`: returns a zip containing `manifest.json` plus
- *   each media blob stored as raw binary under `media/{id}.{ext}`. The archive
- *   is emitted incrementally, retaining the output plus at most one raw media
- *   item instead of retaining a second copy of the entire library.
- */
-export type BackupExportProgress = {
-  processedMedia: number;
-  totalMedia: number;
-  percent: number;
-};
-
-export async function exportData(options: {
-  includeMedia?: boolean;
-  onProgress?: (progress: BackupExportProgress) => void;
-} = {}): Promise<Blob> {
-  const includeMedia = options.includeMedia === true;
-  const manifest = await collectManifestData();
-
-  if (!includeMedia) {
-    // Data-only: plain JSON, same shape as before (but version 5).
-    return new Blob([JSON.stringify(manifest)], { type: "application/json" });
-  }
-
-  // ── Full backup: streamed zip ──────────────────────────────────────────
-
-  // Media metadata (everything except the blob) is written to the manifest
-  // after each binary entry has been emitted.
-  const outputParts: Blob[] = [];
-  const mediaMeta: any[] = [];
-  let resolveArchive!: (blob: Blob) => void;
-  let rejectArchive!: (reason: unknown) => void;
-  let settled = false;
-  const archiveReady = new Promise<Blob>((resolve, reject) => {
-    resolveArchive = resolve;
-    rejectArchive = reject;
-  });
-  const zip = new Zip((error, chunk, final) => {
-    if (settled) return;
-    if (error) {
-      settled = true;
-      rejectArchive(error);
-      return;
-    }
-    // Move completed chunks into Blob-backed storage promptly rather than
-    // retaining the whole archive as JavaScript Uint8Arrays.
-    outputParts.push(new Blob([new Uint8Array(chunk)]));
-    if (final) {
-      settled = true;
-      resolveArchive(new Blob(outputParts, { type: "application/zip" }));
-    }
-  });
-
-  try {
-    // Fetch keys first, then read one media row at a time. Dexie's
-    // Collection.each() does not await async callbacks and must not be used here.
-    const mediaIds = await db.media.toCollection().primaryKeys();
-
-    // Put the manifest first so a future restore can preview and validate a
-    // multi-gigabyte archive without reading through every photo. This metadata
-    // pass never calls blob.arrayBuffer(), so photo bytes remain out of JS heap.
-    for (const id of mediaIds) {
-      const m = await db.media.get(id);
-      if (!m) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
-      const mediaBlob = requireMediaBlob(m);
-      if (mediaBlob.size > MAX_BACKUP_MEDIA_ENTRY_BYTES) {
-        throw new Error(`${m.filename || "A media file"} exceeds the supported 1 GB per-file backup limit.`);
-      }
-      const filename = `media/${encodeURIComponent(String(m.id))}.${mediaExt(m.mime)}`;
-      const { blob: _blob, ...meta } = m as any;
-      mediaMeta.push({ ...meta, _zipEntry: filename });
-    }
-
-    manifest.media = mediaMeta;
-    const manifestEntry = new ZipDeflate("manifest.json", { level: 1 });
-    zip.add(manifestEntry);
-    manifestEntry.push(strToU8(JSON.stringify(manifest)), true);
-
-    options.onProgress?.({ processedMedia: 0, totalMedia: mediaIds.length, percent: mediaIds.length ? 0 : 100 });
-    let processedMedia = 0;
-    for (const id of mediaIds) {
-      const m = await db.media.get(id);
-      if (!m) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
-      const mediaBlob = requireMediaBlob(m);
-      const filename = `media/${encodeURIComponent(String(m.id))}.${mediaExt(m.mime)}`;
-
-      // Photos are already compressed in practice; pass-through avoids a large
-      // synchronous recompression and emits each entry immediately.
-      const entry = new ZipPassThrough(filename);
-      zip.add(entry);
-      const reader = mediaBlob.stream().getReader();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (value?.byteLength) entry.push(value, false);
-        if (done) {
-          entry.push(new Uint8Array(), true);
-          break;
-        }
-      }
-      processedMedia += 1;
-      options.onProgress?.({
-        processedMedia,
-        totalMedia: mediaIds.length,
-        percent: mediaIds.length ? Math.round((processedMedia / mediaIds.length) * 100) : 100,
-      });
-    }
-    zip.end();
-  } catch (error) {
-    zip.terminate();
-    if (!settled) {
-      settled = true;
-      rejectArchive(error);
-    }
-  }
-
-  return archiveReady;
-}
 
 export async function exportToCSV(): Promise<string> {
   const permissions = await db.permissions.toArray();
