@@ -103,11 +103,24 @@ export const BACKUP_TABLE_REGISTRY = {
 
 export type RegisteredTableName = keyof typeof BACKUP_TABLE_REGISTRY;
 
-function registeredNamesWith(
-  classification: BackupTableClassification,
-): RegisteredTableName[] {
+export type RegisteredTableNameWith<
+  Classification extends BackupTableClassification,
+> = {
+  [Name in RegisteredTableName]:
+    typeof BACKUP_TABLE_REGISTRY[Name]['classification'] extends Classification
+      ? Name
+      : never;
+}[RegisteredTableName];
+
+export type BackedUpTableName = RegisteredTableNameWith<'backup'>;
+export type ExcludedTableName = RegisteredTableNameWith<'excluded'>;
+
+function registeredNamesWith<Classification extends BackupTableClassification>(
+  classification: Classification,
+): RegisteredTableNameWith<Classification>[] {
   return (Object.keys(BACKUP_TABLE_REGISTRY) as RegisteredTableName[])
-    .filter(name => BACKUP_TABLE_REGISTRY[name].classification === classification);
+    .filter(name => BACKUP_TABLE_REGISTRY[name].classification === classification) as
+      RegisteredTableNameWith<Classification>[];
 }
 
 export const BACKED_UP_TABLE_NAMES = registeredNamesWith('backup');

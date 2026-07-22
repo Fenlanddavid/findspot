@@ -14,6 +14,7 @@ import {
   EXCLUDED_TABLE_NAMES,
 } from '../../src/services/backup/tableRegistry';
 import { validateBackupData } from '../../src/services/data';
+import { validateBackupData as validateBackupDataModule } from '../../src/services/backup/validation';
 
 const databaseNames = new Set<string>();
 
@@ -33,6 +34,12 @@ describe('backup format registry', () => {
     expect(CURRENT_BACKUP_FORMAT_VERSION).toBe(6);
     expect(BACKUP_FORMAT_DEFINITIONS.filter(format => format.lifecycle === 'current'))
       .toEqual([expect.objectContaining({ version: CURRENT_BACKUP_FORMAT_VERSION })]);
+  });
+});
+
+describe('backup validation boundary', () => {
+  it('keeps the data service compatibility export wired to the extracted validator', () => {
+    expect(validateBackupData).toBe(validateBackupDataModule);
   });
 });
 

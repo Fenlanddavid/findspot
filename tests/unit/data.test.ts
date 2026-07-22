@@ -135,6 +135,33 @@ describe('backup format version characterization', () => {
       expect(validateBackupData(makeValidBackup({ version })).version).toBe(version);
     },
   );
+
+  it('preserves an unknown finite future version for the existing import path', () => {
+    expect(validateBackupData(makeValidBackup({ version: 999 })).version).toBe(999);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, '6'])(
+    'normalizes non-finite or non-numeric version %s to legacy format 1',
+    (version) => {
+      expect(validateBackupData(makeValidBackup({ version })).version).toBe(1);
+    },
+  );
+
+  it('ignores unrecognized top-level metadata', () => {
+    const result = validateBackupData(makeValidBackup({ futureMetadata: { value: true } }));
+    expect(result).not.toHaveProperty('futureMetadata');
+  });
+
+  it('normalizes null optional tables to empty arrays', () => {
+    const result = validateBackupData(makeValidBackup({
+      savedPoints: null,
+      outstandingQuestions: null,
+      questionNotes: null,
+    }));
+    expect(result.savedPoints).toEqual([]);
+    expect(result.outstandingQuestions).toEqual([]);
+    expect(result.questionNotes).toEqual([]);
+  });
 });
 
 describe('validateBackupData — permission intelligence', () => {
