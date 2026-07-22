@@ -36,6 +36,19 @@ export {
 export type { ScanContext } from './rules';
 export { generateCandidates } from './generator';
 export { diffQuestions } from './differ';
+export {
+  applyQuestionTransition,
+  initialQuestionLifecycle,
+  QUESTION_LIFECYCLE_TRANSITIONS,
+  transitionQuestion,
+} from './questionStateMachine';
+export type {
+  QuestionLifecycleEvent,
+  QuestionLifecycleState,
+  QuestionLifecycleTransitionKey,
+  QuestionTransitionErrorCode,
+  QuestionTransitionResult,
+} from './questionStateMachine';
 export { deleteQuestionsWithNotes } from './questionNotes';
 export {
   FIELDWORK_PARTLY_PCT,

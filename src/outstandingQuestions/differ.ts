@@ -5,6 +5,10 @@
 
 import { v4 as uuid } from 'uuid';
 import type { OutstandingQuestion, QuestionCandidate, DiffResult } from './types';
+import {
+  applyQuestionTransition,
+  initialQuestionLifecycle,
+} from './questionStateMachine';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -83,15 +87,12 @@ export function diffQuestions(
       : 0;
     const isWeakening = relDrop >= WEAKENING_RELATIVE_THRESHOLD;
 
-    const status = isWeakening ? 'WEAKENING' as const : candidate.status;
-
-    updatedQuestions.push({
+    const updatedQuestion: OutstandingQuestion = {
       ...ex,
       anchor: candidate.anchor,
       title: candidate.title,
       description: candidate.description,
       confidence: candidate.confidence,
-      status,
       updatedAt: now,
       generatedByScanId: candidate.scanId,
       supportingEvidence: candidate.supportingEvidence,
@@ -105,11 +106,13 @@ export function diffQuestions(
       // best available starting point; otherwise stamp the current candidate.
       initialMetrics: ex.initialMetrics ?? ex.metrics ?? candidate.metrics,
       contextGeometry: candidate.contextGeometry,
-      consecutiveMisses: 0,
       // Preserve id, createdAt, permissionId, ruleId, category
-      resolvedReason: undefined,
-      resolvedAt: undefined,
-    });
+    };
+    updatedQuestions.push(applyQuestionTransition(
+      updatedQuestion,
+      { type: 'candidate_observed', candidateStatus: candidate.status, weakening: isWeakening },
+      now,
+    ));
   }
 
   // 3. Create new questions from unmatched candidates
@@ -122,7 +125,7 @@ export function diffQuestions(
       title: candidate.title,
       description: candidate.description,
       category: candidate.category,
-      status: candidate.status,
+      ...initialQuestionLifecycle(candidate.status),
       confidence: candidate.confidence,
       createdAt: now,
       updatedAt: now,
@@ -134,7 +137,6 @@ export function diffQuestions(
       metrics: candidate.metrics,
       initialMetrics: candidate.metrics,
       contextGeometry: candidate.contextGeometry,
-      consecutiveMisses: 0,
     });
   }
 
@@ -150,23 +152,13 @@ export function diffQuestions(
     }
 
     const consecutiveMisses = (q.consecutiveMisses ?? 0) + 1;
-    if (consecutiveMisses >= 2) {
-      newlyResolved.push({
-        ...q,
-        status: 'RESOLVED',
-        resolvedReason: 'preconditions_cleared',
-        resolvedAt: now,
-        updatedAt: now,
-        consecutiveMisses,
-      });
-    } else {
-      updatedQuestions.push({
-        ...q,
-        status: 'WEAKENING',
-        updatedAt: now,
-        consecutiveMisses,
-      });
-    }
+    const transitioned = applyQuestionTransition(
+      q,
+      { type: 'scoped_miss', consecutiveMisses },
+      now,
+    );
+    if (transitioned.status === 'RESOLVED') newlyResolved.push(transitioned);
+    else updatedQuestions.push(transitioned);
   }
 
   // 5. Dedupe: if two candidates fire on overlapping evidence (≥ 2 shared labels),
@@ -175,14 +167,11 @@ export function diffQuestions(
   const dedupedIds = new Set(deduped.map(q => q.id));
   const superseded = updatedQuestions
     .filter(q => !dedupedIds.has(q.id))
-    .map(q => ({
-      ...q,
-      status: 'RESOLVED' as const,
-      resolvedReason: 'superseded' as const,
-      resolvedAt: now,
-      updatedAt: now,
-      supersededByIds: supersededBy.get(q.id) ? [supersededBy.get(q.id)!] : undefined,
-    }));
+    .map(q => applyQuestionTransition(
+      q,
+      { type: 'superseded', successorId: supersededBy.get(q.id) ?? '' },
+      now,
+    ));
 
   // 6. Apply cap — rank by confidence, evict excess
   // Questions outside this scan retain their place. New/scoped questions use
@@ -251,13 +240,8 @@ function applyCap(
   );
 
   const kept = sorted.slice(0, limit);
-  const evicted = sorted.slice(limit).map(q => ({
-    ...q,
-    status: 'RESOLVED' as const,
-    resolvedReason: 'cap_evicted' as const,
-    resolvedAt: now,
-    updatedAt: now,
-  }));
+  const evicted = sorted.slice(limit).map(q =>
+    applyQuestionTransition(q, { type: 'cap_evicted' }, now));
 
   return { kept, evicted };
 }
