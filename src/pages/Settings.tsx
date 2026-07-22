@@ -20,6 +20,11 @@ import {
   type BackupRecoveryReport,
 } from "../services/data";
 import { exportDiagLog } from "../services/diagLog";
+import {
+  formatIntegrityAuditStatus,
+  getLatestIntegrityAuditSummary,
+  type IntegrityAuditSummary,
+} from '../services/integrityAudit';
 import { db } from "../db";
 import {
   ephemeralLocal,
@@ -198,6 +203,7 @@ export default function Settings() {
     ephemeralLocal.get("fs_settings_tab") === "legal"
   ));
   const [storageProtection, setStorageProtection] = useState<StorageProtection | null>(null);
+  const [integritySummary, setIntegritySummary] = useState<IntegrityAuditSummary | null>(null);
   const [detectorist, setDetectorist] = useState("");
   const [recorderName, setRecorderName] = useState("");
   const [email, setEmail] = useState("");
@@ -239,6 +245,7 @@ export default function Settings() {
 
   useEffect(() => {
     getProtectionState().then(setStorageProtection);
+    getLatestIntegrityAuditSummary().then(setIntegritySummary).catch(() => setIntegritySummary(null));
 
     // Fetch community install count — non-critical, abort after 5s
     const controller = new AbortController();
@@ -1051,6 +1058,18 @@ export default function Settings() {
                   </button>
                 )}
               </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-gray-800 dark:text-gray-100">Data check</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  {formatIntegrityAuditStatus(integritySummary)}
+                </p>
+              </div>
+              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${integritySummary?.issueCount === 0 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                {integritySummary ? integritySummary.issueCount === 0 ? "Checked" : "Review" : "Pending"}
+              </span>
             </div>
 
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">

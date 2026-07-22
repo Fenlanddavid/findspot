@@ -93,6 +93,7 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page.getByText("Your saved finds")).toBeVisible();
 
   await page.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByText("Data check passed after the latest storage update.")).toBeVisible();
   await page.getByRole("button", { name: "App" }).click();
   await expect(page.getByText("Privacy Guarantee")).toBeVisible();
   await expect(page.getByText("Saved finds, permissions")).toBeVisible();

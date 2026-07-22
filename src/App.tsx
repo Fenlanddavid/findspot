@@ -32,6 +32,7 @@ import { findResumable, buildResumeContext, PATH_STEP_ORDER } from "./services/s
 import { PATH_LABELS } from "./components/significant/significantFindDisplay";
 import type { SignificantFind } from "./db";
 import { migrateLegacyClientStorage } from './services/clientStorage';
+import { runIntegrityAuditAfterSchemaChange } from './services/integrityAudit';
 import {
   getBackupReminderState,
   type BackupReminderState,
@@ -96,6 +97,7 @@ function Shell() {
     ensureDefaultProject().then(async (id) => {
       await ensureDefaultPermission(id);
       setProjectId(id);
+      void runIntegrityAuditAfterSchemaChange();
     });
     void ensureProtectionOnStartup();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
