@@ -1,5 +1,5 @@
 export type BackupImportProgress = {
-  phase: 'reading' | 'validating' | 'restoring';
+  phase: 'reading' | 'validating' | 'drilling' | 'restoring';
   processedBytes: number;
   totalBytes: number;
   percent: number;

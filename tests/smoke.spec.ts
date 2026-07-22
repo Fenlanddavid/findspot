@@ -49,6 +49,20 @@ async function putIndexedDbRow(page: Page, storeName: string, row: object) {
   }), { name: storeName, value: row });
 }
 
+async function putIndexedDbRows(page: Page, storeName: string, rows: object[]) {
+  await page.evaluate(({ name, values }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction(name, "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      const store = tx.objectStore(name);
+      for (const value of values) store.put(value);
+    };
+  }), { name: storeName, values: rows });
+}
+
 test.beforeEach(async ({ page }) => {
   await page.route('https://findspot-geocode.trials-uk.workers.dev/**', route => {
     const url = new URL(route.request().url());
@@ -397,6 +411,9 @@ test("settings can export and restore a backup", async ({ page }) => {
   ]);
   await dismissNonBlockingPrompts(page);
   await expect(page.getByRole("button", { name: "Restored Meadow" })).toBeVisible();
+  await page.goto("./settings");
+  await expect(page.getByText("Last Restore Report")).toBeVisible();
+  await expect(page.getByText(/Recovery report: 2 imported, 0 skipped, 0 repaired, 0 damaged/)).toBeVisible();
 });
 
 test("backup reminder respects user data, a recent backup and snooze state", async ({ page }) => {
@@ -414,6 +431,17 @@ test("backup reminder respects user data, a recent backup and snooze state", asy
   });
   await page.reload();
   await expect(page.getByText("Backup Recommended")).toHaveCount(0);
+
+  const changedAt = new Date().toISOString();
+  await putIndexedDbRows(page, "finds", Array.from({ length: 20 }, (_, index) => ({
+    id: `urgent-find-${index}`,
+    createdAt: changedAt,
+    updatedAt: changedAt,
+  })));
+  await page.reload();
+  await expect(page.getByText("Backup Urgent").first()).toBeVisible();
+  await expect(page.getByText("20 finds have changed since your last backup.").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Later" })).toHaveCount(0);
 
   await putIndexedDbRow(page, "settings", {
     key: "lastBackupDate",
@@ -449,6 +477,9 @@ test("restore preview does not replace current data before confirmation", async 
 
   await expect(page.getByText(/Restore "preview-only\.json"\?/)).toBeVisible();
   await expect(page.getByText("Backup to restore")).toBeVisible();
+  await page.getByRole("button", { name: "Run Restore Drill" }).click();
+  await expect(page.getByText("Ready to restore. Live data unchanged.")).toBeVisible();
+  await expect(page.getByText(/Drill report: 2 imported, 0 skipped, 0 repaired, 0 damaged/)).toBeVisible();
   const permissions = await readIndexedDbStore(page, "permissions") as Array<{ name?: string }>;
   expect(permissions.some(row => row.name === "Preview Must Not Replace")).toBe(true);
   expect(permissions.some(row => row.name === "Preview Backup Permission")).toBe(false);

@@ -1,6 +1,10 @@
 import { db, type Media } from '../../db';
 import { RETIRED_QUESTION_RULE_IDS } from '../persistenceValidation/backup';
 import { extractZipEntry } from './importInput';
+import {
+  LAST_RESTORE_REPORT_SETTING_KEY,
+  type BackupRecoveryReport,
+} from './recoveryReport';
 import type { ValidatedBackupData } from './schema';
 import { BACKED_UP_TABLE_NAMES } from './tableRegistry';
 
@@ -11,6 +15,7 @@ export async function applyValidatedBackup(
   backup: ValidatedBackupData,
   zipBytes: Uint8Array | null,
   mediaItems: Media[],
+  report: BackupRecoveryReport,
 ): Promise<void> {
   const transactionTables = ATOMIC_RESTORE_TABLE_NAMES.map(name => db[name]);
   await db.transaction('rw', transactionTables, async () => {
@@ -60,5 +65,6 @@ export async function applyValidatedBackup(
     );
     if (activeQuestions.length) await db.outstandingQuestions.bulkPut(activeQuestions);
     if (backup.questionNotes.length) await db.questionNotes.bulkPut(backup.questionNotes);
+    await db.settings.put({ key: LAST_RESTORE_REPORT_SETTING_KEY, value: report });
   });
 }

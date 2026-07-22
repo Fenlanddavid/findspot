@@ -14,6 +14,7 @@ import { getPackMeta, isPackStale } from "../services/offlinePack";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { LockIcon, SearchIcon } from "../components/AppIcons";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
+import { getBackupReminderState } from '../services/backupReminder';
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -176,15 +177,12 @@ export default function Home(props: {
   const [fieldGuideScanCount] = useDurableSetting('fs_fg_scan_count', 0);
 
   const appSettings = useLiveQuery(async () => {
-    const [detectorist, lastBackupDate] = await Promise.all([
-      db.settings.get('detectorist'),
-      db.settings.get('lastBackupDate'),
-    ]);
+    const detectorist = await db.settings.get('detectorist');
     return {
       detectorist: (detectorist?.value as string) || '',
-      lastBackupDate: (lastBackupDate?.value as string) || null,
     };
   });
+  const backupReminder = useLiveQuery(() => getBackupReminderState());
 
   const fieldGuidePackPrompt = useLiveQuery<FieldGuidePackPrompt>(async () => {
     const [permissionRows, savedPointRows] = await Promise.all([
@@ -426,10 +424,7 @@ export default function Home(props: {
     const isEstablished = realPerms.length > 0 && totalFinds > 0 && hasSessions;
     const isNewUser = realPerms.length === 0 && totalFinds === 0;
 
-    const backupAge = appSettings.lastBackupDate
-      ? (Date.now() - new Date(appSettings.lastBackupDate).getTime()) / 86400000
-      : Infinity;
-    const backupNeeded = backupAge > 30;
+    const backupNeeded = backupReminder !== undefined && backupReminder.level !== 'none';
     const nameNotSet = !appSettings.detectorist;
     const permsWithoutBoundary = realPerms.filter(p => !p.boundary && !p.fields?.length);
 
@@ -490,7 +485,7 @@ export default function Home(props: {
           a.action();
         },
       }));
-  }, [permissions, realPermissions, finds, appSettings, usedActions, nav, props]);
+  }, [permissions, realPermissions, finds, appSettings, backupReminder, usedActions, nav, props]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();

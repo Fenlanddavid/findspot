@@ -5,6 +5,7 @@ import { applyValidatedBackup } from './atomicRestore';
 import {
   BackupLimitError,
   decodeBackupInput,
+  extractZipEntry,
   isQuotaExceeded,
   isZipBlob,
   MAX_BACKUP_MANIFEST_BYTES,
@@ -13,22 +14,36 @@ import {
 import type { BackupImportOptions, BackupImportProgress } from './importTypes';
 import { base64ToBlob } from './mediaEncoding';
 import {
+  createBackupRecoveryReport,
+  type BackupRecoveryReport,
+} from './recoveryReport';
+import {
   cleanupStaleRestoreStages,
   materializeStagedMedia,
   RESTORE_STAGE_PREFIX,
   RestoreStageDB,
   streamZipBackup,
 } from './restoreStage';
-import type { RawBackupData } from './schema';
+import type { RawBackupData, ValidatedBackupData } from './schema';
 import { validateBackupData } from './validation';
 
 export type { BackupImportOptions, BackupImportProgress } from './importTypes';
+export type {
+  BackupRecoveryReport,
+  BackupRecoveryTableReport,
+} from './recoveryReport';
 export {
   MAX_BACKUP_IN_MEMORY_BYTES,
   MAX_BACKUP_MANIFEST_BYTES,
   MAX_BACKUP_UNCOMPRESSED_BYTES,
   MAX_BACKUP_ZIP_ENTRIES,
 } from './importInput';
+
+type PreparedBackup = {
+  backup: ValidatedBackupData;
+  zipBytes: Uint8Array | null;
+  mediaItems: Media[];
+};
 
 function emitImportProgress(
   options: BackupImportOptions | undefined,
@@ -40,41 +55,51 @@ function emitImportProgress(
   options?.onProgress?.({ phase, processedBytes, totalBytes, percent });
 }
 
-/** Safely decode only the manifest used by the restore preview UI. */
-export async function readBackupManifest(
-  input: string | ArrayBuffer | Blob,
-): Promise<Record<string, unknown>> {
-  let data: RawBackupData;
-  if (input instanceof Blob) {
-    if (await isZipBlob(input)) {
-      data = (await streamZipBackup(input, undefined, { stopAfterManifest: true })).data;
-    } else {
-      if (input.size > MAX_BACKUP_MANIFEST_BYTES) {
-        throw new BackupLimitError(`Invalid backup file: JSON exceeds ${Math.round(MAX_BACKUP_MANIFEST_BYTES / (1024 * 1024))} MB.`);
-      }
-      data = parseJsonBackup(await input.text(), false);
+function validateArchiveReferences(
+  backup: ValidatedBackupData,
+  entryNames: Set<string> | null,
+): void {
+  if (!entryNames) return;
+  const referencedEntries = new Set<string>();
+  for (const media of backup.media) {
+    if (media.format !== 'zip') throw new Error('Invalid backup zip: legacy media manifest entry');
+    if (!entryNames.has(media._zipEntry)) {
+      throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
     }
-  } else {
-    data = decodeBackupInput(input).data;
+    if (referencedEntries.has(media._zipEntry)) {
+      throw new Error(`Invalid backup zip: media entry ${media._zipEntry} is referenced more than once.`);
+    }
+    referencedEntries.add(media._zipEntry);
   }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('Invalid backup file: expected an object.');
+  for (const entryName of entryNames) {
+    if (entryName.startsWith('media/') && !referencedEntries.has(entryName)) {
+      throw new Error(`Invalid backup zip: unreferenced media entry ${entryName}.`);
+    }
   }
-  return data as Record<string, unknown>;
 }
 
-/**
- * Validate and atomically replace live data from legacy JSON or a full zip.
- * Blob zips stage media outside the live database before the transaction opens.
- */
-export async function importData(
+function verifyInMemoryArchiveMedia(
+  backup: ValidatedBackupData,
+  zipBytes: Uint8Array,
+): void {
+  for (const media of backup.media) {
+    if (media.format !== 'zip') throw new Error('Invalid backup zip: legacy media manifest entry');
+    if (!extractZipEntry(zipBytes, media._zipEntry)) {
+      throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
+    }
+  }
+}
+
+async function runWithPreparedBackup<Result>(
   input: string | ArrayBuffer | Blob,
-  options: BackupImportOptions = {},
-): Promise<void> {
+  options: BackupImportOptions,
+  finalPhase: 'drilling' | 'restoring',
+  action: (prepared: PreparedBackup) => Promise<Result>,
+): Promise<Result> {
   let data: RawBackupData;
   let zipBytes: Uint8Array | null = null;
   let entryNames: Set<string> | null = null;
-  let mediaItems: Media[] | null = null;
+  let mediaItems: Media[] = [];
   let stage: RestoreStageDB | null = null;
 
   try {
@@ -105,27 +130,8 @@ export async function importData(
 
     const totalBytes = input instanceof Blob ? input.size : 0;
     emitImportProgress(options, 'validating', totalBytes, totalBytes, 92);
-    const zipMode = !!zipBytes || !!stage;
-    const backup = validateBackupData(data, { zipMode });
-
-    if (zipMode && entryNames) {
-      const referencedEntries = new Set<string>();
-      for (const media of backup.media) {
-        if (media.format !== 'zip') throw new Error('Invalid backup zip: legacy media manifest entry');
-        if (!entryNames.has(media._zipEntry)) {
-          throw new Error(`Invalid backup zip: missing media entry ${media._zipEntry}`);
-        }
-        if (referencedEntries.has(media._zipEntry)) {
-          throw new Error(`Invalid backup zip: media entry ${media._zipEntry} is referenced more than once.`);
-        }
-        referencedEntries.add(media._zipEntry);
-      }
-      for (const entryName of entryNames) {
-        if (entryName.startsWith('media/') && !referencedEntries.has(entryName)) {
-          throw new Error(`Invalid backup zip: unreferenced media entry ${entryName}.`);
-        }
-      }
-    }
+    const backup = validateBackupData(data, { zipMode: !!zipBytes || !!stage });
+    validateArchiveReferences(backup, entryNames);
 
     if (stage) {
       mediaItems = await materializeStagedMedia(stage, backup.media);
@@ -137,22 +143,74 @@ export async function importData(
         const { format: _format, blob, ...rest } = media;
         return { ...rest, blob: await base64ToBlob(blob) } as Media;
       }));
+    } else if (finalPhase === 'drilling') {
+      verifyInMemoryArchiveMedia(backup, zipBytes);
     }
 
-    emitImportProgress(options, 'restoring', totalBytes, totalBytes, 95);
-    try {
-      await applyValidatedBackup(backup, zipBytes, mediaItems ?? []);
-    } catch (error) {
-      if (isQuotaExceeded(error)) {
-        throw new Error('Not enough free device storage to complete this restore. Existing FindSpot data has not been changed.');
-      }
-      throw error;
-    }
-    emitImportProgress(options, 'restoring', totalBytes, totalBytes, 100);
+    emitImportProgress(options, finalPhase, totalBytes, totalBytes, 95);
+    const result = await action({ backup, zipBytes, mediaItems });
+    emitImportProgress(options, finalPhase, totalBytes, totalBytes, 100);
+    return result;
   } finally {
     if (stage) {
       stage.close();
       await Dexie.delete(stage.name).catch(() => {});
     }
   }
+}
+
+/** Safely decode only the manifest used by the restore preview UI. */
+export async function readBackupManifest(
+  input: string | ArrayBuffer | Blob,
+): Promise<Record<string, unknown>> {
+  let data: RawBackupData;
+  if (input instanceof Blob) {
+    if (await isZipBlob(input)) {
+      data = (await streamZipBackup(input, undefined, { stopAfterManifest: true })).data;
+    } else {
+      if (input.size > MAX_BACKUP_MANIFEST_BYTES) {
+        throw new BackupLimitError(`Invalid backup file: JSON exceeds ${Math.round(MAX_BACKUP_MANIFEST_BYTES / (1024 * 1024))} MB.`);
+      }
+      data = parseJsonBackup(await input.text(), false);
+    }
+  } else {
+    data = decodeBackupInput(input).data;
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid backup file: expected an object.');
+  }
+  return data as Record<string, unknown>;
+}
+
+/** Validate and stage every backup byte without changing the live database. */
+export async function drillRestore(
+  input: string | ArrayBuffer | Blob,
+  options: BackupImportOptions = {},
+): Promise<BackupRecoveryReport> {
+  return runWithPreparedBackup(input, options, 'drilling', async ({ backup }) =>
+    createBackupRecoveryReport(backup, 'drill'));
+}
+
+/** Validate, stage and atomically replace all backed-up live tables. */
+export async function importData(
+  input: string | ArrayBuffer | Blob,
+  options: BackupImportOptions = {},
+): Promise<BackupRecoveryReport> {
+  return runWithPreparedBackup(input, options, 'restoring', async prepared => {
+    const report = createBackupRecoveryReport(prepared.backup, 'restore');
+    try {
+      await applyValidatedBackup(
+        prepared.backup,
+        prepared.zipBytes,
+        prepared.mediaItems,
+        report,
+      );
+    } catch (error) {
+      if (isQuotaExceeded(error)) {
+        throw new Error('Not enough free device storage to complete this restore. Existing FindSpot data has not been changed.');
+      }
+      throw error;
+    }
+    return report;
+  });
 }

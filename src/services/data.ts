@@ -17,6 +17,7 @@ export { MAX_BACKUP_RECORDS, validateBackupData };
 export { exportData } from "./backup/export";
 export type { BackupExportOptions, BackupExportProgress } from "./backup/export";
 export {
+  drillRestore,
   importData,
   MAX_BACKUP_IN_MEMORY_BYTES,
   MAX_BACKUP_MANIFEST_BYTES,
@@ -24,7 +25,12 @@ export {
   MAX_BACKUP_ZIP_ENTRIES,
   readBackupManifest,
 } from "./backup/import";
-export type { BackupImportOptions, BackupImportProgress } from "./backup/import";
+export type {
+  BackupImportOptions,
+  BackupImportProgress,
+  BackupRecoveryReport,
+  BackupRecoveryTableReport,
+} from "./backup/import";
 export {
   estimateMediaSizeBytes,
   MAX_BACKUP_MEDIA_ENTRY_BYTES,
@@ -39,7 +45,10 @@ export type {
 
 export async function markExternalBackupSaved() {
   const now = new Date().toISOString();
-  await db.settings.put({ key: "lastBackupDate", value: now });
+  await db.transaction('rw', db.settings, async () => {
+    await db.settings.put({ key: "lastBackupDate", value: now });
+    await db.settings.delete('backupSnoozedUntil');
+  });
   return now;
 }
 

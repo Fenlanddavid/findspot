@@ -33,6 +33,10 @@ import { PATH_LABELS } from "./components/significant/significantFindDisplay";
 import type { SignificantFind } from "./db";
 import { migrateLegacyClientStorage } from './services/clientStorage';
 import {
+  getBackupReminderState,
+  type BackupReminderState,
+} from './services/backupReminder';
+import {
   DiscoverIcon,
   FieldGuideIcon,
   FindsIcon,
@@ -64,7 +68,7 @@ type BeforeInstallPromptEvent = Event & {
 function Shell() {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [showBackupReminder, setShowBackupReminder] = useState(false);
+  const [backupReminder, setBackupReminder] = useState<BackupReminderState | null>(null);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
@@ -85,31 +89,7 @@ function Shell() {
   }, [projectId, sfWorkflow.isOpen]);
 
   const checkBackupStatus = useCallback(async () => {
-    // Check if there is any data worth backing up
-    const permCount = await db.permissions.filter(p => !p.isDefault).count();
-    const findCount = await db.finds.count();
-    if (permCount === 0 && findCount === 0) {
-      setShowBackupReminder(false);
-      return;
-    }
-
-    const snoozedUntil = await getSetting<string | null>("backupSnoozedUntil", null);
-    if (snoozedUntil && new Date(snoozedUntil) > new Date()) {
-      setShowBackupReminder(false);
-      return;
-    }
-
-    const lastBackup = await getSetting<string | null>("lastBackupDate", null);
-    if (!lastBackup) {
-      setShowBackupReminder(true);
-      return;
-    }
-
-    const lastDate = new Date(lastBackup).getTime();
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    if (Date.now() - lastDate > thirtyDays) {
-      setShowBackupReminder(true);
-    }
+    setBackupReminder(await getBackupReminderState());
   }, []);
 
   useEffect(() => {
@@ -209,7 +189,9 @@ function Shell() {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     await setSetting("backupSnoozedUntil", thirtyDaysFromNow.toISOString());
-    setShowBackupReminder(false);
+    setBackupReminder(current => current
+      ? { ...current, level: 'none', snoozed: true }
+      : null);
   }
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
@@ -308,7 +290,8 @@ function Shell() {
 
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
-  const shouldShowBackupReminder = showBackupReminder && (location.pathname === "/" || location.pathname === "/settings");
+  const shouldShowBackupReminder = backupReminder !== null && backupReminder.level !== 'none'
+    && (location.pathname === "/" || location.pathname === "/settings");
 
   return (
     <div className="max-w-6xl mx-auto p-3 pb-28 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
@@ -432,23 +415,25 @@ function Shell() {
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-2xl">🛡️</span>
               <div>
-                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">Backup Recommended</h4>
-                <p className="text-xs text-amber-800 dark:text-amber-300 opacity-80">It's been a while since your last backup. Since FindSpot is local-only, a backup protects your finds if your device is lost or broken.</p>
+                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">{backupReminder?.title}</h4>
+                <p className="text-xs text-amber-800 dark:text-amber-300 opacity-80">{backupReminder?.message} Since FindSpot is local-only, exporting protects it if this device is lost or broken.</p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
               <button
-                onClick={() => { setShowBackupReminder(false); nav("/settings"); }}
+                onClick={() => { setBackupReminder(null); nav("/settings"); }}
                 className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
               >
                 Go to Settings →
               </button>
-              <button
-                onClick={snoozeBackup}
-                className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
-              >
-                Later
-              </button>
+              {backupReminder?.level !== 'urgent' && (
+                <button
+                  onClick={snoozeBackup}
+                  className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
+                >
+                  Later
+                </button>
+              )}
             </div>
           </div>
         )}

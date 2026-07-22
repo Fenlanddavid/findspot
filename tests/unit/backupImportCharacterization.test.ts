@@ -3,7 +3,10 @@ import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db } from '../../src/db';
 import {
+  drillRestore,
+  getSetting,
   importData,
+  markExternalBackupSaved,
   type BackupImportProgress,
 } from '../../src/services/data';
 
@@ -42,6 +45,15 @@ afterEach(async () => {
 });
 
 describe('backup import characterization', () => {
+  it('clears a reminder snooze when an external backup is saved', async () => {
+    await db.settings.put({ key: 'backupSnoozedUntil', value: '2099-01-01T00:00:00.000Z' });
+
+    const savedAt = await markExternalBackupSaved();
+
+    expect(await getSetting('lastBackupDate', null)).toBe(savedAt);
+    expect(await db.settings.get('backupSnoozedUntil')).toBeUndefined();
+  });
+
   it('reports the existing JSON import phase and percentage sequence', async () => {
     const progress: BackupImportProgress[] = [];
 
@@ -74,6 +86,41 @@ describe('backup import characterization', () => {
 
     expect((await db.projects.toArray()).map(row => row.id)).toEqual(['restored-project']);
     expect(await db.geologyContext.get('retained-cache')).toBeDefined();
+  });
+
+  it('drills the complete restore without replacing live data or recording a restore', async () => {
+    await db.projects.put({
+      id: 'live-project',
+      name: 'Live project',
+      region: 'England',
+      createdAt: '2026-07-21T12:00:00.000Z',
+    });
+
+    const report = await drillRestore(JSON.stringify(backup()));
+
+    expect(report).toEqual(expect.objectContaining({
+      mode: 'drill',
+      ready: true,
+      backupVersion: 6,
+      totals: expect.objectContaining({ imported: 1, damaged: 0 }),
+    }));
+    expect(Object.keys(report.tables)).toHaveLength(17);
+    expect((await db.projects.toArray()).map(row => row.id)).toEqual(['live-project']);
+    expect(await getSetting('lastRestoreReport', null)).toBeNull();
+    expect(await stagingDatabaseNames()).toEqual([]);
+  });
+
+  it('returns and atomically records the recovery report for a confirmed restore', async () => {
+    const report = await importData(JSON.stringify(backup()));
+
+    expect(report.mode).toBe('restore');
+    expect(report.tables.projects).toEqual({
+      imported: 1,
+      skipped: 0,
+      repaired: 0,
+      damaged: 0,
+    });
+    expect(await getSetting('lastRestoreReport', null)).toEqual(report);
   });
 
   it('does not open the replacement transaction when validation fails', async () => {

@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
+import { readdir, readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FindSpotDB } from '../../src/db';
 import {
@@ -15,6 +16,7 @@ import {
 } from '../../src/services/backup/tableRegistry';
 import {
   estimateMediaSizeBytes,
+  drillRestore,
   exportData,
   importData,
   mediaExt,
@@ -24,6 +26,7 @@ import {
 import { ATOMIC_RESTORE_TABLE_NAMES } from '../../src/services/backup/atomicRestore';
 import { exportData as exportDataModule } from '../../src/services/backup/export';
 import {
+  drillRestore as drillRestoreModule,
   importData as importDataModule,
   readBackupManifest as readBackupManifestModule,
 } from '../../src/services/backup/import';
@@ -71,6 +74,7 @@ describe('backup export boundaries', () => {
 describe('backup import boundaries', () => {
   it('keeps data service compatibility exports wired to the extracted importer', () => {
     expect(importData).toBe(importDataModule);
+    expect(drillRestore).toBe(drillRestoreModule);
     expect(readBackupManifest).toBe(readBackupManifestModule);
   });
 
@@ -109,5 +113,18 @@ describe('backup table registry', () => {
     const normalized = validateBackupData({ projects: [] });
     const normalizedTableNames = Object.keys(normalized).filter(key => key !== 'version');
     expect(sorted(BACKED_UP_TABLE_NAMES)).toEqual(sorted(normalizedTableNames));
+  });
+});
+
+describe('backup module size ratchet', () => {
+  it('keeps every backup module at or below 500 lines', async () => {
+    const backupDirectory = new URL('../../src/services/backup/', import.meta.url);
+    const moduleNames = (await readdir(backupDirectory)).filter(name => name.endsWith('.ts'));
+    const lineCounts = await Promise.all(moduleNames.map(async name => ({
+      name,
+      lines: (await readFile(new URL(name, backupDirectory), 'utf8')).split('\n').length,
+    })));
+
+    expect(lineCounts.filter(module => module.lines > 500)).toEqual([]);
   });
 });

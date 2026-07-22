@@ -9,6 +9,7 @@ import {
   getSetting,
   setSetting,
   exportData,
+  drillRestore,
   importData,
   exportToCSV,
   markExternalBackupSaved,
@@ -16,6 +17,7 @@ import {
   MEDIA_EXPORT_WARN_BYTES,
   readBackupManifest,
   type BackupImportProgress,
+  type BackupRecoveryReport,
 } from "../services/data";
 import { exportDiagLog } from "../services/diagLog";
 import { db } from "../db";
@@ -53,6 +55,52 @@ type RestorePreview = RestoreCounts & {
 type SettingsTab = "data" | "profile" | "detectors" | "app";
 
 const RESTORE_CONFIRMATION = "RESTORE";
+
+function formatBackupTableName(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, letter => letter.toUpperCase());
+}
+
+function RecoveryReportDetails({
+  report,
+  title,
+}: {
+  report: BackupRecoveryReport;
+  title: string;
+}) {
+  return (
+    <details className="mt-3 rounded-xl border border-current/15 bg-white/60 px-3 py-2 dark:bg-gray-950/20">
+      <summary className="cursor-pointer text-xs font-black">
+        {title}: {report.totals.imported} imported, {report.totals.skipped} skipped, {report.totals.repaired} repaired, {report.totals.damaged} damaged
+      </summary>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[30rem] text-left text-xs">
+          <thead className="text-[9px] uppercase tracking-widest opacity-70">
+            <tr>
+              <th className="py-1 pr-3">Table</th>
+              <th className="py-1 pr-3">Imported</th>
+              <th className="py-1 pr-3">Skipped</th>
+              <th className="py-1 pr-3">Repaired</th>
+              <th className="py-1">Damaged</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(report.tables).map(([tableName, counts]) => (
+              <tr key={tableName} className="border-t border-current/10">
+                <td className="py-1 pr-3 font-bold">{formatBackupTableName(tableName)}</td>
+                <td className="py-1 pr-3">{counts.imported}</td>
+                <td className="py-1 pr-3">{counts.skipped}</td>
+                <td className="py-1 pr-3">{counts.repaired}</td>
+                <td className="py-1">{counts.damaged}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
 
 function isSettingsTab(value: string | null): value is SettingsTab {
   return value === "data" || value === "profile" || value === "detectors" || value === "app";
@@ -175,7 +223,10 @@ export default function Settings() {
   const [fullBackupProgress, setFullBackupProgress] = useState<number | null>(null);
   const [exportingCSV, setExportingCSV] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [drillingRestore, setDrillingRestore] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<BackupImportProgress | null>(null);
+  const [restoreDrillReport, setRestoreDrillReport] = useState<BackupRecoveryReport | null>(null);
+  const [lastRestoreReport, setLastRestoreReport] = useState<BackupRecoveryReport | null>(null);
   const [mediaPhotoCount, setMediaPhotoCount] = useState<number | null>(null);
   const [mediaSizeBytes, setMediaSizeBytes] = useState<number | null>(null);
   const [damagedMediaCount, setDamagedMediaCount] = useState<number | null>(null);
@@ -207,6 +258,7 @@ export default function Settings() {
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("membershipCardImage", null).then(setMembershipCardImage);
     getSetting("lastBackupDate", null).then(setLastBackup);
+    getSetting<BackupRecoveryReport | null>("lastRestoreReport", null).then(setLastRestoreReport);
     getSetting("theme", "dark").then(setTheme);
     getSetting("detectors", ["Minelab Equinox 800", "Nokta Legend"]).then(val => {
       if (Array.isArray(val)) setDetectors(val);
@@ -425,12 +477,30 @@ export default function Settings() {
     setCurrentDataCounts(null);
     setRestoreConfirmText("");
     setRestoreProgress(null);
+    setRestoreDrillReport(null);
     getCurrentDataCounts().then(setCurrentDataCounts).catch(() => setCurrentDataCounts(null));
     try {
       setRestorePreview(await previewBackup(file));
     } catch (error) {
       const reason = error instanceof Error ? error.message : "The backup could not be read.";
       setRestorePreviewError(`${reason} FindSpot will validate the backup again before replacing any data.`);
+    }
+  }
+
+  async function runRestoreDrill() {
+    if (!importPendingFile) return;
+    setDataError(null);
+    setDrillingRestore(true);
+    setRestoreProgress(null);
+    setRestoreDrillReport(null);
+    try {
+      const report = await drillRestore(importPendingFile, { onProgress: setRestoreProgress });
+      setRestoreDrillReport(report);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setDataError(`Restore drill failed: ${reason}`);
+    } finally {
+      setDrillingRestore(false);
     }
   }
 
@@ -442,7 +512,8 @@ export default function Settings() {
     setImporting(true);
     setRestoreProgress(null);
     try {
-      await importData(file, { onProgress: setRestoreProgress });
+      const report = await importData(file, { onProgress: setRestoreProgress });
+      setLastRestoreReport(report);
       setImportPendingFile(null);
       setRestorePreview(null);
       setRestorePreviewError(null);
@@ -601,17 +672,17 @@ export default function Settings() {
                 type="text"
                 value={restoreConfirmText}
                 onChange={(event) => setRestoreConfirmText(event.target.value)}
-                disabled={importing}
+                disabled={importing || drillingRestore}
                 className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-amber-500 dark:border-amber-800 dark:bg-gray-950 dark:text-gray-100"
                 autoCapitalize="characters"
                 autoComplete="off"
                 spellCheck={false}
               />
             </label>
-            {importing && restoreProgress && (
+            {(importing || drillingRestore) && restoreProgress && (
               <div className="mt-4" aria-live="polite">
                 <div className="mb-1 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-200">
-                  <span>{restoreProgress.phase === "reading" ? "Reading and staging backup" : restoreProgress.phase === "validating" ? "Validating backup" : "Replacing local archive"}</span>
+                  <span>{restoreProgress.phase === "reading" ? "Reading and staging backup" : restoreProgress.phase === "validating" ? "Validating backup" : restoreProgress.phase === "drilling" ? "Checking recoverability" : "Replacing local archive"}</span>
                   <span>{restoreProgress.percent}%</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-amber-200 dark:bg-amber-900">
@@ -619,10 +690,17 @@ export default function Settings() {
                 </div>
               </div>
             )}
+            {restoreDrillReport && (
+              <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200" role="status">
+                <p className="font-black">Ready to restore. Live data unchanged.</p>
+                <RecoveryReportDetails report={restoreDrillReport} title="Drill report" />
+              </div>
+            )}
           </div>
-          <div className="mt-4 flex gap-2">
-            <button onClick={confirmImport} disabled={importing || !restoreCanConfirm} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? `Restoring${restoreProgress ? ` ${restoreProgress.percent}%` : ""}…` : "Confirm Import"}</button>
-            <button disabled={importing} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); setCurrentDataCounts(null); setRestoreConfirmText(""); setRestoreProgress(null); }} className="text-amber-800 dark:text-amber-300 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button onClick={runRestoreDrill} disabled={importing || drillingRestore} className="border border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-950 disabled:opacity-50 text-xs font-bold px-4 py-2 rounded-lg transition-colors">{drillingRestore ? `Checking${restoreProgress ? ` ${restoreProgress.percent}%` : ""}…` : "Run Restore Drill"}</button>
+            <button onClick={confirmImport} disabled={importing || drillingRestore || !restoreCanConfirm} className="bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">{importing ? `Restoring${restoreProgress ? ` ${restoreProgress.percent}%` : ""}…` : "Confirm Import"}</button>
+            <button disabled={importing || drillingRestore} onClick={() => { setImportPendingFile(null); setRestorePreview(null); setRestorePreviewError(null); setCurrentDataCounts(null); setRestoreConfirmText(""); setRestoreProgress(null); setRestoreDrillReport(null); }} className="text-amber-800 dark:text-amber-300 disabled:opacity-40 text-xs font-bold hover:underline px-2">Cancel</button>
           </div>
         </div>
       )}
@@ -988,6 +1066,16 @@ export default function Settings() {
                 {lastBackup ? "Saved" : "Not saved"}
               </span>
             </div>
+
+            {lastRestoreReport && (
+              <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl text-gray-800 dark:text-gray-200">
+                <h3 className="font-bold">Last Restore Report</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Completed {formatBackupDate(lastRestoreReport.createdAt)} from backup format {lastRestoreReport.backupVersion}.
+                </p>
+                <RecoveryReportDetails report={lastRestoreReport} title="Recovery report" />
+              </div>
+            )}
             
             <div className="p-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl text-center">
               <p className="text-sm text-gray-500 mb-0 italic">
