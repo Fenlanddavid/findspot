@@ -257,6 +257,137 @@ test("significant find workflow saves a located notable record", async ({ page }
   expect(significantFinds[0].osGridRef).toEqual(expect.any(String));
 });
 
+test("deleting a significant record removes only its linked finds and media", async ({ page }) => {
+  await createPermission(page, "Significant Cascade Farm");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  const [project] = await readIndexedDbStore(page, "projects") as any[];
+  if (!permissionId || !project?.id) throw new Error("Could not prepare significant cascade fixture");
+
+  const now = new Date().toISOString();
+  const find = (id: string, objectType: string) => ({
+    id,
+    projectId: project.id,
+    permissionId,
+    fieldId: null,
+    sessionId: null,
+    findCode: id,
+    objectType,
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    osGridRef: "",
+    w3w: "",
+    period: "Unknown",
+    material: "Other",
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await putIndexedDbRows(page, "finds", [
+    find("cascade-linked", "Linked notable find"),
+    { ...find("cascade-scatter", "Scatter find"), scatterId: "cascade-group" },
+    find("keep-unrelated-find", "Unrelated find"),
+  ]);
+  await putIndexedDbRow(page, "significantFinds", {
+    id: "cascade-significant",
+    projectId: project.id,
+    permissionId,
+    sessionId: null,
+    path: "map_scatter",
+    status: "in_progress",
+    jurisdiction: "england_wales",
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    osGridRef: "",
+    w3w: "",
+    preExcavationNotes: "",
+    soilObservations: "",
+    groundSurfacePhotoCaptured: false,
+    scatterId: "cascade-group",
+    scatterFindIds: ["cascade-scatter"],
+    linkedFindId: "cascade-linked",
+    treasureActDraft: "",
+    landownerSummary: "",
+    findDescription: "Cascade scatter",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await page.evaluate(({ projectId, createdAt }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction("media", "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      const store = tx.objectStore("media");
+      for (const [id, findId] of [
+        ["cascade-significant-media", "cascade-significant"],
+        ["cascade-linked-media", "cascade-linked"],
+        ["cascade-scatter-media", "cascade-scatter"],
+        ["keep-unrelated-media", "keep-unrelated-find"],
+      ]) {
+        store.put({
+          id,
+          projectId,
+          findId,
+          type: "photo",
+          photoType: "other",
+          filename: `${id}.txt`,
+          mime: "text/plain",
+          blob: new Blob([id], { type: "text/plain" }),
+          caption: "Significant cascade fixture",
+          scalePresent: false,
+          createdAt,
+        });
+      }
+    };
+  }), { projectId: project.id, createdAt: now });
+
+  await page.goto("./finds-box?tab=significant");
+  await page.getByRole("button", { name: /Cascade scatter/ }).click();
+  await page.getByRole("button", { name: "Delete record" }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete Record?" });
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+
+  const [significantFinds, finds, media] = await Promise.all([
+    readIndexedDbStore(page, "significantFinds"),
+    readIndexedDbStore(page, "finds"),
+    readIndexedDbStore(page, "media"),
+  ]) as any[][];
+  expect(significantFinds.map(row => row.id)).not.toContain("cascade-significant");
+  expect(finds.map(row => row.id)).toEqual(["keep-unrelated-find"]);
+  expect(media.map(row => row.id)).toEqual(["keep-unrelated-media"]);
+});
+
+test("field guide saves and deletes a named map point", async ({ page }) => {
+  await page.route("https://a.tile.openstreetmap.org/**", route => route.abort());
+  await page.route("https://services.arcgisonline.com/**", route => route.abort());
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
+
+  await page.getByRole("button", { name: "Map layers" }).click();
+  await page.getByRole("button", { name: "Save This Point" }).click();
+  await page.getByPlaceholder("Name this point...").fill("Boundary point");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  const saved = await readIndexedDbStore(page, "savedPoints") as any[];
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatchObject({ label: "Boundary point", projectId: expect.any(String) });
+  expect(saved[0].lat).toEqual(expect.any(Number));
+  expect(saved[0].lon).toEqual(expect.any(Number));
+  expect(saved[0].zoom).toEqual(expect.any(Number));
+
+  await page.getByRole("button", { name: "Map layers" }).click();
+  await page.getByRole("button", { name: /Saved Points \(1\)/ }).click();
+  await expect(page.getByText("Boundary point", { exact: true })).toBeVisible();
+  await page.getByTitle("Delete").click();
+  await page.getByTitle("Tap again to confirm delete").click();
+  await expect(page.getByText("No saved points yet.")).toBeVisible();
+  expect(await readIndexedDbStore(page, "savedPoints")).toEqual([]);
+});
+
 test("deleting a permission removes its sessions and finds", async ({ page }) => {
   await createPermission(page, "Smoke Delete Farm");
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];

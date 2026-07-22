@@ -703,6 +703,14 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await detailsButton.click();
   await expect(page.getByText("Movement Corridors & Roads")).toBeVisible();
   await expect(page.getByText("Regression Roman Road", { exact: true })).toBeVisible();
+
+  const cacheRows = await readIndexedDbStore(page, "fieldGuideCache") as any[];
+  expect(cacheRows.some(row => (
+    typeof row.id === "string"
+    && row.id.startsWith("historic:")
+    && row.historicLookup
+    && typeof row.createdAt === "number"
+  ))).toBe(true);
 });
 
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
