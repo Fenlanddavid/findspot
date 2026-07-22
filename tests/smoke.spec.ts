@@ -346,6 +346,151 @@ test("deleting a permission removes its sessions and finds", async ({ page }) =>
   expect((media as any[]).some((row) => row.findId === "sig-delete-fixture")).toBe(false);
 });
 
+test("deleting a session removes only its linked finds, significant finds, media and tracks", async ({ page }) => {
+  await createPermission(page, "Session Cascade Farm");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  const [project] = await readIndexedDbStore(page, "projects") as any[];
+  if (!permissionId || !project?.id) throw new Error("Could not prepare session cascade fixture");
+
+  const now = new Date().toISOString();
+  const session = (id: string) => ({
+    id,
+    projectId: project.id,
+    permissionId,
+    fieldId: null,
+    date: now,
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    landUse: "",
+    cropType: "",
+    isStubble: false,
+    notes: "",
+    isFinished: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const find = (id: string, sessionId: string) => ({
+    id,
+    projectId: project.id,
+    permissionId,
+    fieldId: null,
+    sessionId,
+    findCode: id,
+    objectType: "Test find",
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    osGridRef: "",
+    w3w: "",
+    period: "Unknown",
+    material: "Other",
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+  const track = (id: string, sessionId: string) => ({
+    id,
+    projectId: project.id,
+    sessionId,
+    name: "Test track",
+    points: [],
+    isActive: false,
+    color: "#ffffff",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await putIndexedDbRows(page, "sessions", [session("delete-session"), session("keep-session")]);
+  await putIndexedDbRows(page, "finds", [
+    find("delete-find", "delete-session"),
+    find("keep-find", "keep-session"),
+  ]);
+  await putIndexedDbRow(page, "significantFinds", {
+    id: "delete-significant",
+    projectId: project.id,
+    permissionId,
+    sessionId: "delete-session",
+    path: "notable_find",
+    status: "in_progress",
+    jurisdiction: "england_wales",
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    osGridRef: "",
+    w3w: "",
+    preExcavationNotes: "",
+    soilObservations: "",
+    groundSurfacePhotoCaptured: false,
+    scatterId: null,
+    scatterFindIds: [],
+    linkedFindId: null,
+    treasureActDraft: "",
+    landownerSummary: "",
+    createdAt: now,
+    updatedAt: now,
+  });
+  await page.evaluate(({ projectId, createdAt }) => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction("media", "readwrite");
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      const store = tx.objectStore("media");
+      for (const [id, findId] of [
+        ["delete-find-media", "delete-find"],
+        ["delete-significant-media", "delete-significant"],
+        ["keep-media", "keep-find"],
+      ]) {
+        store.put({
+          id,
+          projectId,
+          findId,
+          type: "photo",
+          photoType: "other",
+          filename: `${id}.txt`,
+          mime: "text/plain",
+          blob: new Blob([id], { type: "text/plain" }),
+          caption: "Session cascade fixture",
+          scalePresent: false,
+          createdAt,
+        });
+      }
+    };
+  }), { projectId: project.id, createdAt: now });
+  await putIndexedDbRows(page, "tracks", [
+    track("delete-track", "delete-session"),
+    track("keep-track", "keep-session"),
+  ]);
+
+  await page.goto("./session/delete-session");
+  await page.getByRole("button", { name: "Delete" }).click();
+  const dialog = page.getByRole("dialog", { name: "Delete Session?" });
+  await expect(dialog).toContainText("1 find");
+  await expect(dialog).toContainText("1 significant find");
+  await expect(dialog).toContainText("2 photos/documents");
+  await expect(dialog).toContainText("1 GPS track");
+  await dialog.getByRole("button", { name: "Delete" }).click();
+  await expect(page).toHaveURL(new RegExp(`/permission/${permissionId}$`));
+
+  const [sessions, finds, significantFinds, storedMedia, tracks] = await Promise.all([
+    readIndexedDbStore(page, "sessions"),
+    readIndexedDbStore(page, "finds"),
+    readIndexedDbStore(page, "significantFinds"),
+    readIndexedDbStore(page, "media"),
+    readIndexedDbStore(page, "tracks"),
+  ]) as any[][];
+  expect(sessions.map(row => row.id)).toContain("keep-session");
+  expect(sessions.map(row => row.id)).not.toContain("delete-session");
+  expect(finds.map(row => row.id)).toContain("keep-find");
+  expect(finds.map(row => row.id)).not.toContain("delete-find");
+  expect(significantFinds.map(row => row.id)).not.toContain("delete-significant");
+  expect(storedMedia.map(row => row.id)).toEqual(["keep-media"]);
+  expect(tracks.map(row => row.id)).toContain("keep-track");
+  expect(tracks.map(row => row.id)).not.toContain("delete-track");
+});
+
 test("settings can export and restore a backup", async ({ page }) => {
   await createPermission(page, "Smoke Backup Permission");
 
