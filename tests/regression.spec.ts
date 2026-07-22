@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import type { Cluster, Hotspot, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
 import { applyGeologyModifiers } from "../src/engines/hotspot/hotspotEngine";
@@ -125,7 +125,6 @@ async function mockFieldGuideHistoricScan(page: Page) {
   await page.route("https://services.arcgisonline.com/**", route => route.abort());
   await page.route("https://environment.data.gov.uk/**", route => route.abort());
   await page.route("https://mapseries-tilesets.s3.amazonaws.com/**", route => route.abort());
-  await page.route("https://findspot-counter.trials-uk.workers.dev/**", route => route.fulfill({ status: 204 }));
   await page.route("**/roman-roads-gb.geojson", route => route.fulfill({
     status: 200,
     contentType: "application/json",

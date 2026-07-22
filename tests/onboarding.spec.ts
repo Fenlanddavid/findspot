@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 async function durableSetting(page: Page, key: string): Promise<unknown> {
   return page.evaluate((settingKey) => new Promise((resolve, reject) => {
