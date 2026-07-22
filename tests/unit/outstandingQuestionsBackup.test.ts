@@ -8,6 +8,9 @@ const { tables, db } = vi.hoisted(() => {
     let rows = initial;
     return {
       toArray: vi.fn(async () => structuredClone(rows)),
+      each: vi.fn(async (callback: (row: Row) => void) => {
+        for (const row of structuredClone(rows)) callback(row);
+      }),
       toCollection: vi.fn(() => ({
         primaryKeys: vi.fn(async () => rows.map(row => row.id ?? row.signalKey ?? row.key)),
       })),
@@ -45,7 +48,11 @@ const { tables, db } = vi.hoisted(() => {
 
 vi.mock('../../src/db', () => ({ db }));
 
-import { exportData, importData } from '../../src/services/data';
+import {
+  estimateMediaSizeBytes,
+  exportData,
+  importData,
+} from '../../src/services/data';
 import { CURRENT_BACKUP_FORMAT_VERSION } from '../../src/services/backup/backupVersion';
 import {
   BACKED_UP_TABLE_NAMES,
@@ -155,6 +162,68 @@ describe('outstanding questions backup round-trip', () => {
     expect(tables.outstandingQuestions.bulkPut).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'question-1', ruleId: 'MOVEMENT_NO_FINDS' }),
     ]);
+  });
+
+  it('keeps data-only exports as JSON with media deliberately omitted', async () => {
+    tables.media._set([{
+      id: 'media-1', projectId: 'project-1', permissionId: 'permission-1',
+      type: 'photo', filename: 'field.jpg', mime: 'image/jpeg',
+      blob: new Blob(['photo proof'], { type: 'image/jpeg' }), caption: '',
+      scalePresent: false, createdAt: '2026-07-16T12:00:00.000Z',
+    }]);
+
+    const backup = await exportData();
+    const manifest = JSON.parse(await backup.text());
+
+    expect(backup.type).toBe('application/json');
+    expect(manifest).toEqual(expect.objectContaining({
+      version: CURRENT_BACKUP_FORMAT_VERSION,
+      generatedBy: 'FindSpot',
+      media: [],
+    }));
+    expect(manifest.exportedAt).toEqual(expect.any(String));
+  });
+
+  it('writes a manifest-only zip and reports completion when there is no media', async () => {
+    const progress = vi.fn();
+
+    const backup = await exportData({ includeMedia: true, onProgress: progress });
+    const backupBytes = new Uint8Array(await backup.arrayBuffer());
+    const entries = unzipSync(backupBytes);
+
+    expect(backup.type).toBe('application/zip');
+    expect(Object.keys(entries)).toEqual(['manifest.json']);
+    expect(JSON.parse(strFromU8(entries['manifest.json'])).media).toEqual([]);
+    expect(progress).toHaveBeenCalledTimes(1);
+    expect(progress).toHaveBeenCalledWith({ processedMedia: 0, totalMedia: 0, percent: 100 });
+  });
+
+  it('counts media bytes without reading blobs and reports damaged rows', async () => {
+    tables.media._set([
+      {
+        id: 'media-1', filename: 'field.jpg',
+        blob: new Blob(['photo proof'], { type: 'image/jpeg' }),
+      },
+      { id: 'media-2', filename: 'damaged.jpg' },
+    ]);
+
+    await expect(estimateMediaSizeBytes()).resolves.toEqual({
+      count: 2,
+      bytes: 11,
+      damaged: 1,
+    });
+  });
+
+  it('rejects a full backup when persisted media is damaged', async () => {
+    tables.media._set([{
+      id: 'media-1', projectId: 'project-1', permissionId: 'permission-1',
+      type: 'photo', filename: 'damaged.jpg', mime: 'image/jpeg', caption: '',
+      scalePresent: false, createdAt: '2026-07-16T12:00:00.000Z',
+    }]);
+
+    await expect(exportData({ includeMedia: true })).rejects.toThrow(
+      'damaged.jpg is damaged and cannot be included in a full backup.',
+    );
   });
 
   it('round-trips binary media and hotspot accuracy history through a full zip backup', async () => {
