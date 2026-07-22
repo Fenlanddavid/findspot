@@ -465,7 +465,7 @@ test("deleting a session removes only its linked finds, significant finds, media
   ]);
 
   await page.goto("./session/delete-session");
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Delete Session?" });
   await expect(dialog).toContainText("1 find");
   await expect(dialog).toContainText("1 significant find");
