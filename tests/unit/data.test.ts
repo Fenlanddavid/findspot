@@ -15,6 +15,7 @@ vi.mock('../../src/db', () => ({
 
 // Import AFTER the mock is registered.
 import { MAX_BACKUP_RECORDS, validateBackupData } from '../../src/services/data';
+import { BACKED_UP_TABLE_NAMES } from '../../src/services/backup/tableRegistry';
 
 // ─── Minimal valid backup fixture ─────────────────────────────────────────────
 
@@ -120,6 +121,20 @@ describe('validateBackupData — accepts valid backups', () => {
     };
     expect(() => validateBackupData(minimal)).not.toThrow();
   });
+});
+
+describe('backup format version characterization', () => {
+  it('normalizes an export with no declared version to legacy format 1', () => {
+    const backup = makeValidBackup({ version: undefined });
+    expect(validateBackupData(backup).version).toBe(1);
+  });
+
+  it.each([1, 2, 3, 4, 5, 6])(
+    'preserves declared historical format version %i',
+    (version) => {
+      expect(validateBackupData(makeValidBackup({ version })).version).toBe(version);
+    },
+  );
 });
 
 describe('validateBackupData — permission intelligence', () => {
@@ -465,39 +480,15 @@ describe('validateBackupData — findHotspotSignals', () => {
   });
 });
 
-// ─── Table coverage guard ─────────────────────────────────────────────────────
-// Fails when a new user-authored table is added to db.ts but not exported.
-// If this test fails: add the table to exportData/BackupData/validateBackupData
-// in src/services/data.ts (and check importData's transaction table list).
-//
-// Tables intentionally excluded (regenerable caches — not user data):
-//   fieldGuideCache, geologyContext,
-//   landscapeInterpretations, diagnosticLog
+// ─── Backed-up table validation coverage ──────────────────────────────────────
+// Schema-to-registry completeness is enforced in backupArchitecture.test.ts.
+// This suite checks that every table classified for backup reaches the
+// normalized validation output.
 
 describe('table coverage guard', () => {
-  const USER_TABLES = [
-    'projects',
-    'permissions',
-    'fields',
-    'sessions',
-    'finds',
-    'significantFinds',
-    'tracks',
-    'media',
-    'settings',
-    'importedPackages',
-    'savedPoints',
-    'undugSignals',
-    'findHotspotSignals',
-    'hotspotPredictions',
-    'hotspotPredictionAggregates',
-    'outstandingQuestions',
-    'questionNotes',
-  ] as const;
-
   it('validateBackupData returns every user table as an array', () => {
     const result = validateBackupData(makeValidBackup());
-    for (const table of USER_TABLES) {
+    for (const table of BACKED_UP_TABLE_NAMES) {
       expect(Array.isArray(result[table]), `${table} missing from backup`).toBe(true);
     }
   });

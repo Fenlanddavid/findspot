@@ -46,6 +46,11 @@ const { tables, db } = vi.hoisted(() => {
 vi.mock('../../src/db', () => ({ db }));
 
 import { exportData, importData } from '../../src/services/data';
+import { CURRENT_BACKUP_FORMAT_VERSION } from '../../src/services/backup/backupVersion';
+import {
+  BACKED_UP_TABLE_NAMES,
+  BACKUP_TABLE_REGISTRY,
+} from '../../src/services/backup/tableRegistry';
 
 describe('outstanding questions backup round-trip', () => {
   beforeEach(() => {
@@ -111,6 +116,11 @@ describe('outstanding questions backup round-trip', () => {
     const blob = await exportData();
     const json = await blob.text();
     const exported = JSON.parse(json);
+    expect(exported.version).toBe(CURRENT_BACKUP_FORMAT_VERSION);
+    const exportedRegisteredTables = Object.keys(exported)
+      .filter(key => Object.hasOwn(BACKUP_TABLE_REGISTRY, key))
+      .sort();
+    expect(exportedRegisteredTables).toEqual([...BACKED_UP_TABLE_NAMES].sort());
     expect(exported.outstandingQuestions).toEqual(tables.outstandingQuestions._get());
     expect(exported.questionNotes).toEqual(tables.questionNotes._get());
     expect(exported.permissions).toEqual(tables.permissions._get());

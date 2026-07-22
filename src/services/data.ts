@@ -26,6 +26,10 @@ import {
   TERMS_OF_USE_VERSION,
 } from "../utils/legalCopy";
 import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, unzipSync, strToU8, strFromU8 } from "fflate";
+import {
+  CURRENT_BACKUP_FORMAT_VERSION,
+  DEFAULT_LEGACY_BACKUP_FORMAT_VERSION,
+} from "./backup/backupVersion";
 
 export async function markExternalBackupSaved() {
   const now = new Date().toISOString();
@@ -125,7 +129,7 @@ async function collectManifestData() {
   ]);
 
   return {
-    version: 6,
+    version: CURRENT_BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     generatedBy: "FindSpot",
     termsVersion: TERMS_OF_USE_VERSION,
@@ -726,7 +730,7 @@ export function validateBackupData(
   return {
     version: typeof raw.version === "number" && Number.isFinite(raw.version)
       ? raw.version
-      : 1,
+      : DEFAULT_LEGACY_BACKUP_FORMAT_VERSION,
     projects: backup.projects as Project[],
     permissions: backup.permissions as Permission[],
     fields: backup.fields as Field[],
