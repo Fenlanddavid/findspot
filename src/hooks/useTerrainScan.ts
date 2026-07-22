@@ -399,13 +399,13 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
 
         // Non-satellite workers start immediately — no wayback dependency
         const terrainStart = performance.now();
-        const terrainTask       = scanDataSource('terrain',       zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
-        const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
-        const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+        const terrainTask       = scanDataSource('terrain',       zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg, signal);
+        const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg, signal);
+        const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg, signal);
 
         onStatusChange('Reading hydrology...');
         const hydroStart = performance.now();
-        const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg);
+        const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerReg, signal);
 
         onStatusChange('Comparing spectral layers...');
         // Satellite workers need waybackIds — await the (already in-flight) promise
@@ -416,8 +416,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
             return null;
         }
         const satelliteStart = performance.now();
-        const springTask   = scanDataSource('satellite_spring', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
-        const summerTask   = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg);
+        const springTask   = scanDataSource('satellite_spring', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg, signal);
+        const summerTask   = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerReg, signal);
 
         try {
             // NHLE, AIM, and all six tile workers resolve in parallel

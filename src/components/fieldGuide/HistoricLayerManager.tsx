@@ -15,9 +15,11 @@ import { buildFieldStrategy } from '../../services/fieldguide/fieldStrategy';
 import { deriveTerrainSignals } from '../../services/fieldguide/terrainSignals';
 import { pasPeriodEntries, pasTypeEntries } from '../../services/pasDensityService';
 import { heritageGatewayUrl } from '../../lib/heritageGatewayLink';
-import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, LandscapeInterpretationWorkerOutput, PersonalFindsInput } from '../../types/landscapeInterpretation';
+import type { LandscapeInterpretation, LandscapeInterpretationWorkerInput, PersonalFindsInput } from '../../types/landscapeInterpretation';
 import type { Cluster, HistoricFind, Hotspot, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 import { safeParseLandscapeInterpretationRecord } from '../../services/persistenceValidation';
+import { WorkerClientError } from '../../workers/client';
+import { runLandscapeInterpretationWorker } from '../../workers/landscapeInterpretationClient';
 
 const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
 
@@ -164,7 +166,7 @@ export function HistoricLayerManager() {
     const [landscapeInterpretation, setLandscapeInterpretation] = useState<LandscapeInterpretation | null>(null);
     const [alieLoading, setAlieLoading] = useState(false);
     const [heritageGatewayCenter, setHeritageGatewayCenter] = useState<{ lat: number; lng: number } | null>(null);
-    const workerRef = useRef<Worker | null>(null);
+    const alieAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         if (!historicScanComplete) {
@@ -221,7 +223,7 @@ export function HistoricLayerManager() {
                 terrainClusters={terrainClusters}
                 potentialScoreBreakdown={potentialScore?.breakdown ?? null}
                 mapRef={mapRef}
-                workerRef={workerRef}
+                alieAbortRef={alieAbortRef}
                 landscapeInterpretation={landscapeInterpretation}
                 setLandscapeInterpretation={setLandscapeInterpretation}
                 alieLoading={alieLoading}
@@ -586,7 +588,7 @@ interface AlieSectionProps {
     terrainClusters: import('../../pages/fieldGuideTypes').Cluster[];
     potentialScoreBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null;
     mapRef: React.RefObject<import('maplibre-gl').Map | null>;
-    workerRef: React.MutableRefObject<Worker | null>;
+    alieAbortRef: React.MutableRefObject<AbortController | null>;
     landscapeInterpretation: LandscapeInterpretation | null;
     setLandscapeInterpretation: React.Dispatch<React.SetStateAction<LandscapeInterpretation | null>>;
     alieLoading: boolean;
@@ -612,7 +614,7 @@ function AlieSection({
     terrainClusters,
     potentialScoreBreakdown,
     mapRef,
-    workerRef,
+    alieAbortRef,
     landscapeInterpretation,
     setLandscapeInterpretation,
     alieLoading,
@@ -804,10 +806,8 @@ function AlieSection({
             }
         }).catch((e: unknown) => diagLog.warn('alie', 'Cache read failed', String(e)));
 
-        if (workerRef.current) {
-            workerRef.current.terminate();
-            workerRef.current = null;
-        }
+        alieAbortRef.current?.abort();
+        alieAbortRef.current = null;
 
         // ── P2: assemble unified evidence object ─────────────────────────────
         const nearbyFinds = projectFinds.filter(
@@ -898,67 +898,43 @@ function AlieSection({
         });
 
         setAlieLoading(true);
-
-        try {
-            const worker = new Worker(
-                new URL('../../workers/landscapeInterpretation.worker.ts', import.meta.url),
-                { type: 'module' }
-            );
-            workerRef.current = worker;
-
-            worker.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerOutput>) => {
-                // Guard: discard result if the user panned to a newer cell.
-                if (alieRequestSeqRef.current !== requestSeq) {
-                    worker.terminate();
-                    workerRef.current = null;
-                    return;
-                }
-                setAlieLoading(false);
-                if (event.data.error) {
-                    diagLog.error('alie', 'Worker pipeline error', event.data.error);
-                } else if (event.data.result) {
-                    const result = event.data.result;
-                    console.log('[ALIE] result', {
-                        recordSparsity: result.recordSparsity,
-                        temporalPersistence: result.temporalPersistence,
-                        engineVersion: result.engineVersion,
-                    });
-                    setLandscapeInterpretation(result);
-                    // Persist to Dexie (last-write-wins)
-                    db.landscapeInterpretations.put({
-                        geohash6: result.geohash6,
-                        generatedAt: result.generatedAt,
-                        engineVersion: result.engineVersion,
-                        geologyTileKey,
-                        inputSignature,
-                        interpretation: result,
-                    }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', String(e)));
-                }
-                worker.terminate();
-                workerRef.current = null;
-            };
-
-            worker.onerror = (e: ErrorEvent) => {
-                diagLog.error('alie', 'Worker error', e.message ?? 'unknown');
-                setAlieLoading(false);
-                worker.terminate();
-                workerRef.current = null;
-            };
-
-            worker.postMessage(input);
-        } catch (e) {
-            diagLog.error('alie', 'Failed to start worker', String(e));
-            setAlieLoading(false);
-        }
+        const controller = new AbortController();
+        alieAbortRef.current = controller;
+        runLandscapeInterpretationWorker(input, controller.signal).then(result => {
+            // Guard: discard result if the user panned to a newer cell.
+            if (alieRequestSeqRef.current !== requestSeq) return;
+            console.log('[ALIE] result', {
+                recordSparsity: result.recordSparsity,
+                temporalPersistence: result.temporalPersistence,
+                engineVersion: result.engineVersion,
+            });
+            setLandscapeInterpretation(result);
+            // Persist to Dexie (last-write-wins)
+            db.landscapeInterpretations.put({
+                geohash6: result.geohash6,
+                generatedAt: result.generatedAt,
+                engineVersion: result.engineVersion,
+                geologyTileKey,
+                inputSignature,
+                interpretation: result,
+            }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', String(e)));
+        }).catch((error: unknown) => {
+            if (alieRequestSeqRef.current !== requestSeq) return;
+            if (error instanceof WorkerClientError && error.code === 'cancelled') return;
+            const code = error instanceof WorkerClientError ? error.code : 'worker_error';
+            const message = error instanceof Error ? error.message : String(error);
+            diagLog.error('alie', `Worker ${code}`, message);
+        }).finally(() => {
+            if (alieAbortRef.current === controller) alieAbortRef.current = null;
+            if (alieRequestSeqRef.current === requestSeq) setAlieLoading(false);
+        });
 
         }).catch(() => {}); // L3: personal finds query failure is non-fatal
 
         // Cleanup on unmount
         return () => {
-            if (workerRef.current) {
-                workerRef.current.terminate();
-                workerRef.current = null;
-            }
+            alieAbortRef.current?.abort();
+            alieAbortRef.current = null;
         };
     }, [
         historicScanComplete,

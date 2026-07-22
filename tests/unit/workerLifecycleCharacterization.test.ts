@@ -55,9 +55,11 @@ describe('worker lifecycle characterization', () => {
       'terrain', 16, 100, 200, bounds, 65_536, { features: [] }, null, registry,
     );
     const worker = CharacterizationWorker.instances[0];
+    const posted = worker.posted[0] as WorkerParams | { payload: WorkerParams };
+    const postedParams = 'payload' in posted ? posted.payload : posted;
 
     expect(worker.options).toEqual({ type: 'module' });
-    expect(worker.posted).toEqual([{
+    expect(postedParams).toEqual({
       sourceType: 'terrain',
       zoom: 16,
       tX_start: 100,
@@ -65,7 +67,7 @@ describe('worker lifecycle characterization', () => {
       bounds: { west: -0.2, east: 0.2, south: 51.9, north: 52.1 },
       n: 65_536,
       waybackIds: null,
-    } satisfies WorkerParams]);
+    } satisfies WorkerParams);
     expect(registry).toHaveLength(1);
 
     const expected: WorkerResult = { clusters: [], tilesLoaded: 4 };

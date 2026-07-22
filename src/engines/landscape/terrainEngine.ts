@@ -5,8 +5,26 @@
 import { Cluster } from '../../pages/fieldGuideTypes';
 import { WaybackIds } from '../../utils/waybackService';
 import type { WorkerParams, WorkerResult } from '../../workers/terrainScanWorker';
+import { runWorkerRequest } from '../../workers/client';
+import { createTerrainScanWorker } from '../../workers/factory';
 
 type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
+const TERRAIN_WORKER_TIMEOUT_MS = 30_000;
+
+function decodeLegacyTerrainResponse(value: unknown): WorkerResult | undefined {
+    if (Array.isArray(value)) {
+        const clusters = value as Cluster[];
+        return { clusters, tilesLoaded: clusters.length > 0 ? 1 : 0 };
+    }
+    if (
+        typeof value === 'object' && value !== null &&
+        Array.isArray((value as WorkerResult).clusters) &&
+        typeof (value as WorkerResult).tilesLoaded === 'number'
+    ) {
+        return value as WorkerResult;
+    }
+    return undefined;
+}
 
 /**
  * Spawn a worker to scan one tile source. The worker fetches tiles, runs the
@@ -25,50 +43,37 @@ export function scanDataSource(
     _assetsGeoJSON: { features: unknown[] },   // kept for API compatibility — unused
     waybackIds: WaybackIds | null = null,
     workerReg?: Worker[],
+    signal?: AbortSignal,
 ): Promise<WorkerResult> {
-    return new Promise<WorkerResult>((resolve) => {
-        const worker = new Worker(
-            new URL('../../workers/terrainScanWorker.ts', import.meta.url),
-            { type: 'module' },
-        );
+    let liveWorker: Worker | undefined;
+    const params: WorkerParams = {
+        sourceType,
+        zoom,
+        tX_start,
+        tY_start,
+        bounds: {
+            west:  bounds.getWest(),
+            east:  bounds.getEast(),
+            south: bounds.getSouth(),
+            north: bounds.getNorth(),
+        },
+        n,
+        waybackIds,
+    };
 
-        if (workerReg) workerReg.push(worker);
-
-        const cleanup = () => {
-            if (workerReg) {
-                const i = workerReg.indexOf(worker);
-                if (i !== -1) workerReg.splice(i, 1);
-            }
-        };
-
-        worker.onmessage = (e: MessageEvent<WorkerResult | Cluster[]>) => {
-            cleanup();
-            const data = e.data;
-            resolve(Array.isArray(data) ? { clusters: data, tilesLoaded: data.length > 0 ? 1 : 0 } : data);
-            worker.terminate();
-        };
-
-        worker.onerror = () => {
-            cleanup();
-            resolve({ clusters: [], tilesLoaded: 0 });
-            worker.terminate();
-        };
-
-        const params: WorkerParams = {
-            sourceType,
-            zoom,
-            tX_start,
-            tY_start,
-            bounds: {
-                west:  bounds.getWest(),
-                east:  bounds.getEast(),
-                south: bounds.getSouth(),
-                north: bounds.getNorth(),
-            },
-            n,
-            waybackIds,
-        };
-
-        worker.postMessage(params);
+    return runWorkerRequest<WorkerParams, WorkerResult>({
+        createWorker: createTerrainScanWorker,
+        payload: params,
+        signal,
+        timeoutMs: TERRAIN_WORKER_TIMEOUT_MS,
+        decodeLegacyResponse: decodeLegacyTerrainResponse,
+        onWorkerCreated: worker => {
+            liveWorker = worker;
+            workerReg?.push(worker);
+        },
+    }).catch(() => ({ clusters: [], tilesLoaded: 0 })).finally(() => {
+        if (!workerReg || !liveWorker) return;
+        const index = workerReg.indexOf(liveWorker);
+        if (index !== -1) workerReg.splice(index, 1);
     });
 }

@@ -8,6 +8,7 @@
 import { Cluster, SCAN_PROFILE } from '../pages/fieldGuideTypes';
 import { waybackTileUrl } from '../utils/waybackService';
 import { cachedFetchAny } from '../utils/cachedFetch';
+import { dispatchWorkerRequest } from './protocol';
 
 type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
 
@@ -793,13 +794,18 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
 // Guard: self is not defined in Node test environments. Named exports (e.g.
 // boostScoreLocal) remain importable without triggering the handler assignment.
 if (typeof self !== 'undefined') {
-    self.onmessage = async (e: MessageEvent<WorkerParams>) => {
-        try {
-            const result = await processSource(e.data);
-            self.postMessage(result);
-        } catch {
-            // Fail-safe: an empty result is recoverable; a missing message hangs Promise.all.
-            self.postMessage({ clusters: [], tilesLoaded: 0 } satisfies WorkerResult);
-        }
+    self.onmessage = async (event: MessageEvent<unknown>) => {
+        const response = await dispatchWorkerRequest<WorkerParams, WorkerResult>(
+            event.data,
+            async params => {
+                try {
+                    return await processSource(params);
+                } catch {
+                    // Fail-safe: an empty result is recoverable for one source.
+                    return { clusters: [], tilesLoaded: 0 };
+                }
+            },
+        );
+        self.postMessage(response);
     };
 }

@@ -302,8 +302,3 @@ export interface LandscapeInterpretationWorkerInput {
     // undefined / null = no personal finds effect (L3 null-neutral).
     personalFinds?: PersonalFindsInput | null;
 }
-
-export interface LandscapeInterpretationWorkerOutput {
-    result?: LandscapeInterpretation;
-    error?: string;
-}

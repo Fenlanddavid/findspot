@@ -1,12 +1,12 @@
 // ─── ALIE v5 Web Worker ───────────────────────────────────────────────────────
-// Receives LandscapeInterpretationWorkerInput via postMessage.
-// Runs the full pipeline and postMessages LandscapeInterpretationWorkerOutput.
+// Receives a versioned LandscapeInterpretationWorkerInput request.
+// Runs the full pipeline and posts a correlated protocol response.
 
 import type {
     LandscapeInterpretationWorkerInput,
-    LandscapeInterpretationWorkerOutput,
     LandscapeInterpretation,
 } from '../types/landscapeInterpretation';
+import { dispatchWorkerRequest } from './protocol';
 
 import { extractSignals, extractPASSignals, extractPersonalFindsSignals } from '../services/fieldguide/landscapeInterpretation/signalAdapters';
 import { deriveTerrainRegion }                                         from '../services/fieldguide/landscapeInterpretation/regionalCalibration';
@@ -24,9 +24,9 @@ import { computeEvidenceAssessment }                                   from '../
 
 const ENGINE_VERSION = 'ALIE-2026.06.22a';
 
-self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
-    try {
-        const input = event.data;
+export function runLandscapeInterpretation(
+    input: LandscapeInterpretationWorkerInput,
+): LandscapeInterpretation {
         const {
             geohash6,
             nhleFeatures,
@@ -227,15 +227,17 @@ self.onmessage = (event: MessageEvent<LandscapeInterpretationWorkerInput>) => {
             generatedAt: Date.now(),
         };
 
-        const output: LandscapeInterpretationWorkerOutput = { result };
-        (self as unknown as Worker).postMessage(output);
+        return result;
+}
 
-    } catch (e) {
-        const output: LandscapeInterpretationWorkerOutput = {
-            error: e instanceof Error ? e.message : String(e),
-        };
-        (self as unknown as Worker).postMessage(output);
-    }
-};
+if (typeof self !== 'undefined') {
+    self.onmessage = async (event: MessageEvent<unknown>) => {
+        const response = await dispatchWorkerRequest<
+            LandscapeInterpretationWorkerInput,
+            LandscapeInterpretation
+        >(event.data, runLandscapeInterpretation);
+        (self as unknown as Worker).postMessage(response);
+    };
+}
 
 export {};
