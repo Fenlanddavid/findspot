@@ -38,8 +38,9 @@ import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, 
 import { buildTargetInterpretation, getTargetVerdict, TargetSignalStrength } from '../engines/hotspot/targetInterpreter';
 import { getDistance, MONUMENT_BOUNDARY_BUFFER_M } from '../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
-import { runGeologyContext, sweepStaleGeologyCache } from '../engines/geologyContext';
+import { runGeologyContext } from '../engines/geologyContext';
 import type { GeologyContext } from '../engines/geologyContext';
+import { sweepStaleGeologyCache } from '../services/geologyContextCache';
 import { applyGeologyModifiers } from '../engines/hotspot/hotspotEngine';
 import { computeHotspotLandscapeIntelligence, computeLandscapeSummary } from '../engines/landscape/landscapeIntelligenceEngine';
 import type { LandscapeIntelligence, LandscapeSummary } from './fieldGuideTypes';

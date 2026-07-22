@@ -2,11 +2,11 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, type GeologyContextRecord } from "../../src/db";
 import {
-  buildTileKey,
   cacheGeologyContext,
   getCachedGeologyContext,
   sweepStaleGeologyCache,
-} from "../../src/engines/geologyContext/geologyCache";
+} from "../../src/services/geologyContextCache";
+import { buildTileKey } from "../../src/engines/geologyContext/geologyTileKey";
 import {
   GEOLOGY_CACHE_TTL_MS,
   GEOLOGY_CLASSIFIER_VERSION,

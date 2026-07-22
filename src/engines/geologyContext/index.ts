@@ -8,12 +8,12 @@ export type { GeologyContext, GeologyAuditEntry, GeologyLandscapeClass } from '.
 export { GEOLOGY_CLASSIFIER_VERSION, GEOLOGY_SOURCE_VERSION } from './geologyContextTypes';
 export { buildGeologyDisplay } from './geologyExplain';
 export type { GeologyDisplayData } from './geologyExplain';
-export { sweepStaleGeologyCache } from './geologyCache';
 
 import { fetchBgsGeology } from './geologyContextClient';
 import { classifyGeology } from './geologyClassifier';
 import { computeGeologyModifiers, netGeologyScore } from './geologyModifiers';
-import { buildTileKey, getCachedGeologyContext, cacheGeologyContext } from './geologyCache';
+import { buildTileKey } from './geologyTileKey';
+import { cacheGeologyContext, getCachedGeologyContext } from '../../services/geologyContextCache';
 import {
     GEOLOGY_CLASSIFIER_VERSION,
     GEOLOGY_SOURCE_VERSION,
