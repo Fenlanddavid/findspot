@@ -1,5 +1,5 @@
 // ─── Release notes ────────────────────────────────────────────────────────────
-// Update this before each push. Shown in the PWA update banner so users know
-// what the update contains before they tap "Update Now".
+// Keep this short and user-focused; technical detail belongs in the programme
+// record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'modular backup exports with streamed media archives, damaged-media safeguards and unchanged v4.x compatibility';
+export const UPDATE_NOTES = 'Safer backup restores.';

@@ -16,10 +16,17 @@ import {
 import {
   estimateMediaSizeBytes,
   exportData,
+  importData,
   mediaExt,
+  readBackupManifest,
   validateBackupData,
 } from '../../src/services/data';
+import { ATOMIC_RESTORE_TABLE_NAMES } from '../../src/services/backup/atomicRestore';
 import { exportData as exportDataModule } from '../../src/services/backup/export';
+import {
+  importData as importDataModule,
+  readBackupManifest as readBackupManifestModule,
+} from '../../src/services/backup/import';
 import {
   estimateMediaSizeBytes as estimateMediaSizeBytesModule,
   mediaExt as mediaExtModule,
@@ -58,6 +65,17 @@ describe('backup export boundaries', () => {
     expect(exportData).toBe(exportDataModule);
     expect(estimateMediaSizeBytes).toBe(estimateMediaSizeBytesModule);
     expect(mediaExt).toBe(mediaExtModule);
+  });
+});
+
+describe('backup import boundaries', () => {
+  it('keeps data service compatibility exports wired to the extracted importer', () => {
+    expect(importData).toBe(importDataModule);
+    expect(readBackupManifest).toBe(readBackupManifestModule);
+  });
+
+  it('derives the atomic replacement transaction from every backed-up table', () => {
+    expect(sorted(ATOMIC_RESTORE_TABLE_NAMES)).toEqual(sorted(BACKED_UP_TABLE_NAMES));
   });
 });
 

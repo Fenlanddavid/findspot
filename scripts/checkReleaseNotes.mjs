@@ -41,4 +41,14 @@ if (currentNotes === previousNotes) {
   console.error(`src/version.ts is unchanged since ${latestTag}; update UPDATE_NOTES before deployment.`);
   process.exit(1);
 }
+
+const updateNote = currentNotes.match(/UPDATE_NOTES\s*=\s*(['"])(.*?)\1/s)?.[2];
+if (!updateNote) {
+  console.error('src/version.ts must define UPDATE_NOTES as a string literal.');
+  process.exit(1);
+}
+if (updateNote.length > 80) {
+  console.error(`UPDATE_NOTES is ${updateNote.length} characters; keep user-facing update messages at 80 or fewer.`);
+  process.exit(1);
+}
 console.log(`Release notes and version are ready for ${nextTag} (previous: ${latestTag}).`);
