@@ -19,7 +19,7 @@ describe('FieldGuide user-map architecture characterization', () => {
       readFile(SAVED_POINTS_HOOK, 'utf8'),
     ]);
 
-    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(614);
+    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(294);
     expect(userLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(savedPointsHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(userLayersHook.match(/useEffect\(/g)).toHaveLength(6);

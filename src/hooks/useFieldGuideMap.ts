@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
 import { Find, SavedPoint } from '../db';
 import { DevAnnotation } from '../utils/devAnnotation';
-import { getPASDensityGeoJSON } from '../services/pasDensityService';
-import { reportNonFatal } from '../services/diagLog';
 import { useFieldGuideUserLayers } from './useFieldGuideUserLayers';
 import { useSavedPointMarkers } from './useSavedPointMarkers';
+import { useFieldGuideScanLayers } from './useFieldGuideScanLayers';
+import { useFieldGuideHistoricLayers } from './useFieldGuideHistoricLayers';
 import {
     createFieldGuideMapStyle,
     ensureFieldGuideMapProtocolsRegistered,
@@ -15,11 +14,8 @@ import {
 } from '../services/fieldguide/mapLayerRegistry';
 import {
     bindFieldGuideMapInteractions,
-    routeLabel,
     type FieldGuideMapCallbacks,
 } from '../services/fieldguide/mapInteractions';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LayerState {
     historicMode: boolean;
@@ -56,48 +52,7 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'hotspots-fill',                   visibleWhen: () => true },
 ];
 
-function makeTargetLabelElement(label: string, primary: boolean) {
-    const el = document.createElement('div');
-    el.style.alignItems = 'center';
-    el.style.background = primary
-        ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.98), rgba(13, 148, 136, 0.96))'
-        : 'rgba(15, 23, 42, 0.94)';
-    el.style.border = primary ? '1px solid rgba(209, 250, 229, 0.92)' : '1px solid rgba(226, 232, 240, 0.82)';
-    el.style.borderRadius = '999px';
-    el.style.boxShadow = primary
-        ? '0 0 0 4px rgba(16, 185, 129, 0.16), 0 8px 18px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.28)'
-        : '0 5px 14px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.20)';
-    el.style.color = primary ? '#ecfdf5' : '#f8fafc';
-    el.style.display = 'flex';
-    el.style.font = "900 9px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    el.style.gap = '0';
-    el.style.height = primary ? '1.55rem' : '1.45rem';
-    el.style.justifyContent = 'center';
-    el.style.letterSpacing = '0.06em';
-    el.style.minWidth = primary ? '2.75rem' : '1.55rem';
-    el.style.padding = primary ? '0 0.55rem' : '0 0.36rem';
-    el.style.pointerEvents = 'none';
-    el.style.textTransform = 'uppercase';
-
-    if (primary) {
-        const start = document.createElement('span');
-        start.textContent = 'Start';
-        start.style.color = '#a7f3d0';
-        start.style.fontSize = '0.48rem';
-        start.style.letterSpacing = '0.12em';
-        start.style.lineHeight = '1';
-        el.append(start);
-        return el;
-    }
-
-    el.textContent = label.padStart(2, '0');
-    return el;
-}
-
-// Callbacks are stored in a ref so map event handlers never go stale
-// without needing to be in the map-init effect's dependency array.
 export type UseFieldGuideMapOptions = {
-    // Data that drives source updates
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
@@ -108,7 +63,6 @@ export type UseFieldGuideMapOptions = {
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
     fieldBoundaries: Array<{ id: string; name: string; permissionId: string; boundary: any }>;
-    // Layer visibility drivers
     isSatellite: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
@@ -118,19 +72,14 @@ export type UseFieldGuideMapOptions = {
     historicLayerOpacity: { lidar: number; 'lidar-wales': number; os1930: number; os1880: number };
     savedPoints: SavedPoint[];
     showSavedPoints: boolean;
-    // Initial fly-to coordinates
     initLat?: number;
     initLng?: number;
     initPinLabel?: string;
-    // Dev annotation support
     devMode:        boolean;
     annotationMode: boolean;
     devAnnotations: DevAnnotation[];
-    // Event handler callbacks
     callbacks: FieldGuideMapCallbacks;
 };
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
@@ -254,296 +203,6 @@ export function useFieldGuideMap({
         if (map.getLayer('satellite')) map.setLayoutProperty('satellite',  'visibility', isSatellite ? 'visible' : 'none');
     }, [isSatellite]);
 
-    // ── Hotspot overlay source ────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const source = map.getSource('hotspots-overlay') as maplibregl.GeoJSONSource;
-        if (!source) return;
-        source.setData({
-            type: 'FeatureCollection',
-            features: hotspots
-                .filter(h => h.id === selectedHotspotId)
-                .map(h => ({
-                    type: 'Feature' as const,
-                    geometry: { type: 'Polygon' as const, coordinates: [[[h.bounds[0][0], h.bounds[0][1]], [h.bounds[1][0], h.bounds[0][1]], [h.bounds[1][0], h.bounds[1][1]], [h.bounds[0][0], h.bounds[1][1]], [h.bounds[0][0], h.bounds[0][1]]]] },
-                    properties: { id: h.id, type: h.type, score: h.score },
-                })),
-        } as GeoJSON.FeatureCollection);
-    }, [hotspots, selectedHotspotId, mapReadyVersion]);
-
-    // ── Detected features (targets) source ───────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const source = map.getSource('targets') as maplibregl.GeoJSONSource;
-        if (!source) return;
-        source.setData({
-            type: 'FeatureCollection',
-            features: detectedFeatures.filter(f => !f.isRouteArtefactRisk).map(f => ({
-                type: 'Feature' as const,
-                geometry: { type: 'Point' as const, coordinates: f.center },
-                properties: {
-                    id: f.id,
-                    number: f.number.toString(),
-                    isProtected: f.isProtected,
-                    source: f.sources[0],
-                    consensus: f.sources.length,
-                    isPrimary: f.id === primaryTargetId,
-                },
-            })),
-        } as GeoJSON.FeatureCollection);
-    }, [detectedFeatures, primaryTargetId, mapReadyVersion]);
-
-    // ── Selected target highlight ────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const layer = map.getLayer('targets-selected');
-        if (!layer) return;
-        map.setFilter('targets-selected', ['==', ['get', 'id'], selectedTargetId ?? '']);
-    }, [selectedTargetId, mapReadyVersion]);
-
-    // ── Target pin labels ────────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        targetLabelMarkersRef.current.forEach(marker => marker.remove());
-        targetLabelMarkersRef.current = [];
-
-        detectedFeatures
-            .filter(f => !f.isRouteArtefactRisk && !f.isProtected)
-            .forEach(f => {
-                const primary = f.id === primaryTargetId;
-                const marker = new maplibregl.Marker({
-                    element: makeTargetLabelElement(f.number.toString(), primary),
-                    anchor: 'center',
-                })
-                    .setLngLat(f.center)
-                    .addTo(map);
-                targetLabelMarkersRef.current.push(marker);
-            });
-    }, [detectedFeatures, primaryTargetId, mapReadyVersion]);
-
-    // ── Trace Signals source ──────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const source = map.getSource('trace-targets') as maplibregl.GeoJSONSource;
-        if (!source) return;
-        source.setData({
-            type: 'FeatureCollection',
-            features: traceTargets.map(t => ({
-                type: 'Feature' as const,
-                geometry: { type: 'Point' as const, coordinates: t.center },
-                properties: { id: t.id, traceLabel: t.traceLabel, traceScore: t.traceScore },
-            })),
-        } as GeoJSON.FeatureCollection);
-    }, [traceTargets, mapReadyVersion]);
-
-    // ── Trace selected highlight filter ──────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const layer = map.getLayer('trace-targets-selected');
-        if (!layer) return;
-        map.setFilter('trace-targets-selected', ['==', ['get', 'id'], selectedTraceId ?? '']);
-    }, [selectedTraceId, mapReadyVersion]);
-
-    // ── Cluster link lines ────────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const source = map.getSource('cluster-links') as maplibregl.GeoJSONSource;
-        if (!source) return;
-        const validFeatures = detectedFeatures.filter(f => !f.isRouteArtefactRisk);
-        const idToCenter = new Map(validFeatures.map(f => [f.id, f.center]));
-        const seen = new Set<string>();
-        const features: GeoJSON.Feature[] = [];
-        for (const f of validFeatures) {
-            if (!f.linkedClusterIds?.length) continue;
-            for (const linkedId of f.linkedClusterIds) {
-                const key = [f.id, linkedId].sort().join('|');
-                if (seen.has(key)) continue;
-                seen.add(key);
-                const target = idToCenter.get(linkedId);
-                if (!target) continue;
-                features.push({
-                    type: 'Feature',
-                    geometry: { type: 'LineString', coordinates: [f.center, target] },
-                    properties: {},
-                } as GeoJSON.Feature);
-            }
-        }
-        source.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
-    }, [detectedFeatures, mapReadyVersion]);
-
-    // ── PAS finds source ──────────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const coordGroups: Record<string, number> = {};
-        const pasGeoJSON: GeoJSON.FeatureCollection = {
-            type: 'FeatureCollection',
-            features: pasFinds.map(f => {
-                const key = `${f.lat.toFixed(4)},${f.lon.toFixed(4)}`;
-                const count = coordGroups[key] || 0;
-                coordGroups[key] = count + 1;
-                return {
-                    type: 'Feature' as const,
-                    geometry: { type: 'Point' as const, coordinates: [f.lon + count * 0.0001, f.lat + count * 0.0001] },
-                    properties: { ...f },
-                };
-            }),
-        };
-        let canceled = false;
-        const updateSource = () => {
-            if (canceled) return;
-            const source = mapRef.current?.getSource('pas-finds') as maplibregl.GeoJSONSource;
-            if (source) { source.setData(pasGeoJSON); }
-            else if (!mapRef.current?.loaded()) { setTimeout(updateSource, 500); }
-        };
-        updateSource();
-        return () => { canceled = true; };
-    }, [pasFinds]);
-
-    // ── PAS density hexagons ──────────────────────────────────────────────────
-    // Loaded once after the map is ready; the index is cached at module level
-    // so subsequent renders (e.g. visibility toggle) don't re-fetch.
-    useEffect(() => {
-        if (!mapReadyVersion) return;
-        let canceled = false;
-        getPASDensityGeoJSON().then(geojson => {
-            if (canceled) return;
-            const source = mapRef.current?.getSource('pas-density') as maplibregl.GeoJSONSource;
-            if (source) source.setData(geojson);
-        }).catch(error => {
-            reportNonFatal('field-guide-map', 'PAS density layer load failed', error);
-        });
-        return () => { canceled = true; };
-    }, [mapReadyVersion]);
-
-    // ── Historic routes → route lines, corridors, crossings ──────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const doUpdate = () => {
-            const routeSrc = map.getSource('historic-routes') as maplibregl.GeoJSONSource;
-            if (routeSrc) {
-                routeSrc.setData({
-                    type: 'FeatureCollection',
-                    features: historicRoutes.map(r => ({
-                        type: 'Feature' as const,
-                        geometry: { type: 'LineString' as const, coordinates: r.geometry },
-                        properties: { type: r.type, id: r.id, ...(r.name ? { name: r.name } : {}) },
-                    })),
-                });
-            }
-            if (historicRoutes.length === 0) {
-                const cSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
-                if (cSrc) cSrc.setData({ type: 'FeatureCollection', features: [] });
-                const xSrc = map.getSource('crossings') as maplibregl.GeoJSONSource;
-                if (xSrc) xSrc.setData({ type: 'FeatureCollection', features: [] });
-                return;
-            }
-
-            const corridorFeatures: GeoJSON.Feature[] = [];
-            for (const r of historicRoutes) {
-                try {
-                    const line = turf.lineString(r.geometry);
-                    const bufferKm = r.type === 'roman_road' ? 0.3 : 0.15;
-                    const color    = r.type === 'roman_road' ? '#3b82f6' : '#93c5fd';
-                    const buffered = turf.buffer(line, bufferKm, { units: 'kilometers' });
-                    if (buffered) { buffered.properties = { routeId: r.id, type: r.type, name: r.name, color }; corridorFeatures.push(buffered as GeoJSON.Feature); }
-                } catch (error) {
-                    reportNonFatal('field-guide-map', 'Malformed route corridor skipped', error);
-                }
-            }
-            const corridorSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
-            if (corridorSrc) corridorSrc.setData({ type: 'FeatureCollection', features: corridorFeatures });
-
-            const crossingFeatures: GeoJSON.Feature[] = [];
-            const seen = new Set<string>();
-            for (let i = 0; i < historicRoutes.length; i++) {
-                for (let j = i + 1; j < historicRoutes.length; j++) {
-                    // Skip adjacent segments of the same Itiner-e road — shared endpoints
-                    // are segment joins, not genuine route crossings.
-                    if (historicRoutes[i].source === 'itinere' && historicRoutes[j].source === 'itinere' &&
-                        historicRoutes[i].name && historicRoutes[i].name === historicRoutes[j].name) continue;
-                    try {
-                        const a = turf.lineString(historicRoutes[i].geometry);
-                        const b = turf.lineString(historicRoutes[j].geometry);
-                        const intersects = turf.lineIntersect(a, b);
-                        for (const pt of intersects.features) {
-                            const key = pt.geometry.coordinates.map(c => c.toFixed(5)).join(',');
-                            if (seen.has(key)) continue;
-                            seen.add(key);
-                            crossingFeatures.push({
-                                ...pt,
-                                properties: {
-                                    typeA: historicRoutes[i].type, typeB: historicRoutes[j].type,
-                                    nameA: historicRoutes[i].name, nameB: historicRoutes[j].name,
-                                    label: `${historicRoutes[i].type === 'roman_road' ? 'Roman road' : 'Trackway'} × ${historicRoutes[j].type === 'roman_road' ? 'Roman road' : 'Trackway'}`,
-                                },
-                            });
-                        }
-                    } catch (error) {
-                        reportNonFatal('field-guide-map', 'Malformed route crossing skipped', error);
-                    }
-                }
-            }
-            const crossingSrc = map.getSource('crossings') as maplibregl.GeoJSONSource;
-            if (crossingSrc) crossingSrc.setData({ type: 'FeatureCollection', features: crossingFeatures });
-            if (crossingFeatures.length > 0) {
-                callbacksRef.current.onCrossingsLog(`CROSSINGS: ${crossingFeatures.length} route intersection${crossingFeatures.length !== 1 ? 's' : ''} detected — high-value targets.`);
-            }
-        };
-        doUpdate();
-    }, [historicRoutes, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Landscape context layer ─────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const doUpdate = () => {
-            const src = map.getSource('landscape-context') as maplibregl.GeoJSONSource | undefined;
-            if (!src) return;
-
-            const features: GeoJSON.Feature[] = [];
-
-            for (const r of historicRoutes) {
-                try {
-                    const line = turf.lineString(r.geometry);
-                    const buffered = turf.buffer(line, r.type === 'roman_road' ? 0.55 : 0.35, { units: 'kilometers' });
-                    if (buffered) {
-                        buffered.properties = {
-                            kind: 'route_context',
-                            label: routeLabel(
-                                r.type,
-                                r.name,
-                                r.type === 'roman_road' ? 'Historic route corridor' : 'Historic movement corridor',
-                            ),
-                            routeId: r.id,
-                            type: r.type,
-                            name: r.name,
-                            color: '#60a5fa',
-                        };
-                        features.push(buffered as GeoJSON.Feature);
-                    }
-                } catch (error) {
-                    reportNonFatal('field-guide-map', 'Malformed route geometry skipped', error);
-                }
-            }
-
-            // PAS density blob removed — it overlapped route corridors and
-            // produced a misleading "Historic record density" label on click.
-
-            src.setData({ type: 'FeatureCollection', features } as GeoJSON.FeatureCollection);
-        };
-        if (map.getSource('landscape-context')) doUpdate();
-        else map.once('style.load', doUpdate);
-    }, [historicRoutes, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
-
     // ── Config-driven layer visibility ────────────────────────────────────────
     useEffect(() => {
         const map = mapRef.current;
@@ -575,6 +234,27 @@ export function useFieldGuideMap({
             map.setPaintProperty('overlay-os1880', 'raster-opacity', historicLayerOpacity.os1880);
         }
     }, [historicLayerToggles, historicLayerOpacity, mapReadyVersion]);
+
+    useFieldGuideScanLayers({
+        mapRef,
+        mapReadyVersion,
+        hotspots,
+        selectedHotspotId,
+        detectedFeatures,
+        selectedTargetId,
+        traceTargets,
+        selectedTraceId,
+        primaryTargetId,
+        targetLabelMarkersRef,
+    });
+
+    useFieldGuideHistoricLayers({
+        mapRef,
+        mapReadyVersion,
+        pasFinds,
+        historicRoutes,
+        callbacksRef,
+    });
 
     useFieldGuideUserLayers({
         mapRef,

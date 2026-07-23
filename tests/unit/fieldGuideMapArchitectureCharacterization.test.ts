@@ -23,7 +23,7 @@ describe('FieldGuide map architecture characterization', () => {
       readFile(INTERACTIONS, 'utf8'),
     ]);
 
-    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(614);
+    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(294);
     expect(registry.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(interactions.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(occurrences(hook, /map\.addSource\(/g)).toBe(0);
