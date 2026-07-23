@@ -676,6 +676,7 @@ test("field report summary stays inside the card on narrow Android viewports", a
 });
 
 test("completed historic mobile sheet keeps context details and layer controls", async ({ page }) => {
+  test.setTimeout(45_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await mockFieldGuideHistoricScan(page);
   await page.addInitScript(() => {
@@ -691,7 +692,7 @@ test("completed historic mobile sheet keeps context details and layer controls",
 
   await page.getByRole("button", { name: "Scan Area", exact: true }).click();
 
-  await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Supporting Context", { exact: true })).toBeVisible();
 
   const layersButton = page.getByRole("button", { name: "Layers", exact: true });

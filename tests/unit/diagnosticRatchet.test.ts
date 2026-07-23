@@ -78,15 +78,18 @@ describe("silent diagnostic handler ratchet", () => {
     expect(inventory.promiseCatches).toEqual([]);
   });
 
-  it("records non-fatal fallback failures without changing caller control flow", () => {
+  it("records and deduplicates non-fatal failures without changing caller control flow", () => {
     const warn = vi.spyOn(diagLog, "warn").mockResolvedValue();
     const error = new Error("offline");
 
+    expect(reportNonFatal("cache", "Cache read failed; using network", error)).toBeUndefined();
     expect(reportNonFatal("cache", "Cache read failed; using network", error)).toBeUndefined();
     expect(warn).toHaveBeenCalledWith(
       "cache",
       "Cache read failed; using network",
       "Error: offline",
     );
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });

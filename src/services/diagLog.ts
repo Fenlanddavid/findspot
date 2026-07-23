@@ -11,6 +11,9 @@ import { db } from '../db';
 import type { DiagLogLevel } from '../db';
 
 const RING_BUFFER_CAP = 2000;
+const NON_FATAL_DEDUPE_MS = 60_000;
+const NON_FATAL_DEDUPE_CAP = 200;
+const recentNonFatalReports = new Map<string, number>();
 
 async function writeLog(
   level: DiagLogLevel,
@@ -47,6 +50,18 @@ export const diagLog = {
 };
 
 export function reportNonFatal(scope: string, message: string, error: unknown): void {
+  const now = Date.now();
+  const key = `${scope}\u0000${message}`;
+  const lastReportedAt = recentNonFatalReports.get(key);
+  if (lastReportedAt !== undefined && now - lastReportedAt < NON_FATAL_DEDUPE_MS) return;
+
+  recentNonFatalReports.delete(key);
+  recentNonFatalReports.set(key, now);
+  if (recentNonFatalReports.size > NON_FATAL_DEDUPE_CAP) {
+    const oldestKey = recentNonFatalReports.keys().next().value;
+    if (oldestKey !== undefined) recentNonFatalReports.delete(oldestKey);
+  }
+
   void diagLog.warn(scope, message, String(error));
 }
 

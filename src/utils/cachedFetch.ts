@@ -16,9 +16,8 @@
 //
 // `caches` is available in Window and in dedicated Web Workers in all modern
 // browsers (Chrome 43+, Firefox 44+, Safari 16+). The terrain worker can
-// use this directly.
-
-import { reportNonFatal } from '../services/diagLog';
+// use this directly. Keep its fallback diagnostics console-based so importing
+// this utility in a worker never opens the app's Dexie database.
 
 /**
  * Fetch a resource, serving from the named Cache Storage entry if available.
@@ -39,7 +38,7 @@ export async function cachedFetch(
             const cached = await cache.match(url);
             if (cached) return cached;
         } catch (error) {
-            reportNonFatal('cache', 'Named cache read failed; using network', error);
+            console.warn('[cache] Named cache read failed; using network', error);
         }
     }
     return fetch(url, opts);
@@ -70,7 +69,7 @@ export async function cachedFetchAny(
             const cached = await caches.match(url);
             if (cached) return cached;
         } catch (error) {
-            reportNonFatal('cache', 'Cache read failed; using network', error);
+            console.warn('[cache] Cache read failed; using network', error);
         }
     }
     if (options?.cacheOnly) {
