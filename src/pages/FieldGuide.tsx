@@ -25,9 +25,6 @@ import { usePotentialScore } from '../hooks/usePotentialScore';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { LogEntry, LogSource, LogLevel, makeLog } from '../utils/scanLogger';
 import { updateQuestionsAfterScan } from '../outstandingQuestions/updateAfterScan';
-import { positionMapForPermissionScan } from '../outstandingQuestions/permissionScanTarget';
-import { updatePermissionIntelligenceQuestions } from '../outstandingQuestions/protectionScan';
-import { historicQuestionRuleScope } from '../outstandingQuestions/rules';
 import type { RuleId } from '../outstandingQuestions/types';
 import { diagLog, reportNonFatal } from '../services/diagLog';
 import {
@@ -51,10 +48,8 @@ import { recordHotspotPredictions } from '../services/hotspotPredictionService';
 import { searchLocations } from '../services/geocode';
 import { safeParseFieldGuideScanCache } from '../services/persistenceValidation';
 import { useDurableSetting } from '../services/clientStorage';
-import {
-    discardFieldGuideScanCache,
-    markPermissionQuestionsEvaluated,
-} from '../services/fieldGuideMutations';
+import { discardFieldGuideScanCache } from '../services/fieldGuideMutations';
+import { runFieldGuideScan } from '../services/fieldguide/scanOrchestrator';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -1167,158 +1162,74 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
     // ─── Main combined scan ───────────────────────────────────────────────────
 
     const executeScan = async (requestedQuestionPermissionId?: string) => {
-        if (!mapRef.current || analyzing || isTerrainScanning || isHistoricScanning) return;
+        const run = await runFieldGuideScan({
+            map: mapRef.current,
+            isBusy: analyzing || isTerrainScanning || isHistoricScanning,
+            permissions,
+            requestedPermissionId: requestedQuestionPermissionId,
+            runTerrainScan: () => runTerrainScan({ mapRef, permissions, fields, targetPeriod }),
+            runHistoricPhase,
+            onScanStart: () => {
+                setScanCount(prev => prev + 1);
+                clearScan();
+                dispatch({ type: 'SCAN_START' });
+                setHistoricScanCompleted(false);
+                addLog('> SCAN: Reading terrain, targets and historic landscape context.', 'terrain');
+            },
+            onTerrainResult: result => {
+                applyNhleToMap(result.nhleData);
+                applyAimToMap(result.aimData);
+                nhleDataRef.current   = result.nhleData;
+                aimDataRef.current    = result.aimData;
+                modernWaysRef.current = result.modernWays ?? [];
 
-        let requestedPermission: (typeof permissions)[number] | undefined;
-        if (requestedQuestionPermissionId) {
-            requestedPermission = permissions.find(permission => permission.id === requestedQuestionPermissionId);
-            if (!requestedPermission || !positionMapForPermissionScan(mapRef.current, requestedPermission)) {
-                void diagLog.error(
-                    'outstanding_questions',
-                    'Permission question scan could not be positioned',
-                    `Permission ${requestedQuestionPermissionId} has no usable scan location`,
-                );
-                return;
-            }
-        }
+                setSourceAvailability(result.sourceAvailability ?? null);
+                setScanFromCache(result.fromCache);
+                setScanNoSignal(result.noSignal ?? false);
+                setScheduledMonumentCheckFailed(result.nhleData.available === false);
+                setScheduledMonumentUnavailableReason(result.nhleData.unavailableReason ?? null);
+                setRawClusters(result.rawClusters ?? []);
 
-        // Core permission intelligence has a small, permission-wide data path.
-        // Start it before the heavier terrain scan so terrain availability cannot
-        // block scheduled monuments, Roman roads, PAS context or local coverage.
-        const permissionIntelligencePromise = requestedPermission
-            ? updatePermissionIntelligenceQuestions(requestedPermission).catch(error => {
-                void diagLog.error(
-                    'outstanding_questions',
-                    'Permission intelligence question update failed',
-                    error instanceof Error ? error.message : String(error),
-                );
-                return false;
-            })
-            : Promise.resolve(false);
+                dispatch({
+                    type: 'SCAN_SUCCESS',
+                    features:       result.detectedFeatures,
+                    hotspots:       result.hotspots,
+                    monumentPoints: result.monumentPoints,
+                    routes:         result.routes,
+                    heritageCount:  result.heritageCount,
+                });
 
-        setScanCount(prev => {
-            const next = prev + 1;
-            return next;
-        });
-        clearScan();
-        dispatch({ type: 'SCAN_START' });
-        setHistoricScanCompleted(false);
-        addLog('> SCAN: Reading terrain, targets and historic landscape context.', 'terrain');
-
-        const result = await runTerrainScan({ mapRef, permissions, fields, targetPeriod });
-
-        if (!result) {
-            await permissionIntelligencePromise;
-            dispatch({ type: 'SCAN_FAIL' });
-            if (requestedQuestionPermissionId) {
-                navigate(`/permission/${requestedQuestionPermissionId}`, { replace: true });
-            }
-            return;
-        }
-
-        // Push NHLE and AIM data to map sources
-        applyNhleToMap(result.nhleData);
-        applyAimToMap(result.aimData);
-        nhleDataRef.current   = result.nhleData;
-        aimDataRef.current    = result.aimData;
-        modernWaysRef.current = result.modernWays ?? [];
-
-        setSourceAvailability(result.sourceAvailability ?? null);
-        setScanFromCache(result.fromCache);
-        setScanNoSignal(result.noSignal ?? false);
-        setScheduledMonumentCheckFailed(result.nhleData.available === false);
-        setScheduledMonumentUnavailableReason(result.nhleData.unavailableReason ?? null);
-        setRawClusters(result.rawClusters ?? []);
-
-        dispatch({
-            type: 'SCAN_SUCCESS',
-            features:       result.detectedFeatures,
-            hotspots:       result.hotspots,
-            monumentPoints: result.monumentPoints,
-            routes:         result.routes,
-            heritageCount:  result.heritageCount,
-        });
-
-        // Highlight the top hotspot without moving the map away from the user's chosen view.
-        if (!hasScanned && result.hotspots.length > 0) {
-            setShowSuggestion(true);
-            setSelectedHotspotId(result.hotspots[0].id);
-        }
-
-        // If there are no hotspots, jump straight to the Targets tab so the list
-        // isn't hidden behind an empty Hotspots panel.
-        if (result.hotspots.length === 0) {
-            setMobileSheetMode('targets');
-        }
-
-        const scanCenter = result.scanStartCenter;
-        terrainScanCenterRef.current = scanCenter;
-        terrainScanBoundsRef.current = result.scanStartBounds;
-        terrainAnalysisBoundsRef.current = result.analysisBounds;
-        terrainHistoricRoutesAvailableRef.current = result.historicRoutesAvailable;
-        questionTerrainAvailabilityRef.current = result.questionTerrainAvailability;
-
-        // Fire geology context lookup concurrently — non-blocking, updates state when ready
-        runGeologyContextPhase(scanCenter);
-
-        // Auto-trigger historic phase — passes ScanContext to skip NHLE/AIM re-fetch
-        const context: ScanContext = {
-            terrainClusters: result.terrainClusters,
-            monumentPoints:  result.monumentPoints,
-            routes:          result.routes,
-            nhleData:        result.nhleData,
-            aimData:         result.aimData,
-            scanCenter,
-            analysisBounds:  result.analysisBounds,
-            questionTerrainAvailability: result.questionTerrainAvailability,
-            historicRoutesAvailable: result.historicRoutesAvailable,
-        };
-        setHistoricMode(true);
-        setIntelDetailsOpen(false);
-        setIntelLayersOpen(false);
-
-        // The permission-wide pass started alongside terrain. Resolve its
-        // ownership before the historic pass writes, so the two transactions
-        // never update the same rule family. If it failed, historic keeps the
-        // full rule set as a fallback.
-        const permissionIntelligenceUpdated = await permissionIntelligencePromise;
-        const historicQuestionRuleIds = historicQuestionRuleScope(
-            !!requestedQuestionPermissionId,
-            permissionIntelligenceUpdated,
-        );
-
-        addLog('> Terrain result ready — historic landscape context continues in the background.', 'terrain');
-        void runHistoricPhase(context, requestedQuestionPermissionId, historicQuestionRuleIds).then(async questionsUpdated => {
-            // Even when historic sources are unavailable or no rule fires, a
-            // successful terrain scan from the permission card must stop the UI
-            // presenting this as an unscanned permission.
-            if (requestedQuestionPermissionId && !questionsUpdated) {
-                try {
-                    await markPermissionQuestionsEvaluated(
-                        requestedQuestionPermissionId,
-                        new Date().toISOString(),
-                    );
-                } catch (error) {
-                    void diagLog.error(
-                        'outstanding_questions',
-                        'Could not record permission question scan',
-                        error instanceof Error ? error.message : String(error),
-                    );
+                if (!hasScanned && result.hotspots.length > 0) {
+                    setShowSuggestion(true);
+                    setSelectedHotspotId(result.hotspots[0].id);
                 }
-            }
-            clearMapItemSelections();
-            setSelectedHotspotId(null);
-            persistSheetExpanded(true);
-            if (requestedQuestionPermissionId) {
-                navigate(`/permission/${requestedQuestionPermissionId}`, { replace: true });
-            }
-        }).catch(error => {
-            void diagLog.error(
-                'outstanding_questions',
-                'Permission question scan completion failed',
-                error instanceof Error ? error.message : String(error),
-            );
+                if (result.hotspots.length === 0) setMobileSheetMode('targets');
+
+                terrainScanCenterRef.current = result.scanStartCenter;
+                terrainScanBoundsRef.current = result.scanStartBounds;
+                terrainAnalysisBoundsRef.current = result.analysisBounds;
+                terrainHistoricRoutesAvailableRef.current = result.historicRoutesAvailable;
+                questionTerrainAvailabilityRef.current = result.questionTerrainAvailability;
+                runGeologyContextPhase(result.scanStartCenter);
+
+                setHistoricMode(true);
+                setIntelDetailsOpen(false);
+                setIntelLayersOpen(false);
+            },
+            onHistoricStart: () => {
+                addLog('> Terrain result ready — historic landscape context continues in the background.', 'terrain');
+            },
+            onScanFailure: () => dispatch({ type: 'SCAN_FAIL' }),
+            onScanComplete: () => {
+                clearMapItemSelections();
+                setSelectedHotspotId(null);
+                persistSheetExpanded(true);
+            },
+            onNavigateToPermission: permissionId => {
+                navigate(`/permission/${permissionId}`, { replace: true });
+            },
         });
+        if (run.status === 'historic_started') void run.completion;
     };
 
     // Permission-page Questions CTA: wait for the map and permission data, then
