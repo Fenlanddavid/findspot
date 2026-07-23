@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
-import { Find, SavedPoint, db } from '../db';
-import { deletePack } from '../services/offlinePack';
+import { Find, SavedPoint } from '../db';
 import { DevAnnotation } from '../utils/devAnnotation';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
-import { removeSavedPoint } from '../services/fieldGuideMutations';
 import { reportNonFatal } from '../services/diagLog';
+import { useFieldGuideUserLayers } from './useFieldGuideUserLayers';
+import { useSavedPointMarkers } from './useSavedPointMarkers';
 import {
     createFieldGuideMapStyle,
     ensureFieldGuideMapProtocolsRegistered,
@@ -55,53 +55,6 @@ const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) 
     { id: 'hotspots-outline',                visibleWhen: () => true },
     { id: 'hotspots-fill',                   visibleWhen: () => true },
 ];
-
-function getPolygonCenter(boundary: any): [number, number] | null {
-    const ring = boundary?.coordinates?.[0];
-    if (!Array.isArray(ring) || ring.length === 0) return null;
-    try {
-        const coords = turf.centroid(boundary).geometry.coordinates;
-        return [coords[0], coords[1]];
-    } catch {
-        return null;
-    }
-}
-
-function makeFieldLabelElement(label: string) {
-    const el = document.createElement('div');
-    el.textContent = label;
-    el.style.background = 'rgba(13, 148, 136, 0.9)';
-    el.style.border = '1px solid rgba(94, 234, 212, 0.7)';
-    el.style.borderRadius = '999px';
-    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
-    el.style.color = '#ccfbf1';
-    el.style.font = "800 10px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    el.style.letterSpacing = '0.04em';
-    el.style.maxWidth = '9rem';
-    el.style.overflow = 'hidden';
-    el.style.padding = '0.2rem 0.45rem';
-    el.style.pointerEvents = 'none';
-    el.style.textOverflow = 'ellipsis';
-    el.style.textTransform = 'uppercase';
-    el.style.whiteSpace = 'nowrap';
-    return el;
-}
-
-function makeAnnotationLabelElement(index: number) {
-    const el = document.createElement('div');
-    el.textContent = String(index);
-    el.style.background = 'rgba(17, 24, 39, 0.92)';
-    el.style.border = '1px solid rgba(249, 115, 22, 0.85)';
-    el.style.borderRadius = '999px';
-    el.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.35)';
-    el.style.color = '#fb923c';
-    el.style.font = "800 9px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-    el.style.minWidth = '1.1rem';
-    el.style.padding = '0.05rem 0.25rem';
-    el.style.pointerEvents = 'none';
-    el.style.textAlign = 'center';
-    return el;
-}
 
 function makeTargetLabelElement(label: string, primary: boolean) {
     const el = document.createElement('div');
@@ -623,243 +576,26 @@ export function useFieldGuideMap({
         }
     }, [historicLayerToggles, historicLayerOpacity, mapReadyVersion]);
 
-    // ── Field boundaries data ─────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        let canceled = false;
-        const doUpdate = () => {
-            if (canceled) return;
-            const src = map.getSource('permission-fields') as maplibregl.GeoJSONSource | undefined;
-            if (!src) return;
-            const visible = showFields !== false
-                ? fieldBoundaries.filter(f => {
-                    if (!f.boundary) return false;
-                    if (showFields === 'all') return true;
-                    if (typeof showFields === 'string' && showFields.startsWith('field:')) return f.id === showFields.slice(6);
-                    return f.permissionId === showFields;
-                })
-                : [];
-            src.setData({
-                type: 'FeatureCollection',
-                features: visible.map(f => ({ type: 'Feature', geometry: f.boundary, properties: { id: f.id, name: f.name } }))
-            } as any);
+    useFieldGuideUserLayers({
+        mapRef,
+        mapReadyVersion,
+        fieldBoundaries,
+        showFields,
+        fieldLabelMarkersRef,
+        userFinds,
+        showUserFinds: historicLayerVisibility.userFinds,
+        annotationMode,
+        devAnnotations,
+        devAnnotationMarkersRef,
+    });
 
-            fieldLabelMarkersRef.current.forEach(marker => marker.remove());
-            fieldLabelMarkersRef.current = [];
-            visible.forEach(field => {
-                const center = getPolygonCenter(field.boundary);
-                if (!center) return;
-                const marker = new maplibregl.Marker({ element: makeFieldLabelElement(field.name), anchor: 'center' })
-                    .setLngLat(center)
-                    .addTo(map);
-                fieldLabelMarkersRef.current.push(marker);
-            });
-        };
-        if (map.getSource('permission-fields')) doUpdate();
-        else map.once('style.load', doUpdate);
-        return () => { canceled = true; };
-    }, [fieldBoundaries, showFields]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Field boundaries visibility ───────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        const vis = showFields !== false ? 'visible' : 'none';
-        ['permission-fields-fill', 'permission-fields-outline'].forEach(id => {
-            if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', vis);
-        });
-    }, [showFields]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── User finds data ───────────────────────────────────────────────────────
-    useEffect(() => {
-        const geoJSON: GeoJSON.FeatureCollection = {
-            type: 'FeatureCollection',
-            features: userFinds
-                .filter(f => f.lat !== null && f.lon !== null)
-                .map(f => ({
-                    type: 'Feature' as const,
-                    geometry: { type: 'Point' as const, coordinates: [f.lon!, f.lat!] },
-                    properties: { id: f.id, objectType: f.objectType, period: f.period },
-                })),
-        };
-        let canceled = false;
-        const updateSource = () => {
-            if (canceled) return;
-            const src = mapRef.current?.getSource('user-finds') as maplibregl.GeoJSONSource | undefined;
-            if (src) { src.setData(geoJSON); }
-            else if (!mapRef.current?.loaded()) { setTimeout(updateSource, 500); }
-        };
-        updateSource();
-        return () => { canceled = true; };
-    }, [userFinds]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── User finds visibility ─────────────────────────────────────────────────
-    useEffect(() => {
-        let canceled = false;
-        const vis = historicLayerVisibility.userFinds ? 'visible' : 'none';
-        const applyVisibility = () => {
-            if (canceled) return;
-            const map = mapRef.current;
-            if (!map) return;
-            const hasCircle = !!map.getLayer('user-finds-circles');
-            const hasHitbox = !!map.getLayer('user-finds-hitbox');
-            if (!hasCircle || !hasHitbox) {
-                setTimeout(applyVisibility, 250);
-                return;
-            }
-            map.setLayoutProperty('user-finds-circles', 'visibility', vis);
-            map.setLayoutProperty('user-finds-hitbox',  'visibility', vis);
-        };
-        applyVisibility();
-        return () => { canceled = true; };
-    }, [historicLayerVisibility.userFinds]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Annotation mode cursor ────────────────────────────────────────────────
-    useEffect(() => {
-        const canvas = mapRef.current?.getCanvas();
-        if (!canvas) return;
-        canvas.style.cursor = annotationMode ? 'crosshair' : '';
-    }, [annotationMode]);
-
-    // ── Dev annotation pins ───────────────────────────────────────────────────
-    useEffect(() => {
-        const map = mapRef.current;
-        if (!map) return;
-        let canceled = false;
-        const doUpdate = () => {
-            if (canceled) return;
-            const src = map.getSource('dev-annotations') as maplibregl.GeoJSONSource | undefined;
-            if (!src) return;
-            src.setData({
-                type: 'FeatureCollection',
-                features: devAnnotations.map((a, i) => ({
-                    type: 'Feature' as const,
-                    geometry: { type: 'Point' as const, coordinates: [a.lon, a.lat] },
-                    properties: { id: a.id, index: i + 1, annotationType: a.annotationType },
-                })),
-            } as GeoJSON.FeatureCollection);
-
-            devAnnotationMarkersRef.current.forEach(marker => marker.remove());
-            devAnnotationMarkersRef.current = [];
-            devAnnotations.forEach((annotation, index) => {
-                const marker = new maplibregl.Marker({ element: makeAnnotationLabelElement(index + 1), anchor: 'bottom', offset: [0, -14] })
-                    .setLngLat([annotation.lon, annotation.lat])
-                    .addTo(map);
-                devAnnotationMarkersRef.current.push(marker);
-            });
-        };
-        if (map.getSource('dev-annotations')) doUpdate();
-        else map.once('style.load', doUpdate);
-        return () => { canceled = true; };
-    }, [devAnnotations, mapReadyVersion]);
-
-    // ── Saved point markers ───────────────────────────────────────────────────
-    useEffect(() => {
-        savedPointMarkersRef.current.forEach(m => m.remove());
-        savedPointMarkersRef.current = [];
-        const map = mapRef.current;
-        if (!map || !showSavedPoints || savedPoints.length === 0) return;
-
-        const doAdd = () => {
-            savedPointMarkersRef.current.forEach(m => m.remove());
-            savedPointMarkersRef.current = [];
-            for (const sp of savedPoints) {
-                // Marker element — bookmark icon, all static SVG (no user data)
-                const el = document.createElement('div');
-                el.style.cursor = 'pointer';
-                el.style.lineHeight = '0';
-                el.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="#10b981" stroke="#34d399" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
-
-                // Relative date (computed from ISO string — not user input)
-                const diff = Date.now() - new Date(sp.createdAt).getTime();
-                const days = Math.floor(diff / 86400000);
-                const dateStr = days === 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? `${days} days ago` : new Date(sp.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-
-                // Build popup with DOM nodes — never inject user data via innerHTML
-                const popupEl = document.createElement('div');
-                popupEl.style.cssText = 'background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';
-
-                const labelEl = document.createElement('p');
-                labelEl.style.cssText = 'font-size:13px;font-weight:900;color:#fff;margin:0 0 2px;line-height:1.2;';
-                labelEl.textContent = sp.label;
-                popupEl.appendChild(labelEl);
-
-                const dateEl = document.createElement('p');
-                dateEl.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.4);margin:0;';
-                dateEl.textContent = dateStr;
-                popupEl.appendChild(dateEl);
-
-                if (sp.scanSnapshot) {
-                    const snapEl = document.createElement('p');
-                    snapEl.style.cssText = 'font-size:9px;color:rgba(52,211,153,0.7);margin:2px 0 0;';
-                    snapEl.textContent = `${sp.scanSnapshot.hotspotCount} hotspot${sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · ${sp.scanSnapshot.topHotspotTitle}`;
-                    popupEl.appendChild(snapEl);
-                }
-
-                const btnRow = document.createElement('div');
-                btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
-
-                const flyBtn = document.createElement('button');
-                flyBtn.style.cssText = 'flex:1;padding:5px 8px;border-radius:8px;background:#059669;color:#fff;font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;border:none;cursor:pointer;';
-                flyBtn.textContent = 'Fly here';
-                flyBtn.addEventListener('click', () => {
-                    map.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom });
-                });
-
-                // Two-tap confirm — consistent with the sheet list delete behaviour
-                let deleteConfirmPending = false;
-                let deleteConfirmTimer: ReturnType<typeof setTimeout> | null = null;
-                const deleteBtn = document.createElement('button');
-                deleteBtn.style.cssText = 'padding:5px 8px;border-radius:8px;background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.35);font-size:9px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;';
-                deleteBtn.title = 'Delete';
-                deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-                deleteBtn.addEventListener('click', async () => {
-                    if (deleteConfirmPending) {
-                        if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
-                        await deletePack({ ownerType: 'savedPoint', ownerId: sp.id }).catch(error => {
-                            reportNonFatal('field-guide-map', 'Saved-point offline pack cleanup failed', error);
-                        });
-                        await removeSavedPoint(sp.id);
-                    } else {
-                        deleteConfirmPending = true;
-                        deleteBtn.style.background = 'rgba(239,68,68,0.15)';
-                        deleteBtn.style.color = '#f87171';
-                        deleteBtn.style.borderColor = 'rgba(239,68,68,0.4)';
-                        deleteBtn.title = 'Tap again to confirm';
-                        deleteConfirmTimer = setTimeout(() => {
-                            deleteConfirmPending = false;
-                            deleteBtn.style.background = 'rgba(255,255,255,0.06)';
-                            deleteBtn.style.color = 'rgba(255,255,255,0.35)';
-                            deleteBtn.style.borderColor = 'rgba(255,255,255,0.1)';
-                            deleteBtn.title = 'Delete';
-                        }, 3000);
-                    }
-                });
-
-                btnRow.appendChild(flyBtn);
-                btnRow.appendChild(deleteBtn);
-                popupEl.appendChild(btnRow);
-
-                const popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, offset: 12 })
-                    .setDOMContent(popupEl);
-
-                const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-                    .setLngLat([sp.lon, sp.lat])
-                    .setPopup(popup)
-                    .addTo(map);
-
-                el.addEventListener('click', () => {
-                    map.flyTo({ center: [sp.lon, sp.lat], zoom: sp.zoom });
-                    callbacksRef.current.onSavedPointClick();
-                });
-
-                savedPointMarkersRef.current.push(marker);
-            }
-        };
-
-        doAdd();
-    }, [savedPoints, showSavedPoints]); // eslint-disable-line react-hooks/exhaustive-deps
+    useSavedPointMarkers({
+        mapRef,
+        savedPoints,
+        showSavedPoints,
+        savedPointMarkersRef,
+        callbacksRef,
+    });
 
     // ── Exposed helpers ───────────────────────────────────────────────────────
 

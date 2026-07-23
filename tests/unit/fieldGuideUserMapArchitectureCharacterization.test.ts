@@ -2,27 +2,47 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 const MAP_HOOK = new URL('../../src/hooks/useFieldGuideMap.ts', import.meta.url);
+const USER_LAYERS_HOOK = new URL(
+  '../../src/hooks/useFieldGuideUserLayers.ts',
+  import.meta.url,
+);
+const SAVED_POINTS_HOOK = new URL(
+  '../../src/hooks/useSavedPointMarkers.ts',
+  import.meta.url,
+);
 
 describe('FieldGuide user-map architecture characterization', () => {
-  it('records the inline user-overlay lifecycle before extraction', async () => {
-    const source = await readFile(MAP_HOOK, 'utf8');
-    const userOverlaySection = source.slice(
-      source.indexOf('// ── Field boundaries data'),
-      source.indexOf('// ── Exposed helpers'),
-    );
+  it('ratchets user-owned overlays out of the parent map hook', async () => {
+    const [mapHook, userLayersHook, savedPointsHook] = await Promise.all([
+      readFile(MAP_HOOK, 'utf8'),
+      readFile(USER_LAYERS_HOOK, 'utf8'),
+      readFile(SAVED_POINTS_HOOK, 'utf8'),
+    ]);
 
-    expect(source.trimEnd().split(/\r?\n/)).toHaveLength(878);
-    expect(userOverlaySection.trimEnd().split(/\r?\n/)).toHaveLength(237);
-    expect(userOverlaySection.match(/useEffect\(/g)).toHaveLength(7);
+    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(614);
+    expect(userLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
+    expect(savedPointsHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
+    expect(userLayersHook.match(/useEffect\(/g)).toHaveLength(6);
+    expect(savedPointsHook.match(/useEffect\(/g)).toHaveLength(1);
+    expect(mapHook).toContain('useFieldGuideUserLayers({');
+    expect(mapHook).toContain('useSavedPointMarkers({');
+    expect(mapHook).not.toContain('makeFieldLabelElement');
+    expect(mapHook).not.toContain('makeAnnotationLabelElement');
+    expect(mapHook).not.toContain('deletePack');
+    expect(mapHook).not.toContain('removeSavedPoint');
   });
 
-  it('records safe labels and saved-point deletion behaviour', async () => {
-    const source = await readFile(MAP_HOOK, 'utf8');
+  it('keeps safe labels and saved-point deletion behaviour in bounded owners', async () => {
+    const [userLayersHook, savedPointsHook] = await Promise.all([
+      readFile(USER_LAYERS_HOOK, 'utf8'),
+      readFile(SAVED_POINTS_HOOK, 'utf8'),
+    ]);
 
-    expect(source).toContain('labelEl.textContent = sp.label');
-    expect(source).toContain('deleteConfirmPending = true');
-    expect(source).toContain("deletePack({ ownerType: 'savedPoint', ownerId: sp.id })");
-    expect(source).toContain('await removeSavedPoint(sp.id)');
-    expect(source).toContain('callbacksRef.current.onSavedPointClick()');
+    expect(userLayersHook).toContain('el.textContent = label');
+    expect(savedPointsHook).toContain('labelElement.textContent = savedPoint.label');
+    expect(savedPointsHook).toContain('deleteConfirmPending = true');
+    expect(savedPointsHook).toContain("ownerType: 'savedPoint'");
+    expect(savedPointsHook).toContain('await removeSavedPoint(savedPoint.id)');
+    expect(savedPointsHook).toContain('callbacksRef.current.onSavedPointClick()');
   });
 });
