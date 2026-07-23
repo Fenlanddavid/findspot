@@ -11,7 +11,11 @@
 
 import type { Cluster, ModernWay } from '../../pages/fieldGuideTypes';
 import type { TraceTarget, TraceType, TraceRejectionReason } from '../../pages/fieldGuideTypes';
-import { getDistance, getDistanceToLine } from '../../utils/fieldGuideAnalysis';
+import {
+    getDistance,
+    getDistanceToLine,
+    isRouteLikeWithoutModernWays,
+} from '../../utils/fieldGuideAnalysis';
 
 // ─── Gate mirrors (must exactly match FieldGuide.tsx) ────────────────────────
 
@@ -97,13 +101,7 @@ function isTraceRouteNoisy(c: Cluster, modernWays: ModernWay[]): boolean {
         // Do NOT apply the strong-evidence exemption used in the hotspot fallback —
         // terrain + hydrology in drained landscapes merely indicates a ditch, which
         // may run alongside a minor road rather than marking an archaeological feature.
-        const routeLikeType =
-            c.type.includes('Linear') ||
-            c.type.includes('Movement Signal') ||
-            c.type.includes('Corridor');
-        const elongatedLinear =
-            (c.metrics?.ratio ?? 0) > 3.5 && typeof c.bearing === 'number';
-        return routeLikeType || elongatedLinear;
+        return isRouteLikeWithoutModernWays(c);
     }
     // Fallback when assessment is absent but way data is available
     return isNearModernWayFallback(c, modernWays);

@@ -150,4 +150,21 @@ describe('route-unavailable target fallback', () => {
         expect(roadShaped.isRouteArtefactRisk).toBe(true);
         expect(roadShaped.suppressedBy).toContain('route_data_unavailable_fallback');
     });
+
+    it('retains non-elongated context signals when road data is unavailable', () => {
+        const compactSignal = cluster({
+            id: 'cached-compact-signal',
+            type: 'Ancient Watercourse Signal',
+            bearing: 90,
+            metrics: {
+                circularity: 0.72,
+                density: 0.62,
+                ratio: 1.8,
+                area: 420,
+            },
+        });
+
+        expect(applyRouteUnavailableFallback([compactSignal])).toBe(0);
+        expect(compactSignal.isRouteArtefactRisk).toBeUndefined();
+    });
 });

@@ -1062,18 +1062,23 @@ export function applyRouteAssessments(
 // The hasStrongIndependentEvidence exemption is intentionally NOT applied here:
 // in flat fenland / drained landscapes, terrain + hydrology just means "there's
 // a ditch" — it does not rule out a modern road embankment alongside it.
+export function isRouteLikeWithoutModernWays(c: Cluster): boolean {
+    const routeLikeType =
+        c.type.includes('Linear') ||
+        c.type.includes('Movement Signal') ||
+        c.type.includes('Corridor');
+    const elongatedLinear =
+        (c.metrics?.ratio ?? 0) > 3.5 &&
+        typeof c.bearing === 'number';
+    return routeLikeType || elongatedLinear;
+}
+
 export function applyRouteUnavailableFallback(clusters: Cluster[]): number {
     let hidden = 0;
 
     for (const c of clusters) {
         if ((c.isProtected && !c.monumentBufferM) || c.isRouteArtefactRisk) continue;
-
-        const routeLikeType =
-            c.type.includes('Linear') ||
-            c.type.includes('Movement Signal') ||
-            c.type.includes('Corridor');
-
-        if (!routeLikeType) continue;
+        if (!isRouteLikeWithoutModernWays(c)) continue;
 
         c.isRouteArtefactRisk = true;
         c.routeArtefactReason = 'Modern road data unavailable; linear signal hidden until route suppression can verify it';
