@@ -15,6 +15,7 @@ import {
   completeNotableFindRecord,
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
+import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
   workflowState: WorkflowState;
@@ -40,7 +41,9 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
     if (workflowState.lat != null && workflowState.lon != null) {
       getParishAndCounty(workflowState.lat, workflowState.lon)
         .then(({ county: c }) => setCounty(c))
-        .catch(() => {});
+        .catch(error => {
+          reportNonFatal('significant-find', 'Notable-find county lookup failed', error);
+        });
     }
     if (workflowState.significantFindId) {
       void saveSignificantFindProgress(workflowState.significantFindId, {});

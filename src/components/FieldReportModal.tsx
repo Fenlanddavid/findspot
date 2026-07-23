@@ -15,6 +15,7 @@ import {
 } from "../services/fieldReport";
 import { getSetting } from "../services/data";
 import { saveSessionKeyNotes } from "../services/sessionMutations";
+import { reportNonFatal } from "../services/diagLog";
 import {
   REPORT,
   ReportFooter,
@@ -80,6 +81,14 @@ function makeMarkerImage(num: number): { width: number; height: number; data: Ui
 
 // ─── Map capture ──────────────────────────────────────────────────────────────
 
+function removeReportMap(map: maplibregl.Map): void {
+  try {
+    map.remove();
+  } catch (error) {
+    reportNonFatal('field-report', 'Map cleanup failed', error);
+  }
+}
+
 function captureMap(
   container: HTMLDivElement,
   setup: (map: maplibregl.Map) => void
@@ -109,7 +118,7 @@ function captureMap(
     const timeout = setTimeout(() => {
       if (!settled) {
         settled = true;
-        try { map.remove(); } catch (_) {}
+        removeReportMap(map);
         reject(new Error("Map render timed out"));
       }
     }, 15000);
@@ -118,7 +127,7 @@ function captureMap(
       try {
         setup(map);
       } catch (e) {
-        if (!settled) { settled = true; clearTimeout(timeout); try { map.remove(); } catch (_) {} reject(e); }
+        if (!settled) { settled = true; clearTimeout(timeout); removeReportMap(map); reject(e); }
         return;
       }
 
@@ -137,13 +146,13 @@ function captureMap(
             const url = map.getCanvas().toDataURL("image/png");
             map.remove();
             resolve(url);
-          } catch (e) { try { map.remove(); } catch (_) {} reject(e); }
+          } catch (e) { removeReportMap(map); reject(e); }
         }, 500);
       });
     });
 
     map.on("error", (e) => {
-      if (!settled) { settled = true; clearTimeout(timeout); try { map.remove(); } catch (_) {} reject(e.error); }
+      if (!settled) { settled = true; clearTimeout(timeout); removeReportMap(map); reject(e.error); }
     });
   });
 }

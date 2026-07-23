@@ -31,6 +31,7 @@ import {
     refreshCachedModernWays,
     saveTerrainScanCache,
 } from '../services/fieldGuideMutations';
+import { reportNonFatal } from '../services/diagLog';
 
 /**
  * The formalised handoff from terrain scan to historic phase.
@@ -250,7 +251,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                 (Date.now() - stale.modernWaysFetchedAt) < MODERN_WAYS_TTL_MS) {
                 rescuedModernWays = stale.modernWays;
             }
-        } catch { /* non-fatal */ }
+        } catch (error) {
+            reportNonFatal('terrain-scan', 'Stale route cache recovery failed', error);
+        }
 
         const packMatch = await findPackMatchForBbox([scanWest, scanSouth, scanEast, scanNorth], zoom).catch(() => null);
         const offlinePackMeta = packMatch?.coverage.full ? packMatch.meta : null;
@@ -312,7 +315,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     const routeRaw = await Promise.race([routePromise, new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
                     osmRoutesAvailable = routeRaw !== null;
                     if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
-                } catch { /* routes unavailable */ }
+                } catch (error) {
+                    reportNonFatal('terrain-scan', 'Cached route refresh failed', error);
+                }
                 // Itiner-e Roman roads — static asset, always available; must be
                 // included here as it is in the fresh scan path, otherwise cached
                 // scans miss Roman road context and produce no corridor link lines.
@@ -348,7 +353,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                             if (modernWaysAvailable) {
                                 try {
                                     await refreshCachedModernWays(tileKey, cachedModernWays, Date.now());
-                                } catch { /* cache update failure is non-fatal */ }
+                                } catch (error) {
+                                    reportNonFatal('terrain-scan', 'Modern ways cache refresh failed', error);
+                                }
                             }
                         }
                     }
@@ -382,8 +389,8 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                     historicRoutesAvailable,
                 };
             }
-        } catch {
-            // Cache miss or error — proceed with full scan
+        } catch (error) {
+            reportNonFatal('terrain-scan', 'Terrain cache read failed', error);
         }
 
         // ── Fire remaining parallel requests for fresh scan ───────────────────
@@ -581,7 +588,9 @@ export function useTerrainScan({ onLog, onStatusChange }: UseTerrainScanOptions)
                         engineVersion: ENGINE_VERSION,
                         ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
                     }, expiredCutoff);
-                } catch { /* cache failure is non-fatal */ }
+                } catch (error) {
+                    reportNonFatal('terrain-scan', 'Terrain cache write failed', error);
+                }
             }
 
             onStatusChange('Building hotspot model...');

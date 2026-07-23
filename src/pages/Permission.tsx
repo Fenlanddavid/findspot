@@ -41,6 +41,7 @@ import {
   removeClubDaySharing,
   updatePermissionDetails,
 } from '../services/permissionMutations';
+import { reportNonFatal } from '../services/diagLog';
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
@@ -409,7 +410,9 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
+      await deletePack({ ownerType: 'permission', ownerId: id }).catch(error => {
+        reportNonFatal('permission', 'Offline pack cleanup failed', error);
+      });
       await deletePermissionCascade(id);
       nav("/");
     } catch (e: any) {
@@ -449,7 +452,9 @@ export default function PermissionPage(props: {
 
     setSaving(true);
     try {
-      await deletePack({ ownerType: 'permission', ownerId: id }).catch(() => {});
+      await deletePack({ ownerType: 'permission', ownerId: id }).catch(error => {
+        reportNonFatal('permission', 'Club-day offline pack cleanup failed', error);
+      });
       await deletePermissionCascade(id, { removeJoinRecord: true });
       nav("/");
     } catch (e: any) {

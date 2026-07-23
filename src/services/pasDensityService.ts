@@ -11,6 +11,7 @@
 
 import { latLngToCell, cellToBoundary } from 'h3-js';
 import { cachedFetchAny } from '../utils/cachedFetch';
+import { reportNonFatal } from './diagLog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,7 +70,9 @@ function getPASDensityIndex(): Promise<PASDensityIndex> {
  * requests (NHLE, AIM, Overpass) are also running.
  */
 export function prefetchPASDensity(): void {
-    getPASDensityIndex().catch(() => { /* silently ignore — getPASDensityNear handles retry */ });
+    getPASDensityIndex().catch(error => {
+        reportNonFatal('pas-density', 'Index prefetch failed', error);
+    });
 }
 
 export function pasPeriodEntries(cell: PASCellLookup): PASTopCount[] {
@@ -140,8 +143,8 @@ export async function getPASDensityGeoJSON(): Promise<GeoJSON.FeatureCollection>
                     types:   pasTypeEntries(cell).map(([label, count]) => count > 0 ? `${label} (${count})` : label).join(', '),
                 },
             });
-        } catch {
-            // Skip any cell with an invalid H3 index
+        } catch (error) {
+            reportNonFatal('pas-density', 'Invalid H3 cell skipped', error);
         }
     }
 

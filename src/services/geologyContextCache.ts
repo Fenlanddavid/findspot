@@ -6,6 +6,7 @@ import {
     GEOLOGY_SOURCE_VERSION,
 } from '../engines/geologyContext/geologyContextTypes';
 import { safeParseGeologyContextRecord } from './persistenceValidation';
+import { reportNonFatal } from './diagLog';
 
 export async function getCachedGeologyContext(tileKey: string): Promise<GeologyContext | null> {
     try {
@@ -38,8 +39,8 @@ export async function cacheGeologyContext(context: GeologyContext): Promise<void
             classifierVersion: context.classifierVersion,
             sourceVersion: context.sourceVersion,
         });
-    } catch {
-        // Cache write failure is non-fatal.
+    } catch (error) {
+        reportNonFatal('geology-cache', 'Context cache write failed', error);
     }
 }
 
@@ -55,7 +56,7 @@ export async function sweepStaleGeologyCache(): Promise<void> {
         if (orphans.length > 0) {
             await db.geologyContext.bulkDelete(orphans as string[]);
         }
-    } catch {
-        // Sweep failure is non-fatal.
+    } catch (error) {
+        reportNonFatal('geology-cache', 'Stale context cache sweep failed', error);
     }
 }

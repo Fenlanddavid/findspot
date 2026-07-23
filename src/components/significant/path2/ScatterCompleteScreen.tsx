@@ -13,6 +13,7 @@ import {
   createSignificantFindRecord,
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
+import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
   workflowState: WorkflowState;
@@ -97,7 +98,9 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
       if (reverseLat != null && reverseLon != null) {
         getParishAndCounty(reverseLat, reverseLon)
           .then(({ county: c }) => setCounty(c))
-          .catch(() => {});
+          .catch(error => {
+            reportNonFatal('significant-find', 'Scatter county lookup failed', error);
+          });
       }
       getSetting("detectorist", "").then(setCollectorName);
     }
@@ -142,7 +145,9 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch (error) {
+      reportNonFatal('significant-find', 'Scatter summary copy failed', error);
+    }
   }
 
   async function saveVoiceNote() {

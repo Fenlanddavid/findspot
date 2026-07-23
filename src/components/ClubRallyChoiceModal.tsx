@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Modal from "./Modal";
+import { reportNonFatal } from "../services/diagLog";
 
 type PermissionSummary = { id: string; name: string; type: string };
 
@@ -46,8 +47,8 @@ export function ClubRallyChoiceModal({
           }
         }
       }
-    } catch {
-      // fall through to error
+    } catch (error) {
+      reportNonFatal('club-day', 'Join link parsing failed', error);
     }
 
     if (!searchString) {

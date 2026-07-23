@@ -19,7 +19,7 @@ import {
   type BackupImportProgress,
   type BackupRecoveryReport,
 } from "../services/data";
-import { exportDiagLog } from "../services/diagLog";
+import { exportDiagLog, reportNonFatal } from "../services/diagLog";
 import {
   formatIntegrityAuditStatus,
   getLatestIntegrityAuditSummary,
@@ -277,7 +277,9 @@ export default function Settings() {
       setMediaPhotoCount(count);
       setMediaSizeBytes(bytes);
       setDamagedMediaCount(damaged);
-    }).catch(() => {});
+    }).catch(error => {
+      reportNonFatal('settings', 'Media storage estimate failed', error);
+    });
 
   }, []);
 

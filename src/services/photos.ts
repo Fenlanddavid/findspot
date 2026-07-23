@@ -1,3 +1,5 @@
+import { reportNonFatal } from './diagLog';
+
 const MAX_PX = 1600;
 const QUALITY = 0.85;
 
@@ -45,8 +47,8 @@ export async function fileToBlob(file: File): Promise<Blob> {
           QUALITY,
         );
       });
-    } catch {
-      // Fall through to legacy path
+    } catch (error) {
+      reportNonFatal('photos', 'Image bitmap compression failed; using fallback', error);
     }
   }
 

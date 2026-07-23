@@ -8,6 +8,7 @@ import { getSetting } from "../../../services/data";
 import { buildSecureFindEmail, buildMailtoLink } from "../../../utils/floEmail";
 import OrganiserInstructionCard from "../OrganiserInstructionCard";
 import { setSignificantFindStatus } from "../../../services/significantFindMutations";
+import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
   workflowState: WorkflowState;
@@ -32,7 +33,9 @@ export default function WhatNextScreen({ workflowState, onClose }: Props) {
     if (workflowState.lat != null && workflowState.lon != null) {
       getParishAndCounty(workflowState.lat, workflowState.lon)
         .then(({ county: c }) => setCounty(c))
-        .catch(() => {});
+        .catch(error => {
+          reportNonFatal('significant-find', 'County lookup failed', error);
+        });
     }
     getSetting("detectorist", "").then(setCollectorName);
   // eslint-disable-next-line react-hooks/exhaustive-deps

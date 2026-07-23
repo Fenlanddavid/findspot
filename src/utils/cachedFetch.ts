@@ -18,6 +18,8 @@
 // browsers (Chrome 43+, Firefox 44+, Safari 16+). The terrain worker can
 // use this directly.
 
+import { reportNonFatal } from '../services/diagLog';
+
 /**
  * Fetch a resource, serving from the named Cache Storage entry if available.
  * Falls through to network on a miss. Does not populate the cache on miss.
@@ -36,8 +38,8 @@ export async function cachedFetch(
             const cache = await caches.open(cacheName);
             const cached = await cache.match(url);
             if (cached) return cached;
-        } catch {
-            // Cache Storage unavailable or quota error — fall through to network
+        } catch (error) {
+            reportNonFatal('cache', 'Named cache read failed; using network', error);
         }
     }
     return fetch(url, opts);
@@ -67,8 +69,8 @@ export async function cachedFetchAny(
         try {
             const cached = await caches.match(url);
             if (cached) return cached;
-        } catch {
-            // caches not available or permission denied — fall through
+        } catch (error) {
+            reportNonFatal('cache', 'Cache read failed; using network', error);
         }
     }
     if (options?.cacheOnly) {

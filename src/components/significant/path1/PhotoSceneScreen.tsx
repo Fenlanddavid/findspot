@@ -6,6 +6,7 @@ import {
   addSignificantFindMedia,
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
+import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
   workflowState: WorkflowState;
@@ -98,8 +99,8 @@ export default function PhotoSceneScreen({ workflowState, updateState, onNext }:
           setCurrentSlotIdx(i => i + 1);
         }
       }, 800);
-    } catch {
-      // allow retry
+    } catch (error) {
+      reportNonFatal('significant-find', 'Scene photo save failed', error);
     } finally {
       setSaving(false);
     }

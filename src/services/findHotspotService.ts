@@ -3,6 +3,7 @@ import type { Find, FindHotspotSignal } from '../db';
 import type { Hotspot } from '../pages/fieldGuideTypes';
 import { getDistance } from '../utils/fieldGuideAnalysis';
 import { HOTSPOT_TITLES } from '../components/fieldGuide/FieldGuideContext';
+import { reportNonFatal } from './diagLog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -219,8 +220,8 @@ export async function recordFindHotspotSignals(
                 }
             }
         }
-    } catch {
-        // Non-blocking — swallow all errors
+    } catch (error) {
+        reportNonFatal('hotspot-signals', 'Find hotspot signal recording failed', error);
     }
 }
 

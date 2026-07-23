@@ -7,6 +7,7 @@ import { db, Find, GeoJSONPolygon, Media, Permission, Session, Track } from "../
 import { Modal } from "./Modal";
 import { toFarmerLabel, toFarmerDetail, summariseFinds } from "../services/fieldReport";
 import { getSetting } from "../services/data";
+import { reportNonFatal } from "../services/diagLog";
 import {
   REPORT,
   ReportFooter,
@@ -73,6 +74,14 @@ function makeMarkerImage(num: number): { width: number; height: number; data: Ui
 
 // ─── Map capture ─────────────────────────────────────────────────────────────
 
+function removeReportMap(map: maplibregl.Map): void {
+  try {
+    map.remove();
+  } catch (error) {
+    reportNonFatal('permission-report', 'Map cleanup failed', error);
+  }
+}
+
 function captureMap(
   container: HTMLDivElement,
   setup: (map: maplibregl.Map) => void
@@ -99,12 +108,12 @@ function captureMap(
     });
 
     const timeout = setTimeout(() => {
-      if (!settled) { settled = true; try { map.remove(); } catch (_) {} reject(new Error("Map render timed out")); }
+      if (!settled) { settled = true; removeReportMap(map); reject(new Error("Map render timed out")); }
     }, 15000);
 
     map.on("load", () => {
       try { setup(map); } catch (e) {
-        if (!settled) { settled = true; clearTimeout(timeout); try { map.remove(); } catch (_) {} reject(e); }
+        if (!settled) { settled = true; clearTimeout(timeout); removeReportMap(map); reject(e); }
         return;
       }
       let renderDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -115,13 +124,13 @@ function captureMap(
           settled = true;
           clearTimeout(timeout);
           try { const url = map.getCanvas().toDataURL("image/png"); map.remove(); resolve(url); }
-          catch (e) { try { map.remove(); } catch (_) {} reject(e); }
+          catch (e) { removeReportMap(map); reject(e); }
         }, 500);
       });
     });
 
     map.on("error", (e) => {
-      if (!settled) { settled = true; clearTimeout(timeout); try { map.remove(); } catch (_) {} reject(e.error); }
+      if (!settled) { settled = true; clearTimeout(timeout); removeReportMap(map); reject(e.error); }
     });
   });
 }

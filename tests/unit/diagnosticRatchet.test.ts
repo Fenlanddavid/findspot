@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import ts from "typescript";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { diagLog, reportNonFatal } from "../../src/services/diagLog";
 
 const SOURCE_DIRECTORY = new URL("../../src/", import.meta.url);
 
@@ -67,15 +68,25 @@ async function silentHandlers(): Promise<{
   return { catchClauses, promiseCatches };
 }
 
-describe("silent diagnostic handler inventory", () => {
-  it("characterizes the pre-v4.8.4 silent-handler baseline", async () => {
+describe("silent diagnostic handler ratchet", () => {
+  it("retains only the diagnostic logger self-protection sink", async () => {
     const inventory = await silentHandlers();
 
-    expect(inventory.catchClauses).toHaveLength(44);
-    expect(inventory.promiseCatches).toHaveLength(28);
-    expect(inventory.catchClauses).toContainEqual({
-      file: "services/diagLog.ts",
-      line: 38,
-    });
+    expect(inventory.catchClauses.map(handler => handler.file)).toEqual([
+      "services/diagLog.ts",
+    ]);
+    expect(inventory.promiseCatches).toEqual([]);
+  });
+
+  it("records non-fatal fallback failures without changing caller control flow", () => {
+    const warn = vi.spyOn(diagLog, "warn").mockResolvedValue();
+    const error = new Error("offline");
+
+    expect(reportNonFatal("cache", "Cache read failed; using network", error)).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "cache",
+      "Cache read failed; using network",
+      "Error: offline",
+    );
   });
 });

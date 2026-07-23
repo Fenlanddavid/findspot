@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
-import { diagLog } from '../../services/diagLog';
+import { diagLog, reportNonFatal } from '../../services/diagLog';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
@@ -651,7 +651,9 @@ function AlieSection({
         db.settings.get('fieldGuideViewMode').then(s => {
             const v = s?.value;
             if (v === 'detail' || v === 'glance') setViewMode(v as 'glance' | 'detail');
-        }).catch(() => {});
+        }).catch(error => {
+            reportNonFatal('field-guide', 'View preference load failed', error);
+        });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reset tap-through streak when a new scan completes (Path B)
@@ -696,12 +698,16 @@ function AlieSection({
 
     function handlePersistDetail() {
         setViewMode('detail');
-        saveFieldGuideViewMode('detail').catch(() => {});
+        saveFieldGuideViewMode('detail').catch(error => {
+            reportNonFatal('field-guide', 'Detail view preference save failed', error);
+        });
     }
 
     function handleGlance() {
         setViewMode('glance');
-        saveFieldGuideViewMode('glance').catch(() => {});
+        saveFieldGuideViewMode('glance').catch(error => {
+            reportNonFatal('field-guide', 'Glance view preference save failed', error);
+        });
     }
 
     const fieldStrategy = useMemo(() =>
@@ -934,7 +940,9 @@ function AlieSection({
             if (alieRequestSeqRef.current === requestSeq) setAlieLoading(false);
         });
 
-        }).catch(() => {}); // L3: personal finds query failure is non-fatal
+        }).catch(error => {
+            reportNonFatal('alie', 'Personal finds query failed', error);
+        });
 
         // Cleanup on unmount
         return () => {

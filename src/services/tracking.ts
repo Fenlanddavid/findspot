@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { v4 as uuid } from "uuid";
+import { reportNonFatal } from "./diagLog";
 
 // ── Core state ──────────────────────────────────────────────────────
 let watchId: number | null = null;
@@ -278,7 +279,9 @@ export async function startTracking(projectId: string, sessionId: string | null 
                 currentTrackSessionId = null;
                 pointsBuffer = [];
                 resetLivenessState();
-                await releaseWakeLock().catch(() => {});
+                await releaseWakeLock().catch(error => {
+                  reportNonFatal('tracking', 'Wake lock release failed', error);
+                });
                 reject(err);
             };
 
@@ -313,7 +316,9 @@ export async function startTracking(projectId: string, sessionId: string | null 
         currentTrackSessionId = null;
         pointsBuffer = [];
         resetLivenessState();
-        await releaseWakeLock().catch(() => {});
+        await releaseWakeLock().catch(error => {
+          reportNonFatal('tracking', 'Wake lock release failed', error);
+        });
         throw err;
     } finally {
         isStarting = false;

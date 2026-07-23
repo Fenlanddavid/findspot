@@ -33,6 +33,7 @@ import { PATH_LABELS } from "./components/significant/significantFindDisplay";
 import type { SignificantFind } from "./db";
 import { migrateLegacyClientStorage } from './services/clientStorage';
 import { runIntegrityAuditAfterSchemaChange } from './services/integrityAudit';
+import { reportNonFatal } from './services/diagLog';
 import {
   getBackupReminderState,
   type BackupReminderState,
@@ -101,10 +102,14 @@ function Shell() {
     });
     void ensureProtectionOnStartup();
     closeStaleActiveTracks().catch((e) => console.error("Stale tracking cleanup failed", e));
-    healAimMeta().catch(() => {}); // silently backfill AIM meta into pre-A packs
+    healAimMeta().catch(error => {
+      reportNonFatal('startup', 'AIM metadata backfill failed', error);
+    });
     refreshHotspotPredictionOutcomes()
       .then(() => aggregateAndSweepHotspotPredictions())
-      .catch(() => {}); // derived calibration maintenance is always non-blocking
+      .catch(error => {
+        reportNonFatal('startup', 'Hotspot calibration maintenance failed', error);
+      });
 
     // Track unique installation (one-time per device).
     // Flag lives in IndexedDB (durable) with a one-time migration from localStorage.
@@ -114,8 +119,8 @@ function Shell() {
         try {
           await fetch("https://findspot-counter.trials-uk.workers.dev/up");
           await setSetting("fs_installed", true);
-        } catch (e) {
-          // silent fail — will retry on next launch
+        } catch (error) {
+          reportNonFatal('startup', 'Installation count update failed', error);
         }
       }
     };
@@ -150,7 +155,9 @@ function Shell() {
         if (!navigator.storage?.estimate) return;
         const { usage = 0, quota = 1 } = await navigator.storage.estimate();
         if (quota > 0 && usage / quota > 0.8) setShowQuotaWarning(true);
-      } catch {}
+      } catch (error) {
+        reportNonFatal('storage', 'Storage quota estimate failed', error);
+      }
     };
     checkStorageQuota();
   }, [checkBackupStatus]);

@@ -25,6 +25,7 @@ import {
   statusTransitionText,
   terminalSupersedingQuestionId,
 } from './transitionHistory';
+import { reportNonFatal } from '../services/diagLog';
 
 export interface ScanCompleteInput {
   permissionId?: string;
@@ -95,8 +96,8 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     try {
       const [lon, lat] = turf.centroid(turf.polygon(boundary.coordinates)).geometry.coordinates;
       centroid = { lat, lon };
-    } catch {
-      // Invalid legacy boundaries are already rejected by the candidate gate.
+    } catch (error) {
+      reportNonFatal('outstanding-questions', 'Invalid scan boundary skipped', error);
     }
   }
 

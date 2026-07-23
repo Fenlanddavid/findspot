@@ -13,6 +13,7 @@ import {
   parseJsonBackup,
 } from './importInput';
 import { MAX_BACKUP_MEDIA_ENTRY_BYTES } from './mediaArchive';
+import { reportNonFatal } from '../diagLog';
 
 type StagedZipEntry = {
   name: string;
@@ -53,7 +54,8 @@ export async function cleanupStaleRestoreStages(): Promise<void> {
         return !Number.isFinite(timestamp) || timestamp < staleBefore;
       })
       .map(name => Dexie.delete(name)));
-  } catch {
+  } catch (error) {
+    reportNonFatal('backup', 'Stale restore staging cleanup failed', error);
     // Database enumeration is not available in every browser. The active stage
     // still has an explicit finally cleanup in importData.
   }
@@ -201,7 +203,9 @@ export async function streamZipBackup(
       if (done) break;
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    await reader.cancel().catch(cancelError => {
+      reportNonFatal('backup', 'Backup stream cancellation failed', cancelError);
+    });
     if (isQuotaExceeded(error)) {
       throw new Error('Not enough free device storage to stage this backup. Existing FindSpot data has not been changed.');
     }

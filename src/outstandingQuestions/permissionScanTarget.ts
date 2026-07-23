@@ -1,5 +1,6 @@
 import type { Permission } from '../db';
 import * as turf from '@turf/turf';
+import { reportNonFatal } from '../services/diagLog';
 
 type PermissionScanMap = {
   getZoom: () => number;
@@ -13,8 +14,8 @@ export function getPermissionScanTarget(permission: Permission): { lat: number; 
     try {
       const [lon, lat] = turf.pointOnFeature(turf.polygon(permission.boundary!.coordinates)).geometry.coordinates;
       if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
-    } catch {
-      // Fall through to the permission's saved point for invalid legacy rings.
+    } catch (error) {
+      reportNonFatal('outstanding-questions', 'Invalid permission boundary skipped', error);
     }
   }
 

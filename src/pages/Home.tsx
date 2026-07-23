@@ -16,6 +16,7 @@ import { LockIcon, SearchIcon } from "../components/AppIcons";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 import { getBackupReminderState } from '../services/backupReminder';
 import { setPermissionPinned } from '../services/permissionMutations';
+import { reportNonFatal } from '../services/diagLog';
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
@@ -85,7 +86,11 @@ export default function Home(props: {
   }, []);
 
   const dismissInstallNextStep = useCallback(() => {
-    try { ephemeralSession.set('fs_install_next_step_dismissed', 'true'); } catch {}
+    try {
+      ephemeralSession.set('fs_install_next_step_dismissed', 'true');
+    } catch (error) {
+      reportNonFatal('home', 'Install prompt dismissal save failed', error);
+    }
     setInstallNextStepDismissed(true);
   }, []);
 
@@ -481,7 +486,9 @@ export default function Home(props: {
             const stored = ephemeralSession.get('fs_used_actions');
             const current: string[] = stored ? JSON.parse(stored) : [];
             ephemeralSession.set('fs_used_actions', JSON.stringify([...new Set([...current, a.label])]));
-          } catch {}
+          } catch (error) {
+            reportNonFatal('home', 'Quick action history save failed', error);
+          }
           setUsedActions(prev => new Set(prev).add(a.label));
           a.action();
         },

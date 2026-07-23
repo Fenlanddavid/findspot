@@ -46,6 +46,10 @@ export const diagLog = {
   error: (scope: string, message: string, detail?: string) => writeLog('error', scope, message, detail),
 };
 
+export function reportNonFatal(scope: string, message: string, error: unknown): void {
+  void diagLog.warn(scope, message, String(error));
+}
+
 export async function exportDiagLog(): Promise<string> {
   const entries = await db.diagnosticLog.orderBy('ts').toArray();
   return JSON.stringify(entries, null, 2);

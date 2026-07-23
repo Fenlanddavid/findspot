@@ -8,6 +8,7 @@ import {
   addSignificantFindMedia,
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
+import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
   workflowState: WorkflowState;
@@ -100,7 +101,9 @@ export default function MarkSpotScreen({ workflowState, updateState, onNext }: P
         createdAt: new Date().toISOString(),
       });
       setPhotoSaved(true);
-    } catch {}
+    } catch (error) {
+      reportNonFatal('significant-find', 'Location photo save failed', error);
+    }
   }
 
   function handleW3wChange(v: string) {

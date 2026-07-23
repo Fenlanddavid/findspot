@@ -33,6 +33,7 @@ import {
     smShardKey,
     staticDatasetUrl,
 } from '../shared/staticDatasetContract';
+import { reportNonFatal } from './diagLog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -271,7 +272,9 @@ async function cacheSMIndexFromR2(cache: Cache, cells: string[]): Promise<boolea
                 headers: { 'Content-Type': 'application/json' },
             }));
             ok++;
-        } catch { /* try live fallback below */ }
+        } catch (error) {
+            reportNonFatal('offline-pack', 'Cached dataset read failed', error);
+        }
     }
     return ok === cells.length;
 }
@@ -443,7 +446,9 @@ export async function listPacks(): Promise<PackMeta[]> {
         if (metaRes) {
             try {
                 metas.push(await metaRes.json() as PackMeta);
-            } catch { /* corrupt meta — skip */ }
+            } catch (error) {
+                reportNonFatal('offline-pack', 'Corrupt pack metadata skipped', error);
+            }
         }
     }
     return metas;
@@ -539,7 +544,9 @@ export async function buildPack(
 
     // Request persistent storage before writing
     if (navigator.storage?.persist) {
-        await navigator.storage.persist().catch(() => {});
+        await navigator.storage.persist().catch(error => {
+            reportNonFatal('offline-pack', 'Persistent storage request failed', error);
+        });
     }
 
     // 1 — Resolve Wayback IDs (stored in meta so staleness is detectable)
@@ -640,7 +647,9 @@ export async function buildPack(
                 aimMetaOk = true;
             }
         }
-    } catch { /* aim meta unavailable */ }
+    } catch (error) {
+        reportNonFatal('offline-pack', 'AIM metadata load failed', error);
+    }
 
     if (aimMetaOk && aimCells.length <= AIM_PACK_MAX_SHARDS) {
         for (const cell of aimCells) {
@@ -654,7 +663,9 @@ export async function buildPack(
                     await cache.put(url, res);
                     aimOk++;
                 }
-            } catch { /* unavailable */ }
+            } catch (error) {
+                reportNonFatal('offline-pack', 'AIM shard cache failed', error);
+            }
         }
         layers['aim'] = aimOk === aimCells.length ? 'cached'
                       : aimOk > 0 ? 'partial' : 'unavailable';
@@ -773,5 +784,7 @@ export async function healAimMeta(): Promise<void> {
         } finally {
             clearTimeout(timer);
         }
-    } catch { /* silent — will retry on next launch */ }
+    } catch (error) {
+        reportNonFatal('offline-pack', 'AIM metadata backfill failed', error);
+    }
 }

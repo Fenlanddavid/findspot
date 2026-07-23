@@ -33,6 +33,7 @@ import {
     type HistoricLookupCache,
 } from '../services/persistenceValidation';
 import { discardFieldGuideScanCache, saveHistoricScanCache } from '../services/fieldGuideMutations';
+import { reportNonFatal } from '../services/diagLog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,9 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                     const ageMin = Math.max(1, Math.round((Date.now() - cached.createdAt) / 60000));
                     onLog(`> Historic cache hit — source records reused (${ageMin}m old).`, 'historic');
                 }
-            } catch { /* cache read failure is non-fatal */ }
+            } catch (error) {
+                reportNonFatal('historic-scan', 'Scan cache read failed', error);
+            }
 
             // Always fetch: location label and combined OSM context
             // Conditionally fetch: NHLE, AIM, routes (skip if provided from terrain scan)
@@ -541,7 +544,9 @@ export function useHistoricScan({ onLog, onStatusChange }: UseHistoricScanOption
                         romanRoads: freshRomanRoads.length > 0 ? freshRomanRoads : null,
                     } satisfies HistoricLookupCache,
                 }, expiredCutoff);
-            } catch { /* cache write failure is non-fatal */ }
+            } catch (error) {
+                reportNonFatal('historic-scan', 'Scan cache write failed', error);
+            }
 
             // ── Drift guard (uses shared utility) ────────────────────────────
             const driftM  = getDriftMetres(opts.scanCenter, { lat: center.lat, lng: center.lng });

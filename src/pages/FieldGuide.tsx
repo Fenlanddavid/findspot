@@ -29,7 +29,7 @@ import { positionMapForPermissionScan } from '../outstandingQuestions/permission
 import { updatePermissionIntelligenceQuestions } from '../outstandingQuestions/protectionScan';
 import { historicQuestionRuleScope } from '../outstandingQuestions/rules';
 import type { RuleId } from '../outstandingQuestions/types';
-import { diagLog } from '../services/diagLog';
+import { diagLog, reportNonFatal } from '../services/diagLog';
 import {
     DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence,
     EngineContextAtPoint, ANNOTATION_TYPE_LABELS, LANDSCAPE_TYPE_LABELS,
@@ -1059,10 +1059,14 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             setShowSuggestion(false);
             dispatch({ type: 'HISTORIC_ENHANCE', hotspots: result.enhancedHotspots });
             // Non-blocking feedback signal — does not affect scan result
-            recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(() => {});
+            recordFindHotspotSignals(result.enhancedHotspots, projectFinds).catch(error => {
+                reportNonFatal('field-guide', 'Find hotspot signal recording failed', error);
+            });
             recordHotspotPredictions(result.enhancedHotspots, {
                 permissionId: requestedQuestionPermissionId ?? null,
-            }).catch(() => {});
+            }).catch(error => {
+                reportNonFatal('field-guide', 'Hotspot prediction recording failed', error);
+            });
         }
 
         let questionsUpdated = false;
@@ -1127,8 +1131,8 @@ export default function FieldGuide({ projectId, onSignificantFind }: { projectId
             if (geologyRequestSeqRef.current === requestSeq) {
                 setGeologyContext(ctx);
             }
-        } catch {
-            // Non-blocking — geology failure never interrupts the scan
+        } catch (error) {
+            reportNonFatal('field-guide', 'Geology context load failed', error);
         } finally {
             if (geologyRequestSeqRef.current === requestSeq) {
                 setGeologyContextLoading(false);

@@ -9,6 +9,7 @@ import { DevAnnotation } from '../utils/devAnnotation';
 import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../utils/mapTileCache';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
 import { removeSavedPoint } from '../services/fieldGuideMutations';
+import { reportNonFatal } from '../services/diagLog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -776,7 +777,9 @@ export function useFieldGuideMap({
             if (canceled) return;
             const source = mapRef.current?.getSource('pas-density') as maplibregl.GeoJSONSource;
             if (source) source.setData(geojson);
-        }).catch(() => { /* index unavailable — layer stays empty */ });
+        }).catch(error => {
+            reportNonFatal('field-guide-map', 'PAS density layer load failed', error);
+        });
         return () => { canceled = true; };
     }, [mapReadyVersion]);
 
@@ -812,7 +815,9 @@ export function useFieldGuideMap({
                     const color    = r.type === 'roman_road' ? '#3b82f6' : '#93c5fd';
                     const buffered = turf.buffer(line, bufferKm, { units: 'kilometers' });
                     if (buffered) { buffered.properties = { routeId: r.id, type: r.type, name: r.name, color }; corridorFeatures.push(buffered as GeoJSON.Feature); }
-                } catch { /* skip malformed geometry */ }
+                } catch (error) {
+                    reportNonFatal('field-guide-map', 'Malformed route corridor skipped', error);
+                }
             }
             const corridorSrc = map.getSource('corridors') as maplibregl.GeoJSONSource;
             if (corridorSrc) corridorSrc.setData({ type: 'FeatureCollection', features: corridorFeatures });
@@ -842,7 +847,9 @@ export function useFieldGuideMap({
                                 },
                             });
                         }
-                    } catch { /* skip */ }
+                    } catch (error) {
+                        reportNonFatal('field-guide-map', 'Malformed route crossing skipped', error);
+                    }
                 }
             }
             const crossingSrc = map.getSource('crossings') as maplibregl.GeoJSONSource;
@@ -883,7 +890,9 @@ export function useFieldGuideMap({
                         };
                         features.push(buffered as GeoJSON.Feature);
                     }
-                } catch { /* skip malformed geometry */ }
+                } catch (error) {
+                    reportNonFatal('field-guide-map', 'Malformed route geometry skipped', error);
+                }
             }
 
             // PAS density blob removed — it overlapped route corridors and
@@ -1121,7 +1130,9 @@ export function useFieldGuideMap({
                 deleteBtn.addEventListener('click', async () => {
                     if (deleteConfirmPending) {
                         if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
-                        await deletePack({ ownerType: 'savedPoint', ownerId: sp.id }).catch(() => {});
+                        await deletePack({ ownerType: 'savedPoint', ownerId: sp.id }).catch(error => {
+                            reportNonFatal('field-guide-map', 'Saved-point offline pack cleanup failed', error);
+                        });
                         await removeSavedPoint(sp.id);
                     } else {
                         deleteConfirmPending = true;

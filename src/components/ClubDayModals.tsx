@@ -6,6 +6,7 @@ import { markClubDayExportSubmitted, saveClubDayShareDetails } from "../services
 import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
 import { loadRallyDayReview } from "../services/rallyDayReview";
 import { RallyDayReviewPanel } from "./RallyDayReviewPanel";
+import { reportNonFatal } from "../services/diagLog";
 
 // ─── Build join URL from event details ───────────────────────────────────────
 
@@ -68,13 +69,17 @@ function QRScreen({
       try {
         await navigator.share({ title: `Join ${permissionName} on FindSpot`, url: joinUrl });
         return;
-      } catch { /* fall through */ }
+      } catch (error) {
+        reportNonFatal('club-day', 'Native share failed; falling back to copy', error);
+      }
     }
     handleCopy();
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(joinUrl).catch(() => {});
+    await navigator.clipboard.writeText(joinUrl).catch(error => {
+      reportNonFatal('club-day', 'Join link copy failed', error);
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }

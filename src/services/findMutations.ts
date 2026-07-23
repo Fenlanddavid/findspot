@@ -1,5 +1,6 @@
 import { db } from '../db';
 import type { Find, Media } from '../db';
+import { reportNonFatal } from './diagLog';
 
 export async function discardFindDraft(findId: string): Promise<void> {
   await db.transaction('rw', [db.finds, db.media], async () => {
@@ -64,7 +65,9 @@ export async function saveCompletedFind(
       status: 'dug-find',
       resolvedAt: Date.now(),
       resolvedFindId: find.id,
-    }).catch(() => {});
+    }).catch(error => {
+      reportNonFatal('finds', 'Source signal resolution failed', error);
+    });
   }
 }
 

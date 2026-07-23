@@ -6,6 +6,7 @@
 import { HistoricRoute } from '../pages/fieldGuideTypes';
 import { cachedFetchAny } from '../utils/cachedFetch';
 import { HISTORIC_CONTEXT_RADIUS_KM } from '../outstandingQuestions/contextRadius';
+import { reportNonFatal } from './diagLog';
 
 interface ItinereFeature {
     type: 'Feature';
@@ -50,7 +51,9 @@ function getFeatures(): Promise<ItinereFeature[]> {
  * wait later when fetchRomanRoads() is actually awaited.
  */
 export function prefetchRomanRoads(): void {
-    getFeatures().catch(() => { /* silently ignore — fetchRomanRoads handles retry */ });
+    getFeatures().catch(error => {
+        reportNonFatal('roman-roads', 'Dataset prefetch failed', error);
+    });
 }
 
 /**

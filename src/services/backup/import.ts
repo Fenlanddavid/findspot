@@ -26,6 +26,7 @@ import {
 } from './restoreStage';
 import type { RawBackupData, ValidatedBackupData } from './schema';
 import { validateBackupData } from './validation';
+import { reportNonFatal } from '../diagLog';
 
 export type { BackupImportOptions, BackupImportProgress } from './importTypes';
 export type {
@@ -154,7 +155,9 @@ async function runWithPreparedBackup<Result>(
   } finally {
     if (stage) {
       stage.close();
-      await Dexie.delete(stage.name).catch(() => {});
+      await Dexie.delete(stage.name).catch(error => {
+        reportNonFatal('backup', 'Restore staging cleanup failed', error);
+      });
     }
   }
 }

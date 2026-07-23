@@ -1,5 +1,6 @@
 import { db, SignificantFind } from "../db";
 import { WorkflowStep, WorkflowPath, WorkflowState } from "../types/significantFind";
+import { reportNonFatal } from "./diagLog";
 
 // Authoritative step order per path — used by the filter and the resume context
 // builder. If a step is renamed or removed, old workflowStep values that no longer
@@ -16,14 +17,18 @@ const VALID_PATHS = new Set(Object.keys(PATH_STEP_ORDER));
 export function persistWorkflowProgress(sfId: string, step: WorkflowStep): void {
   db.significantFinds
     .update(sfId, { workflowStep: step, updatedAt: new Date().toISOString() })
-    .catch(() => {});
+    .catch(error => {
+      reportNonFatal('significant-find', 'Workflow progress save failed', error);
+    });
 }
 
 /** Clear the resume marker once the wizard exits cleanly. Never throws. */
 export function clearWorkflowProgress(sfId: string): void {
   db.significantFinds
     .update(sfId, { workflowStep: null, updatedAt: new Date().toISOString() })
-    .catch(() => {});
+    .catch(error => {
+      reportNonFatal('significant-find', 'Workflow progress clear failed', error);
+    });
 }
 
 /**

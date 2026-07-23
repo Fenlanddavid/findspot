@@ -8,6 +8,7 @@ import maplibregl from 'maplibre-gl';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds, waybackTileUrl } from '../utils/waybackService';
 import { findPackCoveringBbox } from '../services/offlinePack';
+import { reportNonFatal } from '../services/diagLog';
 
 const ZOOM = SCAN_CONFIG.TERRAIN_ZOOM;
 
@@ -74,7 +75,9 @@ export function useTilePrewarm(mapRef: React.RefObject<maplibregl.Map | null>) {
                 const urls = tileUrls(ZOOM, tX, tY, waybackIds);
 
                 for (const url of urls) {
-                    fetch(url, { priority: 'low' } as RequestInit).catch(() => {});
+                    fetch(url, { priority: 'low' } as RequestInit).catch(error => {
+                        reportNonFatal('tile-prewarm', 'Tile prefetch failed', error);
+                    });
                 }
             }, 600);
         };
