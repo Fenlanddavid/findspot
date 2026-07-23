@@ -14,6 +14,18 @@ const FIELD_GUIDE_MODULES = {
     '../../src/services/fieldguide/terrainScanSupport.ts',
     import.meta.url,
   ),
+  'services/fieldguide/historicScanCoordinator.ts': new URL(
+    '../../src/services/fieldguide/historicScanCoordinator.ts',
+    import.meta.url,
+  ),
+  'services/fieldguide/historicScanRecords.ts': new URL(
+    '../../src/services/fieldguide/historicScanRecords.ts',
+    import.meta.url,
+  ),
+  'services/fieldguide/historicScanSupport.ts': new URL(
+    '../../src/services/fieldguide/historicScanSupport.ts',
+    import.meta.url,
+  ),
   'services/fieldguide/scanOrchestrator.ts': new URL(
     '../../src/services/fieldguide/scanOrchestrator.ts',
     import.meta.url,
@@ -38,9 +50,12 @@ describe('FieldGuide architecture characterization', () => {
       'pages/FieldGuide.tsx': 1_845,
       'hooks/useFieldGuideMap.ts': 294,
       'hooks/useTerrainScan.ts': 77,
-      'hooks/useHistoricScan.ts': 654,
+      'hooks/useHistoricScan.ts': 82,
       'services/fieldguide/terrainScanCoordinator.ts': 472,
       'services/fieldguide/terrainScanSupport.ts': 142,
+      'services/fieldguide/historicScanCoordinator.ts': 405,
+      'services/fieldguide/historicScanRecords.ts': 241,
+      'services/fieldguide/historicScanSupport.ts': 116,
       'services/fieldguide/scanOrchestrator.ts': 160,
     });
   });
