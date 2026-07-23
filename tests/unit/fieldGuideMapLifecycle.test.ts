@@ -199,4 +199,72 @@ describe('FieldGuide map interaction router', () => {
       'Route Crossing: Roman Road - Ermine Street × Trackway',
     );
   });
+
+  it('retains target, trace, PAS, find, monument and route callback routing', () => {
+    const handlers = new Map<string, (event: any) => void>();
+    const map = {
+      on: vi.fn((event: string, layerOrHandler: string | ((event: any) => void), maybeHandler?: (event: any) => void) => {
+        const layer = typeof layerOrHandler === 'string' ? layerOrHandler : '*';
+        handlers.set(`${event}:${layer}`, maybeHandler ?? layerOrHandler as (event: any) => void);
+      }),
+      queryRenderedFeatures: vi.fn(() => []),
+      getCanvas: () => ({ style: { cursor: '' } }),
+      getZoom: () => 16,
+    } as unknown as maplibregl.Map;
+    const routed = callbacks();
+    const showLabel = vi.fn();
+
+    bindFieldGuideMapInteractions(map, {
+      callbacks: () => routed,
+      annotationMode: () => false,
+      showLabel,
+    });
+
+    handlers.get('click:targets-circle')!({
+      features: [{ properties: { id: 'target-1' } }],
+    });
+    handlers.get('click:trace-targets-circle')!({
+      features: [{ properties: { id: 'trace-1' } }],
+    });
+    handlers.get('click:pas-circles')!({
+      features: [{
+        properties: {
+          id: 'pas-1',
+          internalId: 'internal-1',
+          objectType: 'BROOCH',
+          broadperiod: 'ROMAN',
+          county: 'Lincolnshire',
+          lat: 52.7,
+          lon: -0.3,
+          isApprox: false,
+          osmType: '',
+        },
+      }],
+    });
+    handlers.get('click:user-finds-hitbox')!({
+      features: [{ properties: { id: 'find-1' } }],
+    });
+    handlers.get('click:monuments-fill')!({
+      features: [{ properties: { Name: 'Scheduled Site' } }],
+    });
+    handlers.get('click:historic-routes-roman')!({
+      features: [{ properties: { name: 'Ermine Street' } }],
+    });
+    handlers.get('click:historic-routes-trackway')!({ features: [] });
+
+    expect(routed.onFeatureClick).toHaveBeenCalledWith('target-1');
+    expect(routed.onTraceTargetClick).toHaveBeenCalledWith('trace-1');
+    expect(routed.onPASFindLog).toHaveBeenCalledWith('HERITAGE: BROOCH - pas-1');
+    expect(routed.onPASFindSelect).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'pas-1',
+      objectType: 'BROOCH',
+      broadperiod: 'ROMAN',
+      lat: 52.7,
+      lon: -0.3,
+    }));
+    expect(routed.onUserFindClick).toHaveBeenCalledWith('find-1');
+    expect(routed.onMonumentClick).toHaveBeenCalledWith('Scheduled Site');
+    expect(showLabel).toHaveBeenNthCalledWith(1, 'Roman Road - Ermine Street');
+    expect(showLabel).toHaveBeenNthCalledWith(2, 'Historic Trackway');
+  });
 });
