@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeContext, applyAIMEnrichment, isPointProtectedByNHLE, suppressDisturbance } from '../../src/utils/fieldGuideAnalysis';
+import {
+    analyzeContext,
+    applyAIMEnrichment,
+    applyRouteUnavailableFallback,
+    isPointProtectedByNHLE,
+    suppressDisturbance,
+} from '../../src/utils/fieldGuideAnalysis';
 import type { Cluster } from '../../src/pages/fieldGuideTypes';
 
 function cluster(overrides: Partial<Cluster> = {}): Cluster {
@@ -122,5 +128,26 @@ describe('suppressDisturbance', () => {
             cluster({ id: 'snap-c', center: [0.001, 52], ...base }),
         ];
         expect(suppressDisturbance(input)).toMatchSnapshot();
+    });
+});
+
+describe('route-unavailable target fallback', () => {
+    it('hides elongated road-like geometry after contextual relabelling', () => {
+        const roadShaped = cluster({
+            id: 'cached-road-shape',
+            type: 'Ancient Watercourse Signal',
+            bearing: 90,
+            sources: ['terrain', 'hydrology'],
+            metrics: {
+                circularity: 0.18,
+                density: 0.52,
+                ratio: 4.2,
+                area: 420,
+            },
+        });
+
+        expect(applyRouteUnavailableFallback([roadShaped])).toBe(1);
+        expect(roadShaped.isRouteArtefactRisk).toBe(true);
+        expect(roadShaped.suppressedBy).toContain('route_data_unavailable_fallback');
     });
 });
