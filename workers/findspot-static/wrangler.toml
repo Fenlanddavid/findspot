@@ -1,6 +1,6 @@
 name               = "findspot-static"
 main               = "index.ts"
-compatibility_date = "2026-07-20"
+compatibility_date = "2026-07-23"
 
 [[r2_buckets]]
 binding     = "STATIC_BUCKET"

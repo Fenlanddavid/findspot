@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import {
   deletePendingFind as deletePendingFindRecord,
   markPendingFindComplete,
@@ -13,7 +13,7 @@ export default function PendingFinds(props: { projectId: string }) {
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const pendingFinds = useLiveQuery(
-    () => db.finds
+    () => pagePersistence.finds
       .where("projectId").equals(props.projectId)
       .filter(f => !!f.isPending)
       .reverse()

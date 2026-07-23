@@ -4,13 +4,15 @@
 // It must never create hotspots or targets.
 // It must never elevate a location above threshold without support from existing primary signals.
 
+import { CACHE_POLICIES } from '../../shared/cachePolicy';
+
 // ─── Version constants ────────────────────────────────────────────────────────
 // Bump GEOLOGY_CLASSIFIER_VERSION when classification logic changes (invalidates cache).
 // Bump GEOLOGY_SOURCE_VERSION when the BGS service or layer names change.
 export const GEOLOGY_CLASSIFIER_VERSION = 2;
 export const GEOLOGY_SOURCE_VERSION = 'bgs625k-v2';
 
-export const GEOLOGY_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+export const GEOLOGY_CACHE_TTL_MS = CACHE_POLICIES.geologyContext.expiry.durationMs;
 export const GEOLOGY_REQUEST_TIMEOUT_MS = 8_000;                // 8 seconds
 
 // ─── Landscape classes ────────────────────────────────────────────────────────

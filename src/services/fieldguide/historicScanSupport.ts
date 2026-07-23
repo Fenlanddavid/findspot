@@ -17,6 +17,7 @@ import type { QuestionSourceAvailability } from '../../outstandingQuestions/type
 import type { LogLevel, LogSource } from '../../utils/scanLogger';
 import type { ScanContext } from './terrainScanSupport';
 import { SCAN_CONFIG } from '../../utils/scanConfig';
+import { CACHE_POLICIES } from '../../shared/cachePolicy';
 
 export interface HistoricScanOptions extends ScanContext {
     mapRef: RefObject<maplibregl.Map | null>;
@@ -49,7 +50,8 @@ export interface HistoricScanCoordinatorOptions {
 }
 
 export const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.06.15a';
-export const HISTORIC_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const HISTORIC_CACHE_TTL_MS =
+    CACHE_POLICIES.fieldGuideHistoric.expiry.durationMs;
 
 export function seconds(start: number): string {
     return ((performance.now() - start) / 1000).toFixed(1);

@@ -4,6 +4,7 @@ import type {
   LandscapeInterpretationRecord,
   SavedPoint,
 } from '../db';
+import { safeParseFieldGuideScanCache } from './persistenceValidation';
 
 export async function createSavedPoint(point: SavedPoint): Promise<void> {
   await db.savedPoints.add(point);
@@ -15,6 +16,16 @@ export async function removeSavedPoint(pointId: string): Promise<void> {
 
 export async function discardFieldGuideScanCache(cacheId: string): Promise<void> {
   await db.fieldGuideCache.delete(cacheId);
+}
+
+export async function readFieldGuideScanCache(
+  cacheId: string,
+): Promise<FieldGuideScanCache | null> {
+  const persisted = await db.fieldGuideCache.get(cacheId);
+  if (!persisted) return null;
+  const parsed = safeParseFieldGuideScanCache(persisted);
+  if (!parsed) await discardFieldGuideScanCache(cacheId);
+  return parsed;
 }
 
 export async function refreshCachedModernWays(

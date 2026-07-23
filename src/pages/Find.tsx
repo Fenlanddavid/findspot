@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Media, Find } from "../db";
+import type { Media, Find } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
@@ -192,12 +193,12 @@ export default function FindPage(props: {
   };
 
   const permissions = useLiveQuery(
-    async () => db.permissions.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
+    async () => pagePersistence.permissions.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
     [props.projectId]
   );
 
   const session = useLiveQuery(
-    async () => sessionId ? db.sessions.get(sessionId) : null,
+    async () => sessionId ? pagePersistence.sessions.get(sessionId) : null,
     [sessionId]
   );
 
@@ -230,18 +231,18 @@ export default function FindPage(props: {
 
   const fields = useLiveQuery(async () => {
     if (!currentPermissionId) return [];
-    return db.fields.where("permissionId").equals(currentPermissionId).toArray();
+    return pagePersistence.fields.where("permissionId").equals(currentPermissionId).toArray();
   }, [currentPermissionId]);
 
   // #12 — current field for context strip
   const currentField = useLiveQuery(async () => {
     if (!fieldId) return null;
-    return db.fields.get(fieldId);
+    return pagePersistence.fields.get(fieldId);
   }, [fieldId]);
 
   const availableSessions = useLiveQuery(async () => {
     if (!currentPermissionId) return [];
-    return db.sessions.where("permissionId").equals(currentPermissionId).reverse().sortBy("date");
+    return pagePersistence.sessions.where("permissionId").equals(currentPermissionId).reverse().sortBy("date");
   }, [currentPermissionId]);
 
   const sessionOptions = useMemo(() => {
@@ -359,7 +360,7 @@ export default function FindPage(props: {
 
   useEffect(() => {
     if (props.quickId) {
-      db.finds.get(props.quickId).then(f => {
+      pagePersistence.finds.get(props.quickId).then(f => {
         if (f) {
           setSavedId(f.id);
           setLoadedFindIsPending(!!f.isPending);
@@ -388,7 +389,7 @@ export default function FindPage(props: {
               : currentTime(),
           }));
           if (f.permissionId) {
-            db.permissions.get(f.permissionId).then(p => {
+            pagePersistence.permissions.get(f.permissionId).then(p => {
               if (p) setLocationName(p.name);
             });
           }
@@ -401,7 +402,7 @@ export default function FindPage(props: {
 
   useEffect(() => {
     if (props.permissionId) {
-      db.permissions.get(props.permissionId).then(l => {
+      pagePersistence.permissions.get(props.permissionId).then(l => {
         if (l) setLocationName(l.name);
       });
     } else if (permissions && permissions.length > 0 && !locationName && !props.quickId) {
@@ -419,7 +420,7 @@ export default function FindPage(props: {
   const media = useLiveQuery(
     async () => {
       const id = savedId || dbDraftId;
-      return id ? db.media.where("findId").equals(id).toArray() : [];
+      return id ? pagePersistence.media.where("findId").equals(id).toArray() : [];
     },
     [savedId, dbDraftId]
   );
@@ -475,7 +476,7 @@ export default function FindPage(props: {
   }
 
   async function getClubDayAttribution(permissionId: string): Promise<{ sharedPermissionId?: string; recorderId?: string; recorderName?: string }> {
-    const perm = await db.permissions.get(permissionId);
+    const perm = await pagePersistence.permissions.get(permissionId);
     const sharedId = perm?.sharedPermissionId || (perm?.isClubDayMember ? perm.id : undefined);
     if (!sharedId) return {};
     const [recorderId, recorderName] = await Promise.all([
@@ -742,7 +743,7 @@ export default function FindPage(props: {
 
     useEffect(() => {
       let active = true;
-      db.media.get(props.mediaId).then(m => {
+      pagePersistence.media.get(props.mediaId).then(m => {
         if (active && m) setMedia(m);
       });
       return () => { active = false; };

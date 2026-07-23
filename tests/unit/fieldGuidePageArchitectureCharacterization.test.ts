@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 const FIELD_GUIDE_MODULES = {
   page: new URL('../../src/pages/FieldGuide.tsx', import.meta.url),
   controller: new URL('../../src/pages/FieldGuideController.tsx', import.meta.url),
+  workspace: new URL(
+    '../../src/components/fieldGuide/FieldGuideWorkspace.tsx',
+    import.meta.url,
+  ),
   state: new URL('../../src/hooks/useFieldGuidePageState.ts', import.meta.url),
   projectData: new URL('../../src/hooks/useFieldGuideProjectData.ts', import.meta.url),
   support: new URL(
@@ -52,16 +56,21 @@ describe('FieldGuide page architecture characterization', () => {
     expect(source.support).toContain('export function buildMonumentBufferGeoJSON(');
   });
 
-  it('keeps state and live-query construction out of the controller', async () => {
+  it('keeps the controller composition-only and live-query construction behind hooks', async () => {
     const source = await readModules();
 
-    expect(source.controller).toContain('useFieldGuidePageState()');
-    expect(source.controller).toContain('useFieldGuideProjectData({');
-    expect(source.controller).toContain('runFieldGuideScan({');
-    expect(source.controller).toContain('<FieldGuideContext.Provider value={contextValue}>');
+    expect(source.controller.trimEnd().split(/\r?\n/).length).toBeLessThan(500);
+    expect(source.controller).toContain('<FieldGuideWorkspace {...props} />');
+    expect(source.controller).not.toContain('useFieldGuidePageState()');
+    expect(source.controller).not.toContain('runFieldGuideScan({');
+    expect(source.workspace).toContain('useFieldGuidePageState()');
+    expect(source.workspace).toContain('useFieldGuideProjectData({');
+    expect(source.workspace).toContain('runFieldGuideScan({');
+    expect(source.workspace).toContain('<FieldGuideContext.Provider value={contextValue}>');
     expect(occurrences(source.controller, /useState\(/g)).toBe(0);
     expect(occurrences(source.controller, /useReducer\(/g)).toBe(0);
     expect(occurrences(source.controller, /useLiveQuery/g)).toBe(0);
     expect(occurrences(source.controller, /useMemo\(/g)).toBe(0);
+    expect(occurrences(source.workspace, /useLiveQuery/g)).toBe(0);
   });
 });

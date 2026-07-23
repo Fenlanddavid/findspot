@@ -1,11 +1,12 @@
 import { db } from '../db';
+import { CACHE_POLICIES } from '../shared/cachePolicy';
 
 export const GEOCODE_PROXY_BASE_URL = (
   import.meta.env.VITE_GEOCODE_BASE_URL
   || 'https://findspot-geocode.trials-uk.workers.dev'
 ).replace(/\/$/, '');
 
-const CACHE_TTL_MS = 180 * 24 * 60 * 60 * 1_000;
+const CACHE_TTL_MS = CACHE_POLICIES.geocodeBrowser.expiry.durationMs;
 const MIN_REQUEST_INTERVAL_MS = 1_000;
 
 export type GeocodeAddress = {

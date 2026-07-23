@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Media } from "../db";
+import type { Media } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { useSearchParams } from "react-router-dom";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
@@ -57,7 +58,7 @@ export default function AllFinds(props: { projectId: string }) {
   // so stats can be derived from the same base without a second round-trip.
   const baseFinds = useLiveQuery(
     async () => {
-      let results = await db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
+      let results = await pagePersistence.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt");
       results.sort((a, b) => (b.foundAt ?? b.createdAt).localeCompare(a.foundAt ?? a.createdAt));
       return results.filter(s => {
         if (searchQuery.trim()) {
@@ -126,7 +127,7 @@ export default function AllFinds(props: { projectId: string }) {
   }, [mapFeatures, mapFeatureSignature]);
   const [mapStyleMode, setMapStyleMode] = useState<"streets" | "satellite">("streets");
   useEffect(() => {
-    db.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
+    pagePersistence.settings.get("searchMapStyle").then(s => s && setMapStyleMode(s.value as "streets" | "satellite"));
   }, []);
 
   // Create/destroy the map only when entering/leaving map view.
@@ -245,7 +246,7 @@ export default function AllFinds(props: { projectId: string }) {
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
-    const media = await db.media.where("findId").anyOf(findIds).toArray();
+    const media = await pagePersistence.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
     media.sort((a, b) => {
         const aDate = a?.createdAt || "";

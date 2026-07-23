@@ -27,6 +27,7 @@ import {
     saveTerrainScanCache,
 } from '../fieldGuideMutations';
 import { reportNonFatal } from '../diagLog';
+import { CACHE_POLICIES } from '../../shared/cachePolicy';
 import {
     applyOfflinePackAvailability,
     collapseByProximity,
@@ -60,7 +61,7 @@ export async function runTerrainScanPipeline(
         const scanStart = Date.now();
         const perfStart = performance.now();
 
-        const CACHE_TTL_MS  = 24 * 60 * 60 * 1000;
+        const CACHE_TTL_MS = CACHE_POLICIES.fieldGuideTerrain.expiry.durationMs;
         // Bump this string whenever scoring weights, thresholds, or gates change
         // so existing caches are discarded rather than silently serving stale results.
         const ENGINE_VERSION = HOTSPOT_ENGINE_VERSION;
@@ -102,7 +103,7 @@ export async function runTerrainScanPipeline(
         // expensive tile processing and return the cached raw clusters.
         // Ways data has a longer TTL — roads rarely change, so stale ways from an
         // expired tile record are rescued here and reused if a fresh Overpass fetch fails.
-        const MODERN_WAYS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+        const MODERN_WAYS_TTL_MS = CACHE_POLICIES.fieldGuideModernWays.expiry.durationMs;
         let rescuedModernWays: import('../../pages/fieldGuideTypes').ModernWay[] | null = null;
         try {
             const persisted = await db.fieldGuideCache.get(tileKey);

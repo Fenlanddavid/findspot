@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { usePermissionForm } from "../hooks/usePermissionForm";
-import { db, Permission, Find, Media, GeoJSONPolygon } from "../db";
+import type { Permission, Find, Media, GeoJSONPolygon } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { loadRallyDayReview } from "../services/rallyDayReview";
@@ -144,38 +145,38 @@ export default function PermissionPage(props: {
 
   const fields = useLiveQuery(async () => {
     if (!id) return [];
-    return db.fields.where("permissionId").equals(id).reverse().sortBy("createdAt");
+    return pagePersistence.fields.where("permissionId").equals(id).reverse().sortBy("createdAt");
   }, [id]);
 
   const isFirstPermission = useLiveQuery(async () => {
     if (isEdit) return false;
-    return (await db.permissions.where("projectId").equals(props.projectId).filter(p => !p.isDefault).count()) === 0;
+    return (await pagePersistence.permissions.where("projectId").equals(props.projectId).filter(p => !p.isDefault).count()) === 0;
   }, [isEdit, props.projectId]);
 
   const agreementFile = useLiveQuery(async () => {
     if (!agreementId) return null;
-    return db.media.get(agreementId);
+    return pagePersistence.media.get(agreementId);
   }, [agreementId]);
 
   // Fetch finds for this trip
   const finds = useLiveQuery(async () => {
     if (!id) return [];
-    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
+    return pagePersistence.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
   }, [id]);
 
   const pendingFinds = useLiveQuery(async () => {
     if (!id) return [];
-    return db.finds.where("permissionId").equals(id).filter(f => !!f.isPending).reverse().sortBy("createdAt");
+    return pagePersistence.finds.where("permissionId").equals(id).filter(f => !!f.isPending).reverse().sortBy("createdAt");
   }, [id]);
 
   const standaloneFinds = useLiveQuery(async () => {
     if (!id) return [];
-    return db.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.sessionId && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
+    return pagePersistence.finds.where("permissionId").equals(id).filter(f => !f.isPending && !f.sessionId && !f.scatterId && !f.isNotableFind).reverse().sortBy("createdAt");
   }, [id]);
 
   const sessions = useLiveQuery(async () => {
     if (!id) return [];
-    const rows = await db.sessions
+    const rows = await pagePersistence.sessions
       .where("permissionId")
       .equals(id)
       .toArray();
@@ -195,9 +196,9 @@ export default function PermissionPage(props: {
     const fieldIds = [...new Set(rows.map(s => s.fieldId).filter(Boolean) as string[])];
 
     const [allFindsForSessions, allTracksForSessions, allFields] = await Promise.all([
-      db.finds.where("sessionId").anyOf(sessionIds).toArray(),
-      db.tracks.where("sessionId").anyOf(sessionIds).toArray(),
-      fieldIds.length > 0 ? db.fields.bulkGet(fieldIds) : Promise.resolve([]),
+      pagePersistence.finds.where("sessionId").anyOf(sessionIds).toArray(),
+      pagePersistence.tracks.where("sessionId").anyOf(sessionIds).toArray(),
+      fieldIds.length > 0 ? pagePersistence.fields.bulkGet(fieldIds) : Promise.resolve([]),
     ]);
 
     const findCountBySession = new Map<string, number>();
@@ -239,14 +240,14 @@ export default function PermissionPage(props: {
   // Submitted members (organiser side of club day)
   const submittedMembers = useLiveQuery(async () => {
     if (!id) return [];
-    const perm = await db.permissions.get(id);
+    const perm = await pagePersistence.permissions.get(id);
     if (!perm?.isSharedPermission || !perm.sharedPermissionId) return [];
-    return db.importedPackages.where("sharedPermissionId").equals(perm.sharedPermissionId).sortBy("importedAt");
+    return pagePersistence.importedPackages.where("sharedPermissionId").equals(perm.sharedPermissionId).sortBy("importedAt");
   }, [id]);
 
   const rallyDayReview = useLiveQuery(async () => {
     if (!id) return null;
-    const perm = await db.permissions.get(id);
+    const perm = await pagePersistence.permissions.get(id);
     if (!perm?.isSharedPermission || perm.isClubDayMember) return null;
     return loadRallyDayReview(id);
   }, [id]);
@@ -256,7 +257,7 @@ export default function PermissionPage(props: {
     if (!id || !finds || finds.length === 0) return [];
     const ids = finds.map(s => s.id).filter(Boolean);
     if (ids.length === 0) return [];
-    return db.media.where("findId").anyOf(ids).toArray();
+    return pagePersistence.media.where("findId").anyOf(ids).toArray();
   }, [id, finds]);
 
   // Fetch thumbnails and scale info for the finds
@@ -298,10 +299,10 @@ export default function PermissionPage(props: {
 
   const allTracks = useLiveQuery(async () => {
     if (!id) return [];
-    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessions = await pagePersistence.sessions.where("permissionId").equals(id).toArray();
     const sessionIds = sessions.map(s => s.id).filter(Boolean);
     if (sessionIds.length === 0) return [];
-    return db.tracks.where("sessionId").anyOf(sessionIds).toArray();
+    return pagePersistence.tracks.where("sessionId").anyOf(sessionIds).toArray();
   }, [id]);
 
 
@@ -382,18 +383,18 @@ export default function PermissionPage(props: {
 
   async function handleDelete() {
     if (!id) return;
-    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessions = await pagePersistence.sessions.where("permissionId").equals(id).toArray();
     const sessionIds = sessions.map(s => s.id);
-    const finds = await db.finds.where("permissionId").equals(id).toArray();
+    const finds = await pagePersistence.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
-    const significantFinds = await db.significantFinds.where("permissionId").equals(id).toArray();
+    const significantFinds = await pagePersistence.significantFinds.where("permissionId").equals(id).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
-    const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
-    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
-    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
-    const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
+    const fieldsToDelete = await pagePersistence.fields.where("permissionId").equals(id).toArray();
+    const findMediaCount = findIds.length ? await pagePersistence.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await pagePersistence.media.where("findId").anyOf(significantFindIds).count() : 0;
+    const permissionMediaCount = await pagePersistence.media.where("permissionId").equals(id).count();
     const mediaCount = findMediaCount + significantFindMediaCount + permissionMediaCount;
-    const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
+    const trackCount = sessionIds.length ? await pagePersistence.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
     if (!(await confirmAction({
       title: "Delete Permission?",
@@ -423,18 +424,18 @@ export default function PermissionPage(props: {
 
   async function handleDeleteClubDayPermission() {
     if (!id) return;
-    const sessions = await db.sessions.where("permissionId").equals(id).toArray();
+    const sessions = await pagePersistence.sessions.where("permissionId").equals(id).toArray();
     const sessionIds = sessions.map(s => s.id);
-    const finds = await db.finds.where("permissionId").equals(id).toArray();
+    const finds = await pagePersistence.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
-    const significantFinds = await db.significantFinds.where("permissionId").equals(id).toArray();
+    const significantFinds = await pagePersistence.significantFinds.where("permissionId").equals(id).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
-    const fieldsToDelete = await db.fields.where("permissionId").equals(id).toArray();
-    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
-    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
-    const permissionMediaCount = await db.media.where("permissionId").equals(id).count();
+    const fieldsToDelete = await pagePersistence.fields.where("permissionId").equals(id).toArray();
+    const findMediaCount = findIds.length ? await pagePersistence.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await pagePersistence.media.where("findId").anyOf(significantFindIds).count() : 0;
+    const permissionMediaCount = await pagePersistence.media.where("permissionId").equals(id).count();
     const mediaCount = findMediaCount + significantFindMediaCount + permissionMediaCount;
-    const trackCount = sessionIds.length ? await db.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
+    const trackCount = sessionIds.length ? await pagePersistence.tracks.where("sessionId").anyOf(sessionIds).count() : 0;
 
     if (!(await confirmAction({
       title: "Remove Rally Permission?",
@@ -526,10 +527,10 @@ export default function PermissionPage(props: {
   }
 
   async function handleDeleteField(fieldId: string) {
-    const field = fields?.find(f => f.id === fieldId) || await db.fields.get(fieldId);
+    const field = fields?.find(f => f.id === fieldId) || await pagePersistence.fields.get(fieldId);
     const [sessionCount, findCount] = await Promise.all([
-      db.sessions.where("fieldId").equals(fieldId).count(),
-      db.finds.where("fieldId").equals(fieldId).count(),
+      pagePersistence.sessions.where("fieldId").equals(fieldId).count(),
+      pagePersistence.finds.where("fieldId").equals(fieldId).count(),
     ]);
 
     if (!(await confirmAction({
@@ -1663,7 +1664,7 @@ export default function PermissionPage(props: {
           onClose={() => {
             setShowCreatePack(false);
             // Reload shared permission state
-            db.permissions.get(id).then(p => {
+            pagePersistence.permissions.get(id).then(p => {
               if (p) {
                 setName(p.name);
                 setType(p.type || "individual");

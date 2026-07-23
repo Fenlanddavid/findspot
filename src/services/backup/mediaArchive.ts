@@ -1,5 +1,5 @@
 import { Zip, ZipDeflate, ZipPassThrough, strToU8 } from 'fflate';
-import { db, type Media } from '../../db';
+import { db, type FindSpotDB, type Media } from '../../db';
 import type { BackupExportManifest } from './schema';
 
 // Stored photo formats are already compressed, so raw Blob size is a useful
@@ -15,6 +15,7 @@ export type BackupExportProgress = {
 
 export type MediaArchiveOptions = {
   onProgress?: (progress: BackupExportProgress) => void;
+  database?: FindSpotDB;
 };
 
 const MEDIA_MIME_EXTENSIONS: Readonly<Record<string, string>> = {
@@ -32,7 +33,7 @@ const MEDIA_MIME_EXTENSIONS: Readonly<Record<string, string>> = {
   'text/plain': 'txt',
 };
 
-export async function estimateMediaSizeBytes(): Promise<{
+export async function estimateMediaSizeBytes(database: FindSpotDB = db): Promise<{
   count: number;
   bytes: number;
   damaged: number;
@@ -42,7 +43,7 @@ export async function estimateMediaSizeBytes(): Promise<{
   let damaged = 0;
 
   // Walk records without retaining a year of Blob handles in an array.
-  await db.media.each(media => {
+  await database.media.each(media => {
     count += 1;
     const persistedBlob: unknown = (media as { blob?: unknown }).blob;
     if (persistedBlob instanceof Blob) bytes += persistedBlob.size;
@@ -80,6 +81,7 @@ export async function createMediaArchive(
   manifest: BackupExportManifest,
   options: MediaArchiveOptions = {},
 ): Promise<Blob> {
+  const database = options.database ?? db;
   const outputParts: Blob[] = [];
   let resolveArchive!: (blob: Blob) => void;
   let rejectArchive!: (reason: unknown) => void;
@@ -105,10 +107,10 @@ export async function createMediaArchive(
   try {
     // Collection.each() does not await async callbacks, so fetch keys and then
     // load one media row at a time.
-    const mediaIds = await db.media.toCollection().primaryKeys();
+    const mediaIds = await database.media.toCollection().primaryKeys();
 
     for (const id of mediaIds) {
-      const media = await db.media.get(id);
+      const media = await database.media.get(id);
       if (!media) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
       const mediaBlob = requireMediaBlob(media);
       if (mediaBlob.size > MAX_BACKUP_MEDIA_ENTRY_BYTES) {
@@ -131,7 +133,7 @@ export async function createMediaArchive(
 
     let processedMedia = 0;
     for (const id of mediaIds) {
-      const media = await db.media.get(id);
+      const media = await database.media.get(id);
       if (!media) throw new Error(`Media ${String(id)} changed while the backup was being prepared. Please try again.`);
       const mediaBlob = requireMediaBlob(media);
       const entry = new ZipPassThrough(mediaEntryName(media));

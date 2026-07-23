@@ -16,6 +16,11 @@
  *   BGS data is used under the Open Government Licence.
  */
 
+import { CACHE_POLICIES } from "../../src/shared/cachePolicy";
+
+const EDGE_CACHE_TTL_SECONDS =
+  CACHE_POLICIES.bgsEdge.expiry.durationMs / 1_000;
+
 const BGS_625K_URL =
   "https://ogc.bgs.ac.uk/cgi-bin/BGS_Bedrock_and_Superficial_Geology/ows";
 
@@ -133,7 +138,7 @@ export default {
       status: upstreamResponse.status,
       headers: {
         "Content-Type":  contentType,
-        "Cache-Control": "public, max-age=604800", // 7 days — geology is stable
+        "Cache-Control": `public, max-age=${EDGE_CACHE_TTL_SECONDS}`,
         ...CORS_HEADERS,
       },
     });

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Find, Media, Permission, SignificantFind, UndugSignal } from "../db";
+import type { Find, Media, Permission, SignificantFind, UndugSignal } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
 import SignificantFindCard from "../components/significant/SignificantFindCard";
@@ -110,7 +111,7 @@ export default function FindsBox(props: { projectId: string }) {
     if (!openSfParam) return;
     let cancelled = false;
 
-    db.significantFinds.get(openSfParam).then((sf) => {
+    pagePersistence.significantFinds.get(openSfParam).then((sf) => {
       if (cancelled) return;
       if (sf?.projectId === props.projectId) setOpenSfId(openSfParam);
       setSearchParams(prev => {
@@ -130,7 +131,7 @@ export default function FindsBox(props: { projectId: string }) {
 
   const finds = useLiveQuery(
     async () => {
-      const rows = await db.finds.where("projectId").equals(props.projectId).toArray();
+      const rows = await pagePersistence.finds.where("projectId").equals(props.projectId).toArray();
       return rows
         .filter(f => !f.scatterId && !f.isNotableFind)
         .sort((a, b) => getFindDate(b).localeCompare(getFindDate(a)));
@@ -139,13 +140,13 @@ export default function FindsBox(props: { projectId: string }) {
   );
 
   const permissions = useLiveQuery(
-    async () => db.permissions.where("projectId").equals(props.projectId).toArray(),
+    async () => pagePersistence.permissions.where("projectId").equals(props.projectId).toArray(),
     [props.projectId]
   );
 
   const significantFinds = useLiveQuery<SignificantFind[]>(
     async () => {
-      const rows = await db.significantFinds.where("projectId").equals(props.projectId).toArray();
+      const rows = await pagePersistence.significantFinds.where("projectId").equals(props.projectId).toArray();
       return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     [props.projectId]
@@ -154,9 +155,9 @@ export default function FindsBox(props: { projectId: string }) {
   const undugSignals = useLiveQuery<UndugSignal[]>(
     async () => {
       const [rows, projectPermissions, projectSessions] = await Promise.all([
-        db.undugSignals.where("status").equals("open").toArray(),
-        db.permissions.where("projectId").equals(props.projectId).toArray(),
-        db.sessions.where("projectId").equals(props.projectId).toArray(),
+        pagePersistence.undugSignals.where("status").equals("open").toArray(),
+        pagePersistence.permissions.where("projectId").equals(props.projectId).toArray(),
+        pagePersistence.sessions.where("projectId").equals(props.projectId).toArray(),
       ]);
       const permissionIds = new Set(projectPermissions.map(p => p.id));
       const sessionIds = new Set(projectSessions.map(s => s.id));
@@ -182,7 +183,7 @@ export default function FindsBox(props: { projectId: string }) {
 
   const sfFirstMediaMap = useLiveQuery<Map<string, Media>>(async () => {
     if (!significantFinds || sfMediaOwnerIds.length === 0) return new Map<string, Media>();
-    const media = await db.media.where("findId").anyOf(sfMediaOwnerIds).toArray();
+    const media = await pagePersistence.media.where("findId").anyOf(sfMediaOwnerIds).toArray();
     const byOwner = new Map<string, Media>();
     media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of media) {
@@ -249,7 +250,7 @@ export default function FindsBox(props: { projectId: string }) {
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
-    const media = await db.media.where("findId").anyOf(findIds).toArray();
+    const media = await pagePersistence.media.where("findId").anyOf(findIds).toArray();
     const map = new Map<string, Media>();
     media.sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
     for (const row of media) {

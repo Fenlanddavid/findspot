@@ -1,9 +1,11 @@
 import { DurableObject } from 'cloudflare:workers';
+import { CACHE_POLICIES } from '../../src/shared/cachePolicy';
 
 const UPSTREAM_BASE_URL = 'https://nominatim.openstreetmap.org';
 const UPSTREAM_INTERVAL_MS = 1_100;
-const EDGE_CACHE_TTL_SECONDS = 180 * 24 * 60 * 60;
-const ORIGIN_CACHE_TTL_MS = 365 * 24 * 60 * 60 * 1_000;
+const EDGE_CACHE_TTL_SECONDS =
+  CACHE_POLICIES.geocodeEdge.expiry.durationMs / 1_000;
+const ORIGIN_CACHE_TTL_MS = CACHE_POLICIES.geocodeOrigin.expiry.durationMs;
 const ORIGIN_CACHE_VERSION = 1;
 const APP_URL = 'https://fenlanddavid.github.io/findspot/';
 const USER_AGENT = `FindSpot/${ORIGIN_CACHE_VERSION} (${APP_URL})`;
@@ -21,11 +23,6 @@ type StoredResult = {
   contentType: string;
   cachedAt: number;
 };
-
-interface Env {
-  GEOCODE_COORDINATOR: DurableObjectNamespace<GeocodeCoordinator>;
-  ALLOWED_ORIGINS?: string;
-}
 
 export class GeocodeCoordinator extends DurableObject<Env> {
   private queue: Promise<void> = Promise.resolve();

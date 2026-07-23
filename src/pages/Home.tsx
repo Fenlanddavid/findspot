@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Media } from "../db";
+import type { Media } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { getSetting } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { enrichPermissions } from "../services/permissions";
@@ -122,7 +123,7 @@ export default function Home(props: {
 
   const permissions = useLiveQuery(
     async () => {
-      let rows = await db.permissions.where("projectId").equals(props.projectId).toArray();
+      let rows = await pagePersistence.permissions.where("projectId").equals(props.projectId).toArray();
 
       let enriched = await enrichPermissions(props.projectId, rows);
 
@@ -141,7 +142,7 @@ export default function Home(props: {
   );
 
   const activeSession = useLiveQuery(async () => {
-    const sessions = await db.sessions
+    const sessions = await pagePersistence.sessions
       .where("projectId").equals(props.projectId)
       .filter(s => !s.isFinished)
       .toArray();
@@ -172,7 +173,7 @@ export default function Home(props: {
   }, [permissions, realPermissions, searchQuery]);
 
   const finds = useLiveQuery(
-    async () => db.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
+    async () => pagePersistence.finds.where("projectId").equals(props.projectId).reverse().sortBy("createdAt"),
     [props.projectId]
   );
 
@@ -183,7 +184,7 @@ export default function Home(props: {
   const [fieldGuideScanCount] = useDurableSetting('fs_fg_scan_count', 0);
 
   const appSettings = useLiveQuery(async () => {
-    const detectorist = await db.settings.get('detectorist');
+    const detectorist = await pagePersistence.settings.get('detectorist');
     return {
       detectorist: (detectorist?.value as string) || '',
     };
@@ -192,8 +193,8 @@ export default function Home(props: {
 
   const fieldGuidePackPrompt = useLiveQuery<FieldGuidePackPrompt>(async () => {
     const [permissionRows, savedPointRows] = await Promise.all([
-      db.permissions.where("projectId").equals(props.projectId).toArray(),
-      db.savedPoints.where("projectId").equals(props.projectId).toArray(),
+      pagePersistence.permissions.where("projectId").equals(props.projectId).toArray(),
+      pagePersistence.savedPoints.where("projectId").equals(props.projectId).toArray(),
     ]);
 
     const mappedPermissions = permissionRows
@@ -497,7 +498,7 @@ export default function Home(props: {
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
-    const media = await db.media.where("findId").anyOf(findIds).toArray();
+    const media = await pagePersistence.media.where("findId").anyOf(findIds).toArray();
     const m = new Map<string, Media>();
     media.sort((a, b) => {
         const aDate = a?.createdAt || "";

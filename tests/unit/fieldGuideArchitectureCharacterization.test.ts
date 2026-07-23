@@ -7,6 +7,10 @@ const FIELD_GUIDE_MODULES = {
     '../../src/pages/FieldGuideController.tsx',
     import.meta.url,
   ),
+  'components/fieldGuide/FieldGuideWorkspace.tsx': new URL(
+    '../../src/components/fieldGuide/FieldGuideWorkspace.tsx',
+    import.meta.url,
+  ),
   'hooks/useFieldGuideMap.ts': new URL('../../src/hooks/useFieldGuideMap.ts', import.meta.url),
   'hooks/useTerrainScan.ts': new URL('../../src/hooks/useTerrainScan.ts', import.meta.url),
   'hooks/useHistoricScan.ts': new URL('../../src/hooks/useHistoricScan.ts', import.meta.url),
@@ -46,6 +50,10 @@ const FIELD_GUIDE_MODULES = {
     '../../src/services/fieldguide/scanOrchestrator.ts',
     import.meta.url,
   ),
+  'services/fieldguide/postScanOrchestrator.ts': new URL(
+    '../../src/services/fieldguide/postScanOrchestrator.ts',
+    import.meta.url,
+  ),
 } as const;
 
 async function sourceLines(url: URL): Promise<number> {
@@ -64,25 +72,31 @@ describe('FieldGuide architecture characterization', () => {
 
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
-      'pages/FieldGuideController.tsx': 1_283,
+      'pages/FieldGuideController.tsx': 15,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_247,
       'hooks/useFieldGuideMap.ts': 294,
       'hooks/useTerrainScan.ts': 77,
       'hooks/useHistoricScan.ts': 82,
       'hooks/useFieldGuidePageState.ts': 280,
       'hooks/useFieldGuideProjectData.ts': 297,
-      'services/fieldguide/terrainScanCoordinator.ts': 472,
+      'services/fieldguide/terrainScanCoordinator.ts': 473,
       'services/fieldguide/terrainScanSupport.ts': 142,
       'services/fieldguide/historicScanCoordinator.ts': 405,
       'services/fieldguide/historicScanRecords.ts': 241,
-      'services/fieldguide/historicScanSupport.ts': 116,
+      'services/fieldguide/historicScanSupport.ts': 118,
       'services/fieldguide/fieldGuidePageSupport.ts': 83,
       'services/fieldguide/scanOrchestrator.ts': 160,
+      'services/fieldguide/postScanOrchestrator.ts': 71,
     });
   });
 
   it('keeps combined scan sequencing out of the page', async () => {
-    const source = await readFile(
+    const page = await readFile(
       FIELD_GUIDE_MODULES['pages/FieldGuideController.tsx'],
+      'utf8',
+    );
+    const workspace = await readFile(
+      FIELD_GUIDE_MODULES['components/fieldGuide/FieldGuideWorkspace.tsx'],
       'utf8',
     );
     const orchestrator = await readFile(
@@ -90,11 +104,13 @@ describe('FieldGuide architecture characterization', () => {
       'utf8',
     );
 
-    expect(source).toContain('runFieldGuideScan({');
-    expect(source).toContain('const runHistoricPhase = useCallback(async (');
-    expect(source).not.toContain('await runTerrainScan(');
-    expect(source).not.toContain('void runHistoricPhase(');
-    expect(source).not.toContain('updatePermissionIntelligenceQuestions');
+    expect(page).toContain('<FieldGuideWorkspace {...props} />');
+    expect(page).not.toContain('runFieldGuideScan');
+    expect(workspace).toContain('runFieldGuideScan({');
+    expect(workspace).toContain('const runHistoricPhase = useCallback(async (');
+    expect(workspace).not.toContain('await runTerrainScan(');
+    expect(workspace).not.toContain('void runHistoricPhase(');
+    expect(workspace).not.toContain('updatePermissionIntelligenceQuestions');
     expect(orchestrator).toContain('const permissionIntelligence = requestedPermission');
     expect(orchestrator).toContain('options.runHistoricPhase(');
     expect(orchestrator.trimEnd().split(/\r?\n/)).toHaveLength(160);

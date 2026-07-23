@@ -25,7 +25,7 @@ import {
   getLatestIntegrityAuditSummary,
   type IntegrityAuditSummary,
 } from '../services/integrityAudit';
-import { db } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import {
   ephemeralLocal,
   removeDurableSetting,
@@ -140,14 +140,14 @@ async function previewBackup(file: File): Promise<RestorePreview> {
 
 async function getCurrentDataCounts(): Promise<RestoreCounts> {
   const [projects, permissions, fields, sessions, finds, significantFinds, media, tracks] = await Promise.all([
-    db.projects.count(),
-    db.permissions.count(),
-    db.fields.count(),
-    db.sessions.count(),
-    db.finds.count(),
-    db.significantFinds.count(),
-    db.media.count(),
-    db.tracks.count(),
+    pagePersistence.projects.count(),
+    pagePersistence.permissions.count(),
+    pagePersistence.fields.count(),
+    pagePersistence.sessions.count(),
+    pagePersistence.finds.count(),
+    pagePersistence.significantFinds.count(),
+    pagePersistence.media.count(),
+    pagePersistence.tracks.count(),
   ]);
   return { projects, permissions, fields, sessions, finds, significantFinds, media, tracks };
 }

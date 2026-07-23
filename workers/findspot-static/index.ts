@@ -24,6 +24,13 @@ import {
   smBundleIndexKey,
   smBundleKey,
 } from '../../src/shared/staticDatasetContract';
+import { CACHE_POLICIES } from '../../src/shared/cachePolicy';
+
+const PAS_CACHE_TTL_SECONDS =
+  CACHE_POLICIES.staticPas.expiry.durationMs / 1_000;
+const HERITAGE_CACHE_TTL_SECONDS =
+  CACHE_POLICIES.staticHeritage.expiry.durationMs / 1_000;
+const HERITAGE_CACHE_CONTROL = `public, max-age=${HERITAGE_CACHE_TTL_SECONDS}`;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':   '*',
@@ -82,9 +89,9 @@ export default {
     // ── Determine cache-control for this key ─────────────────────────────────
     let cacheControl;
     if (isPasH3) {
-      cacheControl = 'public, max-age=604800'; // 7 days — PAS H3 tiles are stable
+      cacheControl = `public, max-age=${PAS_CACHE_TTL_SECONDS}`;
     } else {
-      cacheControl = 'public, max-age=86400';  // 1 day — SM index + AIM
+      cacheControl = HERITAGE_CACHE_CONTROL;
     }
 
     // ── Parse Range header ───────────────────────────────────────────────────
@@ -254,7 +261,7 @@ async function serveSmShard(key: string, method: string, env: Env): Promise<Resp
 function jsonResponse(body: string, method: string): Response {
   const headers = new Headers(CORS_HEADERS);
   headers.set('Content-Type', 'application/json');
-  headers.set('Cache-Control', 'public, max-age=86400');
+  headers.set('Cache-Control', HERITAGE_CACHE_CONTROL);
   headers.set('Content-Length', String(new TextEncoder().encode(body).byteLength));
   return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
 }
@@ -262,7 +269,7 @@ function jsonResponse(body: string, method: string): Response {
 function jsonStreamResponse(body: ReadableStream, method: string, length: number): Response {
   const headers = new Headers(CORS_HEADERS);
   headers.set('Content-Type', 'application/json');
-  headers.set('Cache-Control', 'public, max-age=86400');
+  headers.set('Cache-Control', HERITAGE_CACHE_CONTROL);
   headers.set('Content-Length', String(length));
   return new Response(method === 'HEAD' ? null : body, { status: 200, headers });
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { computeSessionOutcomeResult, SessionOutcomeResult } from "../engines/session/sessionOutcomeEngine";
-import { db, Permission, Session, Find, Media } from "../db";
+import type { Permission, Session, Find, Media } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting, getOrCreateRecorderId } from "../services/data";
@@ -341,7 +342,7 @@ export default function SessionPage(props: {
       const top = [...completed].sort((a, b) => getNotableFindScore(b) - getNotableFindScore(a))[0];
       if (!top) return;
 
-      const media = await db.media
+      const media = await pagePersistence.media
         .where("findId")
         .equals(top.id)
         .filter(m => m.type === "photo" && !!m.blob)
@@ -403,7 +404,7 @@ export default function SessionPage(props: {
 
   useEffect(() => {
     if (sessionId) {
-      db.sessions.get(sessionId).then(s => {
+      pagePersistence.sessions.get(sessionId).then(s => {
         if (!s) {
           if (isEdit) {
             // Session not found — it may have been deleted; redirect to home
@@ -475,14 +476,14 @@ export default function SessionPage(props: {
 
   async function handleDelete() {
     if (!isEdit) return;
-    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+    const sessionFinds = await pagePersistence.finds.where("sessionId").equals(sessionId).toArray();
     const findIds = sessionFinds.map(f => f.id);
-    const significantFinds = await db.significantFinds.where("sessionId").equals(sessionId).toArray();
+    const significantFinds = await pagePersistence.significantFinds.where("sessionId").equals(sessionId).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
-    const findMediaCount = findIds.length ? await db.media.where("findId").anyOf(findIds).count() : 0;
-    const significantFindMediaCount = significantFindIds.length ? await db.media.where("findId").anyOf(significantFindIds).count() : 0;
+    const findMediaCount = findIds.length ? await pagePersistence.media.where("findId").anyOf(findIds).count() : 0;
+    const significantFindMediaCount = significantFindIds.length ? await pagePersistence.media.where("findId").anyOf(significantFindIds).count() : 0;
     const mediaCount = findMediaCount + significantFindMediaCount;
-    const trackCount = await db.tracks.where("sessionId").equals(sessionId).count();
+    const trackCount = await pagePersistence.tracks.where("sessionId").equals(sessionId).count();
 
     if (!(await confirmAction({
       title: "Delete Session?",
@@ -519,7 +520,7 @@ export default function SessionPage(props: {
 
       let resolvedPermissionId: string;
       if (isEdit) {
-        const existing = await db.sessions.get(sessionId);
+        const existing = await pagePersistence.sessions.get(sessionId);
         if (!existing) {
           setError("Session not found — it may have been deleted.");
           setSaving(false);
@@ -532,7 +533,7 @@ export default function SessionPage(props: {
 
       let clubDayAttribution: { sharedPermissionId?: string; recorderId?: string; recorderName?: string } = {};
       if (!isEdit) {
-        const perm = await db.permissions.get(resolvedPermissionId);
+        const perm = await pagePersistence.permissions.get(resolvedPermissionId);
         const sharedId = perm?.sharedPermissionId || (perm?.isClubDayMember ? perm.id : undefined);
         if (sharedId) {
           const [recorderId, recorderName] = await Promise.all([
@@ -601,7 +602,7 @@ export default function SessionPage(props: {
             setShowTrackingOverlay(true);
 
             // Record start time if not already set
-            const s = await db.sessions.get(sessionId);
+            const s = await pagePersistence.sessions.get(sessionId);
             if (s && !s.startTime) {
                 const startedAt = new Date().toISOString();
                 await recordSessionTrackingStart(sessionId, startedAt);
@@ -632,12 +633,12 @@ export default function SessionPage(props: {
         if (result) finalCoverage = result.percentCovered;
     }
     
-    const count = await db.finds.where("sessionId").equals(sessionId).count();
+    const count = await pagePersistence.finds.where("sessionId").equals(sessionId).count();
 
     // Duration calculation - use startTime if available
     let durationStr: string | null = null;
     let durationMins: number | null = null;
-    const s = await db.sessions.get(sessionId);
+    const s = await pagePersistence.sessions.get(sessionId);
     const startT = s?.startTime ? new Date(s.startTime).getTime() : null;
 
     if (startT) {
@@ -665,22 +666,22 @@ export default function SessionPage(props: {
     }
 
     // Phase 2+3 — compute outcome + next move
-    const sessionFinds = await db.finds.where("sessionId").equals(sessionId).toArray();
+    const sessionFinds = await pagePersistence.finds.where("sessionId").equals(sessionId).toArray();
     const findPoints = sessionFinds
         .filter(f => f.lat !== null && f.lon !== null)
         .map(f => ({ lat: f.lat!, lon: f.lon! }));
 
     let prevSessionSummaries: { findsCount: number }[] = [];
-    const currentSession = await db.sessions.get(sessionId);
+    const currentSession = await pagePersistence.sessions.get(sessionId);
     const resolvedPermId = currentSession?.permissionId;
     if (resolvedPermId) {
-        const prevSessions = await db.sessions
+        const prevSessions = await pagePersistence.sessions
             .where("permissionId").equals(resolvedPermId)
             .filter(s => s.id !== sessionId && !!s.isFinished)
             .toArray();
         prevSessionSummaries = await Promise.all(
             prevSessions.map(async ps => ({
-                findsCount: await db.finds.where("sessionId").equals(ps.id).count(),
+                findsCount: await pagePersistence.finds.where("sessionId").equals(ps.id).count(),
             }))
         );
     }
@@ -688,7 +689,7 @@ export default function SessionPage(props: {
     const outcomeResult = computeSessionOutcomeResult(count, finalCoverage, durationMins, findPoints, prevSessionSummaries);
 
     const openSignalCount = sessionId
-        ? await db.undugSignals.where('sessionId').equals(sessionId).filter(s => s.status === 'open').count()
+        ? await pagePersistence.undugSignals.where('sessionId').equals(sessionId).filter(s => s.status === 'open').count()
         : 0;
 
     setSummaryData({

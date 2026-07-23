@@ -1,6 +1,6 @@
 name = "findspot-geocode"
 main = "index.ts"
-compatibility_date = "2026-07-20"
+compatibility_date = "2026-07-23"
 
 [durable_objects]
 bindings = [

@@ -1,6 +1,6 @@
 name               = "findspot-wales-lidar"
 main               = "index.js"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-07-23"
 
 [[r2_buckets]]
 binding    = "WALES_LIDAR_BUCKET"

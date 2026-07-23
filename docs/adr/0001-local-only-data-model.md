@@ -31,11 +31,16 @@ Club Day packs remain explicit user-controlled transfers, not an implicit sync c
 
 ## Reopen triggers
 
-Reconsider opt-in sync only when at least one of these is true:
+Reconsider opt-in sync only when at least one of these measurable conditions is
+met:
 
-- sustained user research shows cross-device continuity is more valuable than account-free local-only operation;
-- backup loss or device migration is a material support burden despite reminders and restore drills;
-- collaboration needs cannot be met safely by explicit Club Day packs; or
+- at least 20 distinct users request multi-device continuity within a rolling
+  90-day research window, or at least 25% of respondents in a study of 40 or
+  more active users rank it above account-free local-only operation;
+- three or more independently verified storage-loss or device-migration
+  incidents occur within 12 months despite backup reminders and restore drills;
+- five or more active clubs document a repeated workflow that cannot be
+  completed safely with explicit Club Day packs within six months; or
 - a funded design covers identity, tombstones, conflicts, encryption/key recovery, media quotas, schema compatibility, and offline reconciliation end to end.
 
 Any proposal to reopen this decision must include a migration path that preserves IndexedDB as an offline source of truth and makes sync an optional replica rather than a runtime dependency.

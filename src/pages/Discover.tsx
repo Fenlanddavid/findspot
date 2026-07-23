@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import {
   ephemeralLocal,
@@ -9,6 +9,7 @@ import {
   setDurableSetting,
   useDurableSetting,
 } from '../services/clientStorage';
+import { CACHE_POLICIES } from '../shared/cachePolicy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ const LOCAL_SUBMISSIONS_KEY = "fs_event_submissions";
 const LOCAL_CLUB_SUBMISSIONS_KEY = "fs_club_submissions";
 const EVENTS_CACHE_KEY = "fs_events_cache";
 const CLUBS_CACHE_KEY = "fs_clubs_cache";
-const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL = CACHE_POLICIES.discoverReferenceData.expiry.durationMs;
 const GOING_KEY = "fs_going_events";
 const REVIEW_SUBMISSION_URL = "https://api.web3forms.com/submit";
 const REVIEW_ACCESS_KEY = (import.meta.env.VITE_WEB3FORMS_ACCESS_KEY as string | undefined)?.trim();
@@ -1339,7 +1340,7 @@ export default function Discover({ projectId }: { projectId: string }) {
 
   // Track rally permissions created from Discover events (title|date key)
   const plannedKeys = useLiveQuery(async () => {
-    const rallies = await db.permissions.where("projectId").equals(projectId).filter(p => p.type === "rally").toArray();
+    const rallies = await pagePersistence.permissions.where("projectId").equals(projectId).filter(p => p.type === "rally").toArray();
     return new Set(rallies.map(r => `${r.name}|${r.validFrom ?? ""}`));
   }, [projectId]) ?? new Set<string>();
 

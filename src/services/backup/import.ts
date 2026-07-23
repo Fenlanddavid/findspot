@@ -207,6 +207,7 @@ export async function importData(
         prepared.zipBytes,
         prepared.mediaItems,
         report,
+        options.database,
       );
     } catch (error) {
       if (isQuotaExceeded(error)) {

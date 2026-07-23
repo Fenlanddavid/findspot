@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const SOURCE_DIRECTORY = new URL("../../src/", import.meta.url);
 const ENGINES_DIRECTORY = new URL("../../src/engines/", import.meta.url);
+const PAGES_DIRECTORY = new URL("../../src/pages/", import.meta.url);
 
 const DATABASE_MUTATION_METHODS = new Set([
   "add",
@@ -34,6 +35,53 @@ function importsDatabase(source: string): boolean {
   ));
 }
 
+function importsDatabaseValue(source: string, fileName: string): boolean {
+  const syntax = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  function visit(node: ts.Node): void {
+    if (found) return;
+    if (
+      ts.isImportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier)
+      && /(?:^|\/)db(?:\.ts)?$/.test(node.moduleSpecifier.text)
+      && node.importClause
+      && !node.importClause.isTypeOnly
+    ) {
+      if (node.importClause.name) {
+        found = true;
+        return;
+      }
+      const bindings = node.importClause.namedBindings;
+      if (bindings && (
+        ts.isNamespaceImport(bindings)
+        || bindings.elements.some(element => (
+          !element.isTypeOnly
+          && (element.propertyName?.text ?? element.name.text) === "db"
+        ))
+      )) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(syntax);
+  return found;
+}
+
+function explicitAnyCount(source: string, fileName: string): number {
+  const syntax = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  let count = 0;
+  function visit(node: ts.Node): void {
+    if (node.kind === ts.SyntaxKind.AnyKeyword) count += 1;
+    ts.forEachChild(node, visit);
+  }
+  visit(syntax);
+  return count;
+}
+
 function expressionRoot(expression: ts.Expression): ts.Expression {
   if (ts.isPropertyAccessExpression(expression) || ts.isElementAccessExpression(expression)) {
     return expressionRoot(expression.expression);
@@ -42,7 +90,11 @@ function expressionRoot(expression: ts.Expression): ts.Expression {
   return expression;
 }
 
-function hasDirectDatabaseMutation(source: string, fileName: string): boolean {
+function hasDirectPersistenceMutation(
+  source: string,
+  fileName: string,
+  roots: ReadonlySet<string> = new Set(["db"]),
+): boolean {
   const syntax = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   let found = false;
 
@@ -52,7 +104,7 @@ function hasDirectDatabaseMutation(source: string, fileName: string): boolean {
       const root = expressionRoot(node.expression);
       if (
         ts.isIdentifier(root)
-        && root.text === "db"
+        && roots.has(root.text)
         && DATABASE_MUTATION_METHODS.has(node.expression.name.text)
       ) {
         found = true;
@@ -80,6 +132,61 @@ describe("persistence boundaries", () => {
     expect(violations.sort()).toEqual([]);
   });
 
+  it("keeps every engine locked at zero explicit any keywords", async () => {
+    const violations: string[] = [];
+
+    for (const file of await sourceFiles(ENGINES_DIRECTORY)) {
+      const source = await readFile(file, "utf8");
+      const count = explicitAnyCount(source, file.pathname);
+      if (count > 0) {
+        const relative = file.pathname.split("/src/").at(-1) ?? file.pathname;
+        violations.push(`${relative}: ${count}`);
+      }
+    }
+
+    expect(violations.sort()).toEqual([]);
+  });
+
+  it("keeps database value imports out of every page", async () => {
+    const violations: string[] = [];
+
+    for (const file of await sourceFiles(PAGES_DIRECTORY)) {
+      const source = await readFile(file, "utf8");
+      if (importsDatabaseValue(source, file.pathname)) {
+        violations.push(`pages/${file.pathname.split("/pages/").at(-1)}`);
+      }
+    }
+
+    expect(violations.sort()).toEqual([]);
+  });
+
+  it("keeps FieldGuideController below its composition-only size ceiling", async () => {
+    const controller = new URL("../../src/pages/FieldGuideController.tsx", import.meta.url);
+    const source = await readFile(controller, "utf8");
+    expect(source.split("\n").length).toBeLessThan(500);
+  });
+
+  it("keeps post-scan writes behind the dedicated orchestrator", async () => {
+    const [workspace, orchestrator] = await Promise.all([
+      readFile(
+        new URL("../../src/components/fieldGuide/FieldGuideWorkspace.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../../src/services/fieldguide/postScanOrchestrator.ts", import.meta.url),
+        "utf8",
+      ),
+    ]);
+
+    expect(workspace).toContain("persistPostScanOutcomes({");
+    expect(workspace).not.toContain("updateQuestionsAfterScan(");
+    expect(workspace).not.toContain("recordFindHotspotSignals(");
+    expect(workspace).not.toContain("recordHotspotPredictions(");
+    expect(orchestrator).toContain("updateQuestionsAfterScan({");
+    expect(orchestrator).toContain("recordFindHotspotSignals(");
+    expect(orchestrator).toContain("recordHotspotPredictions(");
+  });
+
   it("keeps direct database writes out of all UI modules", async () => {
     const violations: string[] = [];
     const uiFiles = (await sourceFiles(SOURCE_DIRECTORY)).filter(file => {
@@ -92,7 +199,24 @@ describe("persistence boundaries", () => {
 
     for (const file of uiFiles) {
       const source = await readFile(file, "utf8");
-      if (hasDirectDatabaseMutation(source, file.pathname)) {
+      if (hasDirectPersistenceMutation(source, file.pathname)) {
+        violations.push(file.pathname.split("/src/").at(-1) ?? file.pathname);
+      }
+    }
+
+    expect(violations.sort()).toEqual([]);
+  });
+
+  it("keeps the page persistence facade query-only at page call sites", async () => {
+    const violations: string[] = [];
+
+    for (const file of await sourceFiles(PAGES_DIRECTORY)) {
+      const source = await readFile(file, "utf8");
+      if (hasDirectPersistenceMutation(
+        source,
+        file.pathname,
+        new Set(["pagePersistence"]),
+      )) {
         violations.push(file.pathname.split("/src/").at(-1) ?? file.pathname);
       }
     }

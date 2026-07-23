@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
+import { pagePersistence } from "../services/pagePersistence";
 import { useNavigate } from "react-router-dom";
 import { enrichPermissions } from "../services/permissions";
 import { PermissionCard } from "../components/PermissionCard";
@@ -13,7 +13,7 @@ export default function AllPermissions(props: { projectId: string }) {
 
   const permissions = useLiveQuery(
     async () => {
-      let collection = db.permissions.where("projectId").equals(props.projectId);
+      let collection = pagePersistence.permissions.where("projectId").equals(props.projectId);
       let rows = [];
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
