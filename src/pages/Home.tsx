@@ -510,6 +510,19 @@ export default function Home(props: {
     return m;
   }, [findIds]);
 
+  const homePresentationReady = permissions !== undefined && finds !== undefined;
+  if (!homePresentationReady) {
+    return (
+      <div
+        aria-busy="true"
+        aria-label="Loading Home"
+        className="mx-auto min-h-[calc(100vh-220px)] max-w-5xl px-4"
+      >
+        <span className="sr-only" role="status">Loading Home…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-5 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
       {showHomeSignalSheet && activeSession && (
@@ -855,7 +868,7 @@ export default function Home(props: {
                         <p className={`text-sm max-w-md ${isFirstRun ? "text-gray-500 dark:text-gray-400" : "text-emerald-700/70 dark:text-emerald-400/80"}`}>
                           {isFirstRun ? "Add one when you are ready to keep landowner, field and session records together." : "Add a permission if you already have access to the land."}
                         </p>
-                        <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-all`}>
+                        <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-transform`}>
                             Add Permission
                         </button>
                     </div>
