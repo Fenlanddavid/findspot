@@ -1,4 +1,6 @@
 import * as turf from "@turf/turf";
+import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
+import type { GeoJSONArea } from "../shared/coverageTypes";
 
 export interface CoverageResult {
     undetectionsGeoJSON: any; // FeatureCollection of polygons representing gaps
@@ -6,6 +8,56 @@ export interface CoverageResult {
     totalAreaM2: number;
     percentCovered: number;
     percentUndetected: number;
+    reportedAreaM2?: number;
+}
+
+/**
+ * Removes user-reported searched sections from track-derived gaps. The
+ * reported contribution is kept separate so callers can make evidence-aware
+ * claims rather than presenting it as GPS precision.
+ */
+export function applyReportedCoverageToGaps(
+    result: CoverageResult | null,
+    reportedAreas: GeoJSONArea[],
+): CoverageResult | null {
+    if (!result || reportedAreas.length === 0) return result;
+
+    try {
+        const original = result.undetectionsGeoJSON as FeatureCollection<Polygon | MultiPolygon>;
+        let gaps = original.features;
+        for (const geometry of reportedAreas) {
+            const reported = turf.feature(geometry);
+            gaps = gaps.flatMap(gap => {
+                const remaining = turf.difference(turf.featureCollection([gap, reported]));
+                if (!remaining) return [];
+                return turf.flatten(remaining).features;
+            });
+        }
+        const cleaned = gaps
+            .filter(gap => turf.area(gap) > 2.5)
+            .map(gap => turf.simplify(gap, {
+                tolerance: 0.000005,
+                highQuality: true,
+            }));
+        const gapAreaM2 = turf.area(turf.featureCollection(cleaned));
+        const detectedAreaM2 = Math.max(0, result.totalAreaM2 - gapAreaM2);
+        const newlyReportedAreaM2 = Math.max(0, detectedAreaM2 - result.detectedAreaM2);
+        const percentCovered = result.totalAreaM2 > 0
+            ? (detectedAreaM2 / result.totalAreaM2) * 100
+            : 0;
+
+        return {
+            ...result,
+            undetectionsGeoJSON: turf.featureCollection(cleaned),
+            detectedAreaM2,
+            percentCovered: Math.min(100, percentCovered),
+            percentUndetected: Math.max(0, 100 - percentCovered),
+            reportedAreaM2: (result.reportedAreaM2 ?? 0) + newlyReportedAreaM2,
+        };
+    } catch (error) {
+        console.error("Reported coverage gap calculation error:", error);
+        return result;
+    }
 }
 
 /**

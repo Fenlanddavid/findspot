@@ -1,11 +1,19 @@
 import Dexie, { Table, type Transaction } from "dexie";
 import { v4 as uuid } from "uuid";
 import type { OutstandingQuestion, QuestionNote } from "./outstandingQuestions/types";
-
-export type GeoJSONPolygon = {
-  type: "Polygon";
-  coordinates: number[][][];
-};
+import type {
+  GeoJSONPolygon,
+  PermissionSection,
+  SessionCoverageObservation,
+} from './shared/coverageTypes';
+export type {
+  CoverageEvidence,
+  GeoJSONArea,
+  GeoJSONPolygon,
+  PermissionSection,
+  PermissionSectionGeometryVersion,
+  SessionCoverageObservation,
+} from './shared/coverageTypes';
 
 export type TreasureOutcome =
   | "not_treasure_returned"
@@ -442,6 +450,8 @@ export type HotspotPrediction = {
   searchedCoverage?: number;
   matchedFindId?: string;
   resolvedAt?: number;
+  resolutionEvidence?: 'find' | 'tracked' | 'reported' | 'mixed';
+  reportedConfirmationCount?: number;
 };
 
 /** Long-lived evidence retained after raw prediction records expire. */
@@ -452,6 +462,13 @@ export type HotspotPredictionAggregate = {
   surfacedCount: number;
   searchedCount: number;
   hitCount: number;
+  trackedSearchedCount?: number;
+  trackedHitCount?: number;
+  reportedSearchedCount?: number;
+  reportedHitCount?: number;
+  mixedSearchedCount?: number;
+  mixedHitCount?: number;
+  findOnlyHitCount?: number;
   updatedAt: number;
 };
 
@@ -495,7 +512,7 @@ export type FieldGuideScanCache = {
 // Never transmitted. User-exportable from Settings > Backup.
 // Hard cap 2,000 entries — oldest are pruned on write past the cap.
 
-export type DiagLogLevel = 'info' | 'warn' | 'error';
+export type DiagLogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export type DiagLogEntry = {
   id: string;
@@ -569,7 +586,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 40;
+export const FINDSPOT_CURRENT_VERSION = 41;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -614,6 +631,8 @@ export class FindSpotDB extends Dexie {
   findHotspotSignals!: Table<FindHotspotSignal, string>;
   hotspotPredictions!: Table<HotspotPrediction, string>;
   hotspotPredictionAggregates!: Table<HotspotPredictionAggregate, string>;
+  permissionSections!: Table<PermissionSection, string>;
+  sessionCoverage!: Table<SessionCoverageObservation, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
@@ -908,6 +927,14 @@ export class FindSpotDB extends Dexie {
     declareFindSpotVersion(40).stores({
       hotspotPredictions: 'id, engineVersion, confidence, surfacedAt, permissionId, sessionId, outcome',
       hotspotPredictionAggregates: 'id, engineVersion, confidence, updatedAt',
+    });
+
+    // v41: stable permission sections and source-specific session coverage
+    // observations. Both are additive; section geometry is created lazily so
+    // opening an existing database does not perform heavy spatial work.
+    declareFindSpotVersion(41).stores({
+      permissionSections: 'id, permissionId, fieldId, retiredAt',
+      sessionCoverage: 'id, sessionId, permissionId, sectionId, evidence, observedAt, [sectionId+evidence]',
     });
 
     // Production and migration fixtures both replay this exact registry.

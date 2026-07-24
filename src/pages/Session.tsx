@@ -30,6 +30,7 @@ import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
 import { useSessionMap } from '../hooks/useSessionMap';
+import { useReportedCoverageGeometries } from '../hooks/useReportedCoverageGeometries';
 import {
   createSessionRecord,
   deleteSessionCascade,
@@ -41,11 +42,14 @@ import {
   trimSessionTrack,
   updateSessionDetails,
 } from '../services/sessionMutations';
+import { prepareSessionCoverageEvidence } from '../services/coverageMutations';
+import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
 
 const FIRST_SESSION_KEY = "fs_first_session";
 const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
 
 function SessionSummary({
+  sessionId,
   coverage,
   findsCount,
   pendingCount,
@@ -64,6 +68,7 @@ function SessionSummary({
   onExportClubDay,
   openSignalCount,
 }: {
+  sessionId: string,
   coverage: number,
   findsCount: number,
   pendingCount: number,
@@ -137,6 +142,8 @@ function SessionSummary({
                     </div>
                   )}
               </div>
+
+              <SessionCoverageReview sessionId={sessionId} />
 
               {/* Phase 3 — Next Move */}
               {outcomeResult?.nextMove && (
@@ -298,13 +305,28 @@ export default function SessionPage(props: {
   const { permission, fields, selectedField, session, finds, allMedia, tracks } = useSessionData({
     sessionId, permissionId, fieldId,
   });
+  const reportedCoverage = useReportedCoverageGeometries(
+    permission?.id ?? permissionId ?? undefined,
+    sessionId,
+  );
+  const reportedAreas = useMemo(
+    () => reportedCoverage
+      .filter(item => !selectedField || item.fieldId === selectedField.id)
+      .map(item => item.geometry),
+    [reportedCoverage, selectedField],
+  );
   const {
     isTracking, setIsTracking,
     showTrackingOverlay, setShowTrackingOverlay,
     showCoverage, setShowCoverage,
     coverageResult, coverageError,
     activeDistanceKm, activeCoverage,
-  } = useSessionTracking(sessionId, selectedField?.boundary || permission?.boundary, tracks);
+  } = useSessionTracking(
+    sessionId,
+    selectedField?.boundary || permission?.boundary,
+    tracks,
+    reportedAreas,
+  );
 
   useEffect(() => {
     if (!isActiveSessionMode) return;
@@ -710,6 +732,11 @@ export default function SessionPage(props: {
             setIsTracking(isTrackingActiveForSession(sessionId));
             return;
         }
+        try {
+            await prepareSessionCoverageEvidence(sessionId, endTimeIso);
+        } catch {
+            setError("Session finished, but ground coverage could not be prepared.");
+        }
         setIsFinished(true);
     }
 
@@ -874,6 +901,10 @@ export default function SessionPage(props: {
             <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm flex gap-3 items-center">
                 <span className="text-xl">⚠️</span> {error}
             </div>
+        )}
+
+        {isEdit && isFinished && !showSummary && (
+          <SessionCoverageReview sessionId={sessionId} />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
@@ -1085,7 +1116,7 @@ export default function SessionPage(props: {
                                 onClick={() => setShowCoverage(!showCoverage)}
                                 className={`mt-3 w-full rounded-lg border px-3 py-2 text-2xs font-black uppercase tracking-widest transition-all ${showCoverage ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:border-orange-400 dark:border-orange-900 dark:bg-gray-950/50 dark:text-orange-400"}`}
                               >
-                                {showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? "No Gaps" : "Gaps On") : "Show Gaps"}
+                                {showCoverage ? (coverageResult && coverageResult.percentUndetected <= 1 ? "No Gaps" : "Gaps On") : "Show Gaps"}
                               </button>
                             )}
                           </div>
@@ -1322,7 +1353,7 @@ export default function SessionPage(props: {
                                         onClick={() => setShowCoverage(!showCoverage)}
                                         className={`flex items-center gap-2 px-3 py-1 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-2xs border ${showCoverage ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-orange-700 dark:text-orange-400'}`}
                                     >
-                                        <span>{showCoverage ? (activeCoverage && activeCoverage.percentUndetected <= 1 ? 'No Gaps' : 'Gaps On') : 'Show Gaps'}</span>
+                                        <span>{showCoverage ? (coverageResult && coverageResult.percentUndetected <= 1 ? 'No Gaps' : 'Gaps On') : 'Show Gaps'}</span>
                                         {showCoverage && coverageResult && (
                                             <span className="bg-white/20 px-1 rounded text-3xs">
                                                 {Math.round(100 - coverageResult.percentCovered)}%
@@ -1500,6 +1531,7 @@ export default function SessionPage(props: {
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
         <SessionSummary
+          sessionId={sessionId}
           coverage={summaryData.coverage}
           findsCount={summaryData.findsCount}
           pendingCount={finds?.filter(f => f.isPending).length ?? 0}

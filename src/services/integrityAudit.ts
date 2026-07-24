@@ -66,6 +66,8 @@ export async function auditDatabaseIntegrity(
     database.hotspotPredictions,
     database.outstandingQuestions,
     database.questionNotes,
+    database.permissionSections,
+    database.sessionCoverage,
   ];
 
   const rows = await database.transaction('r', tables, async () => {
@@ -73,6 +75,7 @@ export async function auditDatabaseIntegrity(
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
+      permissionSections, sessionCoverage,
     ] = await Promise.all([
       database.projects.toArray(),
       database.permissions.toArray(),
@@ -88,11 +91,14 @@ export async function auditDatabaseIntegrity(
       database.hotspotPredictions.toArray(),
       database.outstandingQuestions.toArray(),
       database.questionNotes.toArray(),
+      database.permissionSections.toArray(),
+      database.sessionCoverage.toArray(),
     ]);
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
+      permissionSections, sessionCoverage,
     };
   });
 
@@ -105,6 +111,7 @@ export async function auditDatabaseIntegrity(
     ...findIds,
     ...rows.significantFinds.map(row => row.id),
   ]);
+  const sectionById = new Map(rows.permissionSections.map(row => [row.id, row]));
 
   let danglingPermissionIds = 0;
   for (const row of [
@@ -114,6 +121,8 @@ export async function auditDatabaseIntegrity(
     ...rows.significantFinds,
     ...rows.outstandingQuestions,
     ...rows.findHotspotSignals,
+    ...rows.permissionSections,
+    ...rows.sessionCoverage,
   ]) {
     if (!isKnownId(row.permissionId, permissionIds)) danglingPermissionIds += 1;
   }
@@ -139,6 +148,12 @@ export async function auditDatabaseIntegrity(
   for (const row of [...rows.sessions, ...rows.finds]) {
     if (missingOptionalId(row.fieldId, fieldIds)) orphanedRecords += 1;
   }
+  for (const section of rows.permissionSections) {
+    if (!section.retiredAt && missingOptionalId(section.fieldId, fieldIds)) orphanedRecords += 1;
+    if (!section.geometryVersions.some(version =>
+      version.version === section.currentGeometryVersion
+    )) orphanedRecords += 1;
+  }
   for (const row of [
     ...rows.finds,
     ...rows.significantFinds,
@@ -146,6 +161,7 @@ export async function auditDatabaseIntegrity(
     ...rows.undugSignals,
     ...rows.hotspotPredictions,
     ...rows.questionNotes,
+    ...rows.sessionCoverage,
   ]) {
     if (missingOptionalId(row.sessionId, sessionIds)) orphanedRecords += 1;
   }
@@ -165,6 +181,16 @@ export async function auditDatabaseIntegrity(
     for (const linkedFindId of row.linkedFindIds ?? []) {
       if (!findIds.has(linkedFindId)) orphanedRecords += 1;
     }
+  }
+  for (const observation of rows.sessionCoverage) {
+    const section = sectionById.get(observation.sectionId);
+    if (!section) {
+      orphanedRecords += 1;
+      continue;
+    }
+    if (!section.geometryVersions.some(version =>
+      version.version === observation.sectionGeometryVersion
+    )) orphanedRecords += 1;
   }
 
   const retiredRules = rows.outstandingQuestions.filter(question =>

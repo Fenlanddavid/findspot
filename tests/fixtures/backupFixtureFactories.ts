@@ -117,6 +117,26 @@ export const BACKUP_FIXTURE_FACTORIES = {
     id: 'note-1', questionId: 'question-1', author: 'user',
     type: 'freeform', text: 'Check after ploughing.', createdAt: Date.parse(ISO),
   }),
+  permissionSections: () => ({
+    id: 'field-1:whole', permissionId: 'permission-1', fieldId: 'field-1',
+    layoutKey: 'whole', label: 'Lower paddock', currentGeometryVersion: 1,
+    geometryVersions: [{
+      version: 1, boundaryHash: 'h3-r10-v1:fixture',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [[[0.12, 52.20], [0.13, 52.20], [0.13, 52.21], [0.12, 52.20]]],
+      },
+      areaM2: 10_000, effectiveFrom: ISO,
+    }],
+    createdAt: ISO, updatedAt: ISO,
+  }),
+  sessionCoverage: () => ({
+    id: 'session-1:field-1:whole:v1:reported',
+    sessionId: 'session-1', permissionId: 'permission-1',
+    sectionId: 'field-1:whole', sectionGeometryVersion: 1,
+    evidence: 'reported', startedAt: Date.parse(ISO), observedAt: Date.parse(ISO),
+    createdAt: ISO, updatedAt: ISO,
+  }),
 } satisfies Record<BackedUpTableName, FixtureFactory>;
 
 export async function seedBackupFixture(database: FindSpotDB): Promise<void> {

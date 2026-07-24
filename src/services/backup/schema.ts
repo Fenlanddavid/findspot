@@ -7,11 +7,13 @@ import type {
   ImportedPackage,
   Media,
   OutstandingQuestion,
+  PermissionSection,
   Permission,
   Project,
   QuestionNote,
   SavedPoint,
   Session,
+  SessionCoverageObservation,
   Setting,
   SignificantFind,
   Track,
@@ -51,6 +53,8 @@ export type ValidatedBackupTables = {
   hotspotPredictionAggregates: HotspotPredictionAggregate[];
   outstandingQuestions: OutstandingQuestion[];
   questionNotes: QuestionNote[];
+  permissionSections: PermissionSection[];
+  sessionCoverage: SessionCoverageObservation[];
 };
 
 /**

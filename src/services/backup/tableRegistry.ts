@@ -98,6 +98,16 @@ export const BACKUP_TABLE_REGISTRY = {
     storageRole: 'user-data',
     reason: 'User-authored and system investigation notes.',
   },
+  permissionSections: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'Stable, versioned land-section identities preserve the meaning of coverage history.',
+  },
+  sessionCoverage: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'User-reported and source-specific session coverage observations are meaningful fieldwork history.',
+  },
   fieldGuideCache: {
     classification: 'excluded',
     storageRole: 'cache',

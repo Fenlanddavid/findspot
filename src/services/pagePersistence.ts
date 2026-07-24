@@ -20,4 +20,6 @@ export const pagePersistence = {
   importedPackages: db.importedPackages,
   savedPoints: db.savedPoints,
   undugSignals: db.undugSignals,
+  permissionSections: db.permissionSections,
+  sessionCoverage: db.sessionCoverage,
 } as const;

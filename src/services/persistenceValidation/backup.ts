@@ -19,6 +19,37 @@ function isIsoDateString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0 && Number.isFinite(Date.parse(value));
 }
 
+function isCoordinatePair(value: unknown): boolean {
+  return Array.isArray(value)
+    && value.length >= 2
+    && Number.isFinite(value[0])
+    && Number.isFinite(value[1])
+    && (value[0] as number) >= -180
+    && (value[0] as number) <= 180
+    && (value[1] as number) >= -90
+    && (value[1] as number) <= 90;
+}
+
+function isPolygonCoordinates(value: unknown): boolean {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every(ring =>
+      Array.isArray(ring) && ring.length >= 4 && ring.every(isCoordinatePair)
+    );
+}
+
+function isAreaGeometry(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const geometry = value as UnvalidatedRow;
+  if (geometry.type === 'Polygon') return isPolygonCoordinates(geometry.coordinates);
+  if (geometry.type === 'MultiPolygon') {
+    return Array.isArray(geometry.coordinates)
+      && geometry.coordinates.length > 0
+      && geometry.coordinates.every(isPolygonCoordinates);
+  }
+  return false;
+}
+
 function assertPermissionIntelligence(permission: UnvalidatedRow, index: number) {
   const invalid = (field: string) => new Error(`Invalid format: permissions[${index}] has an invalid ${field}`);
 
@@ -183,7 +214,7 @@ export function validatePersistedBackupTables(
   for (const table of [
     'projects', 'permissions', 'fields', 'sessions', 'finds', 'significantFinds',
     'tracks', 'media', 'importedPackages', 'savedPoints', 'undugSignals',
-    'outstandingQuestions', 'questionNotes',
+    'outstandingQuestions', 'questionNotes', 'permissionSections', 'sessionCoverage',
   ] as const) {
     assertRowsHaveId(backup[table], table);
   }
@@ -193,6 +224,7 @@ export function validatePersistedBackupTables(
   const sessionIds = new Set(backup.sessions.map(row => row.id));
   const findIds = new Set(backup.finds.map(row => row.id));
   const significantFindIds = new Set(backup.significantFinds.map(row => row.id));
+  const sectionIds = new Set(backup.permissionSections.map(row => row.id));
 
   backup.permissions.forEach((permission, index) => {
     if (!projectIds.has(permission.projectId)) {
@@ -292,6 +324,15 @@ export function validatePersistedBackupTables(
     }
     if ((aggregate.hitCount as number) > (aggregate.searchedCount as number) ||
         (aggregate.searchedCount as number) > (aggregate.surfacedCount as number)) throw invalid('counts');
+    for (const field of [
+      'trackedSearchedCount', 'trackedHitCount', 'reportedSearchedCount',
+      'reportedHitCount', 'mixedSearchedCount', 'mixedHitCount', 'findOnlyHitCount',
+    ] as const) {
+      if (aggregate[field] !== undefined &&
+          (!Number.isInteger(aggregate[field]) || (aggregate[field] as number) < 0)) {
+        throw invalid(field);
+      }
+    }
   });
   backup.outstandingQuestions.forEach((question, index) => {
     if (!permissionIds.has(question.permissionId)) {
@@ -319,6 +360,82 @@ export function validatePersistedBackupTables(
     }
   });
 
+  backup.permissionSections.forEach((section, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: permissionSections[${index}] has an invalid ${field}`);
+    if (!permissionIds.has(section.permissionId)) throw invalid('permissionId');
+    if (section.fieldId !== null && typeof section.fieldId !== 'string') throw invalid('fieldId');
+    if (typeof section.layoutKey !== 'string' || !section.layoutKey.trim()) throw invalid('layoutKey');
+    if (typeof section.label !== 'string' || !section.label.trim()) throw invalid('label');
+    if (!Number.isInteger(section.currentGeometryVersion) ||
+        (section.currentGeometryVersion as number) < 1) throw invalid('currentGeometryVersion');
+    if (!Array.isArray(section.geometryVersions) || section.geometryVersions.length === 0) {
+      throw invalid('geometryVersions');
+    }
+    const versions = new Set<number>();
+    section.geometryVersions.forEach((value: unknown) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw invalid('geometryVersions');
+      }
+      const version = value as UnvalidatedRow;
+      if (!Number.isInteger(version.version) || (version.version as number) < 1) {
+        throw invalid('geometryVersions.version');
+      }
+      versions.add(version.version as number);
+      if (typeof version.boundaryHash !== 'string' || !version.boundaryHash.trim()) {
+        throw invalid('geometryVersions.boundaryHash');
+      }
+      if (!isAreaGeometry(version.geometry)) throw invalid('geometryVersions.geometry');
+      if (!Number.isFinite(version.areaM2) || (version.areaM2 as number) <= 0) {
+        throw invalid('geometryVersions.areaM2');
+      }
+      if (!isIsoDateString(version.effectiveFrom)) throw invalid('geometryVersions.effectiveFrom');
+    });
+    if (!versions.has(section.currentGeometryVersion as number)) {
+      throw invalid('currentGeometryVersion');
+    }
+    if (!isIsoDateString(section.createdAt) || !isIsoDateString(section.updatedAt)) {
+      throw invalid('timestamps');
+    }
+    if (section.retiredAt !== undefined && !isIsoDateString(section.retiredAt)) {
+      throw invalid('retiredAt');
+    }
+  });
+
+  backup.sessionCoverage.forEach((observation, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: sessionCoverage[${index}] has an invalid ${field}`);
+    if (!sessionIds.has(observation.sessionId)) throw invalid('sessionId');
+    if (!permissionIds.has(observation.permissionId)) throw invalid('permissionId');
+    if (!sectionIds.has(observation.sectionId)) throw invalid('sectionId');
+    if (!['reported', 'tracked', 'find-visited'].includes(observation.evidence as string)) {
+      throw invalid('evidence');
+    }
+    if (!Number.isInteger(observation.sectionGeometryVersion) ||
+        (observation.sectionGeometryVersion as number) < 1) {
+      throw invalid('sectionGeometryVersion');
+    }
+    if (!Number.isFinite(observation.startedAt)) throw invalid('startedAt');
+    if (!Number.isFinite(observation.observedAt) ||
+        (observation.observedAt as number) < (observation.startedAt as number)) {
+      throw invalid('observedAt');
+    }
+    if (observation.coverageFraction !== undefined &&
+        (!Number.isFinite(observation.coverageFraction) ||
+         (observation.coverageFraction as number) < 0 ||
+         (observation.coverageFraction as number) > 1)) {
+      throw invalid('coverageFraction');
+    }
+    if (observation.sourceRecordIds !== undefined &&
+        (!Array.isArray(observation.sourceRecordIds) ||
+         observation.sourceRecordIds.some((id: unknown) => typeof id !== 'string' || !id.trim()))) {
+      throw invalid('sourceRecordIds');
+    }
+    if (!isIsoDateString(observation.createdAt) || !isIsoDateString(observation.updatedAt)) {
+      throw invalid('timestamps');
+    }
+  });
+
   return {
     version: input.version,
     projects: backup.projects as ValidatedBackupData['projects'],
@@ -342,5 +459,9 @@ export function validatePersistedBackupTables(
     outstandingQuestions:
       backup.outstandingQuestions as unknown as ValidatedBackupData['outstandingQuestions'],
     questionNotes: backup.questionNotes as unknown as ValidatedBackupData['questionNotes'],
+    permissionSections:
+      backup.permissionSections as unknown as ValidatedBackupData['permissionSections'],
+    sessionCoverage:
+      backup.sessionCoverage as unknown as ValidatedBackupData['sessionCoverage'],
   };
 }

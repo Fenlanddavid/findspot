@@ -158,4 +158,31 @@ describe('FindSpot IndexedDB forward migrations', () => {
     await expectNoDanglingPermissionIds(current);
     current.close();
   });
+
+  it('adds coverage tables to a v40 database without changing existing prediction outcomes', async () => {
+    const name = 'findspot-migration-v40-coverage';
+    await createFixtureDb(name, 40, {
+      projects: [{ id: 'project-1' }],
+      permissions: [{ id: 'permission-1', projectId: 'project-1' }],
+      hotspotPredictions: [{
+        id: 'prediction-1',
+        engineVersion: 'engine-v1',
+        confidence: 'Strong Signal',
+        surfacedAt: 1,
+        permissionId: 'permission-1',
+        outcome: 'hit',
+      }],
+    });
+
+    const current = await openCurrent(name);
+    expect(await current.permissionSections.count()).toBe(0);
+    expect(await current.sessionCoverage.count()).toBe(0);
+    expect(await current.hotspotPredictions.get('prediction-1')).toMatchObject({
+      engineVersion: 'engine-v1',
+      outcome: 'hit',
+    });
+    expect(await current.projects.count()).toBe(1);
+    expect(await current.permissions.count()).toBe(1);
+    current.close();
+  });
 });

@@ -23,12 +23,15 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
   const findIds = finds.map(find => find.id);
   const significantFindIds = significantFinds.map(find => find.id);
 
-  await db.transaction('rw', [db.sessions, db.finds, db.significantFinds, db.media, db.tracks], async () => {
+  await db.transaction('rw', [
+    db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.sessionCoverage,
+  ], async () => {
     if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
     if (significantFindIds.length) await db.media.where('findId').anyOf(significantFindIds).delete();
     await db.finds.where('sessionId').equals(sessionId).delete();
     await db.significantFinds.where('sessionId').equals(sessionId).delete();
     await db.tracks.where('sessionId').equals(sessionId).delete();
+    await db.sessionCoverage.where('sessionId').equals(sessionId).delete();
     await db.sessions.delete(sessionId);
   });
 }

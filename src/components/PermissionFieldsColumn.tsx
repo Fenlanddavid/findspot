@@ -5,7 +5,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { area as turfArea } from "@turf/turf";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, GeoJSONPolygon, Field } from "../db";
-import { calculateCoverage, CoverageResult } from "../services/coverage";
+import {
+  applyReportedCoverageToGaps,
+  calculateCoverage,
+  CoverageResult,
+} from "../services/coverage";
+import { useReportedCoverageGeometries } from "../hooks/useReportedCoverageGeometries";
 import {
   BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
   type BasemapMode,
@@ -154,6 +159,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     } = props;
 
     const nav = useNavigate();
+    const reportedCoverage = useReportedCoverageGeometries(permissionId);
 
     // Local state
     const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -220,7 +226,12 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                 t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
             );
 
-            const result = calculateCoverage(field.boundary, fieldTracks);
+            const result = applyReportedCoverageToGaps(
+                calculateCoverage(field.boundary, fieldTracks),
+                reportedCoverage
+                    .filter(item => item.fieldId === fId)
+                    .map(item => item.geometry),
+            );
             return { fId, result };
         })).then(results => {
             const next = new Map<string, CoverageResult>();
@@ -234,7 +245,15 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
         }).catch(() => {
             setFieldGapErrors(new Set(fIds));
         });
-    }, [showCoverage, shownFieldGapIds, boundary, allTracks, permissionId, fields]);
+    }, [
+        showCoverage,
+        shownFieldGapIds,
+        boundary,
+        allTracks,
+        permissionId,
+        fields,
+        reportedCoverage,
+    ]);
 
     // Map init effect
     useEffect(() => {
@@ -1502,7 +1521,12 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                     >
                                                         {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
                                                         {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
-                                                            <span className="ml-1 opacity-80">{Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left</span>
+                                                            <span className="ml-1 opacity-80">
+                                                                {Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left
+                                                                {(fieldGapResults.get(f.id)!.reportedAreaM2 ?? 0) > 0
+                                                                    ? ' · reports included'
+                                                                    : ''}
+                                                            </span>
                                                         )}
                                                         {shownFieldGapIds.has(f.id) && fieldGapErrors.has(f.id) && (
                                                             <span className="ml-1">Error</span>

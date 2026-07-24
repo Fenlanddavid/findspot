@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db";
 import { computeScanAccuracy } from "../services/fieldguide/scanAccuracy";
+import { loadPredictionEvidenceCalibration } from '../services/predictionCalibration';
 
 function pct(value: number | null): string {
   if (value === null) return "--";
@@ -51,6 +52,10 @@ export function ScanAccuracyCard({ permissionId }: { permissionId: string }) {
     if (!hotspotSignals || !undugSignals || gpsFindIds === undefined) return null;
     return computeScanAccuracy({ hotspotSignals, undugSignals, gpsFindIds });
   }, [hotspotSignals, undugSignals, gpsFindIds]);
+  const evidenceCalibration = useLiveQuery(
+    () => loadPredictionEvidenceCalibration(permissionId),
+    [permissionId],
+  );
 
   // Don't render if no data at all (no hotspot signals AND no undug signals AND no finds)
   if (!result) return null;
@@ -125,6 +130,28 @@ export function ScanAccuracyCard({ permissionId }: { permissionId: string }) {
         <p className="text-3xs text-gray-400 dark:text-gray-500 mt-1">
           At least {5} GPS-located finds and {2} corroborated hotspot cells needed for calibration.
         </p>
+      )}
+      {evidenceCalibration && evidenceCalibration.rows.some(row => row.searched > 0) && (
+        <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-700/50">
+          <div className="mb-1 text-3xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            Coverage evidence
+          </div>
+          {evidenceCalibration.rows.map(row => row.searched > 0 && (
+            <StatRow
+              key={row.evidence}
+              label={row.evidence === 'mixed'
+                ? 'Tracked + reported'
+                : row.evidence[0].toUpperCase() + row.evidence.slice(1)}
+              value={pct(row.hitRate)}
+              sub={`${row.hits} of ${row.searched}`}
+            />
+          ))}
+          {evidenceCalibration.findOnlyHits > 0 && (
+            <p className="mt-1 text-3xs text-gray-400 dark:text-gray-500">
+              {evidenceCalibration.findOnlyHits} additional {evidenceCalibration.findOnlyHits === 1 ? 'hit' : 'hits'} had find-only evidence.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

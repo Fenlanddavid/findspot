@@ -105,7 +105,7 @@ describe('backup table registry', () => {
   it('partitions the registry into backed-up and excluded tables', () => {
     expect(new Set([...BACKED_UP_TABLE_NAMES, ...EXCLUDED_TABLE_NAMES]).size)
       .toBe(Object.keys(BACKUP_TABLE_REGISTRY).length);
-    expect(BACKED_UP_TABLE_NAMES).toHaveLength(17);
+    expect(BACKED_UP_TABLE_NAMES).toHaveLength(19);
     expect(EXCLUDED_TABLE_NAMES).toHaveLength(5);
   });
 

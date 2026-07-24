@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { GeoJSONPolygon, Track } from '../db';
-import { calculateCoverage, type CoverageResult } from '../services/coverage';
+import type { GeoJSONArea } from '../shared/coverageTypes';
+import {
+    applyReportedCoverageToGaps,
+    calculateCoverage,
+    type CoverageResult,
+} from '../services/coverage';
 import { isTrackingActiveForSession } from '../services/tracking';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -17,6 +22,7 @@ export function useSessionTracking(
     sessionId: string,
     boundary: GeoJSONPolygon | undefined,
     tracks: Track[] | undefined,
+    reportedAreas: GeoJSONArea[] = [],
 ) {
     const [isTracking, setIsTracking] = useState(isTrackingActiveForSession(sessionId));
     const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
@@ -31,10 +37,13 @@ export function useSessionTracking(
             setCoverageError(false);
             return;
         }
-        const result = calculateCoverage(boundary, tracks ?? []);
+        const result = applyReportedCoverageToGaps(
+            calculateCoverage(boundary, tracks ?? []),
+            reportedAreas,
+        );
         setCoverageResult(result);
         setCoverageError(result === null);
-    }, [boundary, showCoverage, tracks]);
+    }, [boundary, reportedAreas, showCoverage, tracks]);
 
     const activeDistanceKm = useMemo(() => {
         let total = 0;

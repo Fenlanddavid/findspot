@@ -85,6 +85,8 @@ describe('backup import characterization', () => {
     await importData(JSON.stringify(backup()));
 
     expect((await db.projects.toArray()).map(row => row.id)).toEqual(['restored-project']);
+    expect(await db.permissionSections.count()).toBe(0);
+    expect(await db.sessionCoverage.count()).toBe(0);
     expect(await db.geologyContext.get('retained-cache')).toBeDefined();
   });
 
@@ -104,7 +106,7 @@ describe('backup import characterization', () => {
       backupVersion: 6,
       totals: expect.objectContaining({ imported: 1, damaged: 0 }),
     }));
-    expect(Object.keys(report.tables)).toHaveLength(17);
+    expect(Object.keys(report.tables)).toHaveLength(19);
     expect((await db.projects.toArray()).map(row => row.id)).toEqual(['live-project']);
     expect(await getSetting('lastRestoreReport', null)).toBeNull();
     expect(await stagingDatabaseNames()).toEqual([]);

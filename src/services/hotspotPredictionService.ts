@@ -10,10 +10,15 @@ import type {
 import type { Hotspot } from '../pages/fieldGuideTypes';
 import { getDistance } from '../utils/fieldGuideAnalysis';
 import { HOTSPOT_ENGINE_VERSION } from '../engines/hotspot/hotspotEngine';
+import {
+    PREDICTION_TRACK_COVERAGE_THRESHOLD,
+    resolvePredictionDecisions,
+} from '../engines/coverage/sectionCoverageEngine';
 import { geohashEncode } from './findHotspotService';
+import { diagLog } from './diagLog';
 
 export const HOTSPOT_PREDICTION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
-export const SEARCHED_COVERAGE_THRESHOLD = 0.2;
+export const SEARCHED_COVERAGE_THRESHOLD = PREDICTION_TRACK_COVERAGE_THRESHOLD;
 const TRACK_SWATH_RADIUS_M = 5;
 const GRID_SIZE = 10;
 
@@ -37,22 +42,6 @@ export async function recordHotspotPredictions(
         outcome: 'unvisited',
     }));
     await db.hotspotPredictions.bulkPut(rows);
-}
-
-function occurredAfter(value: string | number | undefined, cutoff: number): boolean {
-    if (typeof value === 'number') return value >= cutoff;
-    if (typeof value !== 'string') return false;
-    const timestamp = Date.parse(value);
-    return Number.isFinite(timestamp) && timestamp >= cutoff;
-}
-
-function findMatchesPrediction(find: Find, prediction: HotspotPrediction): boolean {
-    if (find.lat == null || find.lon == null) return false;
-    if (prediction.permissionId && find.permissionId !== prediction.permissionId) return false;
-    if (!occurredAfter(find.createdAt, prediction.surfacedAt) && !occurredAfter(find.foundAt, prediction.surfacedAt)) return false;
-    const [[west, south], [east, north]] = prediction.bounds;
-    return (find.lon >= west && find.lon <= east && find.lat >= south && find.lat <= north) ||
-        getDistance([find.lon, find.lat], prediction.center) <= 150;
 }
 
 function interpolateTrackPoints(track: Track, surfacedAt: number): Array<[number, number]> {
@@ -108,39 +97,75 @@ export async function resolveHotspotPredictionOutcomes(
     finds: Find[],
     tracks: Track[],
     sessions: Session[],
+    scopePermissionId?: string,
 ): Promise<{ hits: number; searchedNoFind: number }> {
-    const predictions = await db.hotspotPredictions.where('outcome').equals('unvisited').toArray();
-    let hits = 0;
-    let searchedNoFind = 0;
+    const unresolved = await db.hotspotPredictions.where('outcome').equals('unvisited').toArray();
+    const predictions = scopePermissionId
+        ? unresolved.filter(prediction => prediction.permissionId === scopePermissionId)
+        : unresolved;
+    const [sections, observations] = await Promise.all([
+        db.permissionSections.toArray(),
+        db.sessionCoverage.toArray(),
+    ]);
+    const trackedCoverageByPrediction = new Map(predictions.map(prediction => [
+        prediction.id,
+        predictionTrackCoverage(prediction, tracks, sessions),
+    ]));
+    const decisions = resolvePredictionDecisions({
+        predictions,
+        finds,
+        sections,
+        observations,
+        trackedCoverageByPrediction,
+    });
     const resolvedAt = Date.now();
-
-    for (const prediction of predictions) {
-        const matchedFind = finds.find(find => findMatchesPrediction(find, prediction));
-        if (matchedFind) {
-            await db.hotspotPredictions.update(prediction.id, {
-                outcome: 'hit', matchedFindId: matchedFind.id, resolvedAt,
+    await db.transaction('rw', db.hotspotPredictions, async () => {
+        for (const decision of decisions) {
+            await db.hotspotPredictions.update(decision.predictionId, {
+                outcome: decision.outcome,
+                resolutionEvidence: decision.evidence,
+                reportedConfirmationCount: decision.reportedConfirmationCount,
+                searchedCoverage: decision.outcome === 'searched_no_find'
+                    ? decision.searchedCoverage
+                    : undefined,
+                matchedFindId: decision.outcome === 'hit'
+                    ? decision.matchedFindId
+                    : undefined,
+                resolvedAt,
             });
-            hits++;
-            continue;
+            void diagLog.debug(
+                'coverage-resolution',
+                `${decision.outcome} via ${decision.evidence}`,
+                JSON.stringify({
+                    predictionId: decision.predictionId,
+                    reportedConfirmations: decision.reportedConfirmationCount,
+                    searchedCoverage: decision.outcome === 'searched_no_find'
+                        ? decision.searchedCoverage
+                        : undefined,
+                }),
+            );
         }
-        const searchedCoverage = predictionTrackCoverage(prediction, tracks, sessions);
-        if (searchedCoverage >= SEARCHED_COVERAGE_THRESHOLD) {
-            await db.hotspotPredictions.update(prediction.id, {
-                outcome: 'searched_no_find', searchedCoverage, resolvedAt,
-            });
-            searchedNoFind++;
-        }
-    }
-    return { hits, searchedNoFind };
+    });
+    return {
+        hits: decisions.filter(decision => decision.outcome === 'hit').length,
+        searchedNoFind: decisions.filter(
+            decision => decision.outcome === 'searched_no_find'
+        ).length,
+    };
 }
 
-export async function refreshHotspotPredictionOutcomes(): Promise<void> {
+export async function refreshHotspotPredictionOutcomes(
+    scopePermissionId?: string,
+): Promise<{
+    hits: number;
+    searchedNoFind: number;
+}> {
     const [finds, tracks, sessions] = await Promise.all([
         db.finds.toArray(),
         db.tracks.toArray(),
         db.sessions.toArray(),
     ]);
-    await resolveHotspotPredictionOutcomes(finds, tracks, sessions);
+    return resolveHotspotPredictionOutcomes(finds, tracks, sessions, scopePermissionId);
 }
 
 /** Rolls evidence up before deleting raw rows, preserving long-term calibration. */
@@ -168,6 +193,31 @@ export async function aggregateAndSweepHotspotPredictions(
                 surfacedCount: (existing?.surfacedCount ?? 0) + predictions.length,
                 searchedCount: (existing?.searchedCount ?? 0) + predictions.filter(row => row.outcome !== 'unvisited').length,
                 hitCount: (existing?.hitCount ?? 0) + predictions.filter(row => row.outcome === 'hit').length,
+                trackedSearchedCount: (existing?.trackedSearchedCount ?? 0)
+                    + predictions.filter(row => row.resolutionEvidence === 'tracked').length,
+                trackedHitCount: (existing?.trackedHitCount ?? 0)
+                    + predictions.filter(row =>
+                        row.outcome === 'hit' && row.resolutionEvidence === 'tracked'
+                    ).length,
+                reportedSearchedCount: (existing?.reportedSearchedCount ?? 0)
+                    + predictions.filter(row => row.resolutionEvidence === 'reported').length,
+                reportedHitCount: (existing?.reportedHitCount ?? 0)
+                    + predictions.filter(row =>
+                        row.outcome === 'hit' && row.resolutionEvidence === 'reported'
+                    ).length,
+                mixedSearchedCount: (existing?.mixedSearchedCount ?? 0)
+                    + predictions.filter(row => row.resolutionEvidence === 'mixed').length,
+                mixedHitCount: (existing?.mixedHitCount ?? 0)
+                    + predictions.filter(row =>
+                        row.outcome === 'hit' && row.resolutionEvidence === 'mixed'
+                    ).length,
+                findOnlyHitCount: (existing?.findOnlyHitCount ?? 0)
+                    + predictions.filter(row =>
+                        row.outcome === 'hit' && (
+                            row.resolutionEvidence === 'find'
+                            || row.resolutionEvidence === undefined
+                        )
+                    ).length,
                 updatedAt: now,
             };
             await db.hotspotPredictionAggregates.put(aggregate);

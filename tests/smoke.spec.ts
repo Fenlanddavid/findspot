@@ -121,6 +121,102 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect(page.getByRole("button").filter({ hasText: "Smoke Test Buckle" })).toBeVisible();
 });
 
+test("session coverage is saved in three taps and appears on the permission", async ({ page }) => {
+  await createPermission(page, "Coverage Smoke Farm");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  if (!permissionId) throw new Error("Could not read coverage permission id from URL");
+
+  const permissions = await readIndexedDbStore(page, "permissions") as Array<{
+    id: string;
+    projectId: string;
+  }>;
+  const permission = permissions.find(row => row.id === permissionId);
+  if (!permission) throw new Error("Could not read coverage permission from IndexedDB");
+
+  const now = Date.now();
+  const fieldId = "coverage-smoke-field";
+  const sessionId = "coverage-smoke-session";
+  await putIndexedDbRow(page, "fields", {
+    id: fieldId,
+    projectId: permission.projectId,
+    permissionId,
+    name: "Home field",
+    boundary: {
+      type: "Polygon",
+      coordinates: [[
+        [-1.4700, 53.3810],
+        [-1.4690, 53.3810],
+        [-1.4690, 53.3820],
+        [-1.4700, 53.3820],
+        [-1.4700, 53.3810],
+      ]],
+    },
+    notes: "",
+    createdAt: new Date(now - 86_400_000).toISOString(),
+    updatedAt: new Date(now - 86_400_000).toISOString(),
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: sessionId,
+    projectId: permission.projectId,
+    permissionId,
+    fieldId,
+    date: new Date(now - 3_600_000).toISOString(),
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    landUse: "pasture",
+    cropType: "",
+    isStubble: false,
+    notes: "",
+    isFinished: true,
+    startTime: new Date(now - 3_600_000).toISOString(),
+    endTime: new Date(now - 1_800_000).toISOString(),
+    createdAt: new Date(now - 3_600_000).toISOString(),
+    updatedAt: new Date(now - 1_800_000).toISOString(),
+  });
+
+  await page.goto(`./session/${sessionId}`);
+  const reviewTapBudget = 4;
+  let reviewTaps = 0;
+
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  reviewTaps += 1;
+  await expect(page.getByText("Which parts did you cover today?")).toBeVisible();
+  const reviewSections = page
+    .getByRole("group", { name: "Permission sections" })
+    .getByRole("button");
+  expect(await reviewSections.count()).toBeGreaterThanOrEqual(2);
+  await reviewSections.first().click();
+  reviewTaps += 1;
+  await page.getByRole("button", { name: "Save" }).click();
+  reviewTaps += 1;
+
+  expect(reviewTaps).toBeLessThanOrEqual(reviewTapBudget);
+  await expect(page.getByText("Ground covered saved.")).toBeVisible();
+  const observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{
+    sessionId: string;
+    evidence: string;
+  }>;
+  expect(observations).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      sessionId,
+      evidence: "reported",
+    }),
+  ]));
+
+  await page.goto(`./permission/${permissionId}`);
+  const coverage = page.getByRole("heading", { name: "What has been searched" });
+  await expect(coverage).toBeVisible();
+  await page
+    .getByRole("group", { name: "Permission sections" })
+    .getByRole("button")
+    .first()
+    .click();
+  await expect(page.getByText("Reported searched · 1")).toBeVisible();
+  await page.getByRole("button", { name: "Show Gaps" }).click();
+  await expect(page.getByText(/reports included/)).toBeVisible();
+});
+
 test("organiser rally setup continues to share link generation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");

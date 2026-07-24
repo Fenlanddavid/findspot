@@ -44,6 +44,7 @@ async function writeLog(
 }
 
 export const diagLog = {
+  debug: (scope: string, message: string, detail?: string) => writeLog('debug', scope, message, detail),
   info:  (scope: string, message: string, detail?: string) => writeLog('info',  scope, message, detail),
   warn:  (scope: string, message: string, detail?: string) => writeLog('warn',  scope, message, detail),
   error: (scope: string, message: string, detail?: string) => writeLog('error', scope, message, detail),
