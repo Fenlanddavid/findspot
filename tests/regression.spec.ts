@@ -714,6 +714,42 @@ test("completed historic mobile sheet keeps context details and layer controls",
   ))).toBe(true);
 });
 
+test("field guide mobile sheet cannot scroll or rubber-band the page behind it", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
+    localStorage.setItem("fs_onboarding_done", "1");
+    localStorage.setItem("fs_fg_helpers_seen", "1");
+  });
+
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
+
+  const viewport = await page.evaluate(() => ({
+    innerHeight: window.innerHeight,
+    documentHeight: document.documentElement.scrollHeight,
+    bodyOverflow: getComputedStyle(document.body).overflow,
+    htmlOverflow: getComputedStyle(document.documentElement).overflow,
+    bodyOverscroll: getComputedStyle(document.body).overscrollBehavior,
+    htmlOverscroll: getComputedStyle(document.documentElement).overscrollBehavior,
+  }));
+  expect(viewport.documentHeight).toBeLessThanOrEqual(viewport.innerHeight);
+  expect(viewport.bodyOverflow).toBe("hidden");
+  expect(viewport.htmlOverflow).toBe("hidden");
+  expect(viewport.bodyOverscroll).toBe("none");
+  expect(viewport.htmlOverscroll).toBe("none");
+
+  await page.evaluate(() => window.scrollTo(0, 200));
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await expect(page.getByTestId("fieldguide-mobile-sheet-handle")).toHaveCSS("touch-action", "none");
+  await expect(page.getByTestId("fieldguide-mobile-sheet-scroll")).toHaveCSS("overscroll-behavior", "contain");
+
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
+  await expect(page).toHaveURL(/\/findspot\/?$/);
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
+});
+
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
   const basePack = {
     type: "findspot-club-day-pack",

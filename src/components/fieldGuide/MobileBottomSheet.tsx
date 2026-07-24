@@ -308,11 +308,13 @@ export function MobileBottomSheet() {
     return (
         <>
         <div
-            className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65vh]' : 'max-h-[136px]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
+            data-testid="fieldguide-mobile-sheet"
+            className={`absolute bottom-3 left-3 right-3 z-[85] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden overscroll-contain transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65dvh]' : 'max-h-[136px]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
         >
             {/* Handle + Status + Actions — always visible */}
             <div
-                className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetHeaderExpanded ? 'h-auto' : 'h-[136px]'}`}
+                data-testid="fieldguide-mobile-sheet-handle"
+                className={`shrink-0 px-4 pt-2 pb-3 border-b border-white/5 cursor-pointer select-none touch-none flex flex-col gap-2.5 transition-[height] duration-300 ${sheetHeaderExpanded ? 'h-auto' : 'h-[136px]'}`}
                 onClick={() => persistSheetExpanded(!sheetExpanded)}
                 onTouchStart={handleSheetTouchStart}
                 onTouchEnd={handleSheetTouchEnd}
@@ -348,7 +350,11 @@ export function MobileBottomSheet() {
             </div>
 
             {/* Scrollable content */}
-            <div ref={sheetScrollRef} className="flex-1 overflow-y-auto scrollbar-hide px-3 py-3 space-y-4">
+            <div
+                ref={sheetScrollRef}
+                data-testid="fieldguide-mobile-sheet-scroll"
+                className="flex-1 overflow-y-auto overscroll-contain touch-pan-y scrollbar-hide px-3 py-3 space-y-4"
+            >
 
                 <SavedPointsPanel />
 

@@ -998,7 +998,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
 
     return (
         <FieldGuideContext.Provider value={contextValue}>
-        <div className={focusMode ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : 'flex flex-col h-[calc(100vh-140px)] landscape:h-[calc(100vh-100px)] sm:h-[calc(100vh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
+        <div className={focusMode ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : 'flex flex-col h-[calc(100dvh-140px)] landscape:h-[calc(100dvh-100px)] sm:h-[calc(100dvh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
             <header className={`bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md${focusMode ? ' hidden' : ''}`}>
                 {/* Bottom Row: Primary FieldGuide Actions */}
                 <div className="hidden justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">

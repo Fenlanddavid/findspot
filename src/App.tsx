@@ -21,6 +21,7 @@ import GlobalActions from "./components/GlobalActions";
 import OnboardingFlow from "./components/OnboardingFlow";
 import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 import { useConfirmDialog } from "./components/ConfirmModal";
+import { useViewportScrollLock } from "./hooks/useViewportScrollLock";
 import { Logo } from "./components/Logo";
 import { FINDSPOT_COPYRIGHT_NOTICE } from "./utils/legalCopy";
 import SignificantFindWorkflow from "./components/SignificantFindWorkflow";
@@ -80,6 +81,8 @@ function Shell() {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const nav = useNavigate();
   const location = useLocation();
+  const isFieldGuideRoute = location.pathname === "/fieldguide";
+  useViewportScrollLock(isFieldGuideRoute);
   const sfWorkflow = useSignificantFindWorkflow(projectId ?? "");
   const [resumableSf, setResumableSf] = React.useState<SignificantFind | null>(null);
   const [dismissedResumeId, setDismissedResumeId] = React.useState<string | null>(null);
@@ -303,7 +306,7 @@ function Shell() {
     && (location.pathname === "/" || location.pathname === "/settings");
 
   return (
-    <div className="max-w-6xl mx-auto p-3 pb-28 sm:p-4 font-sans text-gray-900 dark:text-gray-100 min-h-screen overflow-x-hidden">
+    <div className={`max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
       {isInAppBrowser && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl mb-4 shadow-lg flex flex-col items-center gap-3 text-center border-2 border-white animate-pulse">
             <div className="text-2xl">{isIOS ? "🍎" : "🌍"}</div>
