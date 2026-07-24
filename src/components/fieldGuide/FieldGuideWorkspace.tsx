@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import type { Find } from '../../db';
 import { ScaledImage } from '../ScaledImage';
 import { CoachTip } from '../CoachTips';

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import {
   getProtectionState,
   requestProtection,
@@ -41,6 +41,7 @@ import {
   TERMS_OF_USE_SECTIONS,
   TERMS_OF_USE_VERSION,
 } from "../utils/legalCopy";
+import { clearFieldGuideCaches } from "../services/fieldGuideMutations";
 
 type RestoreCounts = {
   projects: number;
@@ -242,6 +243,12 @@ export default function Settings() {
   const [easterEggUnlocked, setEasterEggUnlocked] = useDurableSetting('fs_dev_egg', false);
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [geologyEnabled, setGeologyEnabled] = useState(true);
+  const [fieldGuideCacheConfirming, setFieldGuideCacheConfirming] = useState(false);
+  const [fieldGuideCacheClearing, setFieldGuideCacheClearing] = useState(false);
+  const [fieldGuideCacheNotice, setFieldGuideCacheNotice] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     getProtectionState().then(setStorageProtection);
@@ -341,6 +348,29 @@ export default function Settings() {
   async function handleRequestPersistence() {
     const state = await requestProtection();
     setStorageProtection(state);
+  }
+
+  async function handleClearFieldGuideCache() {
+    setFieldGuideCacheClearing(true);
+    setFieldGuideCacheNotice(null);
+    try {
+      const cleared = await clearFieldGuideCaches();
+      setFieldGuideCacheNotice({
+        kind: "success",
+        message: cleared.total === 0
+          ? "Field Guide cache was already empty."
+          : `Cleared ${cleared.total} Field Guide cache ${cleared.total === 1 ? "entry" : "entries"}.`,
+      });
+      setFieldGuideCacheConfirming(false);
+    } catch (error) {
+      reportNonFatal("settings", "Field Guide cache clear failed", error);
+      setFieldGuideCacheNotice({
+        kind: "error",
+        message: "Could not clear the Field Guide cache. Please try again.",
+      });
+    } finally {
+      setFieldGuideCacheClearing(false);
+    }
   }
 
   async function toggleTheme() {
@@ -1074,6 +1104,65 @@ export default function Settings() {
               </span>
             </div>
 
+            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-bold text-gray-800 dark:text-gray-100">Field Guide cache</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Clear regenerated scan, geology and landscape results. Saved records, points and offline map downloads are kept.
+                  </p>
+                </div>
+                {!fieldGuideCacheConfirming && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFieldGuideCacheConfirming(true);
+                      setFieldGuideCacheNotice(null);
+                    }}
+                    disabled={fieldGuideCacheClearing}
+                    className="shrink-0 rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-widest text-amber-700 transition-colors hover:border-amber-500 disabled:opacity-60 dark:border-amber-800 dark:bg-gray-950 dark:text-amber-300"
+                  >
+                    Clear cache
+                  </button>
+                )}
+              </div>
+
+              {fieldGuideCacheConfirming && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                  <p className="text-xs text-amber-900 dark:text-amber-200">
+                    The next Field Guide visit may take longer while these results are rebuilt.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleClearFieldGuideCache}
+                      disabled={fieldGuideCacheClearing}
+                      className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-amber-800 disabled:opacity-60"
+                    >
+                      {fieldGuideCacheClearing ? "Clearing…" : "Confirm clear"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFieldGuideCacheConfirming(false)}
+                      disabled={fieldGuideCacheClearing}
+                      className="rounded-lg px-3 py-2 text-xs font-bold text-amber-800 hover:underline disabled:opacity-60 dark:text-amber-300"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {fieldGuideCacheNotice && (
+                <p
+                  className={`mt-3 text-xs font-bold ${fieldGuideCacheNotice.kind === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}
+                  role="status"
+                >
+                  {fieldGuideCacheNotice.message}
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
               <div>
                 <h3 className="font-bold text-gray-800 dark:text-gray-100">Saved JSON Backup</h3>
@@ -1163,7 +1252,7 @@ export default function Settings() {
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
 	          <h2 className="text-xl font-bold mb-1">External Data Sources</h2>
 	          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-	            FieldGuide may request public map and heritage datasets for the area being viewed. These requests do not include your finds, permissions, sessions, notes or photos.
+	            Field Guide may request public map and heritage datasets for the area being viewed. These requests do not include your finds, permissions, sessions, notes or photos.
 	          </p>
 
           <div className="flex justify-between items-start py-3 border-t border-gray-100 dark:border-gray-700">

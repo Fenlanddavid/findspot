@@ -60,6 +60,19 @@ async function createPermission(page: Page, name: string): Promise<void> {
   await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
 }
 
+async function durableSetting(page: Page, key: string): Promise<unknown> {
+  return page.evaluate((settingKey) => new Promise((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction("settings", "readonly");
+      const row = tx.objectStore("settings").get(settingKey);
+      row.onerror = () => reject(row.error);
+      row.onsuccess = () => resolve(row.result?.value);
+    };
+  }), key);
+}
+
 test.use({
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,
@@ -89,6 +102,7 @@ test("fresh-install Home resolves first-run data without a layout jump", async (
 test("returning-user Home waits for persisted records before presenting its layout", async ({ page }) => {
   await page.goto("./");
   await page.getByRole("button", { name: "Skip Quick Start" }).click();
+  await expect.poll(() => durableSetting(page, "fs_onboarding_v2_done")).toBe(true);
   await createPermission(page, "Performance Characterization Farm");
 
   await installLayoutShiftObserver(page);

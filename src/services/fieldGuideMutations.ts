@@ -6,6 +6,13 @@ import type {
 } from '../db';
 import { safeParseFieldGuideScanCache } from './persistenceValidation';
 
+export type ClearedFieldGuideCacheCounts = {
+  scanEntries: number;
+  geologyEntries: number;
+  landscapeEntries: number;
+  total: number;
+};
+
 export async function createSavedPoint(point: SavedPoint): Promise<void> {
   await db.savedPoints.add(point);
 }
@@ -16,6 +23,35 @@ export async function removeSavedPoint(pointId: string): Promise<void> {
 
 export async function discardFieldGuideScanCache(cacheId: string): Promise<void> {
   await db.fieldGuideCache.delete(cacheId);
+}
+
+export async function clearFieldGuideCaches(): Promise<ClearedFieldGuideCacheCounts> {
+  return db.transaction(
+    'rw',
+    db.fieldGuideCache,
+    db.geologyContext,
+    db.landscapeInterpretations,
+    async () => {
+      const [scanEntries, geologyEntries, landscapeEntries] = await Promise.all([
+        db.fieldGuideCache.count(),
+        db.geologyContext.count(),
+        db.landscapeInterpretations.count(),
+      ]);
+
+      await Promise.all([
+        db.fieldGuideCache.clear(),
+        db.geologyContext.clear(),
+        db.landscapeInterpretations.clear(),
+      ]);
+
+      return {
+        scanEntries,
+        geologyEntries,
+        landscapeEntries,
+        total: scanEntries + geologyEntries + landscapeEntries,
+      };
+    },
+  );
 }
 
 export async function readFieldGuideScanCache(

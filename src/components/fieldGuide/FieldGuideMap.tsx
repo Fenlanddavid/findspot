@@ -1,6 +1,6 @@
 import React from 'react';
 import maplibregl from 'maplibre-gl';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { CoachTips } from '../CoachTips';
 import { ScaledImage } from '../ScaledImage';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';

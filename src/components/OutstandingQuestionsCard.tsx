@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { db } from "../db";
 import type { Find, OutstandingQuestion, Permission, Track } from "../db";
 import { confidenceBand, NOTE_TAG_LABELS } from "../outstandingQuestions/types";
@@ -68,7 +68,7 @@ function ProtectionBanner({ protection }: { protection: Permission['protectionSt
 
 // ─── Empty state copy (exact, fail-safe) ────────────────────────────────────
 
-const EMPTY_SCANNED = "No open investigations from the latest scan. This reflects what FieldGuide can currently see — not a complete picture of the landscape.";
+const EMPTY_SCANNED = "No open investigations from the latest scan. This reflects what Field Guide can currently see — not a complete picture of the landscape.";
 
 // ─── Status display ─────────────────────────────────────────────────────────
 
@@ -636,7 +636,7 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
                 ? EMPTY_SCANNED
                 : hasBoundary
                   ? "A focused scan checks the permission for landscape signals, quiet areas and routes that may need more evidence."
-                  : "Add a mapped permission boundary first. Investigations are generated from FieldGuide scans inside that boundary."}
+                  : "Add a mapped permission boundary first. Investigations are generated from Field Guide scans inside that boundary."}
             </p>
           </div>
         )}

@@ -5,7 +5,7 @@ import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { getSetting, getOrCreateRecorderId } from "../services/data";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router";
 import { importClubDayPack, getSetting, setSetting, normalizeClubDayPack } from "../services/data";
 import type { ClubDayPack } from "../services/data";
 import { Logo } from "../components/Logo";

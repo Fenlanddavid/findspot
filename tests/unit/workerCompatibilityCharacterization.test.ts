@@ -85,6 +85,53 @@ describe('Wales LiDAR compatibility characterization', () => {
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
   });
 
+  it('returns suffix ranges from the end of the object', async () => {
+    const get = vi.fn(async (_key: string, options: {
+      range?: { suffix: number };
+    }) => ({
+      body: new Blob(['0123456789']).stream(),
+      size: 100,
+      range: options.range,
+      writeHttpMetadata() {},
+    }));
+
+    const response = await walesLidarWorker.fetch(
+      new Request('https://lidar.test/wales_hillshade_3857.tif', {
+        headers: { Range: 'bytes=-10' },
+      }),
+      { WALES_LIDAR_BUCKET: { get } },
+    );
+
+    expect(get).toHaveBeenCalledWith('wales_hillshade_3857.tif', {
+      range: { suffix: 10 },
+    });
+    expect(response.status).toBe(206);
+    expect(response.headers.get('content-range')).toBe('bytes 90-99/100');
+    expect(response.headers.get('content-length')).toBe('10');
+  });
+
+  it('clamps an oversized suffix range to the full object', async () => {
+    const get = vi.fn(async (_key: string, options: {
+      range?: { suffix: number };
+    }) => ({
+      body: new Blob(['01234']).stream(),
+      size: 5,
+      range: options.range,
+      writeHttpMetadata() {},
+    }));
+
+    const response = await walesLidarWorker.fetch(
+      new Request('https://lidar.test/wales_hillshade_3857.tif', {
+        headers: { Range: 'bytes=-10' },
+      }),
+      { WALES_LIDAR_BUCKET: { get } },
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get('content-range')).toBe('bytes 0-4/5');
+    expect(response.headers.get('content-length')).toBe('5');
+  });
+
   it('preserves method and object-key allowlists', async () => {
     const bucket = { get: vi.fn() };
     const [method, key] = await Promise.all([

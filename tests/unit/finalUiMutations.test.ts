@@ -13,6 +13,7 @@ import {
   saveLocationMapPreferences,
 } from "../../src/services/mapPreferenceMutations";
 import {
+  clearFieldGuideCaches,
   saveHistoricScanCache,
   saveTerrainScanCache,
 } from "../../src/services/fieldGuideMutations";
@@ -108,6 +109,7 @@ async function clearTables(): Promise<void> {
     db.settings.clear(),
     db.fieldGuideCache.clear(),
     db.savedPoints.clear(),
+    db.geologyContext.clear(),
     db.landscapeInterpretations.clear(),
     db.significantFinds.clear(),
     db.finds.clear(),
@@ -163,6 +165,44 @@ describe("final UI mutation services", () => {
       "historic:new",
       "terrain:expired",
     ]);
+  });
+
+  it("clears only regenerable Field Guide caches", async () => {
+    await db.fieldGuideCache.put(cache("terrain:cached", 1_000));
+    await db.geologyContext.put({
+      tileKey: "geology:test",
+      centroid: { lat: 52, lon: -1 },
+      context: { landscapeClass: "unknown" },
+      fetchedAt: 1_000,
+      classifierVersion: 2,
+      sourceVersion: "test",
+    });
+    await db.landscapeInterpretations.put({
+      geohash6: "gcpvj0",
+      generatedAt: 1_000,
+      interpretation: { summary: "Cached interpretation" },
+    });
+    await db.savedPoints.put({
+      id: "saved-point",
+      projectId: "project-1",
+      label: "Keep me",
+      lat: 52,
+      lon: -1,
+      zoom: 15,
+      note: "",
+      createdAt: NOW,
+    });
+
+    await expect(clearFieldGuideCaches()).resolves.toEqual({
+      scanEntries: 1,
+      geologyEntries: 1,
+      landscapeEntries: 1,
+      total: 3,
+    });
+    expect(await db.fieldGuideCache.count()).toBe(0);
+    expect(await db.geologyContext.count()).toBe(0);
+    expect(await db.landscapeInterpretations.count()).toBe(0);
+    expect(await db.savedPoints.get("saved-point")).toBeDefined();
   });
 
   it("creates a significant record, marks its linked find and clears resume state on status change", async () => {

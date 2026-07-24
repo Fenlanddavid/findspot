@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
@@ -362,25 +362,19 @@ async function saveLocalClubSubmission(c: ClubListing) {
 function EventCard({
   event,
   distanceKm,
-  score,
   going,
   planned,
   onClick,
-  onSubmitUpdate,
 }: {
   event: DetectingEvent;
   distanceKm?: number;
-  score: number;
   going?: boolean;
   planned?: boolean;
   onClick: () => void;
-  onSubmitUpdate: () => void;
 }) {
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
-  const scoreTag = getScoreLabel(score);
   const qualityTag = getQualityLabel(event);
-  const hasPublicLink = hasEventPublicLink(event);
   const isRally = event.type === "rally";
 
   return (
@@ -454,9 +448,6 @@ function EventCard({
             ✓ Planned
           </span>
         )}
-        <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${scoreTag.cls}`}>
-          {scoreTag.label}
-        </span>
         <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${qualityTag.style}`}>
           {qualityTag.label}
         </span>
@@ -464,25 +455,13 @@ function EventCard({
           <span className="text-[9px] text-gray-400 dark:text-gray-500">{event.entryFee}</span>
         )}
       </div>
-      {!hasPublicLink && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-dashed border-amber-200 bg-amber-50/70 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/20">
-          <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">No public link yet</span>
-          <button
-            type="button"
-            onClick={onSubmitUpdate}
-            className="shrink-0 text-[9px] font-black uppercase tracking-widest text-amber-800 underline underline-offset-2 dark:text-amber-300"
-          >
-            Submit update
-          </button>
-        </div>
-      )}
       <button
         type="button"
         onClick={onClick}
         className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 text-[10px] font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-gray-700 dark:bg-gray-900/60 dark:text-emerald-300 dark:hover:border-emerald-700"
-        aria-label={`View details for ${event.title}`}
+        aria-label={`View event ${event.title}`}
       >
-        <span>{hasPublicLink ? "View details" : "Details needed"}</span>
+        <span>View event</span>
         <span className="text-gray-400">Plan / going</span>
       </button>
     </article>
@@ -1267,14 +1246,12 @@ function EventSection({
   goingIds,
   plannedKeys,
   onSelect,
-  onSubmitUpdate,
 }: {
   title: string;
   entries: { event: DetectingEvent; distanceKm?: number; score: number }[];
   goingIds: Set<string>;
   plannedKeys: Set<string>;
   onSelect: (event: DetectingEvent) => void;
-  onSubmitUpdate: (event: DetectingEvent) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? entries : entries.slice(0, 4);
@@ -1283,16 +1260,14 @@ function EventSection({
     <div className="mb-6">
       <SectionHeader accent={title === "This Weekend"}>{title}</SectionHeader>
       <div className="grid gap-3">
-        {visible.map(({ event, distanceKm, score }) => (
+        {visible.map(({ event, distanceKm }) => (
           <EventCard
             key={event.id}
             event={event}
             distanceKm={distanceKm}
-            score={score}
             going={goingIds.has(event.id)}
             planned={plannedKeys.has(`${event.title}|${event.startDate}`)}
             onClick={() => onSelect(event)}
-            onSubmitUpdate={() => onSubmitUpdate(event)}
           />
         ))}
       </div>
@@ -1657,7 +1632,7 @@ export default function Discover({ projectId }: { projectId: string }) {
       ) : (
         <>
           {weekendEvents.length > 0 ? (
-            <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
+            <EventSection title="This Weekend" entries={weekendEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
           ) : (
             <div className="mb-5 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-center dark:border-gray-700 dark:bg-gray-800/50">
               <p className="text-xs font-bold text-gray-400 dark:text-gray-500">Nothing nearby this weekend</p>
@@ -1665,10 +1640,10 @@ export default function Discover({ projectId }: { projectId: string }) {
             </div>
           )}
           {soonEvents.length > 0 && (
-            <EventSection title="Next 14 Days" entries={soonEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
+            <EventSection title="Next 14 Days" entries={soonEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
           )}
           {laterEvents.length > 0 && (
-            <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} onSubmitUpdate={openEventUpdate} />
+            <EventSection title="Coming Up" entries={laterEvents} goingIds={goingIds} plannedKeys={plannedKeys} onSelect={setSelectedEvent} />
           )}
         </>
       )}

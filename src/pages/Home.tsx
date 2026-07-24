@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { Media } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
@@ -98,7 +98,7 @@ export default function Home(props: {
   const dismissClubRallyCard = useCallback(async () => {
     const confirmed = await confirmAction({
       title: "Hide Club / Rally Shortcut?",
-      message: "This will remove the Run a club dig or rally shortcut from your Home screen permanently on this device.\n\nYou can still open the feature from the Club/Rally button at the top, next to Settings.",
+      message: "This will remove the Run a club dig or rally shortcut from your Home screen on this device.\n\nYou can still create or open rallies from Permissions.",
       confirmLabel: "Hide Shortcut",
       cancelLabel: "Keep It",
     });
@@ -277,7 +277,7 @@ export default function Home(props: {
         type: 'first_fieldguide_scan',
         dismissKey: 'first_fieldguide_scan',
         message: 'Read a field before setting anything up',
-        detail: 'Run a FieldGuide scan to compare terrain, movement, landscape and historic context.',
+        detail: 'Run a Field Guide scan to compare terrain, movement, landscape and historic context.',
         cta: 'Scan Land',
         action: props.goFieldGuide,
       });
@@ -325,11 +325,11 @@ export default function Home(props: {
         type: `fieldguide_pack_${fieldGuidePackPrompt.kind}`,
         dismissKey: `fieldguide_pack:${fieldGuidePackPrompt.kind}:${fieldGuidePackPrompt.id}:${fieldGuidePackPrompt.stale ? 'stale' : 'missing'}`,
         message: fieldGuidePackPrompt.stale
-          ? 'Refresh your offline FieldGuide data'
-          : 'Download FieldGuide data for offline use',
+          ? 'Refresh your offline Field Guide data'
+          : 'Download Field Guide data for offline use',
         detail: fieldGuidePackPrompt.kind === 'permission'
           ? `${fieldGuidePackPrompt.name}: terrain, heritage layers and PAS density for use before you lose signal.`
-          : `${fieldGuidePackPrompt.name}: save the nearby FieldGuide layers for a return visit.`,
+          : `${fieldGuidePackPrompt.name}: save the nearby Field Guide layers for a return visit.`,
         cta: fieldGuidePackPrompt.kind === 'permission' ? 'Prepare Data' : 'Open Points',
         action: fieldGuidePackPrompt.kind === 'permission'
           ? () => props.goPermissionEdit(fieldGuidePackPrompt.id)
@@ -453,7 +453,7 @@ export default function Home(props: {
     // The first 4 non-null entries are available on mobile; larger screens show the first 2.
     const pool: Action[] = isNewUser ? [
       { label: 'Create Permission',    mobileLabel: 'Permission', action: props.goPermission },
-      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
+      { label: 'Scan with Field Guide', mobileLabel: 'Field Guide',  action: props.goFieldGuide },
       { label: 'Discover Rallies',     mobileLabel: 'Rallies',     action: () => nav('/discover') },
     ] : isEstablished ? [
       backupNeeded   ? { label: 'Back Up Your Data',   mobileLabel: 'Back Up',       action: () => nav('/settings') } : null,
@@ -466,10 +466,10 @@ export default function Home(props: {
       realPerms.length > 0
                      ? { label: 'Share a Permission',   mobileLabel: 'Share',         action: () => setShowClubRallyModal(true) } : null,
       { label: 'Discover Rallies',     mobileLabel: 'Rallies', action: () => nav('/discover') },
-      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
+      { label: 'Scan with Field Guide', mobileLabel: 'Field Guide',  action: props.goFieldGuide },
     ] : [
       { label: 'Record Find',          action: () => props.goFind() },
-      { label: 'Scan with FieldGuide', mobileLabel: 'FieldGuide',  action: props.goFieldGuide },
+      { label: 'Scan with Field Guide', mobileLabel: 'Field Guide',  action: props.goFieldGuide },
       { label: 'Create Permission',    mobileLabel: 'Permission',  action: props.goPermission },
     ];
     // ────────────────────────────────────────────────────────────────────────
@@ -553,15 +553,15 @@ export default function Home(props: {
       )}
       <button
         onClick={() => setPrivacyExpanded(v => !v)}
-        className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left opacity-40 hover:opacity-60 transition-opacity"
+        className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
       >
         <LockIcon className="h-3.5 w-3.5 shrink-0" />
         {privacyExpanded ? (
-          <p className="text-xs font-normal text-black dark:text-white m-0">
+          <p className="text-xs font-normal m-0">
             Your saved finds, GPS coordinates, photos and landowner details stay on this device unless you export or share them. Online features may request map tiles, search results or landscape data for the area you are viewing; Discover only sends details you type into its submit forms.
           </p>
         ) : (
-          <span className="text-xs font-normal text-black dark:text-white">Local-first storage · No subscriptions · No accounts</span>
+          <span className="text-xs font-normal">Local-first storage · No subscriptions · No accounts</span>
         )}
       </button>
 
@@ -582,8 +582,8 @@ export default function Home(props: {
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              { label: "Scan land", detail: "Read the area first.", action: props.goFieldGuide, active: true },
-              { label: "Save permission", detail: "Add land details.", action: props.goPermission, active: false },
+              { label: "Save permission", detail: "Add land details.", action: props.goPermission, active: true },
+              { label: "Scan land", detail: "Read the area.", action: props.goFieldGuide, active: false },
               { label: "Record find", detail: "Start a find record.", action: () => props.goFind(), active: false },
               { label: "Back up", detail: "Protect local data.", action: () => nav('/settings'), active: false },
             ].map((item, index) => (
@@ -785,7 +785,7 @@ export default function Home(props: {
             <rect x="402" y="244" width="70" height="24" rx="4" fill="url(#fg-card-grad)" opacity="0.18" />
           </svg>
           <div className="flex-1 min-w-0">
-            <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">FieldGuide</div>
+            <div className="font-black text-gray-800 dark:text-gray-100 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Field Guide</div>
             <div className="text-2xs text-gray-500/80 dark:text-gray-400/80 mt-0.5 leading-snug tracking-[0.01em]">Understand the landscape before you dig</div>
           </div>
           <button
@@ -869,7 +869,7 @@ export default function Home(props: {
                         <p className={`text-sm max-w-md ${isFirstRun ? "text-gray-500 dark:text-gray-400" : "text-emerald-700/70 dark:text-emerald-400/80"}`}>
                           {isFirstRun ? "Add one when you are ready to keep landowner, field and session records together." : "Add a permission if you already have access to the land."}
                         </p>
-                        <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-transform`}>
+                        <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-all`}>
                             Add Permission
                         </button>
                     </div>

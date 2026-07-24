@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { Find, Media, Permission, SignificantFind, UndugSignal } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
@@ -358,7 +358,7 @@ export default function FindsBox(props: { projectId: string }) {
             </button>
           </div>
 
-          {mainTab === "finds" && (
+          {mainTab === "finds" && !emptyMain && (
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
@@ -392,7 +392,7 @@ export default function FindsBox(props: { projectId: string }) {
           )}
         </div>
 
-        {mainTab === "finds" && (
+        {mainTab === "finds" && !emptyMain && (
           <div className="flex flex-wrap gap-2 sm:justify-end">
             <button
               type="button"
@@ -519,7 +519,7 @@ export default function FindsBox(props: { projectId: string }) {
         </div>
       )}
 
-      {mainTab === "finds" && (
+      {mainTab === "finds" && !emptyMain && (
         <section className="mt-5 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-2 sm:flex-row">
             <label className="relative flex-1">

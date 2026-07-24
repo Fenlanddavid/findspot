@@ -4,7 +4,7 @@
 // Dismiss sets the versioned completion flag; it will not appear again.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { db } from '../db';
 import { FIELDGUIDE_SHORT_NOTICE } from '../utils/legalCopy';
 import {
@@ -32,6 +32,7 @@ export default function OnboardingFlow() {
     const [step, setStep]                     = useState<Step>('welcome');
     const [pendingDestination, setPending]    = useState('/');
     const [demoExpanded, setDemoExpanded]     = useState(false);
+    const [showMoreChoices, setShowMoreChoices] = useState(false);
     const dialogRef                           = useRef<HTMLDivElement>(null);
     const nav = useNavigate();
 
@@ -144,20 +145,43 @@ export default function OnboardingFlow() {
     if (!visible) return null;
 
     const dots = (active: number) => (
-        <div className="flex items-center justify-center gap-2 mb-8">
+        <div className="flex items-center justify-center gap-2 mb-5 sm:mb-8">
             {[0, 1, 2].map(i => (
                 <div key={i} className={`rounded-full transition-all duration-300 ${i === active ? 'w-5 h-2 bg-emerald-400' : 'w-2 h-2 bg-white/20'}`} />
             ))}
         </div>
     );
 
-    const skipBtn = (
-        <button
-            onClick={dismiss}
-            className="mt-6 text-xs text-white/60 hover:text-white transition-colors duration-150 cursor-pointer"
-        >
-            Skip Quick Start
-        </button>
+    const actionFooter = (
+        primaryLabel: string | null,
+        onPrimary: (() => void) | null,
+        backStep?: Step,
+        includeSkip = true,
+    ) => (
+        <div className="fixed inset-x-0 bottom-0 sm:bottom-[5vh] z-[201] mx-auto w-full sm:max-w-md border-t border-white/10 bg-slate-900/95 px-5 sm:px-8 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-4 backdrop-blur sm:rounded-b-3xl">
+            {primaryLabel && onPrimary && (
+                <button
+                    onClick={onPrimary}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
+                >
+                    {primaryLabel}
+                </button>
+            )}
+            {(backStep || includeSkip) && (
+                <div className="flex items-center justify-center gap-6 pt-3">
+                    {backStep && (
+                        <button onClick={() => setStep(backStep)} className="text-2xs text-white/45 hover:text-white/70 transition-colors cursor-pointer">
+                            Back
+                        </button>
+                    )}
+                    {includeSkip && (
+                        <button onClick={dismiss} className="text-xs text-white/60 hover:text-white transition-colors duration-150 cursor-pointer">
+                            Skip Quick Start
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
     );
 
     return (
@@ -169,14 +193,14 @@ export default function OnboardingFlow() {
                 aria-labelledby="onboarding-title"
                 tabIndex={-1}
                 onKeyDown={handleDialogKeyDown}
-                className="w-full sm:max-w-md bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-8 flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-300 max-h-[90vh] overflow-y-auto outline-none"
+                className="w-full sm:max-w-md bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 pb-32 sm:p-8 sm:pb-36 flex flex-col animate-in slide-in-from-bottom-4 fade-in duration-300 max-h-[90vh] overflow-y-auto outline-none"
             >
 
                 {/* ── Step 1: Welcome ─────────────────────────────────────── */}
                 {step === 'welcome' && (
                     <>
                         {dots(0)}
-                        <div className="text-center mb-8">
+                        <div className="text-center mb-5 sm:mb-8">
                             <div className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
                                 <svg width="28" height="28" viewBox="0 0 512 512" fill="none">
                                     <circle cx="256" cy="256" r="200" stroke="#10b981" strokeWidth="36" fill="none" />
@@ -212,13 +236,7 @@ export default function OnboardingFlow() {
                             </p>
                         </div>
 
-                        <button
-                            onClick={() => setStep('choose')}
-                            className="mt-6 w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Get Started
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Get Started', () => setStep('choose'))}
                     </>
                 )}
 
@@ -226,13 +244,13 @@ export default function OnboardingFlow() {
                 {step === 'choose' && (
                     <>
                         {dots(1)}
-                        <div className="text-center mb-7">
+                        <div className="text-center mb-5 sm:mb-7">
                             <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-2">What brought you here?</h2>
                             <p className="text-sm text-white/60">Pick a starting point — you can do everything else later.</p>
                         </div>
 
-                        <div className="space-y-3">
-                            <button
+                        <div className="space-y-2">
+                            {showMoreChoices && <button
                                 onClick={() => setStep('install')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
                             >
@@ -244,17 +262,17 @@ export default function OnboardingFlow() {
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
-                            </button>
+                            </button>}
 
                             <button
                                 onClick={() => setStep('finds')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
+                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
                                     <span className="text-2xl">📍</span>
                                     <div>
                                         <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Record finds</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Log what you find, where you found it</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Log finds with GPS</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -262,13 +280,13 @@ export default function OnboardingFlow() {
 
                             <button
                                 onClick={() => setStep('fieldguide')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
+                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
                                     <span className="text-2xl">🗺️</span>
                                     <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Read a field before detecting</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Scan for places people may have preferred</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Scan land</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Understand an area before detecting</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
@@ -276,19 +294,19 @@ export default function OnboardingFlow() {
 
                             <button
                                 onClick={() => setStep('permissions')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
+                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
                             >
-                                <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-3">
                                     <span className="text-2xl">📋</span>
                                     <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Manage permissions</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Keep track of where you can detect</p>
+                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Permissions</p>
+                                        <p className="text-xs text-white/60 mt-0.5">Save access and land details</p>
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
                             </button>
 
-                            <button
+                            {showMoreChoices && <button
                                 onClick={() => setStep('settings')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
                             >
@@ -300,9 +318,9 @@ export default function OnboardingFlow() {
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
-                            </button>
+                            </button>}
 
-                            <button
+                            {showMoreChoices && <button
                                 onClick={() => setStep('clubday')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
                             >
@@ -314,13 +332,18 @@ export default function OnboardingFlow() {
                                     </div>
                                     <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
                                 </div>
+                            </button>}
+                            <button
+                                type="button"
+                                onClick={() => setShowMoreChoices(value => !value)}
+                                aria-expanded={showMoreChoices}
+                                className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-black text-white/70 transition-colors hover:border-emerald-500/40 hover:text-emerald-300"
+                            >
+                                {showMoreChoices ? 'Fewer options' : 'More options'}
                             </button>
                         </div>
 
-                        <button onClick={() => setStep('welcome')} className="mt-6 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter(null, null, 'welcome')}
                     </>
                 )}
 
@@ -353,17 +376,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setStep('choose')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Got it — what's next?
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter("Got it — what's next?", () => setStep('choose'), 'choose')}
                     </>
                 )}
 
@@ -442,17 +455,7 @@ export default function OnboardingFlow() {
                             </p>
                         </div>
 
-                        <button
-                            onClick={() => go('/permission')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Create my first permission
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Create my first permission', () => go('/permission'), 'choose')}
                     </>
                 )}
 
@@ -463,7 +466,7 @@ export default function OnboardingFlow() {
                         <div className="mb-6">
                             <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Read the land first</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
-                                FieldGuide gives you a quick way to understand why one part of a field may be worth checking before another.
+                                Field Guide gives you a quick way to understand why one part of a field may be worth checking before another.
                             </p>
 
                             <button
@@ -472,7 +475,7 @@ export default function OnboardingFlow() {
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Demo FieldGuide scan</p>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">Demo Field Guide scan</p>
                                         <p className="mt-1 text-base font-black text-white">Settlement Edge Candidate</p>
                                         <p className="mt-0.5 text-2xs font-black uppercase tracking-widest text-amber-300">Strong Zone</p>
                                     </div>
@@ -521,17 +524,7 @@ export default function OnboardingFlow() {
                             <p className="text-[10px] text-white/25 leading-relaxed">{FIELDGUIDE_SHORT_NOTICE}</p>
                         </div>
 
-                        <button
-                            onClick={() => go('/fieldguide')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Try your first scan
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Try your first scan', () => go('/fieldguide'), 'choose')}
                     </>
                 )}
 
@@ -576,17 +569,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => go('/settings')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Open Settings
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Open Settings', () => go('/settings'), 'choose')}
                     </>
                 )}
 
@@ -636,17 +619,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => go('/permission')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Create my first permission
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Create my first permission', () => go('/permission'), 'choose')}
                     </>
                 )}
 
@@ -704,17 +677,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => go('/')}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Got it — take me to the app
-                        </button>
-
-                        <button onClick={() => setStep('choose')} className="mt-5 text-2xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
-                            Back
-                        </button>
-                        {skipBtn}
+                        {actionFooter('Got it — take me to the app', () => go('/'), 'choose')}
                     </>
                 )}
 
@@ -738,12 +701,7 @@ export default function OnboardingFlow() {
                             </p>
                         </div>
 
-                        <button
-                            onClick={leave}
-                            className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3.5 rounded-2xl transition-colors duration-150 tracking-wide"
-                        >
-                            Let's go
-                        </button>
+                        {actionFooter("Let's go", leave, undefined, false)}
                     </>
                 )}
 

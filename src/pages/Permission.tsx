@@ -6,7 +6,7 @@ import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
 import { loadRallyDayReview } from "../services/rallyDayReview";
 import { CreateClubDayPackModal, ExportClubDayModal, ImportClubDayDataModal } from "../components/ClubDayModals";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { FindRow } from "../components/FindRow";
 import { FindModal } from "../components/FindModal";
@@ -680,7 +680,9 @@ export default function PermissionPage(props: {
       : isRally
         ? (organiserSetupParam ? "Save & Generate Link" : "Save Rally")
         : "Create Record";
-  const permissionCoachEnabled = !!isFirstPermission && isEditing && !isRally && !isClubDayMember;
+  // The starter form now explains itself inline and keeps its primary action
+  // beside the only required field. Retain ?tips=1 for deliberate replays.
+  const permissionCoachEnabled = false;
   const permissionCoachTips: CoachTip[] = [
     {
       title: "Name first",
@@ -1367,7 +1369,6 @@ export default function PermissionPage(props: {
                 isClubDayMember={isClubDayMember}
                 isSharedPermission={isSharedPermission}
                 isPersonalRallyRecord={isPersonalRallyRecord}
-                isFirstPermission={isFirstPermission}
                 organiserSetupParam={organiserSetupParam}
                 showOrganiserHub={showOrganiserHub}
                 canUseAgreement={canUseAgreement}
@@ -1470,7 +1471,7 @@ export default function PermissionPage(props: {
                 <div className="lg:col-span-3">
                     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
                         <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Offline Access</div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so FieldGuide works without a signal.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so Field Guide works without a signal.</p>
 
                         {permPackStatus.kind === 'checking' && (
                             <div className="flex items-center gap-2 text-xs text-gray-400">

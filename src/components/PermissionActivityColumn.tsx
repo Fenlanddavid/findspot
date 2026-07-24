@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { db } from "../db";
 import type { Find, Media, UndugSignal } from "../db";
 import { ScaledImage } from "./ScaledImage";

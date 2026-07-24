@@ -132,7 +132,7 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
         {onOpenFieldGuide && (
           <button
             type="button"
-            title="Open in FieldGuide"
+            title="Open in Field Guide"
             onClick={(event) => { event.stopPropagation(); onOpenFieldGuide(); }}
             className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-bold uppercase text-gray-600 transition-all duration-200 ease-out hover:text-emerald-600 dark:border-gray-700 dark:bg-gray-700/50 dark:text-gray-300 dark:hover:text-emerald-400"
           >

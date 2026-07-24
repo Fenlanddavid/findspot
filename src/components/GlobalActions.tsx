@@ -1,5 +1,5 @@
 import React from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 import QuickFindFab from "./QuickFindFab";
 import type { WorkflowState } from "../types/significantFind";
 
@@ -18,7 +18,7 @@ export default function GlobalActions({ projectId, onSignificantFind }: { projec
     return () => window.removeEventListener("scroll", update);
   }, [location.pathname]);
 
-  const hideOn = ["/settings", "/finds-box", "/fieldguide", "/discover"];
+  const hideOn = ["/settings", "/finds-box", "/fieldguide", "/discover", "/permissions"];
   if (hideOn.includes(location.pathname)) return null;
   if (location.pathname.startsWith("/find")) return null;
   if (location.pathname === "/permission" || location.pathname.startsWith("/permission/")) return null;

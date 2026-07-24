@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
@@ -210,10 +210,10 @@ function Shell() {
       if (!projectId) return [];
       const rows = await db.permissions.where("projectId").equals(projectId).toArray();
       return rows
-        .filter(p => !p.isClubDayMember && !p.isDefault)
-        .map(p => ({ id: p.id, name: p.name, type: p.type }));
+        .filter(permission => !permission.isClubDayMember && !permission.isDefault)
+        .map(permission => ({ id: permission.id, name: permission.name, type: permission.type }));
     },
-    [projectId]
+    [projectId],
   );
   const theme = settings?.find(s => s.key === "theme")?.value ?? "dark";
 
@@ -367,7 +367,7 @@ function Shell() {
             <nav className="flex gap-x-3 sm:gap-x-5 gap-y-2 flex-wrap items-center text-[13px] sm:text-sm font-medium text-gray-600 dark:text-gray-300">
               <NavLink to="/" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Home</NavLink>
               <NavLink to="/fieldguide" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
-                FieldGuide
+                Field Guide
               </NavLink>
               <NavLink to="/permissions" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>
                 Permissions
@@ -486,7 +486,7 @@ function Shell() {
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {[
             { to: "/", label: "Home", icon: HomeIcon },
-            { to: "/fieldguide", label: "FieldGuide", icon: FieldGuideIcon },
+            { to: "/fieldguide", label: "Field Guide", icon: FieldGuideIcon },
             { to: "/permissions", label: "Permissions", icon: PermissionsIcon },
             { to: "/discover", label: "Discover", icon: DiscoverIcon },
             { to: "/finds-box", label: "Finds", icon: FindsIcon },
@@ -511,7 +511,7 @@ function Shell() {
           onJoinUrl={(url) => { setShowClubRallyModal(false); nav(url); }}
           onOrganiseNew={() => { setShowClubRallyModal(false); nav("/permission?type=rally&organiserSetup=true"); }}
           onOrganiseExisting={(id) => { setShowClubRallyModal(false); nav(`/permission/${id}?openClubDay=true`); }}
-          permissions={clubRallyPermissions || []}
+          permissions={clubRallyPermissions ?? []}
         />
       )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { area as turfArea } from "@turf/turf";
@@ -52,7 +52,6 @@ interface FieldsColumnProps {
     isClubDayMember:            boolean;
     isSharedPermission:         boolean;
     isPersonalRallyRecord:      boolean;
-    isFirstPermission:          boolean | undefined;
     organiserSetupParam:        boolean;
     showOrganiserHub:           boolean;
 
@@ -140,7 +139,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const {
         permissionId, isEdit, isEditing, saving,
         isRally, isClubDayMember, isSharedPermission, isPersonalRallyRecord,
-        isFirstPermission, organiserSetupParam, showOrganiserHub,
+        organiserSetupParam, showOrganiserHub,
         canUseAgreement, generateAgreementLabel, uploadAgreementLabel,
         permissionNeedsCompletion, saveButtonLabel, showOptionalPermissionDetails,
         permissionCoachActive, permissionCoachStep,
@@ -595,11 +594,6 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                   <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{isRally ? "Event Details" : "Permission Details"}</div>
                   <div className="flex-1 h-px bg-gray-100 dark:bg-gray-700"></div>
                 </div>
-                {isFirstPermission && (
-                  <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-800 dark:text-emerald-400">
-                    Just add a name to get started — fields, boundaries, and landowner details can all be added later.
-                  </div>
-                )}
                 {organiserSetupParam && (
                   <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 rounded-xl px-4 py-3.5">
                     <div className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-1.5">Setting up a club/rally?</div>
@@ -625,28 +619,37 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
 	                </label>
 
 	                {!showOptionalPermissionDetails && (
-	                  <div className={`rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20 ${permissionCoachActive && permissionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
-	                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Fast setup</div>
-	                    <p className="mt-1 text-sm font-medium text-emerald-900 dark:text-emerald-100">
-	                      Create the permission now. Landowner details, GPS, field boundaries, agreements and notes can be added from the permission page afterwards.
-	                    </p>
-	                    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-	                      <button
-	                        type="button"
-	                        onClick={() => onShowAllDetails()}
-	                        className="min-h-11 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-500 hover:bg-emerald-600 hover:text-white dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
-	                      >
-	                        Add details now
-	                      </button>
-	                      <button
-	                        type="button"
-	                        onClick={onDoGPS}
-	                        className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-	                      >
-	                        {lat != null ? "GPS set" : "Set GPS only"}
-	                      </button>
-	                    </div>
-	                  </div>
+                      <>
+                        <button
+                          onClick={onSave}
+                          disabled={saving || !name.trim()}
+                          className={`w-full bg-emerald-700 hover:bg-emerald-800 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50 ${permissionCoachActive && permissionCoachStep === 2 ? "ring-4 ring-amber-300/40" : ""}`}
+                        >
+                          {saveButtonLabel}
+                        </button>
+                        <details className={`group rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40 ${permissionCoachActive && permissionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
+                          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:text-emerald-700 dark:text-gray-300 dark:hover:text-emerald-300 [&::-webkit-details-marker]:hidden">
+                            Optional details
+                            <span className="text-base font-medium transition-transform group-open:rotate-180">⌄</span>
+                          </summary>
+                          <div className="flex flex-col gap-2 border-t border-gray-200 p-3 dark:border-gray-700 sm:flex-row">
+                            <button
+                              type="button"
+                              onClick={() => onShowAllDetails()}
+                              className="min-h-11 flex-1 rounded-xl border border-emerald-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-500 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                            >
+                              Add all details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={onDoGPS}
+                              className="min-h-11 flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                            >
+                              {lat != null ? "GPS set" : "Set GPS only"}
+                            </button>
+                          </div>
+                        </details>
+                      </>
 	                )}
 
 	                {showOptionalPermissionDetails && (
@@ -966,7 +969,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
 	                  </>
 	                )}
 
-                <div className="flex gap-4">
+                {showOptionalPermissionDetails && <div className="flex gap-4">
                     <button
                         onClick={onSave}
                         disabled={saving || !name.trim()}
@@ -982,7 +985,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             Cancel
                         </button>
                     )}
-                </div>
+                </div>}
               </>
             ) : (
                 <div className="grid gap-4 min-w-0">
@@ -1182,7 +1185,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                       <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/40">
                         {lat != null && lon != null && (
                           <button onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)} className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-2xs font-bold text-sky-600 hover:border-sky-400 dark:border-sky-900 dark:bg-gray-800 dark:text-sky-400">
-                            Open FieldGuide
+                            Open Field Guide
                           </button>
                         )}
                         {canUseAgreement && (

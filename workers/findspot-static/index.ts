@@ -109,6 +109,9 @@ export default {
 
       if (suffixMatch) {
         const length = parseInt(suffixMatch[1], 10);
+        if (length === 0) {
+          return textError('Range Not Satisfiable', 416);
+        }
         r2Options.range = { suffix: length };
       } else if (standardMatch) {
         const offset = parseInt(standardMatch[1], 10);
@@ -162,13 +165,17 @@ export default {
       const totalSize = object.size;
       let rangeOffset: number;
       let rangeLength: number;
+      const suffix = numericRangeProperty(object.range, 'suffix');
 
-      if ('suffix' in object.range) {
-        rangeLength = object.range.suffix;
-        rangeOffset = Math.max(0, totalSize - rangeLength);
+      if (suffix !== undefined) {
+        rangeLength = Math.min(suffix, totalSize);
+        rangeOffset = totalSize - rangeLength;
       } else {
-        rangeOffset = object.range.offset ?? 0;
-        rangeLength = object.range.length ?? (totalSize - rangeOffset);
+        rangeOffset = numericRangeProperty(object.range, 'offset') ?? 0;
+        rangeLength = Math.min(
+          numericRangeProperty(object.range, 'length') ?? (totalSize - rangeOffset),
+          Math.max(0, totalSize - rangeOffset),
+        );
       }
       responseHeaders.set(
         'Content-Range',
@@ -191,6 +198,14 @@ function textError(message: string, status: number): Response {
     status,
     headers: { 'Content-Type': 'text/plain', ...CORS_HEADERS },
   });
+}
+
+function numericRangeProperty(
+  range: R2Range,
+  property: 'offset' | 'length' | 'suffix',
+): number | undefined {
+  const value = Reflect.get(range, property);
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 async function serveAimShard(key: string, method: string, env: Env): Promise<Response> {

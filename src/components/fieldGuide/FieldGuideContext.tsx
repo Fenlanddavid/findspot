@@ -57,11 +57,11 @@ export interface FieldGuideContextValue {
 
     // Map refs
     mapRef: RefObject<maplibregl.Map | null>;
-    mapContainerRef: RefObject<HTMLDivElement>;
+    mapContainerRef: RefObject<HTMLDivElement | null>;
 
     // Dev/log refs
-    logContainerRef: RefObject<HTMLDivElement>;
-    sheetScrollRef: RefObject<HTMLDivElement>;
+    logContainerRef: RefObject<HTMLDivElement | null>;
+    sheetScrollRef: RefObject<HTMLDivElement | null>;
     sheetDragStartY: RefObject<number | null>;
     traceCardRefs: RefObject<Map<string, HTMLDivElement>>;
     savedPointJustClickedRef: RefObject<boolean>;

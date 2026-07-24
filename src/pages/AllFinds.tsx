@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import type { Media } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
 import maplibregl from "maplibre-gl";

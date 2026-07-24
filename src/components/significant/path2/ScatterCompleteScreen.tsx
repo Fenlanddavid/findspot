@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { WorkflowState } from "../../../types/significantFind";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../../../db";

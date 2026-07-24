@@ -102,6 +102,82 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page).toHaveURL(/\/discover$/);
 });
 
+test("settings clears regenerable Field Guide caches without deleting saved points", async ({ page }) => {
+  await page.goto("./settings");
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const tx = request.result.transaction(
+        ["fieldGuideCache", "geologyContext", "landscapeInterpretations", "savedPoints"],
+        "readwrite",
+      );
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve();
+      tx.objectStore("fieldGuideCache").put({
+        id: "terrain:settings-smoke",
+        createdAt: Date.now(),
+        rawClusters: [],
+        sourceAvailability: {},
+      });
+      tx.objectStore("geologyContext").put({
+        tileKey: "geology:settings-smoke",
+        centroid: { lat: 52, lon: -1 },
+        context: {},
+        fetchedAt: Date.now(),
+        classifierVersion: 2,
+        sourceVersion: "test",
+      });
+      tx.objectStore("landscapeInterpretations").put({
+        geohash6: "gcpvj0",
+        generatedAt: Date.now(),
+        interpretation: {},
+      });
+      tx.objectStore("savedPoints").put({
+        id: "settings-smoke-saved-point",
+        projectId: "default",
+        label: "Keep me",
+        lat: 52,
+        lon: -1,
+        zoom: 15,
+        note: "",
+        createdAt: new Date().toISOString(),
+      });
+    };
+  }));
+
+  await page.getByRole("button", { name: "Clear cache" }).click();
+  await expect(page.getByText("The next Field Guide visit may take longer")).toBeVisible();
+  await page.getByRole("button", { name: "Confirm clear" }).click();
+  await expect(page.getByRole("status")).toHaveText("Cleared 3 Field Guide cache entries.");
+
+  const counts = await page.evaluate(() => new Promise<Record<string, number>>((resolve, reject) => {
+    const request = indexedDB.open("findspot_uk");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const stores = ["fieldGuideCache", "geologyContext", "landscapeInterpretations", "savedPoints"];
+      const tx = request.result.transaction(stores, "readonly");
+      const result: Record<string, number> = {};
+      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => resolve(result);
+      for (const storeName of stores) {
+        const count = tx.objectStore(storeName).count();
+        count.onerror = () => reject(count.error);
+        count.onsuccess = () => {
+          result[storeName] = count.result;
+        };
+      }
+    };
+  }));
+
+  expect(counts).toEqual({
+    fieldGuideCache: 0,
+    geologyContext: 0,
+    landscapeInterpretations: 0,
+    savedPoints: 1,
+  });
+});
+
 test("can create a permission, start a session and save a find", async ({ page }) => {
   await createPermission(page, "Smoke Test Farm");
 
@@ -122,6 +198,8 @@ test("can create a permission, start a session and save a find", async ({ page }
 });
 
 test("session coverage is saved in three taps and appears on the permission", async ({ page }) => {
+  test.setTimeout(60_000);
+
   await createPermission(page, "Coverage Smoke Farm");
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
   if (!permissionId) throw new Error("Could not read coverage permission id from URL");

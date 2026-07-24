@@ -64,6 +64,7 @@ test("legacy false-completion flags are recovered and completion persists", asyn
 
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "Get Started" }).click();
+  await page.getByRole("button", { name: "More options" }).click();
   await page.getByRole("button", { name: "Set up your profile" }).click();
   await page.getByRole("button", { name: "Open Settings" }).click();
   await page.getByRole("button", { name: "Let's go" }).click();
@@ -122,6 +123,7 @@ test("Settings replays the guide and shows current install instructions", async 
 
   await expect(page).toHaveURL(/\/findspot\/$/);
   await page.getByRole("button", { name: "Get Started" }).click();
+  await page.getByRole("button", { name: "More options" }).click();
   await page.getByRole("button", { name: "Install the app" }).click();
   const dialog = page.getByRole("dialog", { name: "Install FindSpot" });
   await expect(dialog).toContainText("Safari or Chrome");

@@ -82,6 +82,22 @@ describe('findspot-static dataset contract', () => {
     expect(response.status).toBe(404);
   });
 
+  it('serves suffix ranges from the end of an R2 object', async () => {
+    const key = `${STATIC_DATA_GENERATION}/pas-h3/suffix-fixture`;
+    await env.STATIC_BUCKET.put(key, '0123456789');
+
+    const response = await exports.default.fetch(
+      new Request(`https://static.test/${key}`, {
+        headers: { Range: 'bytes=-4' },
+      }),
+    );
+
+    expect(response.status).toBe(206);
+    expect(response.headers.get('content-range')).toBe('bytes 6-9/10');
+    expect(response.headers.get('content-length')).toBe('4');
+    expect(await response.text()).toBe('6789');
+  });
+
   it('retains v1 paths during the generation grace window', async () => {
     const key = smShardKey(CELL, 'v1');
     await env.STATIC_BUCKET.put(key, '[]', { httpMetadata: { contentType: 'application/json' } });

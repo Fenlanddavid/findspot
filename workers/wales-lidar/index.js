@@ -56,6 +56,9 @@ export default {
 
             if (suffixMatch) {
                 const length = parseInt(suffixMatch[1], 10);
+                if (length === 0) {
+                    return new Response('Range Not Satisfiable', { status: 416, headers: CORS_HEADERS });
+                }
                 r2Options.range = { suffix: length };
             } else if (standardMatch) {
                 const offset = parseInt(standardMatch[1], 10);
@@ -93,8 +96,20 @@ export default {
         // We must return 206 Partial Content with a Content-Range header.
         if (object.range && rangeHeader) {
             const totalSize = object.size;
-            const rangeOffset = 'offset' in object.range ? object.range.offset : 0;
-            const rangeLength = object.range.length ?? (totalSize - rangeOffset);
+            let rangeOffset;
+            let rangeLength;
+            const suffix = numericRangeProperty(object.range, 'suffix');
+
+            if (suffix !== undefined) {
+                rangeLength = Math.min(suffix, totalSize);
+                rangeOffset = totalSize - rangeLength;
+            } else {
+                rangeOffset = numericRangeProperty(object.range, 'offset') ?? 0;
+                rangeLength = Math.min(
+                    numericRangeProperty(object.range, 'length') ?? (totalSize - rangeOffset),
+                    Math.max(0, totalSize - rangeOffset)
+                );
+            }
             responseHeaders.set(
                 'Content-Range',
                 `bytes ${rangeOffset}-${rangeOffset + rangeLength - 1}/${totalSize}`
@@ -108,3 +123,8 @@ export default {
         return new Response(object.body, { status: 200, headers: responseHeaders });
     },
 };
+
+function numericRangeProperty(range, property) {
+    const value = Reflect.get(range, property);
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
