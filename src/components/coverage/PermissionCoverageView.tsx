@@ -29,6 +29,7 @@ export function PermissionCoverageView(props: {
 }) {
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [setupError, setSetupError] = useState(false);
+  const [directSessionId, setDirectSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     ensurePermissionSections(props.permissionId).catch(error => {
@@ -76,12 +77,17 @@ export function PermissionCoverageView(props: {
     .filter(session =>
       !props.fieldId
       || session.fieldId === props.fieldId
-      || !session.fieldId
       || reportedSessionIds.has(session.id)
     )
     .sort((left, right) =>
     Date.parse(right.endTime ?? right.updatedAt) - Date.parse(left.endTime ?? left.updatedAt)
   )[0] ?? null;
+  useEffect(() => {
+    if (!latestEditableSession) return;
+    setDirectSessionId(current => current ?? latestEditableSession.id);
+  }, [latestEditableSession?.id]);
+  const directSession = editableSessions.find(session => session.id === directSessionId)
+    ?? latestEditableSession;
   const evidence = useMemo(
     () => summarizeSectionEvidence(observations),
     [observations],
@@ -103,16 +109,56 @@ export function PermissionCoverageView(props: {
 
   if (sections.length === 0 && !setupError) return null;
 
-  if (latestEditableSession) {
+  if (directSession) {
     return (
       <SessionCoverageReview
-        sessionId={latestEditableSession.id}
+        sessionId={directSession.id}
         fieldId={props.fieldId}
         initiallyOpen
         stayOpenAfterSave
         compact={props.embedded}
         onClose={props.onRequestClose}
       />
+    );
+  }
+
+  if (
+    !setupError
+    && observations.length === 0
+  ) {
+    return (
+      <section className={props.embedded
+        ? 'mt-2 rounded-xl border border-emerald-200 bg-gradient-to-br from-white to-emerald-50/70 p-4 shadow-sm dark:border-emerald-800/70 dark:from-gray-900 dark:to-emerald-950/20'
+        : 'rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800'}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" aria-hidden="true">
+              ✓
+            </div>
+            <div>
+              <p className="text-2xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                Ground coverage
+              </p>
+              <h3 className="mt-1 text-sm font-black text-gray-900 dark:text-gray-100">
+                Finish a session first
+              </h3>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                After your first session in this field, you can mark the areas you searched.
+              </p>
+            </div>
+          </div>
+          {props.onRequestClose && (
+            <button
+              type="button"
+              onClick={props.onRequestClose}
+              aria-label="Close ground coverage"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:hover:text-gray-200"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </section>
     );
   }
 

@@ -11,6 +11,9 @@ edit mode or edit button. **Done** saves without closing the panel so further
 adjustments remain one tap away.
 Eligible whole-permission sessions remain editable from the relevant sub-field;
 editing one field preserves any reports belonging to the session's other fields.
+For a newly mapped field, **Ground coverage** stays a collapsed field action.
+Until a session has been finished, opening it explains that coverage becomes
+available after the first session rather than presenting a misleading editable map.
 The review never displays FieldGuide predictions. It remains available for 48
 hours from the session's original `endTime`; after that it is read-only.
 Choosing **Not now** creates no record and leaves predictions unvisited.

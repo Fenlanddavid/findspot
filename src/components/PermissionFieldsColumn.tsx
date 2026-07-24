@@ -1511,7 +1511,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                             Locate
                                                         </button>
                                                     )}
-                                                    {!isClubDayMember && (
+                                                    {!isClubDayMember && !!f.boundary && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setCoverageFieldId(current =>
@@ -1586,13 +1586,6 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                         );
                                     })}
                                 </div>
-                                {permissionId && fields.length === 0 && !!boundary && !isClubDayMember && (
-                                    <PermissionCoverageView
-                                        permissionId={permissionId}
-                                        embedded
-                                        onRequestClose={() => setCoverageFieldId(null)}
-                                    />
-                                )}
                             </div>
                         )}
                     </div>

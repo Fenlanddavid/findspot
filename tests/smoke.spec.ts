@@ -178,6 +178,14 @@ test("session coverage is saved in three taps and appears on the permission", as
     createdAt: new Date(now - 86_400_000).toISOString(),
     updatedAt: new Date(now - 86_400_000).toISOString(),
   });
+
+  await page.goto(`./permission/${permissionId}`);
+  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await expect(page.getByRole("heading", { name: "Finish a session first" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Searched area map" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Close ground coverage" }).click();
+  await expect(page.getByRole("heading", { name: "Finish a session first" })).toHaveCount(0);
+
   await putIndexedDbRow(page, "sessions", {
     id: sessionId,
     projectId: permission.projectId,
