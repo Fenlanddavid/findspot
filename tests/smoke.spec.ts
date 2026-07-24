@@ -283,6 +283,17 @@ test("session coverage is saved in three taps and appears on the permission", as
   await page.getByRole("button", { name: "Done" }).click();
 
   await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "Close ground coverage" }).click();
+  await page.getByRole("button", { name: "Show Gaps" }).click();
+  await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("100% left");
+  await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("reports included");
+  await page.getByRole("button", { name: /Gaps On/ }).click();
+
+  await putIndexedDbRow(page, "sessions", coverageSession);
+  await page.getByRole("button", { name: "Ground coverage" }).click();
+  permissionReviewSections = page
+    .getByRole("group", { name: "Searched area map" })
+    .getByRole("button");
   await permissionReviewSections.first().click();
   await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Done" }).click();
@@ -297,7 +308,8 @@ test("session coverage is saved in three taps and appears on the permission", as
   }).toBe(true);
   await page.getByRole("button", { name: "Close ground coverage" }).click();
   await page.getByRole("button", { name: "Show Gaps" }).click();
-  await expect(page.getByText(/reports included/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("reports included");
+  await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("100% left");
 });
 
 test("organiser rally setup continues to share link generation", async ({ page }) => {

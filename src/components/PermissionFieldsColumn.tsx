@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -167,8 +167,6 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [permissionSelected, setPermissionSelected] = useState(false);
     const [noPermTooltip, setNoPermTooltip] = useState(false);
     const [shownFieldGapIds, setShownFieldGapIds] = useState<Set<string>>(new Set());
-    const [fieldGapResults, setFieldGapResults] = useState<Map<string, CoverageResult>>(new Map());
-    const [fieldGapErrors, setFieldGapErrors] = useState<Set<string>>(new Set());
     const [mapStyle, setMapStyle] = useState<BasemapMode>('satellite');
     const showCoverage = false; // always false, kept for effect
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
@@ -194,7 +192,40 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const fieldScrollRef = useRef<HTMLDivElement | null>(null);
     const agreementUploadRef = useRef<HTMLInputElement | null>(null);
 
-    // Coverage calculation effect
+    // Derive field gaps synchronously from live page data. This keeps a coverage
+    // edit and the adjacent Show Gaps action on the same render snapshot, rather
+    // than allowing an older async database calculation to overwrite the edit.
+    const { fieldGapResults, fieldGapErrors } = useMemo(() => {
+        const results = new Map<string, CoverageResult>();
+        const errors = new Set<string>();
+        for (const fId of shownFieldGapIds) {
+            const field = (fields ?? []).find(candidate => candidate.id === fId);
+            if (!field?.boundary) {
+                errors.add(fId);
+                continue;
+            }
+
+            const fieldSessionIds = new Set(
+                (sessions ?? [])
+                    .filter(candidate => candidate.fieldId === fId || !candidate.fieldId)
+                    .map(candidate => candidate.id),
+            );
+            const fieldTracks = (allTracks ?? []).filter(track =>
+                track.sessionId && fieldSessionIds.has(track.sessionId)
+            );
+            const result = applyReportedCoverageToGaps(
+                calculateCoverage(field.boundary, fieldTracks),
+                reportedCoverage
+                    .filter(item => item.fieldId === fId)
+                    .map(item => item.geometry),
+            );
+            if (result) results.set(fId, result);
+            else errors.add(fId);
+        }
+        return { fieldGapResults: results, fieldGapErrors: errors };
+    }, [allTracks, fields, reportedCoverage, sessions, shownFieldGapIds]);
+
+    // Whole-permission coverage calculation effect
     useEffect(() => {
         if (!showCoverage || !boundary) {
             setCoverageResult(null);
@@ -204,58 +235,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
             setCoverageResult(result);
             setCoverageError(result === null);
         }
-
-        if (shownFieldGapIds.size === 0) {
-            setFieldGapResults(new Map());
-            return;
-        }
-
-        const fIds = Array.from(shownFieldGapIds);
-        Promise.all(fIds.map(async (fId) => {
-            const field = await db.fields.get(fId);
-            if (!field || !field.boundary) return null;
-
-            // 1. Find all sessions explicitly assigned to this field
-            const sessions = await db.sessions.where("fieldId").equals(fId).toArray();
-            const fieldSessionIds = new Set(sessions.map(s => s.id));
-
-            // 2. Find sessions for this permission that have NO field assigned (General tracks)
-            const unassignedSessions = await db.sessions.where("permissionId").equals(permissionId!).filter(s => !s.fieldId).toArray();
-            const unassignedSessionIds = new Set(unassignedSessions.map(s => s.id));
-
-            // Filter allTracks for either explicitly assigned or unassigned sessions
-            const fieldTracks = (allTracks ?? []).filter(t =>
-                t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
-            );
-
-            const result = applyReportedCoverageToGaps(
-                calculateCoverage(field.boundary, fieldTracks),
-                reportedCoverage
-                    .filter(item => item.fieldId === fId)
-                    .map(item => item.geometry),
-            );
-            return { fId, result };
-        })).then(results => {
-            const next = new Map<string, CoverageResult>();
-            const errors = new Set<string>();
-            results.forEach(r => {
-                if (r && r.result) next.set(r.fId, r.result);
-                else if (r && !r.result) errors.add(r.fId);
-            });
-            setFieldGapResults(next);
-            setFieldGapErrors(errors);
-        }).catch(() => {
-            setFieldGapErrors(new Set(fIds));
-        });
-    }, [
-        showCoverage,
-        shownFieldGapIds,
-        boundary,
-        allTracks,
-        permissionId,
-        fields,
-        reportedCoverage,
-    ]);
+    }, [allTracks, boundary, showCoverage]);
 
     // Map init effect
     useEffect(() => {
