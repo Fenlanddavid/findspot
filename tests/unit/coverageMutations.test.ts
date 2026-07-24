@@ -6,6 +6,7 @@ import {
   prepareSessionCoverageEvidence,
   saveReportedSessionCoverage,
 } from '../../src/services/coverageMutations';
+import { deriveSectionCandidates } from '../../src/engines/coverage/sectionCoverageEngine';
 
 const ISO = '2026-07-24T08:00:00.000Z';
 
@@ -206,6 +207,65 @@ describe('coverage mutation boundary', () => {
     expect(reports).toHaveLength(sections.length);
     expect(reports.every(report =>
       report.evidence === 'reported'
+      && sections.some(section => section.id === report.sectionId)
+    )).toBe(true);
+  });
+
+  it('moves reports from the coarser v2 layout onto overlapping finer areas', async () => {
+    const oldCandidate = deriveSectionCandidates({
+      fieldId: 'field-1',
+      permissionId: 'permission-1',
+      name: 'Small field',
+      boundary: field().boundary,
+    }, 10)[0];
+    expect(oldCandidate).toBeDefined();
+    if (!oldCandidate) throw new Error('Expected an old section fixture');
+
+    await db.permissionSections.put({
+      id: oldCandidate.id,
+      permissionId: oldCandidate.permissionId,
+      fieldId: oldCandidate.fieldId,
+      layoutKey: oldCandidate.layoutKey,
+      label: oldCandidate.label,
+      currentGeometryVersion: 1,
+      geometryVersions: [{
+        version: 1,
+        boundaryHash: 'h3-adaptive-v2:old-boundary',
+        geometry: oldCandidate.geometry,
+        areaM2: oldCandidate.areaM2,
+        effectiveFrom: ISO,
+      }],
+      createdAt: ISO,
+      updatedAt: ISO,
+    });
+    await db.sessionCoverage.put({
+      id: `session-1:${oldCandidate.id}:v1:reported`,
+      sessionId: 'session-1',
+      permissionId: 'permission-1',
+      sectionId: oldCandidate.id,
+      sectionGeometryVersion: 1,
+      evidence: 'reported',
+      startedAt: Date.parse(ISO),
+      observedAt: Date.parse(ISO),
+      createdAt: ISO,
+      updatedAt: ISO,
+    });
+
+    const sections = await ensurePermissionSections(
+      'permission-1',
+      '2026-07-24T09:00:00.000Z',
+    );
+    const reports = await db.sessionCoverage
+      .where('sessionId')
+      .equals('session-1')
+      .toArray();
+
+    expect(sections.length).toBeGreaterThanOrEqual(6);
+    expect((await db.permissionSections.get(oldCandidate.id))?.retiredAt).toBeDefined();
+    expect(reports.length).toBeGreaterThan(0);
+    expect(reports.every(report =>
+      report.evidence === 'reported'
+      && report.sectionId !== oldCandidate.id
       && sections.some(section => section.id === report.sectionId)
     )).toBe(true);
   });

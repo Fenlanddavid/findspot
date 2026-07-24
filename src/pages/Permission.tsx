@@ -43,7 +43,6 @@ import {
   updatePermissionDetails,
 } from '../services/permissionMutations';
 import { reportNonFatal } from '../services/diagLog';
-import { PermissionCoverageView } from '../components/coverage/PermissionCoverageView';
 
 const PERMISSION_HELPERS_SEEN_KEY = "fs_permission_helpers_seen";
 
@@ -1465,10 +1464,6 @@ export default function PermissionPage(props: {
                 confirmAction={confirmAction}
                 onConvertSignalToFind={handleConvertSignalToFind}
             />
-
-            {isEdit && id && !isEditing && (
-              <PermissionCoverageView permissionId={id} />
-            )}
 
             {/* Offline Access card — regular permissions with a mapped boundary */}
             {isEdit && !isClubDayMember && !isEditing && !!boundary && (

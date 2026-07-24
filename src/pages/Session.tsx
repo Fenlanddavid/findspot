@@ -109,6 +109,8 @@ function SessionSummary({
   return (
       <Modal title="Session Complete" onClose={onClose}>
           <div className="flex flex-col gap-5 py-2">
+              <SessionCoverageReview sessionId={sessionId} initiallyOpen />
+
               {/* Phase 2 — Session Outcome card */}
               {outcomeResult && (
                 <div className={`rounded-2xl border p-4 ${outcomeColours[outcomeResult.outcome.colour].bg} ${outcomeColours[outcomeResult.outcome.colour].border}`}>
@@ -142,8 +144,6 @@ function SessionSummary({
                     </div>
                   )}
               </div>
-
-              <SessionCoverageReview sessionId={sessionId} />
 
               {/* Phase 3 — Next Move */}
               {outcomeResult?.nextMove && (
@@ -657,11 +657,17 @@ export default function SessionPage(props: {
     
     const count = await pagePersistence.finds.where("sessionId").equals(sessionId).count();
 
-    // Duration calculation - use startTime if available
+    // Session time starts when the session record was created. Tracking may
+    // start later and must not shorten the detectorist's recorded session.
     let durationStr: string | null = null;
     let durationMins: number | null = null;
     const s = await pagePersistence.sessions.get(sessionId);
-    const startT = s?.startTime ? new Date(s.startTime).getTime() : null;
+    const startT = [s?.createdAt, s?.startTime, s?.date]
+      .reduce<number | null>((resolved, candidate) => {
+        if (resolved !== null || !candidate) return resolved;
+        const parsed = Date.parse(candidate);
+        return Number.isFinite(parsed) ? parsed : null;
+      }, null);
 
     if (startT) {
         const ms = now.getTime() - startT;
@@ -765,13 +771,16 @@ export default function SessionPage(props: {
     }
   }
 
-  const sessionDateMs = new Date(date).getTime();
-  const trackingStartMs = startTime ? new Date(startTime).getTime() : NaN;
-  const activeStartedAt = Number.isFinite(trackingStartMs)
-    ? trackingStartMs
-    : Number.isFinite(sessionDateMs)
-      ? sessionDateMs
-      : nowTick;
+  const activeStartedAt = [
+    session?.createdAt,
+    session?.startTime,
+    session?.date,
+    startTime,
+  ].reduce<number | null>((resolved, candidate) => {
+    if (resolved !== null || !candidate) return resolved;
+    const parsed = Date.parse(candidate);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, null) ?? nowTick;
   const activeDurationText = formatElapsed(nowTick - activeStartedAt);
   const activeFindCount = finds?.filter(f => !f.isPending).length ?? 0;
   const activeHudFindCount = finds?.length ?? 0;
@@ -851,17 +860,10 @@ export default function SessionPage(props: {
           {milestoneMsg}
         </div>
       )}
-      <div className="grid gap-8 mt-4">
+      <div className={`grid ${isActiveSessionMode ? 'mt-2 gap-3' : 'mt-4 gap-8'}`}>
+        {!isActiveSessionMode && (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
-                {isActiveSessionMode ? (
-                  <div>
-                    <h2 className="m-0 text-sm font-black uppercase tracking-widest text-gray-800 dark:text-gray-100">Session Details</h2>
-                    <p className="mt-1 text-base font-bold text-gray-500 dark:text-gray-400">
-                      {new Date(date + ':00Z').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                    </p>
-                  </div>
-                ) : (
                   <>
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                         {isEdit ? "Session Details" : "New Session"}
@@ -875,10 +877,9 @@ export default function SessionPage(props: {
                         </button>
                     )}
                   </>
-                )}
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-                {!isActiveSessionMode && isEdit && (
+                {isEdit && (
                     <button
                         onClick={handleDelete}
                         disabled={saving}
@@ -887,15 +888,10 @@ export default function SessionPage(props: {
                         Delete
                     </button>
                 )}
-                {isActiveSessionMode ? (
-                  <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs font-medium text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors">
-                    ← Back
-                  </button>
-                ) : (
-                  <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
-                )}
+                <button onClick={() => nav(permission ? `/permission/${permission.id}` : "/")} className="text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-gray-50 dark:bg-gray-800 px-3 py-1 rounded-lg border border-gray-200 dark:border-gray-700 transition-colors flex-1 sm:flex-none">Back</button>
             </div>
         </div>
+        )}
 
         {error && (
             <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm flex gap-3 items-center">
@@ -907,106 +903,107 @@ export default function SessionPage(props: {
           <SessionCoverageReview sessionId={sessionId} />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
-            <div className="lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm grid gap-6 h-fit">
+        <div className={`grid grid-cols-1 lg:grid-cols-3 min-w-0 ${isActiveSessionMode ? 'gap-3' : 'gap-8'}`}>
+            <div className={`lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm grid h-fit ${isActiveSessionMode ? 'gap-3 p-3' : 'gap-6 p-6'}`}>
                 {!isEditing && (
-                  <div className="flex flex-col gap-6">
+                  <div className={`flex flex-col ${isActiveSessionMode ? 'gap-3' : 'gap-6'}`}>
                     {isActiveSessionMode ? (
                       <>
-                        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md shadow-emerald-900/5 dark:border-emerald-900/70 dark:bg-gray-900">
-                          <div className="grid grid-cols-[5px_1fr]">
-                            <div className={`${isTracking ? "bg-red-500" : "bg-emerald-500"}`} />
-                            <div className="p-4 sm:p-5">
-                              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                                <div className="min-w-0 flex-1">
-                                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                                    <span className={`h-2.5 w-2.5 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
-                                    <span className={`rounded-full px-2.5 py-1 text-2xs font-black uppercase tracking-widest ${isTracking ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
-                                      {isTracking ? "Mapping live" : selectedField ? "Field mode" : "Active session"}
-                                    </span>
-                                    <span className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Started {new Date(date + ':00Z').toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                                  </div>
-                                  <h3 className="m-0 truncate text-2xl min-[420px]:text-3xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
-                                    {selectedField?.name || permission?.name || "Active Session"}
-                                  </h3>
-                                  {selectedField && (
-                                    <p className="mt-2 truncate text-sm font-bold text-gray-500 dark:text-gray-400">{permission?.name}</p>
-                                  )}
-
-                                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
-                                      <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDurationText}</div>
-                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Live time</div>
-                                    </div>
-                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
-                                      <div className="text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeFindCount}</div>
-                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">{activeFindCount === 1 ? "Find" : "Finds"}</div>
-                                    </div>
-                                    <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 dark:border-gray-800 dark:bg-gray-950/40">
-                                      <div className="truncate text-base font-black leading-none text-gray-900 dark:text-gray-100">{activeDistanceText ?? "--"}</div>
-                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Walked</div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={lat == null ? doGPS : undefined}
-                                      className={`rounded-xl border px-3 py-2 text-left transition-colors ${lat != null && lon != null ? "border-emerald-100 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/25" : "border-gray-100 bg-gray-50 hover:border-emerald-200 hover:bg-emerald-50 dark:border-gray-800 dark:bg-gray-950/40 dark:hover:border-emerald-900"}`}
-                                    >
-                                      <div className={`truncate text-base font-black leading-none ${lat != null && lon != null ? "text-emerald-700 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}>{lat != null && lon != null ? (acc ? `+/-${Math.round(acc)}m` : "Saved") : "Tap to set"}</div>
-                                      <div className="mt-1 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">GPS</div>
-                                    </button>
-                                  </div>
-
-                                  {activePendingCount > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => nav("/pending")}
-                                      className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-2xs font-black uppercase tracking-widest text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-                                    >
-                                      {activePendingCount} pending find{activePendingCount === 1 ? "" : "s"} to finish
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="grid w-full grid-cols-2 gap-2 sm:w-44 sm:grid-cols-1">
-                                  <button
-                                    type="button"
-                                    onClick={toggleTracking}
-                                    className={`rounded-xl px-4 py-3 text-sm font-black transition-all active:scale-[0.98] ${isTracking ? "bg-red-600 text-white shadow-md shadow-red-600/20" : "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50"}`}
-                                  >
-                                    {isTracking ? "Stop Mapping" : "Map Session"}
-                                  </button>
-                                  {isTracking && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setShowTrackingOverlay(true)}
-                                      className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3 text-2xs font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
-                                    >
-                                      Fullscreen
-                                    </button>
-                                  )}
-                                </div>
+                        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-white via-white to-emerald-50/70 shadow-md shadow-emerald-900/5 dark:border-emerald-900/70 dark:from-gray-900 dark:via-gray-900 dark:to-emerald-950/20">
+                          <div className="border-l-4 border-emerald-500 p-3 sm:p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
+                                <span className="truncate text-2xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+                                  {isTracking ? "Mapping live" : "Session active"}
+                                </span>
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => nav(permission ? `/permission/${permission.id}` : "/")}
+                                className="shrink-0 rounded-lg px-2 py-1 text-2xs font-black text-gray-500 transition-colors hover:bg-white hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                              >
+                                ← Back
+                              </button>
+                            </div>
+
+                            <h3 className="mt-3 truncate text-xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
+                              {selectedField?.name || permission?.name || "Active Session"}
+                            </h3>
+                            {selectedField && (
+                              <p className="mt-1 truncate text-xs font-bold text-gray-500 dark:text-gray-400">{permission?.name}</p>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap gap-1.5 text-2xs font-black text-gray-600 dark:text-gray-300">
+                              <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
+                                {activeDurationText} elapsed
+                              </span>
+                              <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
+                                {activeFindCount} {activeFindCount === 1 ? "find" : "finds"}
+                              </span>
+                              {activeDistanceText && (
+                                <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
+                                  {activeDistanceText} walked
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={lat == null ? doGPS : undefined}
+                                className={`rounded-full border px-2.5 py-1 transition-colors ${lat != null && lon != null ? "border-emerald-200 bg-emerald-100/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-gray-200 bg-white/80 text-gray-500 hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900/70"}`}
+                              >
+                                {lat != null && lon != null ? "GPS saved" : "Set GPS"}
+                              </button>
+                            </div>
+
+                            <div className="mt-3 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={toggleTracking}
+                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-black transition-all active:scale-[0.98] ${isTracking ? "bg-red-600 text-white shadow-md shadow-red-600/20" : "border border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"}`}
+                              >
+                                {isTracking ? "Stop Mapping" : "Map Session"}
+                              </button>
                               {isTracking && (
-                                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-2xs font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/25 dark:text-amber-300">
-                                  Keep screen awake while mapping. Locking the phone can stop GPS recording.
-                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowTrackingOverlay(true)}
+                                  className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-2xs font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
+                                >
+                                  Fullscreen
+                                </button>
                               )}
                             </div>
+
+                            {activePendingCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => nav("/pending")}
+                                className="mt-2 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-2xs font-black text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                              >
+                                {activePendingCount} pending find{activePendingCount === 1 ? "" : "s"} to finish
+                              </button>
+                            )}
+                            {isTracking && (
+                              <p className="mt-2 text-2xs font-bold text-amber-700 dark:text-amber-300">
+                                Keep the screen awake while mapping.
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex flex-col gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-	                            onClick={() => goSessionFind("quick")}
+                            onClick={() => goSessionFind("quick")}
                             aria-label="Add Find to Session"
-                            className="flex min-h-[5.5rem] w-full items-center justify-center rounded-2xl bg-emerald-600 px-4 py-4 text-center text-white shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.99] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
+                            className="flex min-h-14 w-full items-center justify-center rounded-xl bg-emerald-600 px-3 py-3 text-center text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
                           >
-                            <span className="text-xl font-black">Add Find</span>
+                            <span className="text-sm font-black">Add Find</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => setShowSignalSheet(true)}
-                            className="w-full rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-700 shadow-sm transition-all hover:border-emerald-300 hover:bg-emerald-100 active:scale-[0.99] dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-300 dark:hover:border-emerald-700"
+                            className="min-h-14 w-full rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs font-black text-sky-800 shadow-sm transition-all hover:border-sky-300 hover:bg-sky-100 active:scale-[0.98] dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-300"
                           >
                             Un-dug Signal
                           </button>
@@ -1019,14 +1016,14 @@ export default function SessionPage(props: {
                               lon,
                               gpsAccuracyM: acc,
                             })}
-                            className="w-full rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-red-700 shadow-sm transition-all hover:border-red-300 hover:bg-red-100 active:scale-[0.99] dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300 dark:hover:border-red-700"
+                            className="min-h-14 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs font-black text-red-700 shadow-sm transition-all hover:border-red-300 hover:bg-red-100 active:scale-[0.98] dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300"
                           >
                             Significant Find
                           </button>
                           <button
                             type="button"
                             onClick={finishSession}
-                            className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-black uppercase tracking-widest text-amber-800 shadow-sm transition-all hover:border-amber-400 hover:bg-amber-100 active:scale-[0.99] dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:border-amber-600 dark:hover:bg-amber-950/50"
+                            className="min-h-14 w-full rounded-xl border border-gray-300 bg-gray-900 px-3 py-3 text-xs font-black text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900"
                           >
                             Finish Session
                           </button>

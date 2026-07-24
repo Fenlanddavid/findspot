@@ -82,7 +82,7 @@ describe('section derivation', () => {
       },
     });
 
-    expect(sections.length).toBeGreaterThanOrEqual(2);
+    expect(sections.length).toBeGreaterThanOrEqual(6);
     expect(sections.every(candidate => candidate.layoutKey.startsWith('h3:')))
       .toBe(true);
   });
@@ -115,7 +115,7 @@ describe('section derivation', () => {
     }, retainedResolution);
 
     expect(original.length).toBeGreaterThanOrEqual(2);
-    expect(original.length).toBeLessThanOrEqual(5);
+    expect(original.length).toBeLessThanOrEqual(12);
     const editedIds = new Set(edited.map(candidate => candidate.id));
     expect(original.filter(candidate => editedIds.has(candidate.id)).length)
       .toBeGreaterThan(original.length / 2);

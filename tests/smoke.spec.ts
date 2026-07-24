@@ -109,7 +109,7 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect(page).toHaveURL(/\/session\/new/);
   await page.getByRole("button", { name: "Start Session" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
-  await expect(page.getByText("Session Details")).toBeVisible();
+  await expect(page.getByText("Session active", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Add Find to Session" }).click();
   await expect(page).toHaveURL(/\/find\?/);
@@ -136,6 +136,29 @@ test("session coverage is saved in three taps and appears on the permission", as
   const now = Date.now();
   const fieldId = "coverage-smoke-field";
   const sessionId = "coverage-smoke-session";
+  const unmappedSessionId = "coverage-unmapped-session";
+  await putIndexedDbRow(page, "sessions", {
+    id: unmappedSessionId,
+    projectId: permission.projectId,
+    permissionId,
+    fieldId: null,
+    date: new Date(now - 7_200_000).toISOString(),
+    lat: null,
+    lon: null,
+    gpsAccuracyM: null,
+    landUse: "pasture",
+    cropType: "",
+    isStubble: false,
+    notes: "",
+    isFinished: true,
+    startTime: new Date(now - 7_200_000).toISOString(),
+    endTime: new Date(now - 5_400_000).toISOString(),
+    createdAt: new Date(now - 7_200_000).toISOString(),
+    updatedAt: new Date(now - 5_400_000).toISOString(),
+  });
+  await page.goto(`./session/${unmappedSessionId}`);
+  await expect(page.getByText("Searched areas", { exact: true })).toHaveCount(0);
+
   await putIndexedDbRow(page, "fields", {
     id: fieldId,
     projectId: permission.projectId,
@@ -168,32 +191,49 @@ test("session coverage is saved in three taps and appears on the permission", as
     cropType: "",
     isStubble: false,
     notes: "",
-    isFinished: true,
+    isFinished: false,
     startTime: new Date(now - 3_600_000).toISOString(),
-    endTime: new Date(now - 1_800_000).toISOString(),
     createdAt: new Date(now - 3_600_000).toISOString(),
-    updatedAt: new Date(now - 1_800_000).toISOString(),
+    updatedAt: new Date(now - 3_600_000).toISOString(),
   });
 
   await page.goto(`./session/${sessionId}`);
   const reviewTapBudget = 4;
   let reviewTaps = 0;
 
-  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(/(?:59m|1h 0m) elapsed/)).toBeVisible();
+  await page.getByRole("button", { name: "Finish Session" }).click();
   reviewTaps += 1;
-  await expect(page.getByText("Which parts did you cover today?")).toBeVisible();
-  const reviewSections = page
-    .getByRole("group", { name: "Permission sections" })
+  await expect(page.getByText("Which parts of the field did you search?")).toBeVisible();
+  let reviewSections = page
+    .getByRole("group", { name: "Searched area map" })
     .getByRole("button");
   expect(await reviewSections.count()).toBeGreaterThanOrEqual(2);
   await reviewSections.first().click();
+  await expect(page.getByText("1 area marked", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Not now" }).click();
+  let observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{
+    sessionId: string;
+    evidence: string;
+  }>;
+  expect(observations.some(row =>
+    row.sessionId === sessionId && row.evidence === "reported"
+  )).toBe(false);
+
+  await page.getByRole("button", { name: "Mark areas" }).click();
   reviewTaps += 1;
-  await page.getByRole("button", { name: "Save" }).click();
+  reviewSections = page
+    .getByRole("group", { name: "Searched area map" })
+    .getByRole("button");
+  await expect(reviewSections.first()).toHaveAttribute("aria-pressed", "false");
+  await reviewSections.first().click();
+  reviewTaps += 1;
+  await page.getByRole("button", { name: "Done" }).click();
   reviewTaps += 1;
 
   expect(reviewTaps).toBeLessThanOrEqual(reviewTapBudget);
-  await expect(page.getByText("Ground covered saved.")).toBeVisible();
-  const observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{
+  await expect(page.getByText("1 area marked.")).toBeVisible();
+  observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{
     sessionId: string;
     evidence: string;
   }>;
@@ -203,16 +243,51 @@ test("session coverage is saved in three taps and appears on the permission", as
       evidence: "reported",
     }),
   ]));
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  reviewSections = page
+    .getByRole("group", { name: "Searched area map" })
+    .getByRole("button");
+  await expect(reviewSections.first()).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Not now" }).click();
+
+  // Coverage from a whole-permission session must still be directly editable
+  // from the matching sub-field without becoming a silent read-only map.
+  const sessionRows = await readIndexedDbStore(page, "sessions") as Array<Record<string, unknown>>;
+  const coverageSession = sessionRows.find(row => row.id === sessionId);
+  if (!coverageSession) throw new Error("Could not find coverage session");
+  await putIndexedDbRow(page, "sessions", {
+    ...coverageSession,
+    fieldId: null,
+  });
 
   await page.goto(`./permission/${permissionId}`);
-  const coverage = page.getByRole("heading", { name: "What has been searched" });
-  await expect(coverage).toBeVisible();
-  await page
-    .getByRole("group", { name: "Permission sections" })
-    .getByRole("button")
-    .first()
-    .click();
-  await expect(page.getByText("Reported searched · 1")).toBeVisible();
+  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await expect(page.getByRole("button", { name: "Edit recent search" })).toHaveCount(0);
+  await expect(page.getByText("Which parts of the field did you search?")).toBeVisible();
+  let permissionReviewSections = page
+    .getByRole("group", { name: "Searched area map" })
+    .getByRole("button");
+  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "true");
+  await expect(permissionReviewSections.first()).toHaveAttribute("fill", "#10b981");
+  await permissionReviewSections.first().click();
+  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "false");
+  await expect(permissionReviewSections.first()).toHaveAttribute("fill", "#e5e7eb");
+  await page.getByRole("button", { name: "Done" }).click();
+
+  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "false");
+  await permissionReviewSections.first().click();
+  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect.poll(async () => {
+    observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{
+      sessionId: string;
+      evidence: string;
+    }>;
+    return observations.some(row =>
+      row.sessionId === sessionId && row.evidence === "reported"
+    );
+  }).toBe(true);
+  await page.getByRole("button", { name: "Close ground coverage" }).click();
   await page.getByRole("button", { name: "Show Gaps" }).click();
   await expect(page.getByText(/reports included/)).toBeVisible();
 });
@@ -310,7 +385,19 @@ test("active session mobile uses in-page actions without a redundant bottom bar"
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
 
   await expect(page.getByRole("toolbar", { name: "Active session actions" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Finish Session" })).toBeVisible();
+  const mainActions = [
+    page.getByRole("button", { name: "Add Find to Session" }),
+    page.getByRole("button", { name: "Un-dug Signal" }),
+    page.getByRole("button", { name: "Significant Find" }),
+    page.getByRole("button", { name: "Finish Session" }),
+  ];
+  for (const action of mainActions) {
+    await expect(action).toBeVisible();
+    const bounds = await action.boundingBox();
+    expect(bounds && bounds.y + bounds.height).toBeLessThanOrEqual(844);
+  }
+  await expect(page.getByText("Live time", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/elapsed$/)).toBeVisible();
   await page.getByRole("button", { name: "Add Find to Session" }).click();
   await expect(page).toHaveURL(/\/find\?/);
   await expect(page.getByRole("button", { name: "Significant Find" }).first()).toBeVisible();

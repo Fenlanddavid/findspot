@@ -3,29 +3,61 @@
 ## Product contract
 
 At session end, a user may record which stable land sections they searched.
+The searched-area map opens automatically after finishing and remains optional.
+The latest eligible session can also be edited from the relevant sub-field's
+**Ground coverage** action during the 48-hour recall window.
+Opening that action goes straight to the selectable map; there is no separate
+edit mode or edit button. **Done** saves without closing the panel so further
+adjustments remain one tap away.
+Eligible whole-permission sessions remain editable from the relevant sub-field;
+editing one field preserves any reports belonging to the session's other fields.
 The review never displays FieldGuide predictions. It remains available for 48
 hours from the session's original `endTime`; after that it is read-only.
-Skipping creates no record and leaves predictions unvisited.
+Choosing **Not now** creates no record and leaves predictions unvisited.
 
-The permission coverage view is useful independently of prediction calibration.
+## Review interaction
+
+The user-facing task is expressed entirely in detectorist language:
+
+- the collapsed card is **Searched areas**;
+- opening it asks, “Which parts of the field did you search today?”;
+- **Done** saves marked areas and collapses to the saved count;
+- **Not now** and **Close** discard every unsaved toggle;
+- reopening within 48 hours restores only the last saved selection;
+- tapping a saved green area while editing removes the green state immediately;
+- sessions without a usable mapped boundary do not show a dead-end review.
+
+Tracked areas are visibly already counted and cannot be toggled. Marked,
+tracked and find-location areas use both colour and map symbols, with explicit
+accessible state labels. A find location remains selectable if the user also
+searched that surrounding area.
+
+Prediction resolution still runs after **Done**, but its counts and terminology
+never appear in the user experience. They remain available through diagnostics
+and developer calibration surfaces.
+
+The coverage view lives with each sub-field beside **Locate**, **Show Gaps** and
+the session actions. A permission with one unsplit boundary keeps the same view
+inside its boundary-and-fields panel. It is useful independently of prediction calibration.
 Its language is deliberately evidence-aware:
 
 - reported and tracked sections are search coverage;
 - a GPS find marks activity at a location, not whole-section coverage;
-- an empty section says "No coverage recorded", never "never searched".
+- an empty section says "Not marked", never "never searched".
 
 ## Section identity
 
 Every mapped field is split into globally stable H3 cells clipped to its
 boundary. Candidate resolutions are measured against the actual clipped field,
-with a target of roughly three useful sections, so an ordinary small field does
+with a target of roughly six useful sections, so an ordinary small field does
 not collapse into one all-or-nothing selection. The selected H3 resolution is
 retained across ordinary boundary edits.
 
-Legacy whole-field sections are retired on reconciliation. Existing
-whole-field `reported` evidence is transferred to the replacement sections,
-because that report explicitly meant the whole field; the legacy observation
-is removed after the equivalent child observations are written atomically.
+Older coarse sections are retired on reconciliation. Existing `reported`
+evidence is transferred only to finer areas substantially overlapped by the
+original selected area. A legacy whole-field report therefore transfers to all
+replacement areas. Old observations are removed after their equivalent finer
+observations are written atomically.
 
 Each section retains an append-only geometry history:
 
@@ -104,3 +136,6 @@ free in the coverage engine.
 - The property invariants include hit permanence, unique-session confirmation,
   temporal eligibility and no negative resolution without search evidence.
 - New source files contain no explicit `any`.
+- Browser acceptance proves the review stays within the tap budget, **Not now**
+  writes nothing, saved selections reopen, unmapped sessions hide the review,
+  and permission-level **Show Gaps** includes saved reports.

@@ -56,9 +56,9 @@ function evidenceBySection(
 
 function fillForEvidence(
   evidence: SectionEvidenceSummary,
-  selected: boolean,
+  reported: boolean,
 ): { fill: string; opacity: number } {
-  if (selected || evidence.reported) return { fill: '#10b981', opacity: 0.68 };
+  if (reported) return { fill: '#10b981', opacity: 0.68 };
   if (evidence.tracked) return { fill: '#0ea5e9', opacity: 0.62 };
   if (evidence.findVisited) return { fill: '#f59e0b', opacity: 0.28 };
   return { fill: '#e5e7eb', opacity: 0.58 };
@@ -78,6 +78,7 @@ export function SectionCoverageMap(props: {
   onToggle?: (sectionId: string) => void;
   onInspect?: (sectionId: string) => void;
   selectedSectionId?: string | null;
+  disabledSectionIds?: ReadonlySet<string>;
 }) {
   const rendered = useMemo(() => props.sections.map(section => ({
     section,
@@ -112,7 +113,7 @@ export function SectionCoverageMap(props: {
       <svg
         viewBox="0 0 100 72"
         className="block h-auto min-h-52 w-full"
-        aria-label="Permission sections"
+        aria-label="Searched area map"
         role="group"
       >
         <rect width="100" height="72" fill="currentColor" className="text-slate-100 dark:text-slate-950" />
@@ -125,41 +126,97 @@ export function SectionCoverageMap(props: {
             latestObservedAt: null,
           };
           const selected = props.selectedReported?.has(section.id) ?? false;
-          const colours = fillForEvidence(state, selected);
+          // While editing, the draft selection is authoritative. Persisted
+          // reported evidence must not keep a deselected area visually green.
+          const reported = props.interactive && props.selectedReported !== undefined
+            ? selected
+            : state.reported;
+          const disabled = !!props.interactive && (
+            props.disabledSectionIds?.has(section.id) ?? false
+          );
+          const colours = fillForEvidence(state, reported);
           const path = rings.map(ring =>
             ring.map((point, index) => {
               const [x, y] = project(point);
               return `${index === 0 ? 'M' : 'L'}${x.toFixed(3)},${y.toFixed(3)}`;
             }).join(' ') + ' Z'
           ).join(' ');
+          const outerRing = rings[0] ?? [];
+          const centre = outerRing.length > 0
+            ? project([
+                outerRing.reduce((sum, point) => sum + point[0], 0) / outerRing.length,
+                outerRing.reduce((sum, point) => sum + point[1], 0) / outerRing.length,
+              ])
+            : null;
+          const status = reported
+            ? 'marked searched'
+            : state.tracked
+              ? 'recorded by tracking, already counted'
+              : state.findVisited
+                ? 'find location, not marked searched'
+                : 'not marked';
+          const symbol = reported
+            ? '✓'
+            : state.tracked
+              ? '↝'
+              : state.findVisited
+                ? '◆'
+                : null;
           const click = () => {
+            if (disabled) return;
             if (props.interactive) props.onToggle?.(section.id);
             else props.onInspect?.(section.id);
           };
+          const interactive = !!props.interactive || !!props.onInspect;
           return (
-            <path
-              key={section.id}
-              d={path}
-              fill={colours.fill}
-              fillOpacity={colours.opacity}
-              fillRule="evenodd"
-              stroke={props.selectedSectionId === section.id ? '#111827' : '#ffffff'}
-              strokeWidth={props.selectedSectionId === section.id ? 0.9 : 0.45}
-              vectorEffect="non-scaling-stroke"
-              className={props.interactive || props.onInspect ? 'cursor-pointer outline-none' : undefined}
-              role={props.interactive || props.onInspect ? 'button' : undefined}
-              tabIndex={props.interactive || props.onInspect ? 0 : undefined}
-              aria-label={`${section.label}${selected ? ', selected' : ''}`}
-              aria-pressed={props.interactive ? selected : undefined}
-              data-testid={`coverage-section-${section.id}`}
-              onClick={click}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  click();
-                }
-              }}
-            />
+            <g key={section.id}>
+              <path
+                d={path}
+                fill={colours.fill}
+                fillOpacity={colours.opacity}
+                fillRule="evenodd"
+                stroke={props.selectedSectionId === section.id ? '#111827' : '#ffffff'}
+                strokeWidth={props.selectedSectionId === section.id ? 0.9 : 0.45}
+                vectorEffect="non-scaling-stroke"
+                className={interactive
+                  ? disabled
+                    ? 'cursor-not-allowed outline-none'
+                    : 'cursor-pointer outline-none'
+                  : undefined}
+                role={interactive ? 'button' : undefined}
+                tabIndex={interactive ? 0 : undefined}
+                aria-label={`${section.label}, ${status}`}
+                aria-pressed={props.interactive && !disabled ? selected : undefined}
+                aria-disabled={disabled || undefined}
+                data-testid={`coverage-section-${section.id}`}
+                onClick={click}
+                onKeyDown={event => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    click();
+                  }
+                }}
+              />
+              {centre && symbol && (
+                <text
+                  x={centre[0]}
+                  y={centre[1]}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#ffffff"
+                  stroke="#111827"
+                  strokeOpacity="0.35"
+                  strokeWidth="0.35"
+                  paintOrder="stroke"
+                  fontSize="5"
+                  fontWeight="900"
+                  pointerEvents="none"
+                  aria-hidden="true"
+                >
+                  {symbol}
+                </text>
+              )}
+            </g>
           );
         })}
       </svg>

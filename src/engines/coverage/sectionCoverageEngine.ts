@@ -17,8 +17,8 @@ import {
 } from '../../shared/coverageRecords';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 
-export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v2';
-export const SECTION_TARGET_COUNT = 3;
+export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v3';
+export const SECTION_TARGET_COUNT = 6;
 export const SECTION_MIN_RESOLUTION = 7;
 export const SECTION_MAX_RESOLUTION = 13;
 export const SECTION_MIN_COUNT = 2;
@@ -189,7 +189,12 @@ export function deriveSectionCandidates(
         }
         continue;
       }
-      const distance = Math.abs(atResolution.length - SECTION_TARGET_COUNT);
+      // H3 resolutions are deliberately discrete. Penalise layouts below the
+      // target more heavily so a small field does not remain three large taps
+      // when the next resolution offers several more honest search areas.
+      const distance = atResolution.length < SECTION_TARGET_COUNT
+        ? (SECTION_TARGET_COUNT - atResolution.length) * 2
+        : atResolution.length - SECTION_TARGET_COUNT;
       if (
         distance < bestDistance
         || (distance === bestDistance && atResolution.length > candidates.length)
@@ -197,7 +202,10 @@ export function deriveSectionCandidates(
         candidates = atResolution;
         bestDistance = distance;
       }
-      if (distance === 0) break;
+      // Cell count grows monotonically with resolution. Once the target has
+      // been crossed, finer layouts can only move farther away and cost more
+      // geometry work.
+      if (atResolution.length >= SECTION_TARGET_COUNT) break;
     }
   }
 
@@ -205,6 +213,20 @@ export function deriveSectionCandidates(
     ...candidate,
     label: `${source.name} · ${index + 1}`,
   }));
+}
+
+export function areaOverlapFraction(
+  targetGeometry: GeoJSONArea,
+  sourceGeometry: GeoJSONArea,
+): number {
+  const target = geometryFeature(targetGeometry);
+  const targetAreaM2 = turf.area(target);
+  if (!Number.isFinite(targetAreaM2) || targetAreaM2 <= 0) return 0;
+  const overlap = turf.intersect(
+    turf.featureCollection([target, geometryFeature(sourceGeometry)]),
+  ) as Feature<Polygon | MultiPolygon> | null;
+  if (!overlap) return 0;
+  return Math.min(1, Math.max(0, turf.area(overlap) / targetAreaM2));
 }
 
 export function pointIsInsideArea(

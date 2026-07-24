@@ -15,6 +15,7 @@ import {
   BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
   type BasemapMode,
 } from "./permission/basemaps";
+import { PermissionCoverageView } from "./coverage/PermissionCoverageView";
 
 const landTypes = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -174,6 +175,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [coverageError, setCoverageError] = useState(false); // dead but keep
     const [isMapExpanded, setIsMapExpanded] = useState(false);
     const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+    const [coverageFieldId, setCoverageFieldId] = useState<string | null>(null);
 
     const displayAcres = (() => {
         const fieldsWithBoundary = (fields ?? []).filter(f => f.boundary);
@@ -1511,6 +1513,18 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                     )}
                                                     {!isClubDayMember && (
                                                     <button
+                                                        type="button"
+                                                        onClick={() => setCoverageFieldId(current =>
+                                                            current === f.id ? null : f.id
+                                                        )}
+                                                        aria-expanded={coverageFieldId === f.id}
+                                                        className={`text-3xs font-black px-2 py-1 rounded-lg border transition-all ${coverageFieldId === f.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:border-emerald-400'}`}
+                                                    >
+                                                        Ground coverage
+                                                    </button>
+                                                    )}
+                                                    {!isClubDayMember && (
+                                                    <button
                                                         onClick={() => {
                                                             const next = new Set(shownFieldGapIds);
                                                             if (next.has(f.id)) next.delete(f.id);
@@ -1534,6 +1548,14 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                     </button>
                                                     )}
                                                 </div>
+                                                {permissionId && coverageFieldId === f.id && (
+                                                    <PermissionCoverageView
+                                                        permissionId={permissionId}
+                                                        fieldId={f.id}
+                                                        embedded
+                                                        onRequestClose={() => setCoverageFieldId(null)}
+                                                    />
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-3 py-2">
                                                 <button
@@ -1564,6 +1586,13 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                         );
                                     })}
                                 </div>
+                                {permissionId && fields.length === 0 && !!boundary && !isClubDayMember && (
+                                    <PermissionCoverageView
+                                        permissionId={permissionId}
+                                        embedded
+                                        onRequestClose={() => setCoverageFieldId(null)}
+                                    />
+                                )}
                             </div>
                         )}
                     </div>

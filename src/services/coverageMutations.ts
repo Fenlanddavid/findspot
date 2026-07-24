@@ -9,12 +9,17 @@ import type {
 import {
   TRACK_SECTION_CALCULATION_VERSION,
   TRACK_SECTION_COVERAGE_THRESHOLD,
+  SECTION_LAYOUT_VERSION,
+  areaOverlapFraction,
   deriveSectionCandidates,
   evidenceObservationId,
   pointIsInsideArea,
   trackedSectionCoverageFraction,
 } from '../engines/coverage/sectionCoverageEngine';
-import { currentSectionGeometry } from '../shared/coverageRecords';
+import {
+  currentSectionGeometry,
+  sectionGeometryAtVersion,
+} from '../shared/coverageRecords';
 
 export const SESSION_COVERAGE_EDIT_WINDOW_MS = 48 * 60 * 60 * 1_000;
 
@@ -53,7 +58,11 @@ function sourceKey(fieldId: string | null): string {
 }
 
 function retainedH3Resolution(sections: PermissionSection[]): number | undefined {
-  const section = sections.find(candidate => candidate.layoutKey.startsWith('h3:'));
+  const section = sections.find(candidate => {
+    const geometry = currentSectionGeometry(candidate);
+    return candidate.layoutKey.startsWith('h3:')
+      && geometry?.boundaryHash.startsWith(`${SECTION_LAYOUT_VERSION}:`);
+  });
   if (!section) return undefined;
   const cell = section.layoutKey.slice('h3:'.length);
   try {
@@ -97,15 +106,12 @@ export async function ensurePermissionSections(
 
   const nextIds = new Set<string>();
   const writes: PermissionSection[] = [];
-  const legacyMigrations: Array<{
-    legacySection: PermissionSection;
+  const sectionMigrations: Array<{
+    previousSection: PermissionSection;
     replacementSections: PermissionSection[];
   }> = [];
   for (const source of sources) {
     const existingForSource = existing.filter(section => section.fieldId === source.fieldId);
-    const legacyWhole = existingForSource.find(
-      section => section.layoutKey === 'whole' && !section.retiredAt,
-    );
     const candidates = deriveSectionCandidates(
       source,
       retainedH3Resolution(existingForSource),
@@ -170,8 +176,15 @@ export async function ensurePermissionSections(
       writes.push(nextSection);
       replacementSections.push(nextSection);
     }
-    if (legacyWhole && replacementSections.length > 0) {
-      legacyMigrations.push({ legacySection: legacyWhole, replacementSections });
+    const replacementIds = new Set(replacementSections.map(section => section.id));
+    for (const previousSection of existingForSource) {
+      if (
+        !previousSection.retiredAt
+        && !replacementIds.has(previousSection.id)
+        && replacementSections.length > 0
+      ) {
+        sectionMigrations.push({ previousSection, replacementSections });
+      }
     }
   }
 
@@ -186,17 +199,31 @@ export async function ensurePermissionSections(
     }
   }
 
-  if (writes.length > 0 || legacyMigrations.length > 0) {
+  if (writes.length > 0 || sectionMigrations.length > 0) {
     await db.transaction('rw', [db.permissionSections, db.sessionCoverage], async () => {
       if (writes.length > 0) await db.permissionSections.bulkPut(writes);
-      for (const migration of legacyMigrations) {
-        const legacyReports = await db.sessionCoverage
+      for (const migration of sectionMigrations) {
+        const previousReports = await db.sessionCoverage
           .where('sectionId')
-          .equals(migration.legacySection.id)
+          .equals(migration.previousSection.id)
           .filter(observation => observation.evidence === 'reported')
           .toArray();
-        const migratedReports = legacyReports.flatMap(observation =>
-          migration.replacementSections.map(section => ({
+        const migratedReports = previousReports.flatMap(observation => {
+          const previousGeometry = sectionGeometryAtVersion(
+            migration.previousSection,
+            observation.sectionGeometryVersion,
+          );
+          if (!previousGeometry) return [];
+          const overlapping = migration.replacementSections.filter(section => {
+            const replacementGeometry = currentSectionGeometry(section);
+            return replacementGeometry
+              ? areaOverlapFraction(
+                  replacementGeometry.geometry,
+                  previousGeometry.geometry,
+                ) >= 0.5
+              : false;
+          });
+          return overlapping.map(section => ({
             ...observation,
             id: evidenceObservationId(
               observation.sessionId,
@@ -207,13 +234,15 @@ export async function ensurePermissionSections(
             sectionId: section.id,
             sectionGeometryVersion: section.currentGeometryVersion,
             updatedAt: now,
-          }))
-        );
-        if (legacyReports.length > 0) {
-          await db.sessionCoverage.bulkDelete(legacyReports.map(row => row.id));
+          }));
+        });
+        if (previousReports.length > 0) {
+          await db.sessionCoverage.bulkDelete(previousReports.map(row => row.id));
         }
         if (migratedReports.length > 0) {
-          await db.sessionCoverage.bulkPut(migratedReports);
+          await db.sessionCoverage.bulkPut(
+            [...new Map(migratedReports.map(row => [row.id, row])).values()],
+          );
         }
       }
     });
