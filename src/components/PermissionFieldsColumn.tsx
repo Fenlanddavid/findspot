@@ -16,6 +16,7 @@ import {
   type BasemapMode,
 } from "./permission/basemaps";
 import { PermissionCoverageView } from "./coverage/PermissionCoverageView";
+import { StaticMapPreview } from "./StaticMapPreview";
 
 const landTypes = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -1029,6 +1030,23 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     {/* Row 2 — permission name */}
                     <h3 className="min-w-0 max-w-full whitespace-normal text-xl min-[420px]:text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 break-words leading-tight">{name}</h3>
 
+                    {isRally && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-gray-500 dark:text-gray-400">
+                        {validFrom && (
+                          <span>
+                            {new Date(validFrom).toLocaleDateString("en-GB", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </span>
+                        )}
+                        {validFrom && <span aria-hidden="true">·</span>}
+                        <span>{fields?.length ?? 0} {(fields?.length ?? 0) === 1 ? "field" : "fields"}</span>
+                      </div>
+                    )}
+
                     {!isRally && !isClubDayMember && (
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-gray-500 dark:text-gray-400">
                         {landType && <span className="capitalize">{landType}</span>}
@@ -1073,6 +1091,20 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                           {!landownerPhone && !landownerEmail && (
                             <span className="text-xs font-medium text-gray-400 dark:text-gray-500">No phone or email saved</span>
                           )}
+                        </div>
+                      </div>
+                    )}
+
+                    {isRally && lat != null && lon != null && (
+                      <div className="relative h-40 overflow-hidden rounded-xl border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900">
+                        <StaticMapPreview
+                          lat={lat}
+                          lon={lon}
+                          boundary={boundary || fields?.find(field => !!field.boundary)?.boundary}
+                          className="h-full w-full rounded-none"
+                        />
+                        <div className="absolute bottom-2 right-2 rounded border border-white/20 bg-black/55 px-2 py-1 font-mono text-[9px] text-white/75 backdrop-blur-sm">
+                          {lat.toFixed(4)}, {lon.toFixed(4)}
                         </div>
                       </div>
                     )}
@@ -1154,7 +1186,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                       />
                     )}
                     {!isClubDayMember && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {permissionNeedsCompletion ? (
                           <button
                             onClick={onCompletePermission}
@@ -1162,15 +1194,42 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                           >
                             Complete permission
                           </button>
-                        ) : !isRally && permissionId ? (
+                        ) : permissionId ? (
                           <button
                             onClick={() => nav(`/session/new?permissionId=${permissionId}`)}
-                            className="min-h-10 min-w-0 flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-2xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-700"
+                            className={`min-h-11 min-w-0 flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-700 ${isRally ? "basis-full" : ""}`}
                           >
-                            Start visit
+                            {isRally ? "Start rally session" : "Start visit"}
                           </button>
                         ) : null}
-                        {(lat != null && lon != null || canUseAgreement) && (
+                        {isRally && permissionId && (
+                          <button
+                            type="button"
+                            onClick={() => onRecordFind()}
+                            className="min-h-10 min-w-[6rem] flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-2xs font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-500 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                          >
+                            Record find
+                          </button>
+                        )}
+                        {isRally && permissionId && (
+                          <button
+                            type="button"
+                            onClick={() => onAddField()}
+                            className="min-h-10 min-w-[6rem] flex-1 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-2xs font-black uppercase tracking-widest text-emerald-700 transition-colors hover:border-emerald-500 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                          >
+                            Add field
+                          </button>
+                        )}
+                        {isRally && lat != null && lon != null && (
+                          <button
+                            type="button"
+                            onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)}
+                            className="min-h-10 min-w-[6rem] flex-1 rounded-lg border border-sky-200 bg-white px-3 py-2 text-2xs font-black uppercase tracking-widest text-sky-600 transition-colors hover:border-sky-500 hover:bg-sky-50 dark:border-sky-900 dark:bg-gray-900 dark:text-sky-400"
+                          >
+                            Scan area
+                          </button>
+                        )}
+                        {(canUseAgreement || (!isRally && lat != null && lon != null)) && (
                           <button
                             type="button"
                             aria-expanded={moreActionsOpen}
@@ -1184,7 +1243,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                     )}
                     {moreActionsOpen && !isClubDayMember && (
                       <div className="flex flex-wrap gap-2 rounded-xl border border-gray-100 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/40">
-                        {lat != null && lon != null && (
+                        {!isRally && lat != null && lon != null && (
                           <button onClick={() => nav(`/fieldguide?lat=${lat}&lng=${lon}`)} className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-2xs font-bold text-sky-600 hover:border-sky-400 dark:border-sky-900 dark:bg-gray-800 dark:text-sky-400">
                             Open Field Guide
                           </button>
@@ -1208,7 +1267,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
 
                 <details className="group/details mt-4 border-t border-gray-100 pt-3 dark:border-gray-700">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:text-emerald-600 dark:text-gray-400 dark:hover:text-emerald-400 [&::-webkit-details-marker]:hidden">
-                    Permission details
+                    {isRally ? "Event details" : "Permission details"}
                     <span className="text-base font-medium transition-transform group-open/details:rotate-180">⌄</span>
                   </summary>
                 <div className="mt-4 grid grid-cols-1 gap-5 rounded-xl bg-gray-50 p-4 dark:bg-gray-900/40 md:grid-cols-2">
@@ -1304,9 +1363,9 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                     : `Tracking data from all ${sessions?.length} sessions`}
                                 </p>
                             </div>
-                            {!isClubDayMember && (
+                            {!isClubDayMember && !isRally && (
                               <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
-                                {isRally ? "💡 Tap 'Show Gaps' on fields below" : "💡 Tap 'Show Gaps' on sub-fields below"}
+                                💡 Tap 'Show Gaps' on sub-fields below
                               </div>
                             )}
                         </div>
@@ -1453,6 +1512,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                         const fieldCounts = fieldFindCounts.get(f.id);
                                         const recordedCount = fieldCounts?.recorded ?? 0;
                                         const pendingCount = fieldCounts?.pending ?? 0;
+                                        const fieldCenter = getBoundaryCenter(f.boundary);
                                         return (
                                         <div
                                             key={f.id}
@@ -1528,7 +1588,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                             Locate
                                                         </button>
                                                     )}
-                                                    {!isClubDayMember && !!f.boundary && (
+                                                    {!isClubDayMember && !isRally && !!f.boundary && (
                                                     <button
                                                         type="button"
                                                         onClick={() => setCoverageFieldId(current =>
@@ -1540,7 +1600,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                         Ground coverage
                                                     </button>
                                                     )}
-                                                    {!isClubDayMember && (
+                                                    {!isClubDayMember && !isRally && (
                                                     <button
                                                         onClick={() => {
                                                             const next = new Set(shownFieldGapIds);
@@ -1565,7 +1625,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                     </button>
                                                     )}
                                                 </div>
-                                                {permissionId && coverageFieldId === f.id && (
+                                                {!isRally && permissionId && coverageFieldId === f.id && (
                                                     <PermissionCoverageView
                                                         permissionId={permissionId}
                                                         fieldId={f.id}
@@ -1581,6 +1641,16 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                                 >
                                                     {isClubDayMember ? "Record Find" : "Start Session"}
                                                 </button>
+                                                {fieldCenter && (
+                                                  <button
+                                                      type="button"
+                                                      aria-label={`Open ${f.name || "field"} in FieldGuide`}
+                                                      onClick={() => nav(`/fieldguide?lat=${fieldCenter.lat}&lng=${fieldCenter.lon}&fieldId=${encodeURIComponent(f.id)}`)}
+                                                      className="px-2.5 py-1.5 text-[10px] font-bold text-sky-600 hover:text-sky-800 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-colors border border-sky-100 dark:border-sky-900"
+                                                  >
+                                                      FieldGuide
+                                                  </button>
+                                                )}
                                                 {!isClubDayMember && (
                                                   <>
                                                     <button

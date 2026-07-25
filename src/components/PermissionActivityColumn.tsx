@@ -5,8 +5,6 @@ import type { Find, Media, UndugSignal } from "../db";
 import { ScaledImage } from "./ScaledImage";
 import { UndugSignalLogSection } from "./UndugSignalLog";
 import { UndugSignalMapSheet } from "./UndugSignalMapSheet";
-import type { RallyPersona } from "../utils/rallyPersona";
-import { RallyPersonaChip } from "./RallyPersonaChip";
 import { linkFindToSession } from "../services/findMutations";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,15 +27,6 @@ interface ActivityColumnProps {
     fields:                         any[] | undefined;
     allMedia:                       Media[] | undefined;
     isClubDayMember:                boolean;
-    isRally:                        boolean;
-    persona:                        RallyPersona;
-    name:                           string;
-    landownerName:                  string;
-    landownerPhone:                 string;
-    landownerEmail:                 string;
-    validFrom:                      string;
-    lat:                            number | null;
-    lon:                            number | null;
     saving:                         boolean;
     onOpenFind:                     (id: string) => void;
     onRecordFind:                   () => void;
@@ -158,15 +147,6 @@ export function PermissionActivityColumn({
     fields,
     allMedia,
     isClubDayMember,
-    isRally,
-    persona,
-    name,
-    landownerName,
-    landownerPhone,
-    landownerEmail,
-    validFrom,
-    lat,
-    lon,
     saving,
     onOpenFind,
     onRecordFind,
@@ -379,60 +359,6 @@ export function PermissionActivityColumn({
                     Keep Rally Record leaves the organiser event but keeps your finds, photos, fields, and sessions as your own local rally record.
                 </p>
             </div>
-            ) : isRally ? (
-            <>
-            {/* Slim event card */}
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm">
-                <div className="mb-1"><RallyPersonaChip persona={persona} /></div>
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0 mb-5">{name || "Unnamed Rally"}</h3>
-                <div className="grid gap-4">
-                    {landownerName && (
-                        <div>
-                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">Organiser / Club</div>
-                            <p className="font-bold text-gray-700 dark:text-gray-300">{landownerName}</p>
-                            {landownerPhone && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">📞 {landownerPhone}</p>}
-                            {landownerEmail && <p className="text-sm text-gray-500 dark:text-gray-400">✉️ {landownerEmail}</p>}
-                        </div>
-                    )}
-                    {validFrom && (!sessions || sessions.length === 0) && (
-                        <div>
-                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-0.5 text-gray-500 dark:text-gray-400">First dig</div>
-                            <p className="font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                        </div>
-                    )}
-                    {lat != null && lon != null && (
-                        <div>
-                            <div className="text-3xs font-black uppercase tracking-widest opacity-40 mb-1.5 text-gray-500 dark:text-gray-400">Location</div>
-                            <div className="rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/70 px-3 py-3 mb-2">
-                                <p className="font-mono text-xs font-bold text-gray-700 dark:text-gray-300">{lat.toFixed(6)}, {lon.toFixed(6)}</p>
-                                <p className="text-3xs text-gray-400 dark:text-gray-500 mt-1">Map opens only when you choose to view it.</p>
-                            </div>
-                            <button
-                                onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lon}`, "_blank")}
-                                className="text-3xs font-bold text-gray-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
-                            >
-                                View on Google Maps ↗
-                            </button>
-                        </div>
-                    )}
-                </div>
-                {isEdit && (
-                    <button
-                        onClick={() => nav(`/find?permissionId=${permissionId}`)}
-                        className="w-full mt-5 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2"
-                    >
-                        + Log Find
-                    </button>
-                )}
-            </div>
-            {/* Sessions panel — shared with individual permissions */}
-            <SessionsPanel
-                isEdit={isEdit}
-                permissionId={permissionId}
-                sessions={sessions}
-                nav={nav}
-            />
-            </>
             ) : (
             <SessionsPanel
                 isEdit={isEdit}

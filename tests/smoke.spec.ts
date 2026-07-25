@@ -288,6 +288,7 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(page.getByText("Searched areas", { exact: true })).toHaveCount(0);
 
   await page.goto(`./permission/${permissionId}`);
+  await expect(page.getByRole("button", { name: "Open Home field in FieldGuide" })).toBeVisible();
   await page.getByRole("button", { name: "Ground coverage" }).click();
   await expect(page.getByRole("heading", { name: "Finish a session first" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Searched area map" })).toHaveCount(0);
@@ -393,6 +394,66 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("100% left");
 });
 
+test("New Rally on the Rallies tab opens the rally workflow", async ({ page }) => {
+  await page.goto("./permissions");
+  await page.getByRole("button", { name: "Rallies", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Rallies & Club Digs" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New Rally", exact: true }).click();
+  const workflow = page.getByRole("dialog", { name: "Club Day / Rally" });
+  await expect(workflow).toBeVisible();
+  await expect(workflow.getByRole("button", { name: "Scan / Paste Link" })).toBeVisible();
+  await expect(workflow.getByRole("button", { name: "Start My Rally Record" })).toBeVisible();
+  await expect(workflow.getByRole("button", { name: "Set Up Club Day" })).toBeVisible();
+
+  await workflow.getByRole("button", { name: "Start My Rally Record" }).click();
+  await expect(page).toHaveURL(/\/permission\?type=rally&personalRecord=true$/);
+  await expect(page.getByRole("heading", { name: "New Rally / Club Dig" })).toBeVisible();
+
+  await page.getByLabel("Rally / Event Name").fill("Attendee Rally Record");
+  await page.getByRole("button", { name: "Save Rally" }).click();
+  await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
+  await expect(page.getByRole("button", { name: "Start rally session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add field", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^More/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Create Link|Generate Share Link|Create a join pack/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add field", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add New Field" })).toBeVisible();
+  await page.getByRole("dialog", { name: "Add New Field" }).getByRole("button", { name: "Close dialog" }).click();
+
+  const permissions = await readIndexedDbStore(page, "permissions") as any[];
+  const attendeeRally = permissions.find((row) => row.name === "Attendee Rally Record");
+  expect(attendeeRally?.isPersonalRallyRecord).toBe(true);
+
+  await putIndexedDbRow(page, "fields", {
+    id: "attendee-rally-field",
+    projectId: attendeeRally.projectId,
+    permissionId: attendeeRally.id,
+    name: "Newly Opened Field",
+    boundary: {
+      type: "Polygon",
+      coordinates: [[
+        [-1.4710, 53.3805],
+        [-1.4690, 53.3805],
+        [-1.4690, 53.3820],
+        [-1.4710, 53.3820],
+        [-1.4710, 53.3805],
+      ]],
+    },
+    notes: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  await page.reload();
+
+  await expect(page.getByRole("button", { name: "Ground coverage" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show Gaps" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open Newly Opened Field in FieldGuide" }).click();
+  await expect(page).toHaveURL(/\/fieldguide/);
+  await expect(page.getByRole("button", { name: "Scan Area", exact: true })).toBeVisible();
+});
+
 test("organiser rally setup continues to share link generation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
@@ -418,14 +479,23 @@ test("organiser rally setup continues to share link generation", async ({ page }
 });
 
 test("saved solo rally becomes an organiser hub after link generation", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./permission?type=rally");
   await page.getByLabel("Rally / Event Name").fill("Smoke Hub Rally");
   await page.getByLabel("Organiser / Contact Name").fill("Smoke Rally Club");
+  await page.getByLabel("Latitude").fill("52.2053");
+  await page.getByLabel("Longitude").fill("0.1218");
   await page.getByRole("button", { name: "Save Rally" }).click();
   await expect(page).toHaveURL(/\/permission\/[^/?#]+$/);
 
+  await expect(page.getByRole("heading", { name: "Smoke Hub Rally", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Start rally session" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Record find" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Scan area" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Organiser Hub" })).toHaveCount(0);
-  await page.getByRole("button", { name: /Create a join pack/ }).click();
+  await expect(page.getByRole("button", { name: /Create Link|Generate Share Link|Create a join pack/ })).toHaveCount(0);
+
+  await page.goto(`${page.url()}?openClubDay=true`);
   const shareDialog = page.getByRole("dialog");
   await shareDialog.getByLabel("Landowner details, agreements and private notes will not be shared with members.").check();
   await shareDialog.getByRole("button", { name: "Generate Share Link" }).click();

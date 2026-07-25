@@ -180,6 +180,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
     const [searchParams, setSearchParams] = useSearchParams();
     const initLat = parseFloat(searchParams.get('lat') ?? '');
     const initLng = parseFloat(searchParams.get('lng') ?? '');
+    const initFieldId = searchParams.get('fieldId') ?? undefined;
     const initPinLabel = searchParams.get('pin') === 'signal' ? 'Un-dug signal' : undefined;
     const openSavedPointsParam = searchParams.get('savedPoints') === '1';
     const questionScanRequested = searchParams.get('scan') === 'questions';
@@ -299,6 +300,40 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
             },
         },
     });
+
+    const initialFieldFocusedRef = React.useRef(false);
+    useEffect(() => {
+        if (!initFieldId || initialFieldFocusedRef.current) return;
+        const field = fields.find(candidate => candidate.id === initFieldId && candidate.boundary?.coordinates?.[0]);
+        const map = mapRef.current;
+        if (!field || !map) return;
+
+        const focusField = () => {
+            if (initialFieldFocusedRef.current) return;
+            const bounds = new maplibregl.LngLatBounds();
+            (field.boundary.coordinates[0] as [number, number][]).forEach(point => {
+                if (Array.isArray(point) && point.length >= 2) bounds.extend(point);
+            });
+            if (bounds.isEmpty()) return;
+
+            initialFieldFocusedRef.current = true;
+            setShowFields(`field:${field.id}`);
+            map.fitBounds(bounds, { padding: 60, duration: 0 });
+
+            const nextParams = new URLSearchParams(window.location.search);
+            nextParams.delete('fieldId');
+            setSearchParams(nextParams, { replace: true });
+        };
+
+        if (map.loaded()) {
+            focusField();
+            return;
+        }
+        map.once('load', focusField);
+        return () => {
+            map.off('load', focusField);
+        };
+    }, [initFieldId, fields, mapRef, setSearchParams, setShowFields]);
 
     useTilePrewarm(mapRef);
 

@@ -5,10 +5,12 @@ import { useNavigate } from "react-router";
 import { enrichPermissions } from "../services/permissions";
 import { PermissionCard } from "../components/PermissionCard";
 import { setPermissionPinned } from "../services/permissionMutations";
+import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 
 export default function AllPermissions(props: { projectId: string }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"permissions" | "rallies">("permissions");
+  const [showClubRallyModal, setShowClubRallyModal] = useState(false);
   const navigate = useNavigate();
 
   const permissions = useLiveQuery(
@@ -45,6 +47,21 @@ export default function AllPermissions(props: { projectId: string }) {
     viewMode === "rallies" ? p.type === "rally" : p.type !== "rally" && !p.isDefault
   ) ?? false;
   const isEmptyState = permissions !== undefined && !hasSavedRecords && !searchQuery;
+  const clubRallyPermissions = permissions
+    ?.filter(permission => !permission.isClubDayMember && !permission.isDefault)
+    .map(permission => ({
+      id: permission.id,
+      name: permission.name,
+      type: permission.type,
+    })) ?? [];
+
+  function startNewRecord() {
+    if (viewMode === "rallies") {
+      setShowClubRallyModal(true);
+      return;
+    }
+    navigate("/permission");
+  }
 
   return (
     <div className="max-w-5xl mx-auto pb-20 px-4">
@@ -61,7 +78,7 @@ export default function AllPermissions(props: { projectId: string }) {
 
           {!isEmptyState && <div className="flex gap-2">
             <button
-              onClick={() => navigate(viewMode === "rallies" ? "/permission?type=rally&organiserSetup=true" : "/permission")}
+              onClick={startNewRecord}
               className="bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2.5 rounded-xl font-bold shadow-md transition-all whitespace-nowrap text-sm flex items-center gap-2"
             >
               {viewMode === "rallies" ? "New Rally" : "New Permission"}
@@ -125,7 +142,7 @@ export default function AllPermissions(props: { projectId: string }) {
                   <button onClick={() => navigate("/discover")} className="bg-emerald-700 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-colors">
                     Open Discover
                   </button>
-                  <button onClick={() => navigate("/permission?type=rally&organiserSetup=true")} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-400 transition-colors">
+                  <button onClick={startNewRecord} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-400 transition-colors">
                     New Rally
                   </button>
                 </>
@@ -148,6 +165,29 @@ export default function AllPermissions(props: { projectId: string }) {
             />
           ))}
         </div>
+      )}
+
+      {showClubRallyModal && (
+        <ClubRallyChoiceModal
+          onClose={() => setShowClubRallyModal(false)}
+          onSolo={() => {
+            setShowClubRallyModal(false);
+            navigate("/permission?type=rally&personalRecord=true");
+          }}
+          onJoinUrl={(url) => {
+            setShowClubRallyModal(false);
+            navigate(url);
+          }}
+          onOrganiseNew={() => {
+            setShowClubRallyModal(false);
+            navigate("/permission?type=rally&organiserSetup=true");
+          }}
+          onOrganiseExisting={(id) => {
+            setShowClubRallyModal(false);
+            navigate(`/permission/${id}?openClubDay=true`);
+          }}
+          permissions={clubRallyPermissions}
+        />
       )}
     </div>
   );

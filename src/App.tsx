@@ -510,7 +510,7 @@ function Shell() {
       {showClubRallyModal && (
         <ClubRallyChoiceModal
           onClose={() => setShowClubRallyModal(false)}
-          onSolo={() => { setShowClubRallyModal(false); nav("/permission?type=rally"); }}
+          onSolo={() => { setShowClubRallyModal(false); nav("/permission?type=rally&personalRecord=true"); }}
           onJoinUrl={(url) => { setShowClubRallyModal(false); nav(url); }}
           onOrganiseNew={() => { setShowClubRallyModal(false); nav("/permission?type=rally&organiserSetup=true"); }}
           onOrganiseExisting={(id) => { setShowClubRallyModal(false); nav(`/permission/${id}?openClubDay=true`); }}

@@ -73,7 +73,7 @@ describe('FieldGuide architecture characterization', () => {
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
       'pages/FieldGuideController.tsx': 15,
-      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_247,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_282,
       'hooks/useFieldGuideMap.ts': 294,
       'hooks/useTerrainScan.ts': 77,
       'hooks/useHistoricScan.ts': 82,

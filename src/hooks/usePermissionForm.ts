@@ -63,7 +63,9 @@ export function usePermissionForm(
     const [boundary, setBoundary] = useState<any | null>(null);
     const [agreementId, setAgreementId] = useState<string | undefined>();
     const [isClubDayMember, setIsClubDayMember] = useState(false);
-    const [isPersonalRallyRecord, setIsPersonalRallyRecord] = useState(false);
+    const [isPersonalRallyRecord, setIsPersonalRallyRecord] = useState(
+        searchParams.get("personalRecord") === "true",
+    );
     const [isSharedPermission, setIsSharedPermission] = useState(false);
     const [sharedPermissionId, setSharedPermissionId] = useState<string | undefined>();
     const [organiserContactNumber, setOrganiserContactNumber] = useState<string | undefined>();
