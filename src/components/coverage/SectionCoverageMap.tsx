@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
+import * as turf from '@turf/turf';
 import type {
   PermissionSection,
   SessionCoverageObservation,
 } from '../../db';
+import type { GeoJSONArea, GeoJSONPolygon } from '../../shared/coverageTypes';
 import { currentSectionGeometry } from '../../shared/coverageRecords';
 
 type Coordinate = [number, number];
@@ -15,17 +17,39 @@ export type SectionEvidenceSummary = {
   latestObservedAt: number | null;
 };
 
-function geometryRings(section: PermissionSection): Coordinate[][] {
-  const current = currentSectionGeometry(section);
-  if (!current) return [];
-  if (current.geometry.type === 'Polygon') {
-    return current.geometry.coordinates.map(ring =>
+function geometryRings(geometry: GeoJSONArea): Coordinate[][] {
+  if (geometry.type === 'Polygon') {
+    return geometry.coordinates.map(ring =>
       ring.map(point => [point[0], point[1]] as Coordinate)
     );
   }
-  return current.geometry.coordinates.flatMap(polygon =>
+  return geometry.coordinates.flatMap(polygon =>
     polygon.map(ring => ring.map(point => [point[0], point[1]] as Coordinate))
   );
+}
+
+function geometryPath(
+  rings: Coordinate[][],
+  project: (coordinate: Coordinate) => Coordinate,
+): string {
+  return rings.map(ring =>
+    ring.map((point, index) => {
+      const [x, y] = project(point);
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(3)},${y.toFixed(3)}`;
+    }).join(' ') + ' Z'
+  ).join(' ');
+}
+
+function interiorPoint(geometry: GeoJSONArea): Coordinate {
+  const centreOfMass = turf.centerOfMass(geometry);
+  if (turf.booleanPointInPolygon(
+    centreOfMass,
+    geometry,
+    { ignoreBoundary: true },
+  )) {
+    return centreOfMass.geometry.coordinates as Coordinate;
+  }
+  return turf.pointOnFeature(geometry).geometry.coordinates as Coordinate;
 }
 
 function evidenceBySection(
@@ -79,16 +103,30 @@ export function SectionCoverageMap(props: {
   onInspect?: (sectionId: string) => void;
   selectedSectionId?: string | null;
   disabledSectionIds?: ReadonlySet<string>;
+  fieldBoundaries?: readonly GeoJSONPolygon[];
 }) {
-  const rendered = useMemo(() => props.sections.map(section => ({
-    section,
-    rings: geometryRings(section),
-  })).filter(item => item.rings.length > 0), [props.sections]);
+  const rendered = useMemo(() => props.sections.flatMap(section => {
+    const current = currentSectionGeometry(section);
+    if (!current) return [];
+    return [{
+      section,
+      geometry: current.geometry,
+      rings: geometryRings(current.geometry),
+      symbolPoint: interiorPoint(current.geometry),
+    }];
+  }), [props.sections]);
+  const boundaryRings = useMemo(
+    () => (props.fieldBoundaries ?? []).flatMap(geometryRings),
+    [props.fieldBoundaries],
+  );
   const evidence = useMemo(
     () => evidenceBySection(props.observations),
     [props.observations],
   );
-  const allPoints = rendered.flatMap(item => item.rings.flat());
+  const allPoints = [
+    ...rendered.flatMap(item => item.rings.flat()),
+    ...boundaryRings.flat(),
+  ];
   if (allPoints.length === 0) {
     return (
       <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-gray-50 text-xs font-semibold text-gray-400 dark:border-gray-700 dark:bg-gray-900/40">
@@ -101,11 +139,16 @@ export function SectionCoverageMap(props: {
   const east = Math.max(...allPoints.map(point => point[0]));
   const south = Math.min(...allPoints.map(point => point[1]));
   const north = Math.max(...allPoints.map(point => point[1]));
-  const width = Math.max(east - west, 0.000001);
-  const height = Math.max(north - south, 0.000001);
+  const midLat = (south + north) / 2;
+  const lonScale = Math.cos(midLat * Math.PI / 180);
+  const width = Math.max((east - west) * lonScale, 1e-9);
+  const height = Math.max(north - south, 1e-9);
+  const scale = Math.min(92 / width, 64 / height);
+  const offsetX = 4 + (92 - width * scale) / 2;
+  const offsetY = 4 + (64 - height * scale) / 2;
   const project = ([lon, lat]: Coordinate): Coordinate => [
-    4 + ((lon - west) / width) * 92,
-    4 + ((north - lat) / height) * 64,
+    offsetX + (lon - west) * lonScale * scale,
+    offsetY + (north - lat) * scale,
   ];
 
   return (
@@ -117,7 +160,7 @@ export function SectionCoverageMap(props: {
         role="group"
       >
         <rect width="100" height="72" fill="currentColor" className="text-slate-100 dark:text-slate-950" />
-        {rendered.map(({ section, rings }) => {
+        {rendered.map(({ section, rings, symbolPoint }) => {
           const state = evidence.get(section.id) ?? {
             reported: false,
             tracked: false,
@@ -135,26 +178,8 @@ export function SectionCoverageMap(props: {
             props.disabledSectionIds?.has(section.id) ?? false
           );
           const colours = fillForEvidence(state, reported);
-          const path = rings.map(ring =>
-            ring.map((point, index) => {
-              const [x, y] = project(point);
-              return `${index === 0 ? 'M' : 'L'}${x.toFixed(3)},${y.toFixed(3)}`;
-            }).join(' ') + ' Z'
-          ).join(' ');
-          const outerRing = rings[0] ?? [];
-          const centre = outerRing.length > 0
-            ? project([
-                outerRing.reduce((sum, point) => sum + point[0], 0) / outerRing.length,
-                outerRing.reduce((sum, point) => sum + point[1], 0) / outerRing.length,
-              ])
-            : null;
-          const status = reported
-            ? 'marked searched'
-            : state.tracked
-              ? 'recorded by tracking, already counted'
-              : state.findVisited
-                ? 'find location, not marked searched'
-                : 'not marked';
+          const path = geometryPath(rings, project);
+          const centre = project(symbolPoint);
           const symbol = reported
             ? '✓'
             : state.tracked
@@ -183,21 +208,10 @@ export function SectionCoverageMap(props: {
                     ? 'cursor-not-allowed outline-none'
                     : 'cursor-pointer outline-none'
                   : undefined}
-                role={interactive ? 'button' : undefined}
-                tabIndex={interactive ? 0 : undefined}
-                aria-label={`${section.label}, ${status}`}
-                aria-pressed={props.interactive && !disabled ? selected : undefined}
-                aria-disabled={disabled || undefined}
-                data-testid={`coverage-section-${section.id}`}
+                data-testid={`coverage-section-shape-${section.id}`}
                 onClick={click}
-                onKeyDown={event => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    click();
-                  }
-                }}
               />
-              {centre && symbol && (
+              {symbol && (
                 <text
                   x={centre[0]}
                   y={centre[1]}
@@ -219,6 +233,77 @@ export function SectionCoverageMap(props: {
             </g>
           );
         })}
+        {rendered.map(({ section, symbolPoint }) => {
+          const state = evidence.get(section.id) ?? {
+            reported: false,
+            tracked: false,
+            findVisited: false,
+            count: 0,
+            latestObservedAt: null,
+          };
+          const selected = props.selectedReported?.has(section.id) ?? false;
+          const reported = props.interactive && props.selectedReported !== undefined
+            ? selected
+            : state.reported;
+          const disabled = !!props.interactive && (
+            props.disabledSectionIds?.has(section.id) ?? false
+          );
+          const colours = fillForEvidence(state, reported);
+          const status = reported
+            ? 'marked searched'
+            : state.tracked
+              ? 'recorded by tracking, already counted'
+              : state.findVisited
+                ? 'find location, not marked searched'
+                : 'not marked';
+          const click = () => {
+            if (disabled) return;
+            if (props.interactive) props.onToggle?.(section.id);
+            else props.onInspect?.(section.id);
+          };
+          const interactive = !!props.interactive || !!props.onInspect;
+          if (!interactive) return null;
+          const centre = project(symbolPoint);
+          return (
+            <circle
+              key={`tap-${section.id}`}
+              cx={centre[0]}
+              cy={centre[1]}
+              r="2.4"
+              fill={colours.fill}
+              fillOpacity="0.001"
+              role="button"
+              tabIndex={0}
+              aria-label={`${section.label}, ${status}`}
+              aria-pressed={props.interactive && !disabled ? selected : undefined}
+              aria-disabled={disabled || undefined}
+              data-testid={`coverage-section-${section.id}`}
+              className={disabled
+                ? 'cursor-not-allowed outline-none'
+                : 'cursor-pointer outline-none'}
+              onClick={click}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  click();
+                }
+              }}
+            />
+          );
+        })}
+        {boundaryRings.length > 0 && (
+          <path
+            d={geometryPath(boundaryRings, project)}
+            fill="none"
+            stroke="#111827"
+            strokeOpacity="0.5"
+            strokeWidth="0.6"
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+            aria-hidden="true"
+            data-testid="coverage-field-outline"
+          />
+        )}
       </svg>
     </div>
   );

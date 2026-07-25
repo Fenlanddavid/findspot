@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
+import * as turf from '@turf/turf';
 import { getResolution } from 'h3-js';
 import type {
   PermissionSection,
@@ -7,6 +8,8 @@ import type {
 } from '../../src/shared/coverageTypes';
 import {
   REPORTED_LARGE_SECTION_CONFIRMATIONS,
+  SECTION_ABSOLUTE_FLOOR_M2,
+  SECTION_BALANCE_MEDIAN_FRACTION,
   deriveSectionCandidates,
   resolvePredictionDecisions,
 } from '../../src/engines/coverage/sectionCoverageEngine';
@@ -68,7 +71,7 @@ function prediction(outcome: 'hit' | 'searched_no_find' | 'unvisited' = 'unvisit
 }
 
 describe('section derivation', () => {
-  it('splits a small field into several selectable areas', () => {
+  it('splits a small field into a compact set of selectable areas', () => {
     const sections = deriveSectionCandidates({
       fieldId: 'field-1',
       permissionId: 'permission-1',
@@ -82,9 +85,88 @@ describe('section derivation', () => {
       },
     });
 
-    expect(sections.length).toBeGreaterThanOrEqual(6);
+    expect(sections.length).toBeGreaterThanOrEqual(3);
+    expect(sections.length).toBeLessThanOrEqual(6);
     expect(sections.every(candidate => candidate.layoutKey.startsWith('h3:')))
       .toBe(true);
+  });
+
+  it('balances a swimming-pool-sized triangular field without slivers', () => {
+    const latitude = 52.6;
+    const longitudeSpan = 60 / (111_320 * Math.cos(latitude * Math.PI / 180));
+    const latitudeSpan = 100 / 111_320;
+    const boundary = {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [0, latitude],
+        [longitudeSpan, latitude],
+        [0, latitude + latitudeSpan],
+        [0, latitude],
+      ]],
+    };
+    const source = {
+      fieldId: 'triangle-field',
+      permissionId: 'permission-1',
+      name: 'Triangle field',
+      boundary,
+    };
+
+    const first = deriveSectionCandidates(source);
+    const second = deriveSectionCandidates(source);
+    const orderedAreas = first.map(candidate => candidate.areaM2)
+      .sort((left, right) => left - right);
+    const middle = Math.floor(orderedAreas.length / 2);
+    const medianArea = orderedAreas.length % 2 === 1
+      ? orderedAreas[middle]
+      : (orderedAreas[middle - 1] + orderedAreas[middle]) / 2;
+    const fieldArea = turf.area(turf.feature(boundary));
+    const derivedArea = first.reduce((total, candidate) => total + candidate.areaM2, 0);
+
+    expect(first.length).toBeGreaterThanOrEqual(3);
+    expect(first.length).toBeLessThanOrEqual(6);
+    expect(first.every(candidate =>
+      candidate.areaM2 >= SECTION_ABSOLUTE_FLOOR_M2
+      && candidate.areaM2 >= medianArea * SECTION_BALANCE_MEDIAN_FRACTION
+    )).toBe(true);
+    expect(Math.max(...orderedAreas)).toBeLessThanOrEqual(medianArea * 2);
+    expect(Math.abs(derivedArea - fieldArea) / fieldArea).toBeLessThan(0.02);
+    expect(second).toEqual(first);
+  });
+
+  it('applies balancing when retaining the H3 base resolution', () => {
+    const latitude = 52.6;
+    const longitudeSpan = 60 / (111_320 * Math.cos(latitude * Math.PI / 180));
+    const latitudeSpan = 100 / 111_320;
+    const source = {
+      fieldId: 'triangle-field',
+      permissionId: 'permission-1',
+      name: 'Triangle field',
+      boundary: {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [-1, latitude],
+          [-1 + longitudeSpan, latitude],
+          [-1, latitude + latitudeSpan],
+          [-1, latitude],
+        ]],
+      },
+    };
+    const derived = deriveSectionCandidates(source);
+    const retainedResolution = getResolution(derived[0].layoutKey.slice('h3:'.length));
+    const retained = deriveSectionCandidates(source, retainedResolution);
+    const areas = retained.map(candidate => candidate.areaM2).sort((a, b) => a - b);
+    const medianArea = areas.length % 2 === 1
+      ? areas[Math.floor(areas.length / 2)]
+      : (areas[areas.length / 2 - 1] + areas[areas.length / 2]) / 2;
+
+    expect(retained.length).toBeGreaterThanOrEqual(3);
+    expect(retained.length).toBeLessThanOrEqual(6);
+    expect(retained.every(candidate =>
+      candidate.areaM2 >= Math.max(
+        SECTION_ABSOLUTE_FLOOR_M2,
+        medianArea * SECTION_BALANCE_MEDIAN_FRACTION,
+      )
+    )).toBe(true);
   });
 
   it('keeps H3 identities stable when a large boundary is edited', () => {

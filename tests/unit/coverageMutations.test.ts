@@ -1,12 +1,23 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import * as turf from '@turf/turf';
+import type { Feature, MultiPolygon, Polygon } from 'geojson';
+import {
+  POLYGON_TO_CELLS_FLAGS,
+  cellToBoundary,
+  polygonToCellsExperimental,
+} from 'h3-js';
 import { db, type Field, type Find, type Permission, type Session } from '../../src/db';
 import {
   ensurePermissionSections,
   prepareSessionCoverageEvidence,
   saveReportedSessionCoverage,
 } from '../../src/services/coverageMutations';
-import { deriveSectionCandidates } from '../../src/engines/coverage/sectionCoverageEngine';
+import {
+  deriveSectionCandidates,
+  evidenceObservationId,
+} from '../../src/engines/coverage/sectionCoverageEngine';
+import type { GeoJSONArea, GeoJSONPolygon } from '../../src/shared/coverageTypes';
 
 const ISO = '2026-07-24T08:00:00.000Z';
 
@@ -68,6 +79,42 @@ function session(): Session {
   };
 }
 
+function legacyV3TriangleSections(boundary: GeoJSONPolygon) {
+  const fieldFeature = turf.feature(boundary);
+  return polygonToCellsExperimental(
+    boundary.coordinates,
+    11,
+    POLYGON_TO_CELLS_FLAGS.containmentOverlapping,
+    true,
+  ).sort().flatMap((cell, index) => {
+    const ring = cellToBoundary(cell, true);
+    const hex = turf.polygon([[...ring, ring[0]]]);
+    const clipped = turf.intersect(
+      turf.featureCollection([fieldFeature, hex]),
+    ) as Feature<Polygon | MultiPolygon> | null;
+    if (!clipped) return [];
+    const areaM2 = turf.area(clipped);
+    if (areaM2 < 25) return [];
+    return [{
+      id: `field-1:h3:${cell}`,
+      permissionId: 'permission-1',
+      fieldId: 'field-1',
+      layoutKey: `h3:${cell}`,
+      label: `Small triangle · ${index + 1}`,
+      currentGeometryVersion: 1,
+      geometryVersions: [{
+        version: 1,
+        boundaryHash: 'h3-adaptive-v3:triangle-fixture',
+        geometry: clipped.geometry as GeoJSONArea,
+        areaM2,
+        effectiveFrom: ISO,
+      }],
+      createdAt: ISO,
+      updatedAt: ISO,
+    }];
+  });
+}
+
 beforeEach(async () => {
   await db.open();
   await db.transaction('rw', [
@@ -112,10 +159,12 @@ describe('coverage mutation boundary', () => {
       'permission-1',
       '2026-07-24T09:00:00.000Z',
     );
-    const edited = editedSections.find(section => section.id === original.id);
+    const originalIds = new Set(originals.map(section => section.id));
+    const edited = editedSections.find(section => originalIds.has(section.id));
     expect(edited).toBeDefined();
     if (!edited) throw new Error('Expected an H3 section to survive the boundary edit');
-    expect(edited.id).toBe(original.id);
+    const previous = originals.find(section => section.id === edited.id);
+    expect(previous).toBeDefined();
     expect(edited.currentGeometryVersion).toBe(2);
     expect(edited.geometryVersions).toHaveLength(2);
 
@@ -260,13 +309,84 @@ describe('coverage mutation boundary', () => {
       .equals('session-1')
       .toArray();
 
-    expect(sections.length).toBeGreaterThanOrEqual(6);
+    expect(sections.length).toBeGreaterThanOrEqual(3);
+    expect(sections.length).toBeLessThanOrEqual(6);
     expect((await db.permissionSections.get(oldCandidate.id))?.retiredAt).toBeDefined();
     expect(reports.length).toBeGreaterThan(0);
-    expect(reports.every(report =>
+    const activeReports = reports.filter(report =>
+      sections.some(section => section.id === report.sectionId)
+    );
+    expect(activeReports.length).toBeGreaterThan(0);
+    expect(activeReports.every(report =>
       report.evidence === 'reported'
       && report.sectionId !== oldCandidate.id
-      && sections.some(section => section.id === report.sectionId)
     )).toBe(true);
+    const storedSections = await db.permissionSections.toArray();
+    expect(reports.every(report => {
+      const section = storedSections.find(candidate => candidate.id === report.sectionId);
+      return section?.geometryVersions.some(
+        geometry => geometry.version === report.sectionGeometryVersion,
+      );
+    })).toBe(true);
+  });
+
+  it('reconciles genuine v3 triangle cells without orphaning reported evidence', async () => {
+    const latitude = 52.6;
+    const longitudeSpan = 60 / (111_320 * Math.cos(latitude * Math.PI / 180));
+    const latitudeSpan = 100 / 111_320;
+    const boundary: GeoJSONPolygon = {
+      type: 'Polygon',
+      coordinates: [[
+        [0, latitude],
+        [longitudeSpan, latitude],
+        [0, latitude + latitudeSpan],
+        [0, latitude],
+      ]],
+    };
+    await db.fields.put({
+      ...field(),
+      name: 'Small triangle',
+      boundary,
+    });
+    const legacySections = legacyV3TriangleSections(boundary);
+    expect(legacySections.length).toBeGreaterThanOrEqual(5);
+    await db.permissionSections.bulkPut(legacySections);
+    await db.sessionCoverage.bulkPut(legacySections.map(section => ({
+      id: evidenceObservationId('session-1', section.id, 1, 'reported'),
+      sessionId: 'session-1',
+      permissionId: 'permission-1',
+      sectionId: section.id,
+      sectionGeometryVersion: 1,
+      evidence: 'reported' as const,
+      startedAt: Date.parse(ISO),
+      observedAt: Date.parse(ISO),
+      createdAt: ISO,
+      updatedAt: ISO,
+    })));
+
+    const current = await ensurePermissionSections(
+      'permission-1',
+      '2026-07-25T11:00:00.000Z',
+    );
+    const allSections = await db.permissionSections.toArray();
+    const reports = await db.sessionCoverage
+      .where('sessionId')
+      .equals('session-1')
+      .toArray();
+    const activeIds = new Set(current.map(section => section.id));
+
+    expect(current.length).toBeGreaterThanOrEqual(3);
+    expect(current.length).toBeLessThanOrEqual(6);
+    expect(legacySections.some(section =>
+      !activeIds.has(section.id)
+      && allSections.find(candidate => candidate.id === section.id)?.retiredAt
+    )).toBe(true);
+    expect(reports.some(report => activeIds.has(report.sectionId))).toBe(true);
+    expect(reports.every(report => {
+      const section = allSections.find(candidate => candidate.id === report.sectionId);
+      return section?.geometryVersions.some(
+        geometry => geometry.version === report.sectionGeometryVersion,
+      );
+    })).toBe(true);
   });
 });

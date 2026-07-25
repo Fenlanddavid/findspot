@@ -360,8 +360,9 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(permissionReviewSections.first()).toHaveAttribute("fill", "#e5e7eb");
   await page.getByRole("button", { name: "Done" }).click();
 
-  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "false");
-  await page.getByRole("button", { name: "Close ground coverage" }).click();
+  await expect(
+    page.getByRole("group", { name: "Searched area map" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Show Gaps" }).click();
   await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("100% left");
   await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("reports included");
@@ -384,7 +385,9 @@ test("session coverage is saved in three taps and appears on the permission", as
       row.sessionId === sessionId && row.evidence === "reported"
     );
   }).toBe(true);
-  await page.getByRole("button", { name: "Close ground coverage" }).click();
+  await expect(
+    page.getByRole("group", { name: "Searched area map" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Show Gaps" }).click();
   await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("reports included");
   await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("100% left");

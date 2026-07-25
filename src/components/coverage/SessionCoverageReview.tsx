@@ -23,7 +23,6 @@ export function SessionCoverageReview(props: {
   fieldId?: string;
   initiallyOpen?: boolean;
   onClose?: () => void;
-  stayOpenAfterSave?: boolean;
   compact?: boolean;
 }) {
   const [open, setOpen] = useState(!!props.initiallyOpen);
@@ -48,6 +47,21 @@ export function SessionCoverageReview(props: {
     return scopedFieldId
       ? rows.filter(section => section.fieldId === scopedFieldId)
       : rows;
+  }, [session?.permissionId, session?.fieldId, props.fieldId]);
+  const fieldBoundaries = useLiveQuery(async () => {
+    if (!session) return [];
+    const scopedFieldId = props.fieldId ?? session.fieldId;
+    if (scopedFieldId) {
+      const field = await pagePersistence.fields.get(scopedFieldId);
+      return field?.boundary ? [field.boundary] : [];
+    }
+    const fields = await pagePersistence.fields
+      .where('permissionId')
+      .equals(session.permissionId)
+      .toArray();
+    if (fields.length > 0) return fields.map(field => field.boundary);
+    const permission = await pagePersistence.permissions.get(session.permissionId);
+    return permission?.boundary ? [permission.boundary] : [];
   }, [session?.permissionId, session?.fieldId, props.fieldId]);
   const observationRows = useLiveQuery(
     () => pagePersistence.sessionCoverage
@@ -147,12 +161,18 @@ export function SessionCoverageReview(props: {
     setError(null);
     try {
       await saveReportedSessionCoverage(props.sessionId, selected);
-      await refreshHotspotPredictionOutcomes(session?.permissionId);
-      dirtyRef.current = false;
-      if (!props.stayOpenAfterSave) {
-        if (props.onClose) props.onClose();
-        else setOpen(false);
+      try {
+        await refreshHotspotPredictionOutcomes(session?.permissionId);
+      } catch (errorValue) {
+        reportNonFatal(
+          'session-coverage',
+          'Coverage saved but prediction outcomes could not be refreshed',
+          errorValue,
+        );
       }
+      dirtyRef.current = false;
+      if (props.onClose) props.onClose();
+      else setOpen(false);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : 'Searched areas could not be saved.');
     } finally {
@@ -222,6 +242,7 @@ export function SessionCoverageReview(props: {
         selectedReported={selected}
         interactive={editable}
         disabledSectionIds={trackedIds}
+        fieldBoundaries={fieldBoundaries ?? []}
         onToggle={sectionId => {
           if (evidence.get(sectionId)?.tracked) return;
           dirtyRef.current = true;

@@ -7,8 +7,8 @@ The searched-area map opens automatically after finishing and remains optional.
 The latest eligible session can also be edited from the relevant sub-field's
 **Ground coverage** action during the 48-hour recall window.
 Opening that action goes straight to the selectable map; there is no separate
-edit mode or edit button. **Done** saves without closing the panel so further
-adjustments remain one tap away.
+edit mode or edit button. **Done** saves and closes the panel, providing a
+clear completion response; reopening the action restores the saved selection.
 Eligible whole-permission sessions remain editable from the relevant sub-field;
 editing one field preserves any reports belonging to the session's other fields.
 For a newly mapped field, **Ground coverage** stays a collapsed field action.
@@ -50,17 +50,20 @@ Its language is deliberately evidence-aware:
 
 ## Section identity
 
-Every mapped field is split into globally stable H3 cells clipped to its
-boundary. Candidate resolutions are measured against the actual clipped field,
-with a target of roughly six useful sections, so an ordinary small field does
-not collapse into one all-or-nothing selection. The selected H3 resolution is
-retained across ordinary boundary edits.
+Every mapped field starts with globally stable H3 cells clipped to its
+boundary. The engine chooses a base resolution fine enough for the field's
+target section area, then deterministically combines edge-sharing cells into
+two to six contiguous regions of similar area. Very small fragments are
+absorbed before they become standalone tap targets. The selected H3 base
+resolution is retained across ordinary boundary edits.
 
-Older coarse sections are retired on reconciliation. Existing `reported`
-evidence is transferred only to finer areas substantially overlapped by the
-original selected area. A legacy whole-field report therefore transfers to all
-replacement areas. Old observations are removed after their equivalent finer
-observations are written atomically.
+Older sections are retired on reconciliation. Existing `reported` evidence is
+combined per session before replacement overlap is evaluated, so several old
+selected cells can safely transfer to one replacement region. A replacement is
+reported only when at least half of it was covered by the old reported
+geometry. Historical observations are removed only after equivalent
+replacement geometry covers substantially all of their original area;
+otherwise they remain attached to their retired section as durable history.
 
 Each section retains an append-only geometry history:
 

@@ -49,6 +49,19 @@ export function PermissionCoverageView(props: {
   const sections = props.fieldId
     ? allSections.filter(section => section.fieldId === props.fieldId)
     : allSections;
+  const fieldBoundaries = useLiveQuery(async () => {
+    if (props.fieldId) {
+      const field = await pagePersistence.fields.get(props.fieldId);
+      return field?.boundary ? [field.boundary] : [];
+    }
+    const fields = await pagePersistence.fields
+      .where('permissionId')
+      .equals(props.permissionId)
+      .toArray();
+    if (fields.length > 0) return fields.map(field => field.boundary);
+    const permission = await pagePersistence.permissions.get(props.permissionId);
+    return permission?.boundary ? [permission.boundary] : [];
+  }, [props.permissionId, props.fieldId]) ?? [];
   const allObservations = useLiveQuery(
     () => pagePersistence.sessionCoverage
       .where('permissionId')
@@ -115,7 +128,6 @@ export function PermissionCoverageView(props: {
         sessionId={directSession.id}
         fieldId={props.fieldId}
         initiallyOpen
-        stayOpenAfterSave
         compact={props.embedded}
         onClose={props.onRequestClose}
       />
@@ -220,6 +232,7 @@ export function PermissionCoverageView(props: {
         <SectionCoverageMap
           sections={sections}
           observations={observations}
+          fieldBoundaries={fieldBoundaries}
           selectedSectionId={selectedSectionId}
           onInspect={setSelectedSectionId}
         />

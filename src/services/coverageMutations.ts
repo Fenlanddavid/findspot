@@ -1,4 +1,6 @@
 import { db } from '../db';
+import * as turf from '@turf/turf';
+import type { Feature, MultiPolygon, Polygon } from 'geojson';
 import { getResolution } from 'h3-js';
 import type {
   Find,
@@ -20,6 +22,7 @@ import {
   currentSectionGeometry,
   sectionGeometryAtVersion,
 } from '../shared/coverageRecords';
+import type { GeoJSONArea } from '../shared/coverageTypes';
 
 export const SESSION_COVERAGE_EDIT_WINDOW_MS = 48 * 60 * 60 * 1_000;
 
@@ -55,6 +58,23 @@ export function canEditSessionCoverage(session: Session, now = Date.now()): bool
 
 function sourceKey(fieldId: string | null): string {
   return fieldId ?? 'permission';
+}
+
+function geometryFeature(geometry: GeoJSONArea): Feature<Polygon | MultiPolygon> {
+  return { type: 'Feature', properties: {}, geometry };
+}
+
+function unionAreas(geometries: GeoJSONArea[]): GeoJSONArea | null {
+  if (geometries.length === 0) return null;
+  let combined = geometryFeature(geometries[0]);
+  for (const geometry of geometries.slice(1)) {
+    const unioned = turf.union(turf.featureCollection([
+      combined,
+      geometryFeature(geometry),
+    ])) as Feature<Polygon | MultiPolygon> | null;
+    if (unioned) combined = unioned;
+  }
+  return combined.geometry;
 }
 
 function retainedH3Resolution(sections: PermissionSection[]): number | undefined {
@@ -202,31 +222,62 @@ export async function ensurePermissionSections(
   if (writes.length > 0 || sectionMigrations.length > 0) {
     await db.transaction('rw', [db.permissionSections, db.sessionCoverage], async () => {
       if (writes.length > 0) await db.permissionSections.bulkPut(writes);
+      const migrationsBySource = new Map<string, {
+        previousSections: PermissionSection[];
+        replacementSections: PermissionSection[];
+      }>();
       for (const migration of sectionMigrations) {
+        const key = sourceKey(migration.previousSection.fieldId);
+        const grouped = migrationsBySource.get(key) ?? {
+          previousSections: [],
+          replacementSections: migration.replacementSections,
+        };
+        grouped.previousSections.push(migration.previousSection);
+        migrationsBySource.set(key, grouped);
+      }
+
+      for (const migration of migrationsBySource.values()) {
+        const previousById = new Map(
+          migration.previousSections.map(section => [section.id, section]),
+        );
         const previousReports = await db.sessionCoverage
-          .where('sectionId')
-          .equals(migration.previousSection.id)
-          .filter(observation => observation.evidence === 'reported')
+          .where('permissionId')
+          .equals(permissionId)
+          .filter(observation =>
+            observation.evidence === 'reported'
+            && previousById.has(observation.sectionId)
+          )
           .toArray();
-        const migratedReports = previousReports.flatMap(observation => {
-          const previousGeometry = sectionGeometryAtVersion(
-            migration.previousSection,
-            observation.sectionGeometryVersion,
-          );
-          if (!previousGeometry) return [];
+        const reportsBySession = new Map<string, typeof previousReports>();
+        for (const report of previousReports) {
+          const reports = reportsBySession.get(report.sessionId) ?? [];
+          reports.push(report);
+          reportsBySession.set(report.sessionId, reports);
+        }
+
+        const reportsToDelete: string[] = [];
+        const migratedReports: SessionCoverageObservation[] = [];
+        for (const sessionReports of reportsBySession.values()) {
+          const oldGeometries = sessionReports.flatMap(report => {
+            const previousSection = previousById.get(report.sectionId);
+            const geometry = previousSection
+              ? sectionGeometryAtVersion(previousSection, report.sectionGeometryVersion)
+              : null;
+            return geometry ? [geometry.geometry] : [];
+          });
+          const oldUnion = unionAreas(oldGeometries);
+          if (!oldUnion) continue;
           const overlapping = migration.replacementSections.filter(section => {
             const replacementGeometry = currentSectionGeometry(section);
             return replacementGeometry
-              ? areaOverlapFraction(
-                  replacementGeometry.geometry,
-                  previousGeometry.geometry,
-                ) >= 0.5
+              ? areaOverlapFraction(replacementGeometry.geometry, oldUnion) >= 0.5
               : false;
           });
-          return overlapping.map(section => ({
-            ...observation,
+          const representative = sessionReports[0];
+          migratedReports.push(...overlapping.map(section => ({
+            ...representative,
             id: evidenceObservationId(
-              observation.sessionId,
+              representative.sessionId,
               section.id,
               section.currentGeometryVersion,
               'reported',
@@ -234,10 +285,21 @@ export async function ensurePermissionSections(
             sectionId: section.id,
             sectionGeometryVersion: section.currentGeometryVersion,
             updatedAt: now,
+          })));
+
+          const replacementUnion = unionAreas(overlapping.flatMap(section => {
+            const geometry = currentSectionGeometry(section);
+            return geometry ? [geometry.geometry] : [];
           }));
-        });
-        if (previousReports.length > 0) {
-          await db.sessionCoverage.bulkDelete(previousReports.map(row => row.id));
+          if (
+            replacementUnion
+            && areaOverlapFraction(oldUnion, replacementUnion) >= 0.98
+          ) {
+            reportsToDelete.push(...sessionReports.map(report => report.id));
+          }
+        }
+        if (reportsToDelete.length > 0) {
+          await db.sessionCoverage.bulkDelete(reportsToDelete);
         }
         if (migratedReports.length > 0) {
           await db.sessionCoverage.bulkPut(

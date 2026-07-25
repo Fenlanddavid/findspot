@@ -17,11 +17,14 @@ import {
 } from '../../shared/coverageRecords';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 
-export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v3';
+export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v4';
 export const SECTION_TARGET_COUNT = 6;
 export const SECTION_MIN_RESOLUTION = 7;
 export const SECTION_MAX_RESOLUTION = 13;
 export const SECTION_MIN_COUNT = 2;
+export const SECTION_ABSOLUTE_FLOOR_M2 = 25;
+export const SECTION_TARGET_AREA_M2 = 350;
+export const SECTION_BALANCE_MEDIAN_FRACTION = 0.4;
 export const REPORTED_IMMEDIATE_MAX_AREA_M2 = 10_000;
 export const REPORTED_LARGE_SECTION_CONFIRMATIONS = 3;
 export const TRACK_SECTION_COVERAGE_THRESHOLD = 0.15;
@@ -124,11 +127,98 @@ function asArea(feature: Feature<Polygon | MultiPolygon>): GeoJSONArea {
   return { type: 'MultiPolygon', coordinates: feature.geometry.coordinates };
 }
 
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function desiredSectionCount(fieldAreaM2: number): number {
+  return Math.max(
+    SECTION_MIN_COUNT,
+    Math.min(SECTION_TARGET_COUNT, Math.round(fieldAreaM2 / SECTION_TARGET_AREA_M2)),
+  );
+}
+
+function areasShareEdge(left: GeoJSONArea, right: GeoJSONArea): boolean {
+  return turf.lineOverlap(
+    geometryFeature(left),
+    geometryFeature(right),
+    { tolerance: 0.000001 },
+  ).features.length > 0;
+}
+
+function mergeBalancedCandidates(
+  input: SectionCandidate[],
+  desiredCount: number,
+  targetAreaM2: number,
+): SectionCandidate[] {
+  const active = new Map(input.map(candidate => [candidate.id, candidate]));
+  const maximumMerges = Math.max(0, input.length - 1);
+  let mergeCount = 0;
+
+  while (active.size > 1 && mergeCount < maximumMerges) {
+    const ordered = [...active.values()].sort((left, right) =>
+      left.areaM2 - right.areaM2 || left.id.localeCompare(right.id)
+    );
+    const medianAreaM2 = median(ordered.map(candidate => candidate.areaM2));
+    const fairnessFloorM2 = Math.max(
+      SECTION_ABSOLUTE_FLOOR_M2,
+      medianAreaM2 * SECTION_BALANCE_MEDIAN_FRACTION,
+    );
+    const source = active.size > desiredCount
+      ? ordered[0]
+      : ordered.find(candidate => candidate.areaM2 < fairnessFloorM2);
+    if (!source) break;
+
+    const receivers = ordered
+      .filter(candidate =>
+        candidate.id !== source.id
+        && areasShareEdge(source.geometry, candidate.geometry)
+      )
+      .sort((left, right) => {
+        const leftDistance = Math.abs(source.areaM2 + left.areaM2 - targetAreaM2);
+        const rightDistance = Math.abs(source.areaM2 + right.areaM2 - targetAreaM2);
+        return leftDistance - rightDistance
+          || left.areaM2 - right.areaM2
+          || left.id.localeCompare(right.id);
+      });
+    const receiver = receivers[0];
+    if (!receiver) {
+      if (source.areaM2 < SECTION_ABSOLUTE_FLOOR_M2) {
+        active.delete(source.id);
+        mergeCount++;
+        continue;
+      }
+      break;
+    }
+
+    const unioned = turf.union(turf.featureCollection([
+      geometryFeature(receiver.geometry),
+      geometryFeature(source.geometry),
+    ])) as Feature<Polygon | MultiPolygon> | null;
+    if (!unioned) break;
+    active.set(receiver.id, {
+      ...receiver,
+      geometry: asArea(unioned),
+      areaM2: turf.area(unioned),
+    });
+    active.delete(source.id);
+    mergeCount++;
+  }
+
+  return [...active.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
 /**
- * Creates a small set of stable H3-backed sections at the resolution whose
- * clipped cell count is closest to the interaction target. H3 identity is
+ * Creates a small set of stable, balanced H3-backed sections. A sufficiently
+ * fine H3 grid supplies deterministic building blocks; clipped fragments are
+ * then combined into contiguous regions of similar area. H3 identity remains
  * independent of the field bounding box, and callers retain the initially
- * selected resolution across ordinary boundary edits.
+ * selected base resolution across ordinary boundary edits.
  */
 export function deriveSectionCandidates(
   source: SectionSourceBoundary,
@@ -139,7 +229,10 @@ export function deriveSectionCandidates(
   if (!Number.isFinite(fieldAreaM2) || fieldAreaM2 <= 0) return [];
 
   const ownerKey = source.fieldId ?? `permission-${source.permissionId}`;
-  const candidatesAtResolution = (resolution: number): SectionCandidate[] => {
+  const candidatesAtResolution = (resolution: number): {
+    candidates: SectionCandidate[];
+    fullCellAreaM2: number;
+  } => {
     const cells = polygonToCellsExperimental(
       source.boundary.coordinates,
       resolution,
@@ -147,17 +240,19 @@ export function deriveSectionCandidates(
       true,
     ).sort();
     const candidates: SectionCandidate[] = [];
+    const fullCellAreasM2: number[] = [];
     for (const cell of cells) {
       const ring = cellToBoundary(cell, true) as Position[];
       if (ring.length === 0) continue;
       const closedRing = [...ring, ring[0]];
       const hex = turf.polygon([closedRing]);
+      fullCellAreasM2.push(turf.area(hex));
       const clipped = turf.intersect(
         turf.featureCollection([fieldFeature, hex]),
       ) as Feature<Polygon | MultiPolygon> | null;
       if (!clipped) continue;
       const areaM2 = turf.area(clipped);
-      if (!Number.isFinite(areaM2) || areaM2 < 25) continue;
+      if (!Number.isFinite(areaM2) || areaM2 <= 0) continue;
       candidates.push({
         id: `${ownerKey}:h3:${cell}`,
         permissionId: source.permissionId,
@@ -169,47 +264,34 @@ export function deriveSectionCandidates(
         areaM2,
       });
     }
-    return candidates;
+    return {
+      candidates,
+      fullCellAreaM2: median(fullCellAreasM2),
+    };
   };
 
+  const targetCount = desiredSectionCount(fieldAreaM2);
+  const targetAreaM2 = fieldAreaM2 / targetCount;
   let candidates: SectionCandidate[] = [];
   if (retainedResolution !== undefined) {
-    candidates = candidatesAtResolution(retainedResolution);
+    candidates = candidatesAtResolution(retainedResolution).candidates;
   } else {
-    let bestDistance = Number.POSITIVE_INFINITY;
     for (
       let resolution = SECTION_MIN_RESOLUTION;
       resolution <= SECTION_MAX_RESOLUTION;
       resolution++
     ) {
       const atResolution = candidatesAtResolution(resolution);
-      if (atResolution.length < SECTION_MIN_COUNT) {
-        if (resolution === SECTION_MAX_RESOLUTION && candidates.length === 0) {
-          candidates = atResolution;
-        }
-        continue;
-      }
-      // H3 resolutions are deliberately discrete. Penalise layouts below the
-      // target more heavily so a small field does not remain three large taps
-      // when the next resolution offers several more honest search areas.
-      const distance = atResolution.length < SECTION_TARGET_COUNT
-        ? (SECTION_TARGET_COUNT - atResolution.length) * 2
-        : atResolution.length - SECTION_TARGET_COUNT;
+      candidates = atResolution.candidates;
       if (
-        distance < bestDistance
-        || (distance === bestDistance && atResolution.length > candidates.length)
-      ) {
-        candidates = atResolution;
-        bestDistance = distance;
-      }
-      // Cell count grows monotonically with resolution. Once the target has
-      // been crossed, finer layouts can only move farther away and cost more
-      // geometry work.
-      if (atResolution.length >= SECTION_TARGET_COUNT) break;
+        candidates.length >= SECTION_MIN_COUNT
+        && atResolution.fullCellAreaM2 <= targetAreaM2
+      ) break;
     }
   }
 
-  return candidates.map((candidate, index) => ({
+  return mergeBalancedCandidates(candidates, targetCount, targetAreaM2)
+    .map((candidate, index) => ({
     ...candidate,
     label: `${source.name} · ${index + 1}`,
   }));
