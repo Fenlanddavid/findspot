@@ -1,11 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { pagePersistence } from '../../services/pagePersistence';
-import {
-  canEditSessionCoverage,
-  ensurePermissionSections,
-} from '../../services/coverageMutations';
-import { reportNonFatal } from '../../services/diagLog';
+import { preparePermissionSearchedAreas } from '../../services/sessionCoverageCommands';
+import { canEditSessionCoverage } from '../../shared/sessionCoveragePolicy';
 import {
   SectionCoverageMap,
   summarizeSectionEvidence,
@@ -23,7 +20,7 @@ function formatObservedDate(timestamp: number | null): string {
 
 export function PermissionCoverageView(props: {
   permissionId: string;
-  fieldId?: string;
+  fieldId: string;
   embedded?: boolean;
   onRequestClose?: () => void;
 }) {
@@ -32,8 +29,7 @@ export function PermissionCoverageView(props: {
   const [directSessionId, setDirectSessionId] = useState<string | null>(null);
 
   useEffect(() => {
-    ensurePermissionSections(props.permissionId).catch(error => {
-      reportNonFatal('permission-coverage', 'Could not create permission sections', error);
+    preparePermissionSearchedAreas(props.permissionId).catch(() => {
       setSetupError(true);
     });
   }, [props.permissionId]);
@@ -46,21 +42,11 @@ export function PermissionCoverageView(props: {
       .toArray(),
     [props.permissionId],
   ) ?? [];
-  const sections = props.fieldId
-    ? allSections.filter(section => section.fieldId === props.fieldId)
-    : allSections;
+  const sections = allSections
+    .filter(section => section.fieldId === props.fieldId);
   const fieldBoundaries = useLiveQuery(async () => {
-    if (props.fieldId) {
-      const field = await pagePersistence.fields.get(props.fieldId);
-      return field?.boundary ? [field.boundary] : [];
-    }
-    const fields = await pagePersistence.fields
-      .where('permissionId')
-      .equals(props.permissionId)
-      .toArray();
-    if (fields.length > 0) return fields.map(field => field.boundary);
-    const permission = await pagePersistence.permissions.get(props.permissionId);
-    return permission?.boundary ? [permission.boundary] : [];
+    const field = await pagePersistence.fields.get(props.fieldId);
+    return field?.boundary ? [field.boundary] : [];
   }, [props.permissionId, props.fieldId]) ?? [];
   const allObservations = useLiveQuery(
     () => pagePersistence.sessionCoverage
@@ -70,9 +56,8 @@ export function PermissionCoverageView(props: {
     [props.permissionId],
   ) ?? [];
   const sectionIds = new Set(sections.map(section => section.id));
-  const observations = props.fieldId
-    ? allObservations.filter(observation => sectionIds.has(observation.sectionId))
-    : allObservations;
+  const observations = allObservations
+    .filter(observation => sectionIds.has(observation.sectionId));
   const editableSessions = useLiveQuery(
     () => pagePersistence.sessions
       .where('permissionId')
@@ -81,17 +66,8 @@ export function PermissionCoverageView(props: {
       .toArray(),
     [props.permissionId],
   ) ?? [];
-  const reportedSessionIds = new Set(
-    observations
-      .filter(observation => observation.evidence === 'reported')
-      .map(observation => observation.sessionId),
-  );
   const latestEditableSession = editableSessions
-    .filter(session =>
-      !props.fieldId
-      || session.fieldId === props.fieldId
-      || reportedSessionIds.has(session.id)
-    )
+    .filter(session => session.fieldId === props.fieldId)
     .sort((left, right) =>
     Date.parse(right.endTime ?? right.updatedAt) - Date.parse(left.endTime ?? left.updatedAt)
   )[0] ?? null;

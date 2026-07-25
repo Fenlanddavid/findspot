@@ -9,6 +9,9 @@ import {
   markExternalBackupSaved,
   type BackupImportProgress,
 } from '../../src/services/data';
+import { ensurePermissionSections, saveReportedSessionCoverage } from '../../src/services/coverageMutations';
+import { auditDatabaseIntegrity } from '../../src/services/integrityAudit';
+import { BACKUP_FIXTURE_FACTORIES } from '../fixtures/backupFixtureFactories';
 
 function backup(overrides: Record<string, unknown> = {}) {
   return {
@@ -88,6 +91,49 @@ describe('backup import characterization', () => {
     expect(await db.permissionSections.count()).toBe(0);
     expect(await db.sessionCoverage.count()).toBe(0);
     expect(await db.geologyContext.get('retained-cache')).toBeDefined();
+  });
+
+  it('preserves restored legacy permission-level coverage without allowing extensions', async () => {
+    const legacySection = {
+      ...BACKUP_FIXTURE_FACTORIES.permissionSections(),
+      id: 'permission-1:whole',
+      fieldId: null,
+      label: 'South Field',
+    };
+    const legacyObservation = {
+      ...BACKUP_FIXTURE_FACTORIES.sessionCoverage(),
+      id: 'session-1:permission-1:whole:v1:reported',
+      sectionId: legacySection.id,
+    };
+    const restoredSession = {
+      ...BACKUP_FIXTURE_FACTORIES.sessions(),
+      fieldId: null,
+      endTime: '2026-07-23T12:00:00.000Z',
+    };
+
+    await importData(JSON.stringify(backup({
+      projects: [BACKUP_FIXTURE_FACTORIES.projects()],
+      permissions: [BACKUP_FIXTURE_FACTORIES.permissions()],
+      fields: [],
+      sessions: [restoredSession],
+      permissionSections: [legacySection],
+      sessionCoverage: [legacyObservation],
+    })));
+
+    expect((await auditDatabaseIntegrity(db)).issueCount).toBe(0);
+    expect(await db.sessionCoverage.get(legacyObservation.id)).toBeDefined();
+    expect(await ensurePermissionSections(
+      'permission-1',
+      '2026-07-25T12:00:00.000Z',
+    )).toEqual([]);
+    expect((await db.permissionSections.get(legacySection.id))?.retiredAt)
+      .toBe('2026-07-25T12:00:00.000Z');
+    expect(await db.sessionCoverage.get(legacyObservation.id)).toBeDefined();
+    await expect(saveReportedSessionCoverage(
+      restoredSession.id,
+      new Set([legacySection.id]),
+      Date.parse('2026-07-23T13:00:00.000Z'),
+    )).rejects.toThrow('Add a mapped field');
   });
 
   it('drills the complete restore without replacing live data or recording a restore', async () => {

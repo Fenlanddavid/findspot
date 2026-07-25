@@ -173,6 +173,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [isMapExpanded, setIsMapExpanded] = useState(false);
     const [moreActionsOpen, setMoreActionsOpen] = useState(false);
     const [coverageFieldId, setCoverageFieldId] = useState<string | null>(null);
+    const [coverageSetupOpen, setCoverageSetupOpen] = useState(false);
 
     const displayAcres = (() => {
         const fieldsWithBoundary = (fields ?? []).filter(f => f.boundary);
@@ -1404,11 +1405,44 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                     )}
                                 </div>
                                 {fields.length === 0 && (
-                                    <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                                      {isClubDayMember
-                                        ? "No fields were shared. Use Record Find to save finds against the event."
-                                        : `${isRally ? "No fields added yet" : "No sub-fields added yet"} — tap the button above to get started.`}
-                                    </p>
+                                    <>
+                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                                          {isClubDayMember
+                                            ? "No fields were shared. Use Record Find to save finds against the event."
+                                            : `${isRally ? "No fields added yet" : "No sub-fields added yet"} — tap the button above to get started.`}
+                                        </p>
+                                        {!isClubDayMember && !isRally && (
+                                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/10">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCoverageSetupOpen(open => !open)}
+                                                    aria-expanded={coverageSetupOpen}
+                                                    className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition-colors hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                                                >
+                                                    Ground coverage
+                                                </button>
+                                                {coverageSetupOpen && (
+                                                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                        <div>
+                                                            <h5 className="text-sm font-black text-gray-900 dark:text-gray-100">
+                                                                Add a field to use searched areas
+                                                            </h5>
+                                                            <p className="mt-1 max-w-xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                                                Map individual fields within this permission to mark where you have searched and work the ground methodically over future visits.
+                                                            </p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={onAddField}
+                                                            className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-black text-white hover:bg-emerald-700"
+                                                        >
+                                                            Add field
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                                 <div
                                     ref={fieldScrollRef}

@@ -3,7 +3,7 @@ import type { Session } from '../../src/db';
 import {
   canEditSessionCoverage,
   sessionCoverageEditDeadline,
-} from '../../src/services/coverageMutations';
+} from '../../src/shared/sessionCoveragePolicy';
 
 function session(endTime?: string): Session {
   return {

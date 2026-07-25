@@ -23,8 +23,7 @@ import {
   sectionGeometryAtVersion,
 } from '../shared/coverageRecords';
 import type { GeoJSONArea } from '../shared/coverageTypes';
-
-export const SESSION_COVERAGE_EDIT_WINDOW_MS = 48 * 60 * 60 * 1_000;
+import { canEditSessionCoverage } from '../shared/sessionCoveragePolicy';
 
 function sessionObservedAt(session: Session): number {
   for (const candidate of [session.endTime, session.date, session.updatedAt, session.createdAt]) {
@@ -42,18 +41,6 @@ function sessionStartedAt(session: Session): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return sessionObservedAt(session);
-}
-
-export function sessionCoverageEditDeadline(session: Session): number | null {
-  if (!session.isFinished || !session.endTime) return null;
-  const endTime = Date.parse(session.endTime);
-  if (!Number.isFinite(endTime)) return null;
-  return endTime + SESSION_COVERAGE_EDIT_WINDOW_MS;
-}
-
-export function canEditSessionCoverage(session: Session, now = Date.now()): boolean {
-  const deadline = sessionCoverageEditDeadline(session);
-  return deadline !== null && now <= deadline;
 }
 
 function sourceKey(fieldId: string | null): string {
@@ -108,21 +95,12 @@ export async function ensurePermissionSections(
   ]);
   if (!permission) return [];
 
-  const sources = fields.length > 0
-    ? fields.map(field => ({
-        fieldId: field.id,
-        permissionId,
-        name: field.name,
-        boundary: field.boundary,
-      }))
-    : permission.boundary
-      ? [{
-          fieldId: null,
-          permissionId,
-          name: permission.name,
-          boundary: permission.boundary,
-        }]
-      : [];
+  const sources = fields.map(field => ({
+    fieldId: field.id,
+    permissionId,
+    name: field.name,
+    boundary: field.boundary,
+  }));
 
   const nextIds = new Set<string>();
   const writes: PermissionSection[] = [];
@@ -318,8 +296,22 @@ function scopedSections(
   session: Session,
   sections: PermissionSection[],
 ): PermissionSection[] {
-  if (!session.fieldId) return sections;
+  if (!session.fieldId) return [];
   return sections.filter(section => section.fieldId === session.fieldId);
+}
+
+async function requireCoverageField(session: Session): Promise<void> {
+  if (!session.fieldId) {
+    throw new Error('Add a mapped field before recording searched areas.');
+  }
+  const field = await db.fields.get(session.fieldId);
+  if (
+    !field
+    || field.permissionId !== session.permissionId
+    || !field.boundary
+  ) {
+    throw new Error('This session is not linked to a mapped field.');
+  }
 }
 
 function observationBase(input: {
@@ -375,6 +367,13 @@ export async function prepareSessionCoverageEvidence(
 ): Promise<SessionCoverageObservation[]> {
   const session = await db.sessions.get(sessionId);
   if (!session) return [];
+  if (!session.fieldId) {
+    return db.sessionCoverage.where('sessionId').equals(sessionId).toArray();
+  }
+  const field = await db.fields.get(session.fieldId);
+  if (!field || field.permissionId !== session.permissionId || !field.boundary) {
+    return db.sessionCoverage.where('sessionId').equals(sessionId).toArray();
+  }
   const sections = scopedSections(
     session,
     await ensurePermissionSections(session.permissionId, now),
@@ -441,12 +440,19 @@ export async function saveReportedSessionCoverage(
   if (!canEditSessionCoverage(session, nowMs)) {
     throw new Error('Coverage can only be changed for 48 hours after a session ends.');
   }
+  await requireCoverageField(session);
 
   const now = new Date(nowMs).toISOString();
-  const sections = scopedSections(
-    session,
-    await ensurePermissionSections(session.permissionId, now),
-  );
+  const allSections = await ensurePermissionSections(session.permissionId, now);
+  const sections = scopedSections(session, allSections);
+  const sectionIds = new Set(sections.map(section => section.id));
+  const activeSectionById = new Map(allSections.map(section => [section.id, section]));
+  for (const selectedSectionId of selectedSectionIds) {
+    const selectedSection = activeSectionById.get(selectedSectionId);
+    if (selectedSection && !sectionIds.has(selectedSectionId)) {
+      throw new Error('A selected area does not belong to this session field.');
+    }
+  }
   const selected = sections.filter(section => selectedSectionIds.has(section.id));
   const observedAt = sessionObservedAt(session);
   const rows = selected.map(section =>
@@ -459,7 +465,10 @@ export async function saveReportedSessionCoverage(
       .toArray();
     const nextIds = new Set(rows.map(row => row.id));
     const removedIds = previous
-      .filter(observation => !nextIds.has(observation.id))
+      .filter(observation =>
+        sectionIds.has(observation.sectionId)
+        && !nextIds.has(observation.id)
+      )
       .map(observation => observation.id);
     if (removedIds.length > 0) await db.sessionCoverage.bulkDelete(removedIds);
     if (rows.length > 0) await db.sessionCoverage.bulkPut(rows);

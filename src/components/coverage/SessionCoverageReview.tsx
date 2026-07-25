@@ -2,14 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { pagePersistence } from '../../services/pagePersistence';
 import {
+  preparePermissionSearchedAreas,
+  prepareSessionSearchedAreas,
+  saveSessionSearchedAreas,
+} from '../../services/sessionCoverageCommands';
+import {
   canEditSessionCoverage,
-  ensurePermissionSections,
-  prepareSessionCoverageEvidence,
-  saveReportedSessionCoverage,
   sessionCoverageEditDeadline,
-} from '../../services/coverageMutations';
-import { refreshHotspotPredictionOutcomes } from '../../services/hotspotPredictionService';
-import { reportNonFatal } from '../../services/diagLog';
+} from '../../shared/sessionCoveragePolicy';
 import {
   SectionCoverageMap,
   summarizeSectionEvidence,
@@ -17,6 +17,16 @@ import {
 import type { SessionCoverageObservation } from '../../shared/coverageTypes';
 
 const EMPTY_OBSERVATIONS: SessionCoverageObservation[] = [];
+
+function formatEditDeadline(timestamp: number): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
+}
 
 export function SessionCoverageReview(props: {
   sessionId: string;
@@ -37,31 +47,20 @@ export function SessionCoverageReview(props: {
     [props.sessionId],
   );
   const sections = useLiveQuery(async () => {
-    if (!session) return [];
+    if (!session?.fieldId) return [];
+    if (props.fieldId && props.fieldId !== session.fieldId) return [];
     const rows = await pagePersistence.permissionSections
       .where('permissionId')
       .equals(session.permissionId)
       .filter(section => !section.retiredAt)
       .toArray();
-    const scopedFieldId = props.fieldId ?? session.fieldId;
-    return scopedFieldId
-      ? rows.filter(section => section.fieldId === scopedFieldId)
-      : rows;
+    return rows.filter(section => section.fieldId === session.fieldId);
   }, [session?.permissionId, session?.fieldId, props.fieldId]);
   const fieldBoundaries = useLiveQuery(async () => {
-    if (!session) return [];
-    const scopedFieldId = props.fieldId ?? session.fieldId;
-    if (scopedFieldId) {
-      const field = await pagePersistence.fields.get(scopedFieldId);
-      return field?.boundary ? [field.boundary] : [];
-    }
-    const fields = await pagePersistence.fields
-      .where('permissionId')
-      .equals(session.permissionId)
-      .toArray();
-    if (fields.length > 0) return fields.map(field => field.boundary);
-    const permission = await pagePersistence.permissions.get(session.permissionId);
-    return permission?.boundary ? [permission.boundary] : [];
+    if (!session?.fieldId) return [];
+    if (props.fieldId && props.fieldId !== session.fieldId) return [];
+    const field = await pagePersistence.fields.get(session.fieldId);
+    return field?.boundary ? [field.boundary] : [];
   }, [session?.permissionId, session?.fieldId, props.fieldId]);
   const observationRows = useLiveQuery(
     () => pagePersistence.sessionCoverage
@@ -70,16 +69,19 @@ export function SessionCoverageReview(props: {
       .toArray(),
     [props.sessionId],
   );
-  const observations = observationRows ?? EMPTY_OBSERVATIONS;
+  const visibleSectionIds = useMemo(
+    () => new Set((sections ?? []).map(section => section.id)),
+    [sections],
+  );
+  const observations = (observationRows ?? EMPTY_OBSERVATIONS)
+    .filter(observation => visibleSectionIds.has(observation.sectionId));
 
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     setSectionsReady(false);
-    ensurePermissionSections(session.permissionId)
-      .catch(errorValue => {
-        reportNonFatal('session-coverage', 'Could not prepare searched areas', errorValue);
-      })
+    preparePermissionSearchedAreas(session.permissionId)
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setSectionsReady(true);
       });
@@ -90,8 +92,7 @@ export function SessionCoverageReview(props: {
 
   useEffect(() => {
     if (!open) return;
-    prepareSessionCoverageEvidence(props.sessionId).catch(errorValue => {
-      reportNonFatal('session-coverage', 'Could not prepare session coverage evidence', errorValue);
+    prepareSessionSearchedAreas(props.sessionId).catch(() => {
       setError('The searched-area map could not be prepared.');
     });
   }, [open, props.sessionId]);
@@ -103,7 +104,7 @@ export function SessionCoverageReview(props: {
         .filter(observation => observation.evidence === 'reported')
         .map(observation => observation.sectionId),
     ));
-  }, [observationRows]);
+  }, [observationRows, visibleSectionIds]);
 
   const evidence = useMemo(
     () => summarizeSectionEvidence(observations),
@@ -125,15 +126,13 @@ export function SessionCoverageReview(props: {
     ),
     [observations],
   );
-  const editable = !!session && canEditSessionCoverage(session);
+  const editable = !!session?.fieldId && canEditSessionCoverage(session);
   const deadline = session ? sessionCoverageEditDeadline(session) : null;
   const coveredCount = new Set(
     observations
       .filter(observation => observation.evidence !== 'find-visited')
       .map(observation => observation.sectionId),
   ).size;
-  const fieldWord = (props.fieldId ?? session?.fieldId) ? 'field' : 'permission';
-  const visibleSectionIds = new Set((sections ?? []).map(section => section.id));
   const selectedVisibleCount = [...selected]
     .filter(sectionId => visibleSectionIds.has(sectionId))
     .length;
@@ -160,16 +159,11 @@ export function SessionCoverageReview(props: {
     setSaving(true);
     setError(null);
     try {
-      await saveReportedSessionCoverage(props.sessionId, selected);
-      try {
-        await refreshHotspotPredictionOutcomes(session?.permissionId);
-      } catch (errorValue) {
-        reportNonFatal(
-          'session-coverage',
-          'Coverage saved but prediction outcomes could not be refreshed',
-          errorValue,
-        );
-      }
+      if (!session) throw new Error('Session not found.');
+      await saveSessionSearchedAreas({
+        sessionId: props.sessionId,
+        selectedSectionIds: selected,
+      });
       dirtyRef.current = false;
       if (props.onClose) props.onClose();
       else setOpen(false);
@@ -195,7 +189,7 @@ export function SessionCoverageReview(props: {
                 ? `${savedReportedIds.size} ${savedReportedIds.size === 1 ? 'area' : 'areas'} marked.`
                 : coveredCount > 0
                   ? `${coveredCount} ${coveredCount === 1 ? 'area was' : 'areas were'} recorded by tracking.`
-                  : `Mark the parts of the ${fieldWord} you searched.`}
+                  : 'Mark the parts of the field you searched.'}
             </p>
           </div>
           <button
@@ -220,7 +214,7 @@ export function SessionCoverageReview(props: {
             Ground coverage
           </p>
           <h4 className="mt-1 text-sm font-black leading-tight text-gray-900 dark:text-gray-100">
-            Which parts of the {fieldWord} did you search?
+            Which parts of the field did you search today?
           </h4>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Tap an area to add or remove it. Blue areas were recorded by tracking.
@@ -274,12 +268,12 @@ export function SessionCoverageReview(props: {
       {error && <p className="mt-3 text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>}
       {!editable && deadline && (
         <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          This review became read-only 48 hours after the session ended.
+          This session’s searched areas are now read-only.
         </p>
       )}
-      {editable && (
+      {editable && deadline && (
         <p className="mt-2 text-2xs text-gray-400 dark:text-gray-500">
-          You can change this for 48 hours after finishing.
+          Editable until {formatEditDeadline(deadline)}.
         </p>
       )}
 

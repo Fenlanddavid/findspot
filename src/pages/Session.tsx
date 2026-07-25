@@ -42,7 +42,7 @@ import {
   trimSessionTrack,
   updateSessionDetails,
 } from '../services/sessionMutations';
-import { prepareSessionCoverageEvidence } from '../services/coverageMutations';
+import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
 import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
 
 const FIRST_SESSION_KEY = "fs_first_session";
@@ -739,7 +739,7 @@ export default function SessionPage(props: {
             return;
         }
         try {
-            await prepareSessionCoverageEvidence(sessionId, endTimeIso);
+            await prepareSessionSearchedAreas(sessionId);
         } catch {
             setError("Session finished, but ground coverage could not be prepared.");
         }

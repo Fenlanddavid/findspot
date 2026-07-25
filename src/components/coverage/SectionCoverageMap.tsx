@@ -1,10 +1,11 @@
 import React, { useMemo } from 'react';
 import * as turf from '@turf/turf';
 import type {
+  GeoJSONArea,
+  GeoJSONPolygon,
   PermissionSection,
   SessionCoverageObservation,
-} from '../../db';
-import type { GeoJSONArea, GeoJSONPolygon } from '../../shared/coverageTypes';
+} from '../../shared/coverageTypes';
 import { currentSectionGeometry } from '../../shared/coverageRecords';
 
 type Coordinate = [number, number];

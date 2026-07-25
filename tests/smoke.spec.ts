@@ -204,7 +204,7 @@ test("session coverage is saved in three taps and appears on the permission", as
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
   if (!permissionId) throw new Error("Could not read coverage permission id from URL");
 
-  const permissions = await readIndexedDbStore(page, "permissions") as Array<{
+  const permissions = await readIndexedDbStore(page, "permissions") as Array<Record<string, unknown> & {
     id: string;
     projectId: string;
   }>;
@@ -215,6 +215,32 @@ test("session coverage is saved in three taps and appears on the permission", as
   const fieldId = "coverage-smoke-field";
   const sessionId = "coverage-smoke-session";
   const unmappedSessionId = "coverage-unmapped-session";
+  const permissionBoundary = {
+    type: "Polygon",
+    coordinates: [[
+      [-1.4710, 53.3805],
+      [-1.4685, 53.3805],
+      [-1.4685, 53.3825],
+      [-1.4710, 53.3825],
+      [-1.4710, 53.3805],
+    ]],
+  };
+  await putIndexedDbRow(page, "permissions", {
+    ...permission,
+    boundary: permissionBoundary,
+  });
+  await page.goto(`./permission/${permissionId}`);
+  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Add a field to use searched areas" }),
+  ).toBeVisible();
+  await expect(page.getByRole("group", { name: "Searched area map" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add field", exact: true }).click();
+  await expect(
+    page.getByRole("dialog").getByRole("heading", { name: "Add New Field" }),
+  ).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close dialog" }).click();
+
   await putIndexedDbRow(page, "sessions", {
     id: unmappedSessionId,
     projectId: permission.projectId,
@@ -235,6 +261,7 @@ test("session coverage is saved in three taps and appears on the permission", as
     updatedAt: new Date(now - 5_400_000).toISOString(),
   });
   await page.goto(`./session/${unmappedSessionId}`);
+  await page.waitForTimeout(500);
   await expect(page.getByText("Searched areas", { exact: true })).toHaveCount(0);
 
   await putIndexedDbRow(page, "fields", {
@@ -256,6 +283,9 @@ test("session coverage is saved in three taps and appears on the permission", as
     createdAt: new Date(now - 86_400_000).toISOString(),
     updatedAt: new Date(now - 86_400_000).toISOString(),
   });
+  await page.goto(`./session/${unmappedSessionId}`);
+  await page.waitForTimeout(500);
+  await expect(page.getByText("Searched areas", { exact: true })).toHaveCount(0);
 
   await page.goto(`./permission/${permissionId}`);
   await page.getByRole("button", { name: "Ground coverage" }).click();
@@ -290,7 +320,7 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(page.getByText(/(?:59m|1h 0m) elapsed/)).toBeVisible();
   await page.getByRole("button", { name: "Finish Session" }).click();
   reviewTaps += 1;
-  await expect(page.getByText("Which parts of the field did you search?")).toBeVisible();
+  await expect(page.getByText("Which parts of the field did you search today?")).toBeVisible();
   let reviewSections = page
     .getByRole("group", { name: "Searched area map" })
     .getByRole("button");
@@ -336,45 +366,15 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(reviewSections.first()).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Not now" }).click();
 
-  // Coverage from a whole-permission session must still be directly editable
-  // from the matching sub-field without becoming a silent read-only map.
-  const sessionRows = await readIndexedDbStore(page, "sessions") as Array<Record<string, unknown>>;
-  const coverageSession = sessionRows.find(row => row.id === sessionId);
-  if (!coverageSession) throw new Error("Could not find coverage session");
-  await putIndexedDbRow(page, "sessions", {
-    ...coverageSession,
-    fieldId: null,
-  });
-
   await page.goto(`./permission/${permissionId}`);
   await page.getByRole("button", { name: "Ground coverage" }).click();
   await expect(page.getByRole("button", { name: "Edit recent search" })).toHaveCount(0);
-  await expect(page.getByText("Which parts of the field did you search?")).toBeVisible();
-  let permissionReviewSections = page
+  await expect(page.getByText("Which parts of the field did you search today?")).toBeVisible();
+  const restoredSelections = page
     .getByRole("group", { name: "Searched area map" })
-    .getByRole("button");
-  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "true");
-  await expect(permissionReviewSections.first()).toHaveAttribute("fill", "#10b981");
-  await permissionReviewSections.first().click();
-  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "false");
-  await expect(permissionReviewSections.first()).toHaveAttribute("fill", "#e5e7eb");
-  await page.getByRole("button", { name: "Done" }).click();
-
-  await expect(
-    page.getByRole("group", { name: "Searched area map" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Show Gaps" }).click();
-  await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("100% left");
-  await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("reports included");
-  await page.getByRole("button", { name: /Gaps On/ }).click();
-
-  await putIndexedDbRow(page, "sessions", coverageSession);
-  await page.getByRole("button", { name: "Ground coverage" }).click();
-  permissionReviewSections = page
-    .getByRole("group", { name: "Searched area map" })
-    .getByRole("button");
-  await permissionReviewSections.first().click();
-  await expect(permissionReviewSections.first()).toHaveAttribute("aria-pressed", "true");
+    .locator('[role="button"][aria-pressed="true"]');
+  await expect(restoredSelections).toHaveCount(1);
+  await expect(restoredSelections.first()).toHaveAttribute("fill", "#10b981");
   await page.getByRole("button", { name: "Done" }).click();
   await expect.poll(async () => {
     observations = await readIndexedDbStore(page, "sessionCoverage") as Array<{

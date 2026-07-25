@@ -18,6 +18,7 @@ import {
   evidenceObservationId,
 } from '../../src/engines/coverage/sectionCoverageEngine';
 import type { GeoJSONArea, GeoJSONPolygon } from '../../src/shared/coverageTypes';
+import { deleteFieldAndUnlinkRecords } from '../../src/services/permissionMutations';
 
 const ISO = '2026-07-24T08:00:00.000Z';
 
@@ -148,6 +149,140 @@ afterEach(async () => {
 });
 
 describe('coverage mutation boundary', () => {
+  it('does not create sections from a permission boundary without mapped fields', async () => {
+    await db.permissions.update('permission-1', { boundary: field().boundary });
+    await db.fields.clear();
+
+    await expect(ensurePermissionSections('permission-1', ISO)).resolves.toEqual([]);
+    expect(await db.permissionSections.count()).toBe(0);
+  });
+
+  it('creates only field-scoped sections after a mapped field is added', async () => {
+    await db.permissions.update('permission-1', { boundary: field().boundary });
+    await db.fields.clear();
+    expect(await ensurePermissionSections('permission-1', ISO)).toEqual([]);
+
+    await db.fields.put(field());
+    const sections = await ensurePermissionSections('permission-1', ISO);
+
+    expect(sections.length).toBeGreaterThanOrEqual(2);
+    expect(sections.every(section => section.fieldId === 'field-1')).toBe(true);
+    expect(sections.some(section => section.fieldId === null)).toBe(false);
+  });
+
+  it('does not let an unassigned session create reports across mapped fields', async () => {
+    await db.sessions.update('session-1', { fieldId: null });
+    const sections = await ensurePermissionSections('permission-1', ISO);
+    expect(sections.length).toBeGreaterThan(0);
+
+    await expect(saveReportedSessionCoverage(
+      'session-1',
+      new Set([sections[0].id]),
+      Date.parse('2026-07-24T10:00:00.000Z'),
+    )).rejects.toThrow('Add a mapped field');
+    expect(await db.sessionCoverage.count()).toBe(0);
+  });
+
+  it('rejects active sections belonging to a different session field', async () => {
+    await db.fields.put({
+      ...field(0.003),
+      id: 'field-2',
+      name: 'Second field',
+      boundary: {
+        type: 'Polygon',
+        coordinates: [[
+          [0.002, 52], [0.003, 52], [0.003, 52.001],
+          [0.002, 52.001], [0.002, 52],
+        ]],
+      },
+    });
+    const sections = await ensurePermissionSections('permission-1', ISO);
+    const otherFieldSection = sections.find(section => section.fieldId === 'field-2');
+    expect(otherFieldSection).toBeDefined();
+    if (!otherFieldSection) throw new Error('Expected a section for the second field');
+
+    await expect(saveReportedSessionCoverage(
+      'session-1',
+      new Set([otherFieldSection.id]),
+      Date.parse('2026-07-24T10:00:00.000Z'),
+    )).rejects.toThrow('does not belong to this session field');
+    expect(await db.sessionCoverage.count()).toBe(0);
+  });
+
+  it('retires legacy permission sections without deleting their observations', async () => {
+    const legacySectionId = 'permission-1:whole';
+    await db.fields.clear();
+    await db.sessions.update('session-1', { fieldId: null });
+    await db.permissionSections.put({
+      id: legacySectionId,
+      permissionId: 'permission-1',
+      fieldId: null,
+      layoutKey: 'whole',
+      label: 'Test permission',
+      currentGeometryVersion: 1,
+      geometryVersions: [{
+        version: 1,
+        boundaryHash: 'legacy:permission',
+        geometry: field().boundary,
+        areaM2: 7_500,
+        effectiveFrom: ISO,
+      }],
+      createdAt: ISO,
+      updatedAt: ISO,
+    });
+    await db.sessionCoverage.put({
+      id: `session-1:${legacySectionId}:v1:reported`,
+      sessionId: 'session-1',
+      permissionId: 'permission-1',
+      sectionId: legacySectionId,
+      sectionGeometryVersion: 1,
+      evidence: 'reported',
+      startedAt: Date.parse(ISO),
+      observedAt: Date.parse(ISO),
+      createdAt: ISO,
+      updatedAt: ISO,
+    });
+
+    expect(await ensurePermissionSections(
+      'permission-1',
+      '2026-07-25T08:00:00.000Z',
+    )).toEqual([]);
+    expect((await db.permissionSections.get(legacySectionId))?.retiredAt)
+      .toBe('2026-07-25T08:00:00.000Z');
+    expect(await db.sessionCoverage.get(`session-1:${legacySectionId}:v1:reported`))
+      .toBeDefined();
+  });
+
+  it('preserves a deleted field report but prevents the unlinked session extending it', async () => {
+    const sections = await ensurePermissionSections('permission-1', ISO);
+    await saveReportedSessionCoverage(
+      'session-1',
+      new Set([sections[0].id]),
+      Date.parse('2026-07-24T10:00:00.000Z'),
+    );
+    const reportId = (await db.sessionCoverage
+      .where('sessionId')
+      .equals('session-1')
+      .first())?.id;
+    expect(reportId).toBeDefined();
+
+    await deleteFieldAndUnlinkRecords(
+      'field-1',
+      '2026-07-25T09:00:00.000Z',
+    );
+
+    expect((await db.sessions.get('session-1'))?.fieldId).toBeNull();
+    expect((await db.permissionSections.get(sections[0].id))?.retiredAt)
+      .toBe('2026-07-25T09:00:00.000Z');
+    expect(reportId ? await db.sessionCoverage.get(reportId) : undefined)
+      .toBeDefined();
+    await expect(saveReportedSessionCoverage(
+      'session-1',
+      new Set([sections[0].id]),
+      Date.parse('2026-07-25T10:00:00.000Z'),
+    )).rejects.toThrow('Add a mapped field');
+  });
+
   it('versions section geometry and keeps reported and find-visit observations independent', async () => {
     const originals = await ensurePermissionSections('permission-1', ISO);
     expect(originals.length).toBeGreaterThanOrEqual(2);
