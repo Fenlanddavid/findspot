@@ -528,7 +528,11 @@ export function HistoricLayerManager() {
                                             const isHolloway = r.type === 'holloway';
                                             const typeLabel = isRoman ? 'Roman Road' : isHolloway ? 'Holloway' : 'Historic Trackway';
                                             const confidenceLabel = r.confidenceClass === 'A' ? 'High confidence' : r.confidenceClass === 'B' ? 'Moderate confidence' : 'Possible alignment';
-                                            const sourceName = r.source === 'itinere' ? 'Itiner-e dataset' : 'OpenStreetMap';
+                                            const sourceName = r.source === 'rrra'
+                                                ? 'Digital Britannia (RRRA)'
+                                                : r.source === 'itinere'
+                                                    ? 'Itiner-e historical data'
+                                                    : 'OpenStreetMap';
                                             return (
                                                 <div key={i} className="bg-amber-500/5 border border-amber-500/15 p-3 rounded-xl">
                                                     <div className="flex items-start justify-between gap-2 mb-1">

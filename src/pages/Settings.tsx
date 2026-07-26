@@ -1283,6 +1283,7 @@ export default function Settings() {
               <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
               <p>Scheduled Monument and AIM data are provided through public Historic England map services. Welsh Scheduled Ancient Monument data is provided by The Welsh Historic Environment Service (Cadw) under the Open Government Licence v3.0. Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] 2026, licensed under the Open Government Licence v3.0.</p>
               <p>Contains Portable Antiquities Scheme public data from finds.org.uk, used under CC-BY attribution terms. PAS density is aggregated to H3 landscape cells and reflects recording activity, not a complete archaeological inventory.</p>
+              <p>Digital Britannia © Mike Haken 2026, Roman Roads Research Association (RRRA). Licensed CC BY-NC 4.0. Not for use in fee-charging applications without prior written consent.</p>
               <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
               <p>Wales LiDAR data © Crown copyright, Natural Resources Wales / Welsh Government. Licensed under the Open Government Licence v3.0. Source: DataMapWales (datamap.gov.wales).</p>
               <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>

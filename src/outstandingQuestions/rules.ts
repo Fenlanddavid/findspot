@@ -59,7 +59,7 @@ export const RULE_REQUIRED_SOURCES: Record<RuleId, readonly QuestionEvidenceSour
   // The rule itself requires a returned Roman route. Do not also require every
   // configured route provider to have completed successfully: that would hide
   // valid presence-based questions when (for example) OSM is unavailable but
-  // the Itiner-e alignment was returned.
+  // the bundled Roman-road alignment was returned.
   ROMAN_ROUTE_ACTIVITY: ['scheduled_monuments', 'historic_routes'],
 };
 

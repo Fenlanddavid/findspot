@@ -36,6 +36,19 @@ describe('cache policy registry', () => {
     }
   });
 
+  it('registers Roman roads as a versioned service-worker asset', () => {
+    expect(CACHE_POLICIES.staticRomanRoads).toEqual({
+      owner: 'vite.config.ts',
+      storageLayer: 'service-worker',
+      expiry: {
+        strategy: 'versioned',
+        versionSource: 'ROMAN_ROADS_DATASET.generation + asset content hash',
+      },
+      backupClassification: 'not-applicable',
+      invalidationOwner: 'Vite PWA build',
+    });
+  });
+
   it('makes every TTL consumer read its registered duration', async () => {
     for (const [id, policy] of Object.entries(CACHE_POLICIES)) {
       if (policy.expiry.strategy !== 'ttl') continue;

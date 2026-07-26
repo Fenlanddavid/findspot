@@ -54,7 +54,7 @@ const historicRouteSchema = z.object({
     'droveway', 'suspected_route',
   ]),
   source: z.enum([
-    'osm', 'itinere', 'historic_map_digitised', 'lidar_interpreted', 'manual',
+    'osm', 'itinere', 'rrra', 'historic_map_digitised', 'lidar_interpreted', 'manual',
   ]),
   confidenceClass: z.enum(['A', 'B', 'C', 'D']),
   certaintyScore: finite,

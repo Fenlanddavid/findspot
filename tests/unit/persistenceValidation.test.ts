@@ -34,6 +34,36 @@ describe('persisted cache validation', () => {
     expect(safeParseFieldGuideScanCache({ ...cache, rawClusters: 'corrupt' })).toBeNull();
   });
 
+  it('accepts both RRRA routes and historical Itiner-e cached routes', () => {
+    const route = {
+      id: 'route-1',
+      type: 'roman_road',
+      source: 'rrra',
+      confidenceClass: 'A',
+      certaintyScore: 90,
+      geometry: [[-0.35, 52.56], [-0.34, 52.57]],
+      bbox: [[-0.35, 52.56], [-0.34, 52.57]],
+    };
+    const cache = {
+      id: 'historic-route-cache',
+      createdAt: 1_700_000_000_000,
+      sourceAvailability: { historic_routes: true },
+      rawClusters: [],
+      historicLookup: {
+        geoData: null,
+        contextData: null,
+        nhleData: null,
+        aimData: null,
+        routeRaw: null,
+        romanRoads: [route, { ...route, id: 'route-legacy', source: 'itinere' }],
+      },
+    };
+
+    const parsed = safeParseFieldGuideScanCache(cache);
+    expect(parsed?.historicLookup?.romanRoads?.map(item => item.source))
+      .toEqual(['rrra', 'itinere']);
+  });
+
   it('accepts a valid geology record and rejects a malformed context', () => {
     const context = {
       tileKey: 'u120fx',

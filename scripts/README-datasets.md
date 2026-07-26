@@ -15,6 +15,50 @@ Static datasets served from the `findspot-static` R2 bucket via the `findspot-st
 
 ---
 
+## Rebuilding the bundled Roman-road asset
+
+The checked-in `public/roman-roads-gb.geojson` file is the browser-ready RRRA
+Digital Britannia v1.0 engineered-roads layer. The raw download is deliberately
+kept outside the repository.
+
+Pinned input vintage:
+
+- Downloaded: 2026-07-26
+- Source: `downloads/V1.0/GeoJSON/engineered_roman_roads.geojson`
+- Raw bytes: 3,941,276
+- SHA-256: `ff4caff0b4446554660b117304554b51e7e9b1420c262f3dbdf60c0f1454b9d2`
+- Observed features: 3,572 (the published figure is 3,577; the source file was
+  not altered to reconcile that discrepancy)
+
+The `.geojson` download declares and uses EPSG:27700 British National Grid,
+contrary to RFC 7946. Reproject with GDAL before running the existing builder:
+
+```bash
+ogr2ogr -f GeoJSON -s_srs EPSG:27700 -t_srs EPSG:4326 \
+  -lco COORDINATE_PRECISION=5 /tmp/rrra-roads-wgs84.geojson \
+  /path/to/engineered_roman_roads.geojson
+
+node scripts/build-roman-roads.mjs \
+  /tmp/rrra-roads-wgs84.geojson public/roman-roads-gb.geojson
+```
+
+The builder pins the observed v1.0 property schema and `Segment Confidence`
+domain (`0`, `1`, `2`, `3`, `null`) but deliberately does not interpret that
+undocumented field. Every accepted engineered-road segment is emitted as class
+A. Coordinates are quantized to five decimal places; MultiLineStrings are
+split; short/degenerate geometry is removed; properties are reduced to source,
+name, road reference and confidence class; and IDs use the `rrra-` prefix.
+Passing unreprojected BNG coordinates fails WGS84 validation.
+
+Build result: 3,505 features and 1,417,865 bytes. The 67 removed features have
+empty, zero-length geometry, so `droppedDegenerateSegments` is the entire
+`droppedShortSegments` total rather than an additional removal count. At 1.35
+MiB the result is below the 3 MiB Workbox limit and remains one explicitly
+versioned precached asset; no sharding is used. The checked-in output SHA-256 is
+`d7577aaba43e11f63afa6c3e00bdf2a83e135be49a1330361479c7a2b2cbda37`.
+
+---
+
 ## Rebuilding the SM Index
 
 The SM index is a sparse geohash6 shard index of Scheduled Monuments in England from the NHLE FeatureServer/6, Welsh Scheduled Ancient Monuments from Cadw WFS, and Scottish Scheduled Monuments from HES MapServer/5.
@@ -124,5 +168,6 @@ Run the regression suite after refreshing to confirm the app's SM lookup logic m
 ## Attribution
 
 - **Scheduled Monuments (SM index, AIM):** National Heritage List for England (NHLE) © Historic England, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Welsh Scheduled Ancient Monument data is Designated Historic Asset GIS Data from The Welsh Historic Environment Service (Cadw), licensed under the Open Government Licence v3.0. Scottish Scheduled Monument attribution: Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] 2026, licensed under the Open Government Licence v3.0. Sources: NHLE FeatureServer/6, Cadw DataMapWales WFS, HES MapServer/5 live queries.
-- **Itiner-e Roman Roads:** © Itiner-e contributors, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- **RRRA Digital Britannia engineered Roman roads:** Digital Britannia © Mike Haken 2026, Roman Roads Research Association (RRRA), licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Not for use in fee-charging applications without prior written consent.
+- **Historical Itiner-e route caches:** © Itiner-e contributors, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). No Itiner-e-derived Roman-road bytes remain in the shipped asset.
 - **Wales LiDAR hillshade:** © Natural Resources Wales / Welsh Government, Open Government Licence v3.0.

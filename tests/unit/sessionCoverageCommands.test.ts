@@ -91,6 +91,7 @@ afterEach(async () => {
 
 describe('session searched-area command', () => {
   it('reports a pending derived refresh without misrepresenting the saved evidence', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse(ISO) + 60_000);
     const sections = await ensurePermissionSections('permission-1', ISO);
     refreshHotspotPredictionOutcomes.mockRejectedValueOnce(
       new Error('Derived refresh failed'),

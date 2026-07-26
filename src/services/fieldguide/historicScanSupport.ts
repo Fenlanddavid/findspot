@@ -49,7 +49,7 @@ export interface HistoricScanCoordinatorOptions {
     isActive: () => boolean;
 }
 
-export const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.06.15a';
+export const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.07.26b';
 export const HISTORIC_CACHE_TTL_MS =
     CACHE_POLICIES.fieldGuideHistoric.expiry.durationMs;
 

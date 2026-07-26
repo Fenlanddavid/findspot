@@ -118,8 +118,11 @@ export function useFieldGuideHistoricLayers({
         for (let i = 0; i < historicRoutes.length; i++) {
             for (let j = i + 1; j < historicRoutes.length; j++) {
                 if (
-                    historicRoutes[i].source === 'itinere'
-                    && historicRoutes[j].source === 'itinere'
+                    historicRoutes[i].source === historicRoutes[j].source
+                    && (
+                        historicRoutes[i].source === 'itinere'
+                        || historicRoutes[i].source === 'rrra'
+                    )
                     && historicRoutes[i].name
                     && historicRoutes[i].name === historicRoutes[j].name
                 ) continue;

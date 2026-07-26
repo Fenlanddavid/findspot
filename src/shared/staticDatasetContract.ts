@@ -4,6 +4,14 @@ export const SM_BUNDLE_PREFIX_LENGTH = 4;
 export const AIM_BUNDLE_PREFIX_LENGTH = 4;
 export const STATIC_DATA_GENERATION = 'v2';
 export const SUPPORTED_STATIC_DATA_GENERATIONS = ['v1', STATIC_DATA_GENERATION] as const;
+export const ROMAN_ROADS_DATASET = {
+  assetPath: 'roman-roads-gb.geojson',
+  generation: 'rrra-digital-britannia-v1.0-2026-07-26',
+  inputFeatureCount: 3_572,
+  builtFeatureCount: 3_505,
+  builtBytes: 1_417_865,
+  inputSha256: 'ff4caff0b4446554660b117304554b51e7e9b1420c262f3dbdf60c0f1454b9d2',
+} as const;
 
 export type CurrentSmIndexMeta = {
   generationVersion: typeof STATIC_DATA_GENERATION;

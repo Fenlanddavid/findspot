@@ -181,14 +181,14 @@ export async function runTerrainScanPipeline(
                 } catch (error) {
                     reportNonFatal('terrain-scan', 'Cached route refresh failed', error);
                 }
-                // Itiner-e Roman roads — static asset, always available; must be
+                // RRRA Roman roads — static asset, always available; must be
                 // included here as it is in the fresh scan path, otherwise cached
                 // scans miss Roman road context and produce no corridor link lines.
                 const romanRoadResult = await fetchRomanRoadsResult(scanWest, scanSouth, scanEast, scanNorth);
                 if (romanRoadResult.routes.length > 0) {
                     routes = [...routes, ...romanRoadResult.routes];
                 } else if (!romanRoadResult.available) {
-                    onLog('> Routes: Roman road asset unavailable, continuing without Itiner-e context.', 'terrain', 'warn');
+                    onLog('> Routes: Roman road asset unavailable, continuing without RRRA context.', 'terrain', 'warn');
                 }
                 onStatusChange('Building hotspot model...');
                 const contextualized = analyzeContext(suppressed, routes)
@@ -343,13 +343,13 @@ export async function runTerrainScanPipeline(
                 onLog('> Routes: service unavailable, continuing without.', 'terrain', 'warn');
             }
 
-            // Itiner-e Roman roads — independent of OSM timeout; loads from static GeoJSON asset
+            // RRRA Roman roads — independent of OSM timeout; loads from static GeoJSON asset
             const romanRoadResult = await fetchRomanRoadsResult(scanWest, scanSouth, scanEast, scanNorth);
             if (romanRoadResult.routes.length > 0) {
                 routes = [...routes, ...romanRoadResult.routes];
                 onLog(`> Routes: ${romanRoadResult.routes.length} Roman road alignment${romanRoadResult.routes.length !== 1 ? 's' : ''} detected.`, 'terrain');
             } else if (!romanRoadResult.available) {
-                onLog('> Routes: Roman road asset unavailable, continuing without Itiner-e context.', 'terrain', 'warn');
+                onLog('> Routes: Roman road asset unavailable, continuing without RRRA context.', 'terrain', 'warn');
             }
             const routeSeconds = seconds(routeStart);
 

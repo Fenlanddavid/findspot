@@ -148,8 +148,9 @@ export interface PlaceSignal {
 export interface HistoricRoute {
     id: string;
     type: "roman_road" | "historic_trackway" | "holloway" | "green_lane" | "droveway" | "suspected_route";
-    source: "osm" | "itinere" | "historic_map_digitised" | "lidar_interpreted" | "manual";
+    source: "osm" | "itinere" | "rrra" | "historic_map_digitised" | "lidar_interpreted" | "manual";
     name?: string;
+    reference?: string;
     confidenceClass: "A" | "B" | "C" | "D";
     certaintyScore: number;
     geometry: [number, number][];

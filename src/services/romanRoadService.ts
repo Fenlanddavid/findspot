@@ -1,19 +1,22 @@
-// ─── Itiner-e Roman Road Service ─────────────────────────────────────────────
-// Loads Roman road alignments from the Itiner-e dataset (de Soto et al. 2025,
-// CC-BY-4.0). The GeoJSON is bundled in /public and served as a static asset.
-// A session-level cache avoids re-fetching on every scan.
+// ─── RRRA Roman Road Service ─────────────────────────────────────────────────
+// Loads the bundled Digital Britannia engineered-road layer. Legacy Itiner-e
+// property/source handling remains only for v4.x cached-record compatibility.
+// A session-level cache avoids re-fetching the static asset on every scan.
 
 import { HistoricRoute } from '../pages/fieldGuideTypes';
+import { ROMAN_ROADS_DATASET } from '../shared/staticDatasetContract';
 import { cachedFetchAny } from '../utils/cachedFetch';
 import { HISTORIC_CONTEXT_RADIUS_KM } from '../outstandingQuestions/contextRadius';
 import { reportNonFatal } from './diagLog';
 
-interface ItinereFeature {
+interface RomanRoadFeature {
+    id?: string;
     type: 'Feature';
     properties: {
-        Segment_s: string;
-        Name: string | null;
-        Type: string;
+        source?: 'itinere' | 'rrra';
+        name?: string | null;
+        reference?: string | null;
+        Name?: string | null;
         confidenceClass: 'A' | 'B' | 'C';
     };
     geometry: {
@@ -22,20 +25,56 @@ interface ItinereFeature {
     };
 }
 
-let _cache: Promise<ItinereFeature[]> | null = null;
+let _cache: Promise<RomanRoadFeature[]> | null = null;
 
-export function romanRoadsAssetUrl(): string {
-    return new URL(`${import.meta.env.BASE_URL}roman-roads-gb.geojson`, window.location.origin).toString();
+function hash32(value: string, seed: number): string {
+    let hash = seed;
+    for (let index = 0; index < value.length; index++) {
+        hash ^= value.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(36).padStart(7, '0');
 }
 
-function getFeatures(): Promise<ItinereFeature[]> {
+function contentRouteId(
+    source: 'itinere' | 'rrra',
+    name: string | null,
+    coordinates: number[][],
+): string {
+    const normalized = coordinates.map(([lon, lat]) => `${lon.toFixed(5)},${lat.toFixed(5)}`);
+    const forwards = normalized.join(';');
+    const backwards = [...normalized].reverse().join(';');
+    const canonicalGeometry = forwards < backwards ? forwards : backwards;
+    const content = `${name?.trim() ?? ''}|${canonicalGeometry}`;
+    return `${source}-${hash32(content, 0x811c9dc5)}${hash32(content, 0x9e3779b9)}`;
+}
+
+function routeId(
+    feat: RomanRoadFeature,
+    source: 'itinere' | 'rrra',
+    name: string | null,
+    ring: number[][],
+    ringCount: number,
+): string {
+    if (feat.id && ringCount === 1) return feat.id;
+    return contentRouteId(source, name, ring);
+}
+
+export function romanRoadsAssetUrl(): string {
+    return new URL(
+        `${import.meta.env.BASE_URL}${ROMAN_ROADS_DATASET.assetPath}`,
+        window.location.origin,
+    ).toString();
+}
+
+function getFeatures(): Promise<RomanRoadFeature[]> {
     if (!_cache) {
         _cache = cachedFetchAny(romanRoadsAssetUrl())
             .then(r => {
-                if (!r.ok) throw new Error(`roman-roads-gb.geojson: ${r.status}`);
+                if (!r.ok) throw new Error(`${ROMAN_ROADS_DATASET.assetPath}: ${r.status}`);
                 return r.json();
             })
-            .then(data => data.features as ItinereFeature[])
+            .then(data => data.features as RomanRoadFeature[])
             .catch(e => {
                 _cache = null; // allow retry
                 throw e;
@@ -46,7 +85,7 @@ function getFeatures(): Promise<ItinereFeature[]> {
 
 /**
  * Prime the module-level GeoJSON cache without blocking the call site.
- * Call this at scan start so the 150 KB asset is in-flight while other
+ * Call this at scan start so the bundled asset is in-flight while other
  * requests (NHLE, AIM, Overpass) are also running — avoids a sequential
  * wait later when fetchRomanRoads() is actually awaited.
  */
@@ -57,7 +96,7 @@ export function prefetchRomanRoads(): void {
 }
 
 /**
- * Return Itiner-e Roman road alignments within the given bounding box.
+ * Return bundled Roman road alignments within the given bounding box.
  * Adds the shared historic-context padding so nearby roads are included.
  * Multi-ring segments are split into individual HistoricRoute entries.
  */
@@ -115,6 +154,8 @@ export async function fetchRomanRoads(
 
         const p = feat.properties;
         const cls: 'A' | 'B' | 'C' = p.confidenceClass ?? 'C';
+        const source: 'itinere' | 'rrra' = p.source === 'rrra' ? 'rrra' : 'itinere';
+        const name = p.name ?? p.Name ?? null;
 
         for (const ring of rings) {
             if (ring.length < 2) continue;
@@ -122,10 +163,11 @@ export async function fetchRomanRoads(
             const lons = geomCoords.map(c => c[0]);
             const lats = geomCoords.map(c => c[1]);
             routes.push({
-                id:              `itinere-${routes.length}`,
+                id:              routeId(feat, source, name, ring, rings.length),
                 type:            'roman_road',
-                source:          'itinere',
-                name:            p.Name ?? undefined,
+                source,
+                name:            name ?? undefined,
+                reference:       p.reference ?? undefined,
                 confidenceClass: cls,
                 certaintyScore:  cls === 'A' ? 90 : cls === 'B' ? 65 : 40,
                 geometry:        geomCoords,

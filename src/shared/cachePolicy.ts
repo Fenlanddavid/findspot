@@ -145,6 +145,16 @@ export const CACHE_POLICIES = {
     backupClassification: 'not-applicable',
     invalidationOwner: 'static resource publisher',
   },
+  staticRomanRoads: {
+    owner: 'vite.config.ts',
+    storageLayer: 'service-worker',
+    expiry: {
+      strategy: 'versioned',
+      versionSource: 'ROMAN_ROADS_DATASET.generation + asset content hash',
+    },
+    backupClassification: 'not-applicable',
+    invalidationOwner: 'Vite PWA build',
+  },
   pwaPrecache: {
     owner: 'vite.config.ts',
     storageLayer: 'service-worker',

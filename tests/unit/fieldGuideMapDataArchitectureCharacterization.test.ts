@@ -53,7 +53,7 @@ describe('FieldGuide map-data architecture characterization', () => {
     expect(historicLayersHook).toContain(
       'coordinates: [find.lon + count * 0.0001, find.lat + count * 0.0001]',
     );
-    expect(historicLayersHook).toContain("historicRoutes[i].source === 'itinere'");
+    expect(historicLayersHook).toContain("historicRoutes[i].source === 'rrra'");
     expect(historicLayersHook).toContain("'Malformed route corridor skipped'");
     expect(historicLayersHook).toContain("'Malformed route crossing skipped'");
     expect(historicLayersHook).toContain('callbacksRef.current.onCrossingsLog(');

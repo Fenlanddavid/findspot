@@ -4,9 +4,14 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import pkg from './package.json'
+import { ROMAN_ROADS_DATASET } from './src/shared/staticDatasetContract'
 
 const pasDensityRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/pas-density-gb.json', import.meta.url)))
+  .digest('hex')
+const romanRoadsRevision = createHash('sha256')
+  .update(ROMAN_ROADS_DATASET.generation)
+  .update(readFileSync(new URL(`./public/${ROMAN_ROADS_DATASET.assetPath}`, import.meta.url)))
   .digest('hex')
 
 export default defineConfig({
@@ -46,12 +51,16 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,geojson}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // Explicitly precache the PAS density index (not covered by glob above
         // which excludes .json to avoid caching clubs.json / events.json).
         // Content-hash the fixed URL so Workbox replaces it when data changes.
         additionalManifestEntries: [
           { url: '/findspot/pas-density-gb.json', revision: pasDensityRevision },
+          {
+            url: `/findspot/${ROMAN_ROADS_DATASET.assetPath}`,
+            revision: romanRoadsRevision,
+          },
         ],
         // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
         // so the app works fully offline after installation.

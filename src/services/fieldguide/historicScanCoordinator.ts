@@ -282,9 +282,9 @@ export async function runHistoricScanPipeline(
                 osmRoutesAvailable = routeRaw !== null;
             }
 
-            // 6b. Itiner-e Roman roads — serve from cache when available
+            // 6b. Bundled Roman roads — serve from cache when available
             let freshRomanRoads: HistoricRoute[] = [];
-            const hasRomanRoads = routes.some(r => r.source === 'itinere');
+            const hasRomanRoads = routes.some(r => r.source === 'rrra' || r.source === 'itinere');
             let romanRoadsAvailable = opts.historicRoutesAvailable && hasRomanRoads;
             const romanStart = performance.now();
             if (!hasRomanRoads) {
@@ -299,7 +299,7 @@ export async function runHistoricScanPipeline(
                         routes = [...routes, ...freshRomanRoads];
                         onLog(`> ROUTES: ${freshRomanRoads.length} Roman road alignment${freshRomanRoads.length !== 1 ? 's' : ''} detected.`, 'historic');
                     } else if (!romanRoadResult.available) {
-                        onLog('> ROUTES: Roman road asset unavailable, continuing without Itiner-e context.', 'historic', 'warn');
+                        onLog('> ROUTES: Roman road asset unavailable, continuing without RRRA context.', 'historic', 'warn');
                     }
                 }
             }
