@@ -12,7 +12,7 @@ import { db } from '../../db';
 import {
     fetchLocationLabel, fetchHistoricContextFeatures,
     fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
-    parseOverpassRoutes,
+    parseOverpassContextRoutes,
 } from '../historicScanService';
 import { getDriftMetres, getHotspotInput } from '../../utils/fieldGuideAnalysis';
 import { enhanceHotspotsWithHistoric, buildTerrainHotspots } from '../../engines/hotspot/hotspotEngine';
@@ -276,7 +276,7 @@ export async function runHistoricScanPipeline(
             let routes = opts.routes;
             let osmRoutesAvailable = opts.historicRoutesAvailable;
             if (!opts.routes.length && routeRaw?.elements?.length) {
-                routes = parseOverpassRoutes(routeRaw.elements);
+                routes = parseOverpassContextRoutes(routeRaw.elements);
             }
             if (!opts.routes.length && !hasTerrainRouteAttempt) {
                 osmRoutesAvailable = routeRaw !== null;

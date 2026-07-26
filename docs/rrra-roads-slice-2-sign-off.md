@@ -4,7 +4,7 @@ Date: 2026-07-26
 
 Baseline: v4.12.2 plus Roman-road data-hygiene slice
 
-Status: implementation, automated verification and DS field-map verification
+Status: v4.12.5 corrective implementation and DS field-map verification
 complete; the courtesy email remains before release
 
 ## Dataset evidence
@@ -48,15 +48,31 @@ were a subset of those same 308 sub-20 m features, so they do not add another
 - The session-coverage fixture clock is pinned to one minute after its fixed
   session end time, removing its wall-clock expiry failure.
 
+## v4.12.5 production correction
+
+The v4.12.4 live check exposed a network-dependent source-policy regression.
+When Overpass succeeded, FindSpot combined RRRA with OSM relation `7612846`
+(`conjectural=yes`) and member way `497933068` (“Approximate location” and an
+estimated Fen Causeway segment). Local validation had shown only the correct
+RRRA alignment, so the supplied DS screenshot remains the ground-validated
+reference.
+
+The correction removes Roman-road requests from both Overpass scan queries and
+defensively filters any OSM feature classified as a Roman road before it reaches
+either scan coordinator. OSM historic trackways and holloways remain available.
+A permanent regression fixture contains the exact relation and member-way tags
+returned at Flag Fen and proves that only the non-Roman context routes survive
+the production policy.
+
 ## Verification matrix
 
 | Command | Result |
 |---|---|
-| `npm test` | PASS — 93 files; 917 passed; 1 intentional skip |
+| `npm test` | PASS — 94 files; 919 passed; 1 intentional skip |
 | `npm run test:worker:nix` | PASS — 10 passed |
 | `npm run test:e2e:nix` | PASS — 52 passed |
-| `npm run build` | PASS — PWA precache 53 entries / 5,036.98 KiB |
-| `npm run check:release` | PASS — v4.12.4 release metadata ready |
+| `npm run build` | PASS — PWA precache 53 entries / 5,036.41 KiB |
+| `npm run check:release` | PASS — v4.12.5 release metadata ready |
 | `git diff --check` | PASS |
 | Type floor | PASS — 883, below the 891 ceiling |
 | Explicit `any` ratchet | PASS — unchanged at 137 |

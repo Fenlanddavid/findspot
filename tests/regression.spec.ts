@@ -110,8 +110,8 @@ async function mockFieldGuideHistoricScan(page: Page) {
         id: 9002,
         type: "way",
         tags: {
-          historic: "roman_road",
-          name: "Regression Roman Road",
+          historic: "trackway",
+          name: "Regression Trackway",
         },
         geometry: [
           { lat: 53.3798, lon: -1.472 },
@@ -128,7 +128,26 @@ async function mockFieldGuideHistoricScan(page: Page) {
   await page.route("**/roman-roads-gb.geojson", route => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ type: "FeatureCollection", features: [] }),
+    body: JSON.stringify({
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        id: "rrra-regression-road",
+        properties: {
+          source: "rrra",
+          name: "Regression Roman Road",
+          reference: "regression",
+          confidenceClass: "A",
+        },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [-1.472, 53.3798],
+            [-1.468, 53.3824],
+          ],
+        },
+      }],
+    }),
   }));
   await page.route("https://findspot-geocode.trials-uk.workers.dev/reverse**", route => route.fulfill({
     status: 200,

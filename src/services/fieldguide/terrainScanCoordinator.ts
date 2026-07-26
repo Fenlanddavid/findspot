@@ -6,7 +6,7 @@ import { HistoricRoute } from '../../pages/fieldGuideTypes';
 import { db } from '../../db';
 import {
     OverpassElement,
-    parseOverpassRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
+    parseOverpassContextRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
     fetchScheduledMonuments, fetchAIMData,
 } from '../historicScanService';
 import { scanDataSource } from '../../engines/landscape/terrainEngine';
@@ -177,7 +177,7 @@ export async function runTerrainScanPipeline(
                     // time to resolve during the DB lookup and NHLE/AIM fetches.
                     const routeRaw = await Promise.race([routePromise, new Promise<null>((_, r) => setTimeout(() => r(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS))]);
                     osmRoutesAvailable = routeRaw !== null;
-                    if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
+                    if (routeRaw?.elements) routes = parseOverpassContextRoutes(routeRaw.elements as OverpassElement[]);
                 } catch (error) {
                     reportNonFatal('terrain-scan', 'Cached route refresh failed', error);
                 }
@@ -338,7 +338,7 @@ export async function runTerrainScanPipeline(
                 const timeout  = new Promise<null>((_, reject) => setTimeout(() => reject(new Error('timeout')), SCAN_CONFIG.ROUTE_FETCH_TIMEOUT_MS));
                 const routeRaw = await Promise.race([routePromise, timeout]);
                 osmRoutesAvailable = routeRaw !== null;
-                if (routeRaw?.elements) routes = parseOverpassRoutes(routeRaw.elements as OverpassElement[]);
+                if (routeRaw?.elements) routes = parseOverpassContextRoutes(routeRaw.elements as OverpassElement[]);
             } catch {
                 onLog('> Routes: service unavailable, continuing without.', 'terrain', 'warn');
             }

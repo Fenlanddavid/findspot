@@ -150,9 +150,6 @@ const KNOWN_ROMAN_ROUTE_NAMES = [
     'stanegate',
     'watling street',
 ];
-const KNOWN_ROMAN_ROUTE_NAME_REGEX = KNOWN_ROMAN_ROUTE_NAMES
-    .map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|');
 
 export type OverpassAttemptTiming = {
     endpoint: string;
@@ -799,7 +796,9 @@ export async function fetchAIMData(
 }
 
 /**
- * Overpass query for historic routes (roman roads, trackways, holloways) within 2km.
+ * Overpass query for non-Roman historic routes within 2km. RRRA Digital
+ * Britannia is the sole Roman-road source; OSM remains useful for trackways
+ * and holloways.
  */
 export async function fetchHistoricRoutes(
     lat: number,
@@ -807,10 +806,7 @@ export async function fetchHistoricRoutes(
     signal?: AbortSignal,
     options: OverpassFetchOptions = {},
 ): Promise<OverpassResponse | null> {
-    // Include relation queries so Roman roads stored as OSM route relations
-    // (e.g. Fen Causeway, Stane Street) are captured alongside tagged ways.
-    // (._;>;) recurses the relation set down to its member ways with geometry.
-    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:2000,${lat},${lng});way["roman_road"="yes"](around:2000,${lat},${lng});way["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng});way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng});relation["historic"="roman_road"](around:2000,${lat},${lng});relation["route"="historic"](around:2000,${lat},${lng});relation["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:2000,${lat},${lng}););(._;>;);out geom;`;
+    const query = `[out:json][timeout:15];(way["historic"="trackway"](around:2000,${lat},${lng});way["holloway"="yes"](around:2000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:2000,${lat},${lng}););out geom;`;
     return overpassFetch(query, signal, options);
 }
 
@@ -867,14 +863,25 @@ export function parseOverpassRoutes(elements: OverpassElement[]): import('../pag
 }
 
 /**
- * Overpass query for historic routes used during executeScan (wider search, 1km radius).
+ * Apply the production source policy: OSM contributes non-Roman historic
+ * movement routes only. Keep this guard even though the queries exclude Roman
+ * tags, so an upstream tagging overlap cannot reintroduce conjectural roads.
+ */
+export function parseOverpassContextRoutes(
+    elements: OverpassElement[],
+): import('../pages/fieldGuideTypes').HistoricRoute[] {
+    return parseOverpassRoutes(elements).filter(route => route.type !== 'roman_road');
+}
+
+/**
+ * Overpass query for non-Roman historic routes used during executeScan.
  */
 export async function fetchScanRoutes(
     lat: number,
     lng: number,
     signal?: AbortSignal
 ): Promise<OverpassResponse | null> {
-    const query = `[out:json][timeout:15];(way["historic"="roman_road"](around:1000,${lat},${lng});way["roman_road"="yes"](around:1000,${lat},${lng});way["name"~"Roman Road|${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:1000,${lat},${lng});way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng});relation["historic"="roman_road"](around:1000,${lat},${lng});relation["route"="historic"](around:1000,${lat},${lng});relation["name"~"${KNOWN_ROMAN_ROUTE_NAME_REGEX}",i](around:1000,${lat},${lng}););(._;>;);out geom;`;
+    const query = `[out:json][timeout:15];(way["historic"="trackway"](around:1000,${lat},${lng});way["holloway"="yes"](around:1000,${lat},${lng});way["highway"="track"]["historic"="yes"](around:1000,${lat},${lng}););out geom;`;
     return overpassFetch(query, signal);
 }
 
