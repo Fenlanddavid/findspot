@@ -801,6 +801,65 @@ test("field guide mobile sheet cannot scroll or rubber-band the page behind it",
   await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
 });
 
+test("field guide place search does not trigger iPhone focus zoom", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
+    localStorage.setItem("fs_onboarding_done", "1");
+    localStorage.setItem("fs_fg_helpers_seen", "1");
+  });
+
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
+
+  await page.getByRole("button", { name: "Search place" }).click();
+  const searchInput = page.getByPlaceholder("Search place...");
+
+  await expect(searchInput).toBeFocused();
+  await expect(searchInput).toHaveCSS("font-size", "16px");
+  await expect(page.getByTestId("fieldguide-mobile-sheet")).toBeVisible();
+});
+
+test("iPhone receives the focus-zoom viewport policy", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperties(navigator, {
+      userAgent: {
+        configurable: true,
+        value: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1",
+      },
+      platform: { configurable: true, value: "iPhone" },
+      maxTouchPoints: { configurable: true, value: 5 },
+    });
+  });
+
+  await page.goto("./");
+
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    "content",
+    "width=device-width, initial-scale=1.0, maximum-scale=1.0",
+  );
+});
+
+test("Android retains the existing viewport policy", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperties(navigator, {
+      userAgent: {
+        configurable: true,
+        value: "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/138.0.0.0 Mobile Safari/537.36",
+      },
+      platform: { configurable: true, value: "Linux armv8l" },
+      maxTouchPoints: { configurable: true, value: 5 },
+    });
+  });
+
+  await page.goto("./");
+
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
+    "content",
+    "width=device-width, initial-scale=1.0",
+  );
+});
+
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
   const basePack = {
     type: "findspot-club-day-pack",

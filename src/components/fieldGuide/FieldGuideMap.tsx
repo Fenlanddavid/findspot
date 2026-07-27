@@ -619,7 +619,7 @@ export function FieldGuideMap() {
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="Search place..."
-                            className="w-full bg-slate-900/90 border border-white/10 text-white px-3 py-2.5 rounded-xl text-xs outline-none focus:ring-1 focus:ring-emerald-500 shadow-xl backdrop-blur-md"
+                            className="w-full bg-slate-900/90 border border-white/10 text-white px-3 py-2.5 rounded-xl text-base outline-none focus:ring-1 focus:ring-emerald-500 shadow-xl backdrop-blur-md"
                         />
                     </form>
                 </div>

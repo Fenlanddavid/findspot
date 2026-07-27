@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'Coverage opens faster, and geology outages are now reported accurately.';
+export const UPDATE_NOTES = 'iPhone and iPad forms now stay in place when you tap to type.';
