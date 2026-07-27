@@ -13,6 +13,10 @@ export const ROMAN_ROADS_DATASET = {
   inputSha256: 'ff4caff0b4446554660b117304554b51e7e9b1420c262f3dbdf60c0f1454b9d2',
 } as const;
 
+export function romanRoadsAssetRequestPath(): string {
+  return `${ROMAN_ROADS_DATASET.assetPath}?generation=${encodeURIComponent(ROMAN_ROADS_DATASET.generation)}`;
+}
+
 export type CurrentSmIndexMeta = {
   generationVersion: typeof STATIC_DATA_GENERATION;
   schemaVersion: typeof SM_INDEX_SCHEMA_VERSION;

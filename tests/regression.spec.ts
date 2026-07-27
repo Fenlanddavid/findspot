@@ -125,7 +125,7 @@ async function mockFieldGuideHistoricScan(page: Page) {
   await page.route("https://services.arcgisonline.com/**", route => route.abort());
   await page.route("https://environment.data.gov.uk/**", route => route.abort());
   await page.route("https://mapseries-tilesets.s3.amazonaws.com/**", route => route.abort());
-  await page.route("**/roman-roads-gb.geojson", route => route.fulfill({
+  await page.route("**/roman-roads-gb.geojson?generation=*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({
@@ -709,6 +709,37 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
   await expect(page.getByText("Ready to Scan")).toBeVisible();
 
+  // Reproduce an installed PWA upgraded from the old Itiner-e asset. The
+  // current generation-scoped request must not match this stable legacy URL
+  // when cachedFetchAny searches every Cache Storage cache.
+  await page.evaluate(async () => {
+    const cache = await caches.open("regression-stale-roman-roads");
+    await cache.put(
+      new URL("/findspot/roman-roads-gb.geojson", window.location.origin),
+      new Response(JSON.stringify({
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          properties: {
+            source: "itinere",
+            name: "Stale Itiner-e Road",
+            confidenceClass: "B",
+          },
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [-1.473, 53.379],
+              [-1.467, 53.383],
+            ],
+          },
+        }],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+
   await page.getByRole("button", { name: "Scan Area", exact: true }).click();
 
   await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -723,6 +754,7 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await detailsButton.click();
   await expect(page.getByText("Movement Corridors & Roads")).toBeVisible();
   await expect(page.getByText("Regression Roman Road", { exact: true })).toBeVisible();
+  await expect(page.getByText("Stale Itiner-e Road", { exact: true })).toHaveCount(0);
 
   const cacheRows = await readIndexedDbStore(page, "fieldGuideCache") as any[];
   expect(cacheRows.some(row => (

@@ -7,6 +7,7 @@ import {
   STATIC_DATA_GENERATION,
   isCurrentAimIndexMeta,
   isCurrentSmIndexMeta,
+  romanRoadsAssetRequestPath,
   smBundleIndexKey,
   smBundleKey,
 } from '../../src/shared/staticDatasetContract';
@@ -62,5 +63,8 @@ describe('static dataset generation metadata', () => {
     ));
     expect(asset.size).toBe(ROMAN_ROADS_DATASET.builtBytes);
     expect(asset.size).toBeLessThanOrEqual(3 * 1024 * 1024);
+    expect(romanRoadsAssetRequestPath()).toBe(
+      'roman-roads-gb.geojson?generation=rrra-digital-britannia-v1.0-2026-07-26',
+    );
   });
 });

@@ -4,7 +4,10 @@
 // A session-level cache avoids re-fetching the static asset on every scan.
 
 import { HistoricRoute } from '../pages/fieldGuideTypes';
-import { ROMAN_ROADS_DATASET } from '../shared/staticDatasetContract';
+import {
+    ROMAN_ROADS_DATASET,
+    romanRoadsAssetRequestPath,
+} from '../shared/staticDatasetContract';
 import { cachedFetchAny } from '../utils/cachedFetch';
 import { HISTORIC_CONTEXT_RADIUS_KM } from '../outstandingQuestions/contextRadius';
 import { reportNonFatal } from './diagLog';
@@ -62,7 +65,7 @@ function routeId(
 
 export function romanRoadsAssetUrl(): string {
     return new URL(
-        `${import.meta.env.BASE_URL}${ROMAN_ROADS_DATASET.assetPath}`,
+        `${import.meta.env.BASE_URL}${romanRoadsAssetRequestPath()}`,
         window.location.origin,
     ).toString();
 }

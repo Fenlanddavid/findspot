@@ -4,7 +4,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import pkg from './package.json'
-import { ROMAN_ROADS_DATASET } from './src/shared/staticDatasetContract'
+import {
+  ROMAN_ROADS_DATASET,
+  romanRoadsAssetRequestPath,
+} from './src/shared/staticDatasetContract'
 
 const pasDensityRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/pas-density-gb.json', import.meta.url)))
@@ -58,7 +61,7 @@ export default defineConfig({
         additionalManifestEntries: [
           { url: '/findspot/pas-density-gb.json', revision: pasDensityRevision },
           {
-            url: `/findspot/${ROMAN_ROADS_DATASET.assetPath}`,
+            url: `/findspot/${romanRoadsAssetRequestPath()}`,
             revision: romanRoadsRevision,
           },
         ],

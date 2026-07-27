@@ -71,10 +71,21 @@ describe('Roman road context fetch', () => {
     }), { status: 200 }));
   });
 
+  it('scopes the fixed asset filename to the RRRA dataset generation', async () => {
+    const { romanRoadsAssetUrl } = await import('../../src/services/romanRoadService');
+
+    expect(romanRoadsAssetUrl()).toBe(
+      'https://example.test/roman-roads-gb.geojson?generation=rrra-digital-britannia-v1.0-2026-07-26',
+    );
+  });
+
   it('characterizes output shape, scoring and MultiLineString splitting', async () => {
     const { fetchRomanRoads } = await import('../../src/services/romanRoadService');
     const routes = await fetchRomanRoads(-0.005, 51.995, 0.005, 52.005);
 
+    expect(mocks.cachedFetchAny).toHaveBeenCalledWith(
+      'https://example.test/roman-roads-gb.geojson?generation=rrra-digital-britannia-v1.0-2026-07-26',
+    );
     expect(routes.map(({ id: _id, ...route }) => route)).toEqual([
       {
         type: 'roman_road',

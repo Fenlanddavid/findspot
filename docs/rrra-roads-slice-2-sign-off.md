@@ -4,7 +4,7 @@ Date: 2026-07-26
 
 Baseline: v4.12.2 plus Roman-road data-hygiene slice
 
-Status: v4.12.5 corrective implementation and DS field-map verification
+Status: v4.12.6 corrective implementation and DS field-map verification
 complete; the courtesy email remains before release
 
 ## Dataset evidence
@@ -40,7 +40,8 @@ were a subset of those same 308 sub-20 m features, so they do not add another
 - `HISTORIC_CACHE_VERSION` is `HISTORIC-2026.07.26b`.
 - The static-dataset and cache-policy contracts register the generation,
   measured byte size, input hash and service-worker invalidation owner.
-- The PWA manifest contains exactly one `roman-roads-gb.geojson` precache entry.
+- The PWA manifest contains exactly one generation-scoped
+  `roman-roads-gb.geojson` precache entry.
 - The same-name/same-source crossing suppression remains in place for RRRA
   segments; it was not retired without diagnostic evidence.
 - NOTICE and Settings expose the RRRA attribution and permanent fee-charging
@@ -64,15 +65,29 @@ A permanent regression fixture contains the exact relation and member-way tags
 returned at Flag Fen and proves that only the non-Roman context routes survive
 the production policy.
 
+## v4.12.6 stale-asset correction
+
+The v4.12.4 live screenshot also contained old schematic Itiner-e alignments.
+The stable Roman-road URL was loaded through `caches.match()` across all Cache
+Storage caches, allowing an older Workbox or offline-pack entry to shadow the
+RRRA asset even while newer app JavaScript was running.
+
+The app request and PWA precache entry now include
+`?generation=rrra-digital-britannia-v1.0-2026-07-26`. A permanent browser
+regression seeds the old unversioned URL with an Itiner-e fixture and proves a
+full historic scan uses only the generation-scoped RRRA response. The same test
+passes against the built production preview.
+
 ## Verification matrix
 
 | Command | Result |
 |---|---|
-| `npm test` | PASS — 94 files; 919 passed; 1 intentional skip |
+| `npm test` | PASS — 94 files; 920 passed; 1 intentional skip |
 | `npm run test:worker:nix` | PASS — 10 passed |
 | `npm run test:e2e:nix` | PASS — 52 passed |
-| `npm run build` | PASS — PWA precache 53 entries / 5,036.41 KiB |
-| `npm run check:release` | PASS — v4.12.5 release metadata ready |
+| `npm run build` | PASS — PWA precache 53 entries / 5,036.51 KiB |
+| `npm run check:release` | PASS — v4.12.6 release metadata ready |
+| Built preview cache regression | PASS — stale unversioned Itiner-e entry bypassed |
 | `git diff --check` | PASS |
 | Type floor | PASS — 883, below the 891 ceiling |
 | Explicit `any` ratchet | PASS — unchanged at 137 |
