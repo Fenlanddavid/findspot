@@ -394,10 +394,11 @@ function findMatchesPrediction(
   if (prediction.permissionId && find.permissionId !== prediction.permissionId) return false;
   const createdAt = Date.parse(find.createdAt);
   const foundAt = find.foundAt ? Date.parse(find.foundAt) : Number.NaN;
-  if (
-    (!Number.isFinite(createdAt) || createdAt < prediction.surfacedAt)
-    && (!Number.isFinite(foundAt) || foundAt < prediction.surfacedAt)
-  ) return false;
+  // The actual find time is authoritative. Legacy records without a usable
+  // foundAt fall back to their creation time; a later recording timestamp must
+  // never turn an earlier find into a calibration hit.
+  const eventAt = Number.isFinite(foundAt) ? foundAt : createdAt;
+  if (!Number.isFinite(eventAt) || eventAt < prediction.surfacedAt) return false;
   const [[west, south], [east, north]] = prediction.bounds;
   return (
     find.lon >= west && find.lon <= east && find.lat >= south && find.lat <= north

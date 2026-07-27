@@ -72,18 +72,10 @@ describe('persisted cache validation', () => {
       raw: { bedrockName: 'Mudstone' },
       landscapeClass: 'heavy_clay',
       confidence: 'high',
-      modifiers: {
-        hydrology: 0,
-        terrain: -2,
-        spectral: 0,
-        route: 0,
-        soilMechanics: 2,
-        preservation: 1,
-        movementRisk: 0,
-      },
+      scoreModifier: -5,
       explanation: ['Clay-rich bedrock'],
       fetchedAt: 1_700_000_000_000,
-      classifierVersion: 2,
+      classifierVersion: 3,
       sourceVersion: 'bgs625k-v2',
     };
     const record = {
@@ -96,7 +88,19 @@ describe('persisted cache validation', () => {
     };
 
     expect(safeParseGeologyContextRecord(record)?.context.landscapeClass).toBe('heavy_clay');
-    expect(safeParseGeologyContextRecord({ ...record, context: { ...context, modifiers: null } })).toBeNull();
+    expect(safeParseGeologyContextRecord({
+      ...record,
+      context: { ...context, scoreModifier: null },
+    })).toBeNull();
+    expect(safeParseGeologyContextRecord({
+      ...record,
+      context: {
+        ...context,
+        scoreModifier: undefined,
+        modifiers: { route: 3, soilMechanics: -4, spectral: -2, movementRisk: -2 },
+        classifierVersion: 2,
+      },
+    })).toBeNull();
   });
 
   it('accepts a valid landscape interpretation record and rejects damaged evidence', () => {

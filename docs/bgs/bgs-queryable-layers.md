@@ -110,7 +110,7 @@ Archive confirmed attribute names here once GetFeatureInfo responses have been i
 
 All uses of BGS data in FindSpot must include:
 
-> Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.
+> Contains British Geological Survey materials © UKRI 2026. BGS data is used under the Open Government Licence.
 
 This attribution is present in:
 - Settings → App → External Data Sources section

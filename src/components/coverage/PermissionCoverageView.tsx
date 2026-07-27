@@ -7,7 +7,11 @@ import {
   SectionCoverageMap,
   summarizeSectionEvidence,
 } from './SectionCoverageMap';
+import { CoverageSetupError } from './CoverageSetupError';
 import { SessionCoverageReview } from './SessionCoverageReview';
+import { useSessionCoverageNow } from './useSessionCoverageNow';
+
+const EMPTY_SESSIONS: never[] = [];
 
 function formatObservedDate(timestamp: number | null): string {
   if (timestamp === null || !Number.isFinite(timestamp)) return 'Not marked searched';
@@ -29,6 +33,7 @@ export function PermissionCoverageView(props: {
   const [directSessionId, setDirectSessionId] = useState<string | null>(null);
 
   useEffect(() => {
+    setSetupError(false);
     preparePermissionSearchedAreas(props.permissionId).catch(() => {
       setSetupError(true);
     });
@@ -58,14 +63,16 @@ export function PermissionCoverageView(props: {
   const sectionIds = new Set(sections.map(section => section.id));
   const observations = allObservations
     .filter(observation => sectionIds.has(observation.sectionId));
-  const editableSessions = useLiveQuery(
+  const sessionRows = useLiveQuery(
     () => pagePersistence.sessions
       .where('permissionId')
       .equals(props.permissionId)
-      .filter(session => canEditSessionCoverage(session))
       .toArray(),
     [props.permissionId],
-  ) ?? [];
+  );
+  const coverageNow = useSessionCoverageNow(sessionRows ?? EMPTY_SESSIONS);
+  const editableSessions = (sessionRows ?? EMPTY_SESSIONS)
+    .filter(session => canEditSessionCoverage(session, coverageNow));
   const latestEditableSession = editableSessions
     .filter(session => session.fieldId === props.fieldId)
     .sort((left, right) =>
@@ -201,9 +208,7 @@ export function PermissionCoverageView(props: {
       )}
 
       {setupError ? (
-        <p className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-600 dark:bg-red-950/20 dark:text-red-400">
-          Coverage sections could not be prepared.
-        </p>
+        <CoverageSetupError />
       ) : (
         <SectionCoverageMap
           sections={sections}

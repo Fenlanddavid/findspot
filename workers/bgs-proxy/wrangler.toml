@@ -2,8 +2,16 @@ name            = "findspot-bgs-proxy"
 main            = "index.js"
 compatibility_date = "2026-07-23"
 
+# Browser-origin admission discourages third-party browser hotlinking. It is
+# not authentication; non-browser clients can forge Origin. Add preview or
+# alternate local origins through this variable rather than source changes.
+[vars]
+ALLOWED_ORIGINS = "https://fenlanddavid.github.io,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
+
+[observability]
+enabled = true
+
 # No KV, Durable Objects or secrets needed.
-# All configuration is inline in index.js.
 #
 # Deploy:
 #   cd workers/bgs-proxy

@@ -3,7 +3,7 @@
 // Operates entirely on existing scan outputs: no new API calls, no new datasets,
 // no additional raster processing, no new scan stages.
 //
-// Pipeline position: after applyGeologyModifiers(), before UI render.
+// Pipeline position: after applyGeologyModifier(), before UI render.
 // Target overhead: <100ms per hotspot, <50ms for field summary.
 
 import type {

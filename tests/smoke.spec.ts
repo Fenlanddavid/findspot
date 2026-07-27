@@ -125,7 +125,7 @@ test("settings clears regenerable Field Guide caches without deleting saved poin
         centroid: { lat: 52, lon: -1 },
         context: {},
         fetchedAt: Date.now(),
-        classifierVersion: 2,
+        classifierVersion: 3,
         sourceVersion: "test",
       });
       tx.objectStore("landscapeInterpretations").put({

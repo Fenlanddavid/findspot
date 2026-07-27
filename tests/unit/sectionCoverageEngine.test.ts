@@ -205,6 +205,50 @@ describe('section derivation', () => {
 });
 
 describe('coverage prediction resolution', () => {
+  it('does not count a find made before the prediction but recorded afterwards', () => {
+    const decisions = resolvePredictionDecisions({
+      predictions: [prediction()],
+      finds: [{
+        id: 'find-1',
+        permissionId: 'permission-1',
+        lat: 0.5,
+        lon: 0.5,
+        foundAt: new Date(SURFACED_AT - 1).toISOString(),
+        createdAt: new Date(SURFACED_AT + 1).toISOString(),
+      }],
+      sections: [],
+      observations: [],
+      trackedCoverageByPrediction: new Map(),
+    });
+
+    expect(decisions).toEqual([]);
+  });
+
+  it('uses createdAt only when foundAt is absent or invalid', () => {
+    const baseFind = {
+      permissionId: 'permission-1',
+      lat: 0.5,
+      lon: 0.5,
+      createdAt: new Date(SURFACED_AT + 1).toISOString(),
+    };
+    for (const find of [
+      { ...baseFind, id: 'missing-found-at' },
+      { ...baseFind, id: 'invalid-found-at', foundAt: 'not-a-date' },
+    ]) {
+      const decisions = resolvePredictionDecisions({
+        predictions: [prediction()],
+        finds: [find],
+        sections: [],
+        observations: [],
+        trackedCoverageByPrediction: new Map(),
+      });
+      expect(decisions).toEqual([expect.objectContaining({
+        outcome: 'hit',
+        matchedFindId: find.id,
+      })]);
+    }
+  });
+
   it('treats a find visit as hit-only evidence, never a searched-no-find', () => {
     const decisions = resolvePredictionDecisions({
       predictions: [prediction()],

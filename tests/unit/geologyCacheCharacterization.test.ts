@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, type GeologyContextRecord } from "../../src/db";
 import {
+  cacheEmptyGeologyContext,
   cacheGeologyContext,
   getCachedGeologyContext,
   sweepStaleGeologyCache,
@@ -25,15 +26,7 @@ function context(overrides: Partial<GeologyContext> = {}): GeologyContext {
     raw: { bedrockName: "Chalk" },
     landscapeClass: "chalk_downland",
     confidence: "high",
-    modifiers: {
-      hydrology: 0,
-      terrain: 0,
-      spectral: 0,
-      route: 0,
-      soilMechanics: 0,
-      preservation: 0,
-      movementRisk: 0,
-    },
+    scoreModifier: 7,
     explanation: ["Characterized geology context"],
     fetchedAt: NOW,
     classifierVersion: GEOLOGY_CLASSIFIER_VERSION,
@@ -70,7 +63,10 @@ describe("geology cache persistence characterization", () => {
 
     await cacheGeologyContext(value);
 
-    expect(await getCachedGeologyContext(value.tileKey)).toEqual(value);
+    expect(await getCachedGeologyContext(value.tileKey)).toEqual({
+      kind: "context",
+      context: value,
+    });
     expect(await db.geologyContext.get(value.tileKey)).toEqual(record(value));
   });
 
@@ -85,12 +81,28 @@ describe("geology cache persistence characterization", () => {
       context: { unexpected: true },
     });
 
-    expect(await getCachedGeologyContext("stale")).toBeNull();
-    expect(await getCachedGeologyContext("malformed")).toBeNull();
+    expect(await getCachedGeologyContext("stale")).toEqual({ kind: "miss" });
+    expect(await getCachedGeologyContext("malformed")).toEqual({ kind: "miss" });
     expect(await db.geologyContext.bulkGet(["stale", "malformed"])).toEqual([
       undefined,
       undefined,
     ]);
+  });
+
+  it("round-trips a valid empty marker without changing the database schema", async () => {
+    const tileKey = buildTileKey(52.3, 0.2);
+
+    await cacheEmptyGeologyContext(tileKey, { lat: 52.3, lon: 0.2 }, NOW);
+
+    expect(await getCachedGeologyContext(tileKey)).toEqual({ kind: "empty" });
+    expect(await db.geologyContext.get(tileKey)).toEqual({
+      tileKey,
+      centroid: { lat: 52.3, lon: 0.2 },
+      empty: true,
+      fetchedAt: NOW,
+      classifierVersion: GEOLOGY_CLASSIFIER_VERSION,
+      sourceVersion: GEOLOGY_SOURCE_VERSION,
+    });
   });
 
   it("sweeps expired and mismatched-version rows while retaining current rows", async () => {

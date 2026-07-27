@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "./fixtures";
 import type { Cluster, Hotspot, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
-import { applyGeologyModifiers } from "../src/engines/hotspot/hotspotEngine";
+import { applyGeologyModifier } from "../src/engines/hotspot/hotspotEngine";
 import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier";
 import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
 import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
@@ -798,7 +798,7 @@ test("field guide mobile sheet cannot scroll or rubber-band the page behind it",
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();
   await expect(page).toHaveURL(/\/findspot\/?$/);
-  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).not.toBe("hidden");
+  await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
 });
 
 test("Club Day re-scan updates one local rally without losing referenced old fields", async ({ page }) => {
@@ -1030,16 +1030,16 @@ test("classifyGeology: artificial ground appends caution regardless of class", (
 
 test("buildGeologyDisplay: chalk_downland produces correct labels and no cautions", () => {
   const ctx: GeologyContext = {
-    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
+    tileKey: "geology:gcpvj2:classifier:v3:source:bgs625k-v2",
     centroid: { lat: 51.0, lon: -1.5 },
     source: { bedrock: "BGS_625K" },
     raw: { bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" },
     landscapeClass: "chalk_downland",
     confidence: "high",
-    modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
+    scoreModifier: 0,
     explanation: ["Chalk bedrock mapped."],
     fetchedAt: Date.now(),
-    classifierVersion: 2,
+    classifierVersion: 3,
     sourceVersion: "bgs625k-v2",
   };
   const display = buildGeologyDisplay(ctx);
@@ -1051,16 +1051,16 @@ test("buildGeologyDisplay: chalk_downland produces correct labels and no caution
 
 test("buildGeologyDisplay: artificial ground adds caution string", () => {
   const ctx: GeologyContext = {
-    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
+    tileKey: "geology:gcpvj2:classifier:v3:source:bgs625k-v2",
     centroid: { lat: 51.5, lon: -0.1 },
     source: {},
     raw: { artificialGround: { present: true, type: "made_ground" } },
     landscapeClass: "mixed_uncertain",
     confidence: "low",
-    modifiers: { hydrology: 0, terrain: 0, spectral: 0, route: 0, soilMechanics: 0, preservation: 0, movementRisk: 0 },
+    scoreModifier: 0,
     explanation: [],
     fetchedAt: Date.now(),
-    classifierVersion: 2,
+    classifierVersion: 3,
     sourceVersion: "bgs625k-v2",
   };
   const display = buildGeologyDisplay(ctx);
@@ -1068,7 +1068,7 @@ test("buildGeologyDisplay: artificial ground adds caution string", () => {
   expect(display.cautions[0]).toContain("made ground");
 });
 
-test("fetchBgsGeology: returns timedOut=true when request exceeds timeout", async () => {
+test("fetchBgsGeology: classifies a request timeout", async () => {
   // Override global fetch with a never-resolving stub and a short timeout override.
   const origFetch = globalThis.fetch;
   const origSetTimeout = globalThis.setTimeout;
@@ -1090,8 +1090,7 @@ test("fetchBgsGeology: returns timedOut=true when request exceeds timeout", asyn
 
   try {
     const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
-    expect(result.timedOut).toBe(true);
-    expect(result.data).toBeNull();
+    expect(result).toEqual({ ok: false, kind: "timeout" });
   } finally {
     globalThis.fetch = origFetch;
     globalThis.setTimeout = origSetTimeout;
@@ -1108,7 +1107,7 @@ test("classifyGeology: tidal flat → foreshore (not peat_fen)", () => {
   expect(result.confidence).toBe("high");
 });
 
-test("applyGeologyModifiers: gates on primary signals and refreshes score ordering", () => {
+test("applyGeologyModifier: gates on primary signals and refreshes score ordering", () => {
   const boosted = regressionHotspot("boosted", 54, {
     anomaly: 12,
     context: 7,
@@ -1128,20 +1127,20 @@ test("applyGeologyModifiers: gates on primary signals and refreshes score orderi
     signalClassCount: 1,
   });
   const ctx: GeologyContext = {
-    tileKey: "geology:gcpvj2:classifier:v2:source:bgs625k-v2",
+    tileKey: "geology:gcpvj2:classifier:v3:source:bgs625k-v2",
     centroid: { lat: 51.0, lon: -1.5 },
     source: { bedrock: "BGS_625K" },
     raw: { bedrockName: "CHALK FORMATION", bedrockLithology: "CHALK" },
     landscapeClass: "chalk_downland",
     confidence: "high",
-    modifiers: { hydrology: 3, terrain: 2, route: 2, preservation: 0, soilMechanics: 0, spectral: 0, movementRisk: 0 },
+    scoreModifier: 7,
     explanation: ["Chalk bedrock mapped."],
     fetchedAt: Date.now(),
-    classifierVersion: 2,
+    classifierVersion: 3,
     sourceVersion: "bgs625k-v2",
   };
 
-  const result = applyGeologyModifiers([suppressed, boosted], ctx);
+  const result = applyGeologyModifier([suppressed, boosted], ctx);
 
   expect(result.appliedCount).toBe(1);
   expect(result.suppressedCount).toBe(1);
@@ -1153,19 +1152,24 @@ test("applyGeologyModifiers: gates on primary signals and refreshes score orderi
   expect(result.hotspots[1].score).toBe(58);
 });
 
-test("fetchBgsGeology: empty GML feature collection returns data=null", async () => {
-  const origFetch = globalThis.fetch;
-  const EMPTY_GML = '<?xml version="1.0" encoding="UTF-8"?><FeatureCollection xmlns:gml="http://www.opengis.net/gml"/>';
-  globalThis.fetch = async () => new Response(EMPTY_GML, {
-    status: 200,
-    headers: { "Content-Type": "application/vnd.ogc.gml" },
+test("fetchBgsGeology: classifies an empty GML feature collection", async ({ page }) => {
+  await page.goto("./");
+  const result = await page.evaluate(async () => {
+    const { fetchBgsGeology: fetchInBrowser } = await import(
+      "/findspot/src/engines/geologyContext/geologyContextClient.ts"
+    );
+    const originalFetch = globalThis.fetch;
+    const emptyGml = '<?xml version="1.0" encoding="UTF-8"?><FeatureCollection xmlns:gml="http://www.opengis.net/gml"/>';
+    globalThis.fetch = async () => new Response(emptyGml, {
+      status: 200,
+      headers: { "Content-Type": "application/vnd.ogc.gml" },
+    });
+    try {
+      return await fetchInBrowser({ lat: 51.5, lon: -1.5 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
-  try {
-    const result = await fetchBgsGeology({ lat: 51.5, lon: -1.5 });
-    expect(result.data).toBeNull();
-    expect(result.timedOut).toBe(false);
-    expect(result.corsError).toBe(false);
-  } finally {
-    globalThis.fetch = origFetch;
-  }
+
+  expect(result).toEqual({ ok: false, kind: "empty" });
 });

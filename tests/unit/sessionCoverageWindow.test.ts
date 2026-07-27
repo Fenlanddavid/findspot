@@ -4,6 +4,7 @@ import {
   canEditSessionCoverage,
   sessionCoverageEditDeadline,
 } from '../../src/shared/sessionCoveragePolicy';
+import { nextSessionCoverageDeadline } from '../../src/components/coverage/useSessionCoverageNow';
 
 function session(endTime?: string): Session {
   return {
@@ -37,5 +38,22 @@ describe('session coverage recall window', () => {
   it('does not infer a deadline when a finished session has no end time', () => {
     expect(sessionCoverageEditDeadline(session())).toBeNull();
     expect(canEditSessionCoverage(session())).toBe(false);
+  });
+
+  it('schedules the nearest live edit deadline and drops elapsed deadlines', () => {
+    const first = session('2026-07-20T12:00:00.000Z');
+    const second = {
+      ...session('2026-07-20T13:00:00.000Z'),
+      id: 'session-2',
+    };
+
+    expect(nextSessionCoverageDeadline(
+      [second, first],
+      Date.parse('2026-07-22T11:00:00.000Z'),
+    )).toBe(Date.parse('2026-07-22T12:00:00.000Z'));
+    expect(nextSessionCoverageDeadline(
+      [first],
+      Date.parse('2026-07-22T12:00:00.001Z'),
+    )).toBeNull();
   });
 });

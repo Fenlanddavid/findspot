@@ -42,6 +42,7 @@ import {
   TERMS_OF_USE_VERSION,
 } from "../utils/legalCopy";
 import { clearFieldGuideCaches } from "../services/fieldGuideMutations";
+import { BGS_ATTRIBUTION } from "../shared/bgsAttribution";
 
 type RestoreCounts = {
   projects: number;
@@ -1280,7 +1281,7 @@ export default function Settings() {
 
           <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
             <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
-              <p>Contains British Geological Survey materials © UKRI 2025. BGS data is used under the Open Government Licence.</p>
+              <p>{BGS_ATTRIBUTION} BGS data is used under the Open Government Licence.</p>
               <p>Scheduled Monument and AIM data are provided through public Historic England map services. Welsh Scheduled Ancient Monument data is provided by The Welsh Historic Environment Service (Cadw) under the Open Government Licence v3.0. Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] 2026, licensed under the Open Government Licence v3.0.</p>
               <p>Contains Portable Antiquities Scheme public data from finds.org.uk, used under CC-BY attribution terms. PAS density is aggregated to H3 landscape cells and reflects recording activity, not a complete archaeological inventory.</p>
               <p>Digital Britannia © Mike Haken 2026, Roman Roads Research Association (RRRA). Licensed CC BY-NC 4.0. Not for use in fee-charging applications without prior written consent.</p>

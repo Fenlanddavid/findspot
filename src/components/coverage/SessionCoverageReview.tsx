@@ -14,9 +14,12 @@ import {
   SectionCoverageMap,
   summarizeSectionEvidence,
 } from './SectionCoverageMap';
+import { CoverageSetupError } from './CoverageSetupError';
+import { useSessionCoverageNow } from './useSessionCoverageNow';
 import type { SessionCoverageObservation } from '../../shared/coverageTypes';
 
 const EMPTY_OBSERVATIONS: SessionCoverageObservation[] = [];
+const EMPTY_SESSIONS: never[] = [];
 
 function formatEditDeadline(timestamp: number): string {
   return new Intl.DateTimeFormat('en-GB', {
@@ -41,6 +44,7 @@ export function SessionCoverageReview(props: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sectionsReady, setSectionsReady] = useState(false);
+  const [setupError, setSetupError] = useState(false);
 
   const session = useLiveQuery(
     () => pagePersistence.sessions.get(props.sessionId),
@@ -80,8 +84,11 @@ export function SessionCoverageReview(props: {
     if (!session) return;
     let cancelled = false;
     setSectionsReady(false);
+    setSetupError(false);
     preparePermissionSearchedAreas(session.permissionId)
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setSetupError(true);
+      })
       .finally(() => {
         if (!cancelled) setSectionsReady(true);
       });
@@ -126,7 +133,13 @@ export function SessionCoverageReview(props: {
     ),
     [observations],
   );
-  const editable = !!session?.fieldId && canEditSessionCoverage(session);
+  const coverageSessions = useMemo(
+    () => session ? [session] : EMPTY_SESSIONS,
+    [session],
+  );
+  const coverageNow = useSessionCoverageNow(coverageSessions);
+  const editable = !!session?.fieldId
+    && canEditSessionCoverage(session, coverageNow);
   const deadline = session ? sessionCoverageEditDeadline(session) : null;
   const coveredCount = new Set(
     observations
@@ -168,13 +181,18 @@ export function SessionCoverageReview(props: {
       if (props.onClose) props.onClose();
       else setOpen(false);
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : 'Searched areas could not be saved.');
+      const message = errorValue instanceof Error ? errorValue.message : '';
+      setError(message === 'Coverage can only be changed for 48 hours after a session ends.'
+        ? 'The 48-hour edit window lapsed while this panel was open. Your previous coverage is unchanged.'
+        : message || 'Searched areas could not be saved.');
     } finally {
       setSaving(false);
     }
   }
 
-  if (!sectionsReady || !sections || sections.length === 0) return null;
+  if (!sectionsReady || !sections) return null;
+  if (setupError) return <CoverageSetupError />;
+  if (sections.length === 0) return null;
 
   if (!open) {
     return (

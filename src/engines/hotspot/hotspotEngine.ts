@@ -10,7 +10,6 @@ import type { PASCellLookup } from '../../services/pasDensityService';
 import { getDistance, getDistanceToLine, getDistanceKm, getRouteTypeWeight, computeFieldReliabilityScore } from '../../utils/fieldGuideAnalysis';
 import { computeLandscapeReading } from '../landscape/landscapeReadingEngine';
 import type { GeologyContext } from '../geologyContext/geologyContextTypes';
-import { netGeologyScore } from '../geologyContext/geologyModifiers';
 import {
     hotspotExplanation,
     prioritiseHotspotExplanations,
@@ -1287,25 +1286,32 @@ function analyzeHotspotRelationships(hotspots: Hotspot[]): Hotspot[] {
 
 // ─── Geology modifier application ────────────────────────────────────────────
 // Applied after both terrain and historic enhancement are complete.
-// GEOLOGY_RULE: modifiers only apply when a primary non-geology signal is present.
+// GEOLOGY_RULE: the modifier only applies when a primary non-geology signal is present.
 // Combined effect is clamped to [-15, +12] per the Phase 2 cap.
 
 export type GeologyApplyResult = {
     hotspots:    Hotspot[];
     appliedCount: number;
     suppressedCount: number;
-    netScore:    number;
+    scoreModifier: number;
 };
 
-export function applyGeologyModifiers(
+export function applyGeologyModifier(
     hotspots:       Hotspot[],
     geologyContext: GeologyContext,
 ): GeologyApplyResult {
-    const net = netGeologyScore(geologyContext.modifiers);
-    const clampedNet = Math.max(-15, Math.min(12, net));
+    const clampedModifier = Math.max(
+        -15,
+        Math.min(12, geologyContext.scoreModifier),
+    );
 
-    if (clampedNet === 0) {
-        return { hotspots, appliedCount: 0, suppressedCount: 0, netScore: 0 };
+    if (clampedModifier === 0) {
+        return {
+            hotspots,
+            appliedCount: 0,
+            suppressedCount: 0,
+            scoreModifier: 0,
+        };
     }
 
     let appliedCount   = 0;
@@ -1320,7 +1326,7 @@ export function applyGeologyModifiers(
             return h;
         }
         appliedCount++;
-        const score = Math.min(98, Math.max(0, h.score + clampedNet));
+        const score = Math.min(98, Math.max(0, h.score + clampedModifier));
         const confidence = evaluateHotspotConfidence({
             score,
             signalCount: h.metrics.signalCount,
@@ -1339,11 +1345,16 @@ export function applyGeologyModifiers(
         .sort((a, b) => b.score - a.score)
         .map((h, i) => ({ ...h, number: i + 1 }));
 
-    return { hotspots: sorted, appliedCount, suppressedCount, netScore: clampedNet };
+    return {
+        hotspots: sorted,
+        appliedCount,
+        suppressedCount,
+        scoreModifier: clampedModifier,
+    };
 }
 
 // ─── PAS density modifier application ────────────────────────────────────────
-// Applied after geology modifiers. PAS is supporting evidence only — it never
+// Applied after the geology modifier. PAS is supporting evidence only — it never
 // creates hotspots, only adds a small additive modifier to existing ones.
 // Max contribution: +0.08 confidence modifier (≈10% of total weight budget).
 // A null pasCell means the index failed to load: no modification applied.

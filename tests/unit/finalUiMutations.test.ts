@@ -174,7 +174,7 @@ describe("final UI mutation services", () => {
       centroid: { lat: 52, lon: -1 },
       context: { landscapeClass: "unknown" },
       fetchedAt: 1_000,
-      classifierVersion: 2,
+      classifierVersion: 3,
       sourceVersion: "test",
     });
     await db.landscapeInterpretations.put({

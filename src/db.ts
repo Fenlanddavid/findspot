@@ -403,14 +403,24 @@ export type ImportedPackage = {
 // context is typed as any to avoid coupling db.ts to the engine layer.
 // See: src/engines/geologyContext/geologyContextTypes.ts
 
-export type GeologyContextRecord = {
+type GeologyContextRecordBase = {
     tileKey:           string;   // Primary key — geology:{geohash6}:classifier:{v}:source:{sv}
     centroid:          { lat: number; lon: number };
-    context:           unknown;  // validated by the geology engine on read
     fetchedAt:         number;   // Unix ms — used for 90-day TTL sweep
     classifierVersion: number;
     sourceVersion:     string;
 };
+
+export type GeologyContextRecord = GeologyContextRecordBase & (
+    | {
+        context: unknown; // validated by the geology engine on read
+        empty?: false;
+    }
+    | {
+        empty: true;
+        context?: never;
+    }
+);
 
 // ─── Find–hotspot feedback signal ────────────────────────────────────────────
 // Lightweight history record written whenever the feedback service detects that

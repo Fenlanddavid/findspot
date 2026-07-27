@@ -12,7 +12,7 @@
  *   - Logs nothing beyond what Cloudflare Workers analytics capture automatically
  *
  * Attribution:
- *   Contains British Geological Survey materials © UKRI 2025.
+ *   Contains British Geological Survey materials © UKRI 2026.
  *   BGS data is used under the Open Government Licence.
  */
 
@@ -43,21 +43,20 @@ const ALLOWED_LAYERS = new Set([
   "GBR_BGS_625k_SLT",
 ]);
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
-
 export default {
-  async fetch(request, _env, ctx) {
+  async fetch(request, env, ctx) {
+    const origin = request.headers.get("Origin");
+    if (!originAllowed(origin, env.ALLOWED_ORIGINS)) {
+      return jsonError("Origin not allowed", 403);
+    }
+
     // Preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
     if (request.method !== "GET") {
-      return jsonError("Method not allowed", 405);
+      return jsonError("Method not allowed", 405, origin);
     }
 
     const url = new URL(request.url);
@@ -68,9 +67,9 @@ export default {
     const reqType = p.get("request") ?? p.get("REQUEST") ?? "";
     const version = p.get("version") ?? p.get("VERSION") ?? "1.3.0";
 
-    if (!ALLOWED_SERVICES.has(service))  return jsonError("Invalid service", 400);
-    if (!ALLOWED_REQUESTS.has(reqType))  return jsonError("Invalid request type", 400);
-    if (!ALLOWED_VERSIONS.has(version))  return jsonError("Invalid version", 400);
+    if (!ALLOWED_SERVICES.has(service))  return jsonError("Invalid service", 400, origin);
+    if (!ALLOWED_REQUESTS.has(reqType))  return jsonError("Invalid request type", 400, origin);
+    if (!ALLOWED_VERSIONS.has(version))  return jsonError("Invalid version", 400, origin);
 
     // ── Build upstream URL ──
     const upstream = new URL(BGS_625K_URL);
@@ -89,15 +88,15 @@ export default {
       const j          = p.get("j")             ?? p.get("J")            ?? "";
       const infoFormat = p.get("info_format")   ?? p.get("INFO_FORMAT")  ?? "text/xml";
 
-      if (!layer || layer !== queryLayer)       return jsonError("Invalid layer request", 400);
-      if (!ALLOWED_LAYERS.has(layer))           return jsonError("Layer not allowlisted", 400);
-      if (!bbox || !isValidBbox(bbox))          return jsonError("Invalid bbox", 400);
-      if (crs !== "EPSG:4326")                  return jsonError("Invalid CRS", 400);
-      if (!isNonNegativeInt(width))             return jsonError("Invalid WIDTH", 400);
-      if (!isNonNegativeInt(height))            return jsonError("Invalid HEIGHT", 400);
-      if (!isNonNegativeInt(i))                 return jsonError("Invalid I", 400);
-      if (!isNonNegativeInt(j))                 return jsonError("Invalid J", 400);
-      if (!ALLOWED_INFO_FORMATS.has(infoFormat)) return jsonError("Invalid info format", 400);
+      if (!layer || layer !== queryLayer)       return jsonError("Invalid layer request", 400, origin);
+      if (!ALLOWED_LAYERS.has(layer))           return jsonError("Layer not allowlisted", 400, origin);
+      if (!bbox || !isValidBbox(bbox))          return jsonError("Invalid bbox", 400, origin);
+      if (crs !== "EPSG:4326")                  return jsonError("Invalid CRS", 400, origin);
+      if (!isNonNegativeInt(width))             return jsonError("Invalid WIDTH", 400, origin);
+      if (!isNonNegativeInt(height))            return jsonError("Invalid HEIGHT", 400, origin);
+      if (!isNonNegativeInt(i))                 return jsonError("Invalid I", 400, origin);
+      if (!isNonNegativeInt(j))                 return jsonError("Invalid J", 400, origin);
+      if (!ALLOWED_INFO_FORMATS.has(infoFormat)) return jsonError("Invalid info format", 400, origin);
 
       upstream.searchParams.set("LAYERS",       layer);
       upstream.searchParams.set("QUERY_LAYERS", queryLayer);
@@ -115,7 +114,7 @@ export default {
     const cache    = caches.default;
     const cacheKey = new Request(upstream.toString());
     const cached   = await cache.match(cacheKey);
-    if (cached) return withCors(cached);
+    if (cached) return withCors(cached, origin);
 
     // ── Upstream fetch ──
     let upstreamResponse;
@@ -125,11 +124,11 @@ export default {
         headers: { "User-Agent": "FindSpot-BGS-Geology-Proxy/1.0" },
       });
     } catch {
-      return jsonError("BGS service unreachable", 502);
+      return jsonError("BGS service unreachable", 502, origin);
     }
 
     if (!upstreamResponse.ok) {
-      return jsonError(`BGS service returned ${upstreamResponse.status}`, 502);
+      return jsonError(`BGS service returned ${upstreamResponse.status}`, 502, origin);
     }
 
     const contentType = upstreamResponse.headers.get("Content-Type") ?? "text/plain";
@@ -139,28 +138,52 @@ export default {
       headers: {
         "Content-Type":  contentType,
         "Cache-Control": `public, max-age=${EDGE_CACHE_TTL_SECONDS}`,
-        ...CORS_HEADERS,
       },
     });
 
     ctx.waitUntil(cache.put(cacheKey, response.clone()));
 
-    return response;
+    return withCors(response, origin);
   },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function jsonError(message, status) {
+function configuredOrigins(value) {
+  return new Set(String(value ?? "")
+    .split(",")
+    .map(entry => entry.trim().replace(/\/$/, ""))
+    .filter(Boolean));
+}
+
+function originAllowed(origin, configured) {
+  if (!origin) return false;
+  return configuredOrigins(configured).has(origin.replace(/\/$/, ""));
+}
+
+function corsHeaders(origin) {
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Vary": "Origin",
+  };
+}
+
+function jsonError(message, status, origin = null) {
+  const headers = { "Content-Type": "application/json" };
+  if (origin) Object.assign(headers, corsHeaders(origin));
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+    headers,
   });
 }
 
-function withCors(response) {
+function withCors(response, origin) {
   const headers = new Headers(response.headers);
-  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+  for (const [key, value] of Object.entries(corsHeaders(origin))) {
+    headers.set(key, value);
+  }
   return new Response(response.body, { status: response.status, headers });
 }
 

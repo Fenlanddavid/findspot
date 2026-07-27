@@ -4,7 +4,7 @@
 // for the selected scan tile. Finds, permissions and sessions are never sent.
 // Only the tile centroid coordinates reach the proxy and are forwarded to BGS.
 //
-// Attribution: Contains British Geological Survey materials © UKRI 2025.
+// Attribution: Contains British Geological Survey materials © UKRI 2026.
 
 import type { RawGeologyData, ArtificialGroundType } from './geologyContextTypes';
 import { GEOLOGY_REQUEST_TIMEOUT_MS } from './geologyContextTypes';
@@ -66,7 +66,10 @@ function extractXmlAttributes(xmlText: string): Record<string, string> {
     try {
         doc = new DOMParser().parseFromString(xmlText, 'text/xml');
     } catch {
-        return result;
+        throw new Error('BGS response could not be parsed as XML.');
+    }
+    if (doc.getElementsByTagName('parsererror').length > 0) {
+        throw new Error('BGS returned malformed XML.');
     }
 
     // Walk all elements; strip namespace prefix from local name.
@@ -144,50 +147,60 @@ function isMassMovement(attrs: Record<string, string>): boolean {
 
 // ─── Single-layer fetch ───────────────────────────────────────────────────────
 
+type LayerFetchResult =
+    | { kind: 'data'; attrs: Record<string, string> }
+    | { kind: 'empty' }
+    | { kind: 'abort' }
+    | { kind: 'request_fail' }
+    | { kind: 'invalid_response' };
+
 async function fetchLayer(
     url: string,
     signal: AbortSignal,
-): Promise<Record<string, string> | null> {
+): Promise<LayerFetchResult> {
     let response: Response;
     try {
         response = await fetch(url, { signal, mode: 'cors' });
     } catch (err: unknown) {
-        // CORS failure or network error — return null, caller logs the reason
-        if (err instanceof Error && err.name === 'AbortError') throw err;
-        return null;
+        if (err instanceof Error && err.name === 'AbortError') {
+            return { kind: 'abort' };
+        }
+        return { kind: 'request_fail' };
     }
 
-    if (!response.ok) return null;
+    if (!response.ok) return { kind: 'request_fail' };
 
     let text: string;
     try {
         text = await response.text();
     } catch {
-        return null;
+        return { kind: 'invalid_response' };
     }
 
-    if (!text.trim()) return null;
+    if (!text.trim()) return { kind: 'invalid_response' };
 
     try {
         const attrs = extractXmlAttributes(text);
         // BGS returns valid empty GML when no feature exists at a coordinate.
-        // An empty attribute map means no data — treat as null so the caller's
-        // !bedrockAttrs && !superficialAttrs guard correctly triggers empty_response.
-        return Object.keys(attrs).length > 0 ? attrs : null;
+        return Object.keys(attrs).length > 0
+            ? { kind: 'data', attrs }
+            : { kind: 'empty' };
     } catch {
-        return null;
+        return { kind: 'invalid_response' };
     }
 }
 
 // ─── Main fetch function ──────────────────────────────────────────────────────
 // Fetches bedrock and superficial deposits in parallel from BGS 625k.
-// Returns null on timeout, CORS failure or empty response.
+// A genuine empty result is distinct from transport and response failures so
+// callers never audit an outage as absence of geology.
 
-export type FetchGeologyResult = {
-    data: RawGeologyData | null;
-    timedOut: boolean;
-    corsError: boolean;
-};
+export type FetchGeologyResult =
+    | { ok: true; data: RawGeologyData }
+    | {
+        ok: false;
+        kind: 'timeout' | 'request_fail' | 'invalid_response' | 'empty';
+    };
 
 export async function fetchBgsGeology(
     centroid: { lat: number; lon: number },
@@ -201,64 +214,64 @@ export async function fetchBgsGeology(
     const bedrockUrl     = buildGetFeatureInfoUrl(BGS_BEDROCK_LAYER,     centroid.lat, centroid.lon);
     const superficialUrl = buildGetFeatureInfoUrl(BGS_SUPERFICIAL_LAYER, centroid.lat, centroid.lon);
 
-    let bedrockAttrs:     Record<string, string> | null = null;
-    let superficialAttrs: Record<string, string> | null = null;
-    let timedOut  = false;
-    let corsError = false;
-
     try {
-        [bedrockAttrs, superficialAttrs] = await Promise.all([
+        const [bedrock, superficial] = await Promise.all([
             fetchLayer(bedrockUrl, controller.signal),
             fetchLayer(superficialUrl, controller.signal),
         ]);
-    } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'AbortError') {
-            timedOut = true;
-        } else {
-            corsError = true;
+
+        if (bedrock.kind === 'abort' || superficial.kind === 'abort') {
+            return { ok: false, kind: 'timeout' };
         }
-        return { data: null, timedOut, corsError };
+        if (bedrock.kind === 'request_fail' || superficial.kind === 'request_fail') {
+            return { ok: false, kind: 'request_fail' };
+        }
+        if (bedrock.kind === 'invalid_response' || superficial.kind === 'invalid_response') {
+            return { ok: false, kind: 'invalid_response' };
+        }
+        if (bedrock.kind === 'empty' && superficial.kind === 'empty') {
+            return { ok: false, kind: 'empty' };
+        }
+
+        const bedrockAttrs = bedrock.kind === 'data' ? bedrock.attrs : null;
+        const superficialAttrs = superficial.kind === 'data' ? superficial.attrs : null;
+
+        // ── Build RawGeologyData from parsed attributes ──
+        const raw: RawGeologyData = {};
+
+        if (bedrockAttrs) {
+            // GBR_BGS_625k_BLT field mapping (confirmed Jun 2026):
+            //   LEX_D    — formation name  (e.g. "OXFORD CLAY FORMATION")
+            //   RCS_D    — rock type desc  (e.g. "MUDSTONE, SILTSTONE AND SANDSTONE")
+            //   AGE_ONEGL — simple age label (e.g. "JURASSIC")
+            //   MAX_PERIOD — geological period fallback
+            raw.bedrockName     = bedrockAttrs['LEX_D'];
+            raw.bedrockLithology = bedrockAttrs['RCS_D'];
+            raw.bedrockAge      = bedrockAttrs['AGE_ONEGL'] || bedrockAttrs['MAX_PERIOD'];
+        }
+
+        if (superficialAttrs) {
+            // GBR_BGS_625k_SLT field mapping (confirmed Jun 2026):
+            //   LEX_D  — deposit name  (e.g. "RIVER TERRACE DEPOSITS (UNDIFFERENTIATED)")
+            //   ROCK_D — rock type     (e.g. "SAND AND GRAVEL")
+            const isArt  = isArtificialGround(superficialAttrs);
+            const isMass = isMassMovement(superficialAttrs);
+
+            if (isArt) {
+                raw.artificialGround = {
+                    present: true,
+                    type:    resolveArtificialGroundType(superficialAttrs),
+                };
+            } else if (isMass) {
+                raw.massMovement  = true;
+            } else {
+                raw.superficialName     = superficialAttrs['LEX_D'];
+                raw.superficialLithology = superficialAttrs['ROCK_D'];
+            }
+        }
+
+        return { ok: true, data: raw };
     } finally {
         globalThis.clearTimeout(timeoutId);
     }
-
-    if (!bedrockAttrs && !superficialAttrs) {
-        return { data: null, timedOut: false, corsError: false };
-    }
-
-    // ── Build RawGeologyData from parsed attributes ──
-    const raw: RawGeologyData = {};
-
-    if (bedrockAttrs) {
-        // GBR_BGS_625k_BLT field mapping (confirmed Jun 2026):
-        //   LEX_D    — formation name  (e.g. "OXFORD CLAY FORMATION")
-        //   RCS_D    — rock type desc  (e.g. "MUDSTONE, SILTSTONE AND SANDSTONE")
-        //   AGE_ONEGL — simple age label (e.g. "JURASSIC")
-        //   MAX_PERIOD — geological period fallback
-        raw.bedrockName     = bedrockAttrs['LEX_D'];
-        raw.bedrockLithology = bedrockAttrs['RCS_D'];
-        raw.bedrockAge      = bedrockAttrs['AGE_ONEGL'] || bedrockAttrs['MAX_PERIOD'];
-    }
-
-    if (superficialAttrs) {
-        // GBR_BGS_625k_SLT field mapping (confirmed Jun 2026):
-        //   LEX_D  — deposit name  (e.g. "RIVER TERRACE DEPOSITS (UNDIFFERENTIATED)")
-        //   ROCK_D — rock type     (e.g. "SAND AND GRAVEL")
-        const isArt  = isArtificialGround(superficialAttrs);
-        const isMass = isMassMovement(superficialAttrs);
-
-        if (isArt) {
-            raw.artificialGround = {
-                present: true,
-                type:    resolveArtificialGroundType(superficialAttrs),
-            };
-        } else if (isMass) {
-            raw.massMovement  = true;
-        } else {
-            raw.superficialName     = superficialAttrs['LEX_D'];
-            raw.superficialLithology = superficialAttrs['ROCK_D'];
-        }
-    }
-
-    return { data: raw, timedOut: false, corsError: false };
 }

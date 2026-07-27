@@ -8,24 +8,31 @@ import {
 import { safeParseGeologyContextRecord } from './persistenceValidation';
 import { reportNonFatal } from './diagLog';
 
-export async function getCachedGeologyContext(tileKey: string): Promise<GeologyContext | null> {
+export type GeologyCacheLookup =
+    | { kind: 'miss' }
+    | { kind: 'empty' }
+    | { kind: 'context'; context: GeologyContext };
+
+export async function getCachedGeologyContext(tileKey: string): Promise<GeologyCacheLookup> {
     try {
         const persisted = await db.geologyContext.get(tileKey);
-        if (!persisted) return null;
+        if (!persisted) return { kind: 'miss' };
         const record = safeParseGeologyContextRecord(persisted);
         if (!record) {
             await db.geologyContext.delete(tileKey);
-            return null;
+            return { kind: 'miss' };
         }
 
         if (Date.now() - record.fetchedAt > GEOLOGY_CACHE_TTL_MS) {
             await db.geologyContext.delete(tileKey);
-            return null;
+            return { kind: 'miss' };
         }
 
-        return record.context;
+        return record.empty === true
+            ? { kind: 'empty' }
+            : { kind: 'context', context: record.context };
     } catch {
-        return null;
+        return { kind: 'miss' };
     }
 }
 
@@ -41,6 +48,25 @@ export async function cacheGeologyContext(context: GeologyContext): Promise<void
         });
     } catch (error) {
         reportNonFatal('geology-cache', 'Context cache write failed', error);
+    }
+}
+
+export async function cacheEmptyGeologyContext(
+    tileKey: string,
+    centroid: { lat: number; lon: number },
+    fetchedAt = Date.now(),
+): Promise<void> {
+    try {
+        await db.geologyContext.put({
+            tileKey,
+            centroid,
+            empty: true,
+            fetchedAt,
+            classifierVersion: GEOLOGY_CLASSIFIER_VERSION,
+            sourceVersion: GEOLOGY_SOURCE_VERSION,
+        });
+    } catch (error) {
+        reportNonFatal('geology-cache', 'Empty context cache write failed', error);
     }
 }
 

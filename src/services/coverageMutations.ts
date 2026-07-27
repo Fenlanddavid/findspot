@@ -13,6 +13,7 @@ import {
   TRACK_SECTION_COVERAGE_THRESHOLD,
   SECTION_LAYOUT_VERSION,
   areaOverlapFraction,
+  boundaryHash,
   deriveSectionCandidates,
   evidenceObservationId,
   pointIsInsideArea,
@@ -79,6 +80,39 @@ function retainedH3Resolution(sections: PermissionSection[]): number | undefined
   }
 }
 
+function canReuseCurrentSections(
+  source: {
+    fieldId: string;
+    permissionId: string;
+    name: string;
+    boundary: GeoJSONArea;
+  },
+  sections: PermissionSection[],
+): boolean {
+  if (sections.length === 0 || source.boundary.type !== 'Polygon') return false;
+  const expectedBoundaryHash = boundaryHash(source.boundary);
+  const expectedLabelPrefix = `${source.name} · `;
+  return sections.every(section => {
+    if (section.retiredAt) return false;
+    if (
+      section.permissionId !== source.permissionId
+      || section.fieldId !== source.fieldId
+      || !section.layoutKey.startsWith('h3:')
+      || section.id !== `${source.fieldId}:${section.layoutKey}`
+      || !section.label.startsWith(expectedLabelPrefix)
+    ) return false;
+    const labelNumber = Number(section.label.slice(expectedLabelPrefix.length));
+    if (!Number.isInteger(labelNumber) || labelNumber < 1) return false;
+    const cell = section.layoutKey.slice('h3:'.length);
+    try {
+      getResolution(cell);
+    } catch {
+      return false;
+    }
+    return currentSectionGeometry(section)?.boundaryHash === expectedBoundaryHash;
+  });
+}
+
 /**
  * Idempotently reconciles current boundaries with stable section identities.
  * A field keeps the layout mode selected on first creation; geometry edits add
@@ -110,6 +144,11 @@ export async function ensurePermissionSections(
   }> = [];
   for (const source of sources) {
     const existingForSource = existing.filter(section => section.fieldId === source.fieldId);
+    const liveForSource = existingForSource.filter(section => !section.retiredAt);
+    if (canReuseCurrentSections(source, liveForSource)) {
+      for (const section of liveForSource) nextIds.add(section.id);
+      continue;
+    }
     const candidates = deriveSectionCandidates(
       source,
       retainedH3Resolution(existingForSource),

@@ -11,9 +11,13 @@ export type { GeologyDisplayData } from './geologyExplain';
 
 import { fetchBgsGeology } from './geologyContextClient';
 import { classifyGeology } from './geologyClassifier';
-import { computeGeologyModifiers, netGeologyScore } from './geologyModifiers';
+import { computeGeologyModifier } from './geologyModifiers';
 import { buildTileKey } from './geologyTileKey';
-import { cacheGeologyContext, getCachedGeologyContext } from '../../services/geologyContextCache';
+import {
+    cacheEmptyGeologyContext,
+    cacheGeologyContext,
+    getCachedGeologyContext,
+} from '../../services/geologyContextCache';
 import {
     GEOLOGY_CLASSIFIER_VERSION,
     GEOLOGY_SOURCE_VERSION,
@@ -43,15 +47,19 @@ export async function runGeologyContext(
 
     // ── 1. Cache check ──
     const cached = await getCachedGeologyContext(tileKey);
-    if (cached) {
+    if (cached.kind === 'context') {
         audit({ action: 'cache_hit', reason: 'Valid geology context found in local cache.' });
-        return cached;
+        return cached.context;
+    }
+    if (cached.kind === 'empty') {
+        audit({ action: 'cache_hit', reason: 'Valid empty geology result found in local cache.' });
+        return null;
     }
 
     // ── 2. Fetch from BGS 625k ──
-    const { data, timedOut, corsError } = await fetchBgsGeology(centroid);
+    const fetched = await fetchBgsGeology(centroid);
 
-    if (timedOut) {
+    if (!fetched.ok && fetched.kind === 'timeout') {
         audit({
             action: 'timeout',
             reason: `BGS lookup timed out after 8000ms. Geology modifier not applied.`,
@@ -59,27 +67,37 @@ export async function runGeologyContext(
         return null;
     }
 
-    if (corsError) {
+    if (!fetched.ok && fetched.kind === 'request_fail') {
         audit({
-            action: 'cors_fail',
-            reason: 'BGS request blocked by CORS. Check proxy configuration — see docs/bgs/bgs-queryable-layers.md.',
+            action: 'request_fail',
+            reason: 'BGS request failed before a valid response was received. Check network and proxy availability.',
         });
         return null;
     }
 
-    if (!data) {
+    if (!fetched.ok && fetched.kind === 'invalid_response') {
+        audit({
+            action: 'invalid_response',
+            reason: 'BGS returned a response that could not be read as valid geology data.',
+        });
+        return null;
+    }
+
+    if (!fetched.ok) {
+        await cacheEmptyGeologyContext(tileKey, centroid);
         audit({
             action: 'empty_response',
             reason: 'BGS returned no data for this tile. Geology context unavailable.',
         });
         return null;
     }
+    const data = fetched.data;
 
     // ── 3. Classify ──
     const { landscapeClass, confidence, explanation } = classifyGeology(data);
 
-    // ── 4. Compute modifiers (Phase 1: all zero) ──
-    const modifiers = computeGeologyModifiers(landscapeClass, data);
+    // ── 4. Compute the bounded class-level geology modifier ──
+    const scoreModifier = computeGeologyModifier(landscapeClass, data);
 
     // ── 5. Build context object ──
     const context: GeologyContext = {
@@ -92,7 +110,7 @@ export async function runGeologyContext(
         raw:              data,
         landscapeClass,
         confidence,
-        modifiers,
+        scoreModifier,
         explanation,
         fetchedAt:         Date.now(),
         classifierVersion: GEOLOGY_CLASSIFIER_VERSION,
@@ -103,11 +121,10 @@ export async function runGeologyContext(
     await cacheGeologyContext(context);
 
     // ── 7. Audit ──
-    const net = netGeologyScore(modifiers);
     audit({
         action:      'applied',
-        reason:      `Geology modifier computed: ${landscapeClass}, ${confidence} confidence. Net modifier: ${net > 0 ? '+' : ''}${net}. Applied to hotspots when primary signals are present.`,
-        scoreEffect: net,
+        reason:      `Geology modifier computed: ${landscapeClass}, ${confidence} confidence. Modifier: ${scoreModifier > 0 ? '+' : ''}${scoreModifier}. Applied to hotspots when primary signals are present.`,
+        scoreEffect: scoreModifier,
     });
 
     return context;

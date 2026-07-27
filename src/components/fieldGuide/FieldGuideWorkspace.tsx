@@ -31,7 +31,8 @@ import {
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { runGeologyContext } from '../../engines/geologyContext';
 import { sweepStaleGeologyCache } from '../../services/geologyContextCache';
-import { applyGeologyModifiers } from '../../engines/hotspot/hotspotEngine';
+import { applyGeologyModifier } from '../../engines/hotspot/hotspotEngine';
+import { geologyAuditWarning } from '../../engines/geologyContext/geologyAudit';
 import { getSetting } from '../../services/data';
 import { searchLocations } from '../../services/geocode';
 import { readFieldGuideScanCache } from '../../services/fieldGuideMutations';
@@ -554,11 +555,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
                 { lat: center.lat, lon: center.lng },
                 {
                     onAudit: (entry) => {
-                        if (entry.action === 'timeout') {
-                            addLog('BGS geology lookup timed out. Scan unaffected.', 'system', 'warn');
-                        } else if (entry.action === 'cors_fail') {
-                            addLog('BGS geology unavailable via proxy. Scan unaffected.', 'system', 'warn');
-                        }
+                        const warning = geologyAuditWarning(entry);
+                        if (warning) addLog(warning, 'system', 'warn');
                     },
                 },
             );
@@ -574,10 +572,10 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         }
     }, [addLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ─── Apply geology modifiers to hotspots (Phase 2) ───────────────────────
+    // ─── Apply the geology modifier to hotspots (Phase 2) ────────────────────
     // Fires when geology context becomes available AND historic enhancement is done.
     // Guards against re-application using the tileKey of the last applied context.
-    // GEOLOGY_RULE: applyGeologyModifiers enforces the primary-signal gate internally.
+    // GEOLOGY_RULE: applyGeologyModifier enforces the primary-signal gate internally.
 
     useEffect(() => {
         if (!geologyContext) {
@@ -591,9 +589,11 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         if (!hotspots.length) return;
 
         geologyAppliedRef.current = geologyContext.tileKey;
-        const { hotspots: enhanced, appliedCount, netScore } = applyGeologyModifiers(hotspots, geologyContext);
+        const {
+            hotspots: enhanced, appliedCount, scoreModifier,
+        } = applyGeologyModifier(hotspots, geologyContext);
         if (appliedCount > 0) {
-            addLog(`Geology modifiers applied (${geologyContext.landscapeClass}, net ${netScore > 0 ? '+' : ''}${netScore}) to ${appliedCount} hotspot${appliedCount !== 1 ? 's' : ''}.`, 'system');
+            addLog(`Geology modifier applied (${geologyContext.landscapeClass}, ${scoreModifier > 0 ? '+' : ''}${scoreModifier}) to ${appliedCount} hotspot${appliedCount !== 1 ? 's' : ''}.`, 'system');
             dispatch({ type: 'GEOLOGY_ENHANCE', hotspots: enhanced });
         }
     }, [geologyContext, hotspots, hotspotVersion]); // eslint-disable-line react-hooks/exhaustive-deps

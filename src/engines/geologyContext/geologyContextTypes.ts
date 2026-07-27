@@ -9,7 +9,7 @@ import { CACHE_POLICIES } from '../../shared/cachePolicy';
 // ─── Version constants ────────────────────────────────────────────────────────
 // Bump GEOLOGY_CLASSIFIER_VERSION when classification logic changes (invalidates cache).
 // Bump GEOLOGY_SOURCE_VERSION when the BGS service or layer names change.
-export const GEOLOGY_CLASSIFIER_VERSION = 2;
+export const GEOLOGY_CLASSIFIER_VERSION = 3;
 export const GEOLOGY_SOURCE_VERSION = 'bgs625k-v2';
 
 export const GEOLOGY_CACHE_TTL_MS = CACHE_POLICIES.geologyContext.expiry.durationMs;
@@ -68,17 +68,9 @@ export type GeologyContext = {
     landscapeClass: GeologyLandscapeClass;
     confidence: GeologyConfidence;
 
-    // Phase 2: bounded scoring adjustments (+12 max / -15 min).
-    // Application is gated so geology cannot create hotspots or targets by itself.
-    modifiers: {
-        hydrology: number;
-        terrain: number;
-        spectral: number;
-        route: number;
-        soilMechanics: number;
-        preservation: number;
-        movementRisk: number;
-    };
+    // Bounded scalar adjustment (+12 max / -15 min). Application is gated so
+    // geology cannot create hotspots or targets by itself.
+    scoreModifier: number;
 
     explanation: string[];
     fetchedAt: number;
@@ -95,7 +87,8 @@ export type GeologyAuditAction =
     | 'error'
     | 'disabled'
     | 'cache_hit'
-    | 'cors_fail'
+    | 'request_fail'
+    | 'invalid_response'
     | 'empty_response';
 
 export type GeologyAuditEntry = {

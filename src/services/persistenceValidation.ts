@@ -168,33 +168,45 @@ const geologyContextSchema = z.object({
     'mixed_uncertain', 'unknown',
   ]),
   confidence: z.enum(['low', 'medium', 'high']),
-  modifiers: z.object({
-    hydrology: finite,
-    terrain: finite,
-    spectral: finite,
-    route: finite,
-    soilMechanics: finite,
-    preservation: finite,
-    movementRisk: finite,
-  }),
+  scoreModifier: finite,
   explanation: z.array(z.string()),
   fetchedAt: finite,
   classifierVersion: finite,
   sourceVersion: z.string(),
 }).passthrough();
 
-export type ValidatedGeologyContextRecord = Omit<GeologyContextRecord, 'context'> & {
-  context: GeologyContext;
-};
-
-const geologyRecordSchema = z.object({
+const populatedGeologyRecordSchema = z.object({
   tileKey: z.string().min(1),
   centroid: z.object({ lat: finite, lon: finite }),
   context: geologyContextSchema,
+  empty: z.literal(false).optional(),
   fetchedAt: finite,
   classifierVersion: finite,
   sourceVersion: z.string(),
 }).passthrough();
+
+const emptyGeologyRecordSchema = z.object({
+  tileKey: z.string().min(1),
+  centroid: z.object({ lat: finite, lon: finite }),
+  empty: z.literal(true),
+  fetchedAt: finite,
+  classifierVersion: finite,
+  sourceVersion: z.string(),
+}).passthrough();
+
+const geologyRecordSchema = z.union([
+  populatedGeologyRecordSchema,
+  emptyGeologyRecordSchema,
+]);
+
+export type ValidatedGeologyContextRecord =
+  | (Omit<GeologyContextRecord, 'context' | 'empty'> & {
+      context: GeologyContext;
+      empty?: false;
+    })
+  | (Omit<GeologyContextRecord, 'context' | 'empty'> & {
+      empty: true;
+    });
 
 export function safeParseGeologyContextRecord(
   value: unknown,
