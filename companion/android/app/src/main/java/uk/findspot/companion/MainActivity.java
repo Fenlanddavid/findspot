@@ -220,7 +220,7 @@ public final class MainActivity extends Activity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 permissions.add(Manifest.permission.POST_NOTIFICATIONS);
             }
-            requestPermissions(permissions.toArray(String[]::new), LOCATION_REQUEST);
+            requestPermissions(permissions.toArray(new String[0]), LOCATION_REQUEST);
             return;
         }
         if (!getSystemService(android.location.LocationManager.class).isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {

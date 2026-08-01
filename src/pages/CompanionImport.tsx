@@ -174,7 +174,7 @@ export default function CompanionImport({ projectId }: Props) {
         <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-100" role="status">
           <h2 className="font-black">FindSpot Companion is not installed</h2>
           <p className="mt-1 text-sm leading-relaxed text-amber-900/80 dark:text-amber-200/80">
-            Nothing has changed in this session and no data has been lost. The signed Android beta can be installed below; complete a short test before relying on it for fieldwork.
+            Nothing has changed in this session and no data has been lost. The Android beta will be available through Google Play; do not disable your phone's security protections to install an APK.
           </p>
           {COMPANION_DOWNLOAD_URL ? (
             <a
@@ -183,7 +183,7 @@ export default function CompanionImport({ projectId }: Props) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Download Companion app
+              Get Companion on Google Play
             </a>
           ) : (
             <button
@@ -191,7 +191,7 @@ export default function CompanionImport({ projectId }: Props) {
               disabled
               className="mt-3 inline-flex min-h-11 cursor-not-allowed items-center justify-center rounded-xl bg-amber-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
             >
-              Download Companion app
+              Google Play beta coming soon
             </button>
           )}
         </section>

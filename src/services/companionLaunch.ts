@@ -1,10 +1,11 @@
 export const COMPANION_PACKAGE_NAME = 'uk.findspot.companion';
 export const COMPANION_RECORDING_URL = 'findspot-companion://record/start';
 
-// Immutable signed beta asset. Never point this at a debug APK or a mutable
-// workspace build.
-export const COMPANION_DOWNLOAD_URL =
-  'https://github.com/Fenlanddavid/findspot/releases/download/companion-v1.0.0-beta.1/findspot-companion-v1.0.0-beta.1.apk';
+// Keep direct sideloading disabled. Public Android builds are distributed
+// through Google Play so security protections do not need to be weakened.
+// Set this to the immutable Play testing opt-in URL once the internal release
+// has been created in Play Console.
+export const COMPANION_DOWNLOAD_URL = '';
 
 export function isAndroidUserAgent(userAgent = (
   typeof navigator === 'undefined' ? '' : navigator.userAgent

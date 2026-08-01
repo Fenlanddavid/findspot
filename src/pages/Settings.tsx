@@ -1271,7 +1271,7 @@ export default function Settings() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Download Companion app
+                Get Companion on Google Play
               </a>
             ) : (
               <button
@@ -1279,12 +1279,12 @@ export default function Settings() {
                 disabled
                 className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center justify-center rounded-xl bg-gray-200 px-4 py-3 text-center text-xs font-black uppercase tracking-widest text-gray-500 dark:bg-gray-700 dark:text-gray-400"
               >
-                Download Companion app
+                Google Play beta coming soon
               </button>
             )}
           </div>
           <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
-            Beta software: complete a short test before relying on it for fieldwork.
+            Android beta: Google Play distribution is being prepared. Do not disable your phone's security protections to install an APK.
           </p>
         </section>
 

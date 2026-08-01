@@ -45,3 +45,8 @@ for every published update.
 This is a GitHub pre-release. It remains subject to the six-hour battery,
 Samsung power-management, installed-PWA sharesheet, network-capture and field
 acceptance gates documented in the physical-validation record.
+
+Direct APK distribution is no longer offered in FindSpot because Android
+Advanced Protection can block unknown-source installations. The Google Play
+internal-testing handoff and signed app bundle are documented in
+[`google-play-internal-testing.md`](google-play-internal-testing.md).

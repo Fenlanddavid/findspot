@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'Import locked-screen GPS trails from FindSpot Companion, with pauses preserved.';
+export const UPDATE_NOTES = 'Companion installs now use Google Play without weakening phone security.';

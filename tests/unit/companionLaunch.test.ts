@@ -13,11 +13,8 @@ describe('Companion launch handoff', () => {
     expect(COMPANION_RECORDING_URL).toBe('findspot-companion://record/start');
   });
 
-  it('uses the immutable signed beta release asset rather than a debug build', () => {
-    expect(COMPANION_DOWNLOAD_URL).toBe(
-      'https://github.com/Fenlanddavid/findspot/releases/download/companion-v1.0.0-beta.1/findspot-companion-v1.0.0-beta.1.apk',
-    );
-    expect(COMPANION_DOWNLOAD_URL).not.toContain('/debug/');
+  it('does not offer a direct APK sideload while Play distribution is pending', () => {
+    expect(COMPANION_DOWNLOAD_URL).toBe('');
   });
 
   it('limits the native launch handoff to Android devices', () => {
