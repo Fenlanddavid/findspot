@@ -1,3 +1,6 @@
+// Build a portable text snapshot of the repository's permanent architecture.
+// External verification must use `CI=1 npx vitest run` so missing or stale
+// snapshots fail instead of being silently written into the extracted dump.
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -33,8 +36,8 @@ const INCLUDED_ROOT_FILES = new Set([
 
 const TEXT_EXTENSIONS = new Set([
   '.cjs', '.css', '.d.ts', '.html', '.js', '.json', '.jsonc', '.jsx',
-  '.java', '.kts', '.md', '.mjs', '.pro', '.sh', '.toml', '.ts', '.tsx',
-  '.txt', '.xml', '.yaml', '.yml',
+  '.java', '.kts', '.md', '.mjs', '.pro', '.sh', '.snap', '.toml', '.ts',
+  '.tsx', '.txt', '.xml', '.yaml', '.yml',
 ]);
 
 function extensionOf(path) {
@@ -43,24 +46,48 @@ function extensionOf(path) {
   return dot === -1 ? '' : path.slice(dot);
 }
 
-const EXCLUDED_DIRECTORIES = new Set([
+// These names are never legitimate source directories at any depth.
+const EXCLUDED_NAMES_ANYWHERE = new Set([
   '.git',
+  '.gradle',
   '.wrangler',
-  'coverage',
-  'dist',
   'node_modules',
+]);
+
+// Generated outputs at the repository root. Keep these root-relative so a
+// deeper source domain such as src/engines/coverage remains eligible.
+const EXCLUDED_ROOT_PATHS = new Set([
+  'coverage',
+  'dev-dist',
+  'dist',
   'out',
   'playwright-report',
   'test-results',
 ]);
 
+// Generated subtrees whose names are otherwise too broad to exclude at every
+// depth. scripts/out contains generated dataset shards, not source.
+const EXCLUDED_GENERATED_PATHS = new Set([
+  'scripts/out',
+]);
+
+function isExcludedDirectory(relativePath, name) {
+  if (EXCLUDED_NAMES_ANYWHERE.has(name)) return true;
+  if (EXCLUDED_ROOT_PATHS.has(relativePath)) return true;
+  if (EXCLUDED_GENERATED_PATHS.has(relativePath)) return true;
+  // Gradle module outputs; "build" is unambiguous only inside companion/.
+  if (relativePath.startsWith('companion/') && name === 'build') return true;
+  return false;
+}
+
 function candidateFiles(directory = ROOT) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
-    if (entry.isDirectory() && EXCLUDED_DIRECTORIES.has(entry.name)) return [];
     const absolute = resolve(directory, entry.name);
+    const relativePath = relative(ROOT, absolute).replaceAll('\\', '/');
+    if (entry.isDirectory() && isExcludedDirectory(relativePath, entry.name)) return [];
     if (entry.isDirectory()) return candidateFiles(absolute);
     if (!entry.isFile()) return [];
-    return [relative(ROOT, absolute).replaceAll('\\', '/')];
+    return [relativePath];
   });
 }
 
