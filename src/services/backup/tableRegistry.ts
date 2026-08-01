@@ -108,6 +108,16 @@ export const BACKUP_TABLE_REGISTRY = {
     storageRole: 'user-data',
     reason: 'User-reported and source-specific session coverage observations are meaningful fieldwork history.',
   },
+  companionRecordings: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'Immutable lossless native hardware observations are authoritative user fieldwork data.',
+  },
+  companionImports: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'Import identity and derivation rules prevent duplicate coverage and preserve user trimming intent.',
+  },
   fieldGuideCache: {
     classification: 'excluded',
     storageRole: 'cache',

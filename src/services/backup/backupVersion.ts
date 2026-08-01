@@ -4,7 +4,7 @@
  * are normalized during import.
  */
 export const DEFAULT_LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
-export const CURRENT_BACKUP_FORMAT_VERSION = 6 as const;
+export const CURRENT_BACKUP_FORMAT_VERSION = 7 as const;
 
 export type BackupContainer = 'json' | 'json-or-zip';
 
@@ -55,10 +55,16 @@ export const BACKUP_FORMAT_DEFINITIONS = [
     description: 'Introduced full zip archives with manifest media-entry references.',
   },
   {
+    version: 6,
+    lifecycle: 'legacy',
+    container: 'json-or-zip',
+    description: 'Current manifest including question and hotspot accuracy history.',
+  },
+  {
     version: CURRENT_BACKUP_FORMAT_VERSION,
     lifecycle: 'current',
     container: 'json-or-zip',
-    description: 'Current manifest including question and hotspot accuracy history.',
+    description: 'Adds immutable Companion recordings, import identity and derivation rules.',
   },
 ] as const satisfies readonly BackupFormatDefinition[];
 

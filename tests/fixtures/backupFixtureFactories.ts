@@ -137,6 +137,26 @@ export const BACKUP_FIXTURE_FACTORIES = {
     evidence: 'reported', startedAt: Date.parse(ISO), observedAt: Date.parse(ISO),
     createdAt: ISO, updatedAt: ISO,
   }),
+  companionRecordings: () => ({
+    id: '00000000-0000-4000-8000-000000000001',
+    contentHash: `sha256:${'0'.repeat(64)}`,
+    schemaVersion: 1,
+    producerName: 'FindSpot Companion', producerVersion: '1.0.0',
+    producerPlatform: 'android', associatedSessionId: 'session-1',
+    originalJson: '{"fixture":true}', pointCount: 1,
+    importedAt: ISO, createdAt: ISO, updatedAt: ISO,
+  }),
+  companionImports: () => ({
+    id: '00000000-0000-4000-8000-000000000001',
+    contentHash: `sha256:${'0'.repeat(64)}`,
+    recordingId: '00000000-0000-4000-8000-000000000001',
+    sessionId: 'session-1',
+    trackIds: ['track-1'],
+    segmentRules: [{
+      segmentIndex: 0, includeFromSequence: null, includeToSequence: null,
+    }],
+    derivationStatus: 'ready', importedAt: ISO, updatedAt: ISO,
+  }),
 } satisfies Record<BackedUpTableName, FixtureFactory>;
 
 export async function seedBackupFixture(database: FindSpotDB): Promise<void> {

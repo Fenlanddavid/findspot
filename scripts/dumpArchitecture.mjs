@@ -7,6 +7,7 @@ const SELF = 'scripts/dumpArchitecture.mjs';
 
 const INCLUDED_DIRECTORIES = [
   '.github/workflows/',
+  'companion/',
   'docs/',
   'scripts/',
   'src/',
@@ -32,7 +33,8 @@ const INCLUDED_ROOT_FILES = new Set([
 
 const TEXT_EXTENSIONS = new Set([
   '.cjs', '.css', '.d.ts', '.html', '.js', '.json', '.jsonc', '.jsx',
-  '.md', '.mjs', '.sh', '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml',
+  '.java', '.kts', '.md', '.mjs', '.pro', '.sh', '.toml', '.ts', '.tsx',
+  '.txt', '.xml', '.yaml', '.yml',
 ]);
 
 function extensionOf(path) {
@@ -76,6 +78,7 @@ export function requiredDumpFiles() {
   const candidates = candidateFiles();
   return candidates.filter(path => (
     path === SELF
+    || path.startsWith('companion/')
     || path.startsWith('docs/')
     || path.startsWith('.github/workflows/')
     || /(^|\/)wrangler\.(?:toml|json|jsonc)$/.test(path)

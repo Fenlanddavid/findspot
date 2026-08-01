@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import {
   getProtectionState,
   requestProtection,
@@ -43,6 +43,7 @@ import {
 } from "../utils/legalCopy";
 import { clearFieldGuideCaches } from "../services/fieldGuideMutations";
 import { BGS_ATTRIBUTION } from "../shared/bgsAttribution";
+import { COMPANION_DOWNLOAD_URL } from "../services/companionLaunch";
 
 type RestoreCounts = {
   projects: number;
@@ -766,11 +767,17 @@ export default function Settings() {
           <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">Data actions</h3>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Save a backup first. Restore only when replacing this device’s local archive.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1.5fr_1fr_1fr]">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Link
+            to="/companion-import"
+            className="col-span-2 flex items-center justify-center rounded-xl bg-emerald-700 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-600 sm:col-span-1"
+          >
+            Import trail
+          </Link>
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="col-span-2 rounded-xl bg-emerald-600 py-3 text-sm font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-60 sm:col-span-1"
+            className="rounded-xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-60"
           >
             {exporting ? "Saving…" : "Backup JSON"}
           </button>
@@ -1239,6 +1246,46 @@ export default function Settings() {
           >
             Show again →
           </button>
+        </section>
+
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">FindSpot Companion</h2>
+                <span className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+                  Android beta
+                </span>
+              </div>
+              <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+                Record a complete GPS trail while your phone is locked, then share it back into FindSpot with pauses preserved.
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                Android only. On iPhone and iPad, Track Session continues to use FindSpot foreground tracking; keep FindSpot open and the screen awake.
+              </p>
+            </div>
+            {COMPANION_DOWNLOAD_URL ? (
+              <a
+                href={COMPANION_DOWNLOAD_URL}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl bg-emerald-700 px-4 py-3 text-center text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-600"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download Companion app
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="inline-flex min-h-11 shrink-0 cursor-not-allowed items-center justify-center rounded-xl bg-gray-200 px-4 py-3 text-center text-xs font-black uppercase tracking-widest text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+              >
+                Download Companion app
+              </button>
+            )}
+          </div>
+          <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
+            Beta software: complete a short test before relying on it for fieldwork.
+          </p>
         </section>
 
         <section className="bg-emerald-50 dark:bg-emerald-900/20 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-800/50">

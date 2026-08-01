@@ -363,12 +363,59 @@ export type Track = {
   projectId: string;
   sessionId: string | null;
   name: string;
-  points: Array<{ lat: number; lon: number; timestamp: number; accuracy?: number }>;
+  points: Array<{
+    lat: number;
+    lon: number;
+    timestamp: number;
+    accuracy?: number;
+    sourceSequence?: number;
+    altitudeM?: number | null;
+    verticalAccuracyM?: number | null;
+    headingDegrees?: number | null;
+    speedMps?: number | null;
+    provider?: string;
+  }>;
   isActive: boolean;
   color: string;
   createdAt: string;
   updatedAt: string;
   gaps?: { start: number; end: number }[];
+  sourceRecordingUuid?: string;
+  sourceSegmentIndex?: number;
+};
+
+export type CompanionRecordingRecord = {
+  id: string;
+  contentHash: string;
+  schemaVersion: number;
+  producerName: string;
+  producerVersion: string;
+  producerPlatform: 'android' | 'ios';
+  associatedSessionId: string;
+  originalJson: string;
+  pointCount: number;
+  importedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanionSegmentRule = {
+  segmentIndex: number;
+  includeFromSequence: number | null;
+  includeToSequence: number | null;
+};
+
+export type CompanionImportLedger = {
+  id: string;
+  contentHash: string;
+  recordingId: string;
+  sessionId: string;
+  trackIds: string[];
+  segmentRules: CompanionSegmentRule[];
+  derivationStatus: 'pending' | 'ready' | 'failed';
+  derivationError?: string;
+  importedAt: string;
+  updatedAt: string;
 };
 
 export type Setting = {
@@ -596,7 +643,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 41;
+export const FINDSPOT_CURRENT_VERSION = 42;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -643,6 +690,8 @@ export class FindSpotDB extends Dexie {
   hotspotPredictionAggregates!: Table<HotspotPredictionAggregate, string>;
   permissionSections!: Table<PermissionSection, string>;
   sessionCoverage!: Table<SessionCoverageObservation, string>;
+  companionRecordings!: Table<CompanionRecordingRecord, string>;
+  companionImports!: Table<CompanionImportLedger, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
@@ -945,6 +994,13 @@ export class FindSpotDB extends Dexie {
     declareFindSpotVersion(41).stores({
       permissionSections: 'id, permissionId, fieldId, retiredAt',
       sessionCoverage: 'id, sessionId, permissionId, sectionId, evidence, observedAt, [sectionId+evidence]',
+    });
+
+    // v42: immutable lossless Companion recordings and their idempotent import
+    // ledger. Derived tracks remain in the existing tracks table.
+    declareFindSpotVersion(42).stores({
+      companionRecordings: 'id, &contentHash, associatedSessionId, importedAt',
+      companionImports: 'id, &contentHash, sessionId, derivationStatus, importedAt',
     });
 
     // Production and migration fixtures both replay this exact registry.

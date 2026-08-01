@@ -215,6 +215,7 @@ export function validatePersistedBackupTables(
     'projects', 'permissions', 'fields', 'sessions', 'finds', 'significantFinds',
     'tracks', 'media', 'importedPackages', 'savedPoints', 'undugSignals',
     'outstandingQuestions', 'questionNotes', 'permissionSections', 'sessionCoverage',
+    'companionRecordings', 'companionImports',
   ] as const) {
     assertRowsHaveId(backup[table], table);
   }
@@ -225,6 +226,10 @@ export function validatePersistedBackupTables(
   const findIds = new Set(backup.finds.map(row => row.id));
   const significantFindIds = new Set(backup.significantFinds.map(row => row.id));
   const sectionIds = new Set(backup.permissionSections.map(row => row.id));
+  const companionRecordingIds = new Set(backup.companionRecordings.map(row => row.id));
+  const trackIds = new Set(backup.tracks.map(row => row.id));
+  const companionRecordingsById = new Map(backup.companionRecordings.map(row => [row.id, row]));
+  const companionHashes = new Set<string>();
 
   backup.permissions.forEach((permission, index) => {
     if (!projectIds.has(permission.projectId)) {
@@ -267,6 +272,61 @@ export function validatePersistedBackupTables(
   backup.tracks.forEach((track, index) => {
     if (track.sessionId && !sessionIds.has(track.sessionId)) {
       throw new Error(`Invalid format: tracks[${index}] references an unknown session`);
+    }
+  });
+  backup.companionRecordings.forEach((recording, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: companionRecordings[${index}] has an invalid ${field}`);
+    if (!sessionIds.has(recording.associatedSessionId)) throw invalid('associatedSessionId');
+    if (typeof recording.contentHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(recording.contentHash)) {
+      throw invalid('contentHash');
+    }
+    if (!Number.isInteger(recording.schemaVersion) || (recording.schemaVersion as number) < 1) {
+      throw invalid('schemaVersion');
+    }
+    if (typeof recording.originalJson !== 'string' || !recording.originalJson.trim()) {
+      throw invalid('originalJson');
+    }
+    if (!Number.isInteger(recording.pointCount) || (recording.pointCount as number) < 0) {
+      throw invalid('pointCount');
+    }
+    if (companionHashes.has(recording.contentHash as string)) throw invalid('duplicate contentHash');
+    companionHashes.add(recording.contentHash as string);
+    if (!isIsoDateString(recording.importedAt) || !isIsoDateString(recording.createdAt) ||
+        !isIsoDateString(recording.updatedAt)) throw invalid('timestamps');
+  });
+  backup.companionImports.forEach((entry, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: companionImports[${index}] has an invalid ${field}`);
+    if (!companionRecordingIds.has(entry.recordingId) || entry.id !== entry.recordingId) {
+      throw invalid('recordingId');
+    }
+    const recording = companionRecordingsById.get(entry.recordingId);
+    if (!recording || recording.contentHash !== entry.contentHash ||
+        recording.associatedSessionId !== entry.sessionId) throw invalid('recording relationship');
+    if (!sessionIds.has(entry.sessionId)) throw invalid('sessionId');
+    if (typeof entry.contentHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(entry.contentHash)) {
+      throw invalid('contentHash');
+    }
+    if (!Array.isArray(entry.trackIds) || entry.trackIds.some((id: unknown) => typeof id !== 'string' || !id)) {
+      throw invalid('trackIds');
+    }
+    if ((entry.trackIds as unknown[]).some(id => !trackIds.has(id as string))) throw invalid('trackIds');
+    if (!['pending', 'ready', 'failed'].includes(entry.derivationStatus as string)) {
+      throw invalid('derivationStatus');
+    }
+    if (!Array.isArray(entry.segmentRules) || entry.segmentRules.some((rule: unknown) => {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return true;
+      const row = rule as UnvalidatedRow;
+      return !Number.isInteger(row.segmentIndex)
+        || (row.segmentIndex as number) < 0
+        || (row.includeFromSequence !== null && !Number.isInteger(row.includeFromSequence))
+        || (row.includeToSequence !== null && !Number.isInteger(row.includeToSequence));
+    })) {
+      throw invalid('segmentRules');
+    }
+    if (!isIsoDateString(entry.importedAt) || !isIsoDateString(entry.updatedAt)) {
+      throw invalid('timestamps');
     }
   });
   backup.media.forEach((media, index) => {
@@ -463,5 +523,9 @@ export function validatePersistedBackupTables(
       backup.permissionSections as unknown as ValidatedBackupData['permissionSections'],
     sessionCoverage:
       backup.sessionCoverage as unknown as ValidatedBackupData['sessionCoverage'],
+    companionRecordings:
+      backup.companionRecordings as unknown as ValidatedBackupData['companionRecordings'],
+    companionImports:
+      backup.companionImports as unknown as ValidatedBackupData['companionImports'],
   };
 }

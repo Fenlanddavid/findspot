@@ -43,6 +43,7 @@ import {
   updateSessionDetails,
 } from '../services/sessionMutations';
 import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
+import { companionRecordingHref, isAndroidUserAgent } from '../services/companionLaunch';
 import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
 
 const FIRST_SESSION_KEY = "fs_first_session";
@@ -254,6 +255,8 @@ export default function SessionPage(props: {
   // Use a stable sessionId even if it's a new session (id is undefined)
   const [sessionId] = useState(id || uuid());
   const isEdit = !!id;
+  const isAndroid = useMemo(() => isAndroidUserAgent(), []);
+  const companionHref = useMemo(() => companionRecordingHref(sessionId), [sessionId]);
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
   const [lat, setLat] = useState<number | null>(null);
@@ -831,7 +834,7 @@ export default function SessionPage(props: {
     },
     {
       title: "Start detecting",
-      body: "Start the session first. Mapping and find recording are available once it is saved.",
+      body: "Start the session first. Trail tracking and find recording are available once it is saved.",
       accent: "text-amber-300",
       border: "border-amber-400/35",
       position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:bottom-[92px] sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
@@ -915,7 +918,7 @@ export default function SessionPage(props: {
                               <div className="flex min-w-0 items-center gap-2">
                                 <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
                                 <span className="truncate text-2xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                                  {isTracking ? "Mapping live" : "Session active"}
+                                  {isTracking ? "Tracking live" : "Session active"}
                                 </span>
                               </div>
                               <button
@@ -956,13 +959,39 @@ export default function SessionPage(props: {
                             </div>
 
                             <div className="mt-3 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={toggleTracking}
-                                className={`flex-1 rounded-xl px-3 py-2 text-xs font-black transition-all active:scale-[0.98] ${isTracking ? "bg-red-600 text-white shadow-md shadow-red-600/20" : "border border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"}`}
-                              >
-                                {isTracking ? "Stop Mapping" : "Map Session"}
-                              </button>
+                              {isTracking ? (
+                                <button
+                                  type="button"
+                                  onClick={toggleTracking}
+                                  className="flex-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white shadow-md shadow-red-600/20 transition-all active:scale-[0.98]"
+                                >
+                                  Stop Tracking
+                                </button>
+                              ) : isAndroid ? (
+                                <a
+                                  href={companionHref}
+                                  className="flex-1 rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-center text-xs font-black text-emerald-700 transition-all hover:border-emerald-400 active:scale-[0.98] dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"
+                                >
+                                  Track Session
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={toggleTracking}
+                                  className="flex-1 rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-center text-xs font-black text-emerald-700 transition-all hover:border-emerald-400 active:scale-[0.98] dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"
+                                >
+                                  Track Session
+                                </button>
+                              )}
+                              {!isTracking && (
+                                <button
+                                  type="button"
+                                  onClick={() => nav(`/companion-import?session=${sessionId}`)}
+                                  className="rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-2xs font-black uppercase tracking-widest text-gray-600 dark:border-gray-700 dark:bg-gray-900/70 dark:text-gray-300"
+                                >
+                                  Import trail
+                                </button>
+                              )}
                               {isTracking && (
                                 <button
                                   type="button"
@@ -985,7 +1014,7 @@ export default function SessionPage(props: {
                             )}
                             {isTracking && (
                               <p className="mt-2 text-2xs font-bold text-amber-700 dark:text-amber-300">
-                                Keep the screen awake while mapping.
+                                Keep the screen awake while browser tracking is active.
                               </p>
                             )}
                           </div>
@@ -1102,7 +1131,7 @@ export default function SessionPage(props: {
                           </div>
 
                           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                            <h4 className="mb-3 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Mapping</h4>
+                            <h4 className="mb-3 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Tracking</h4>
                             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-center dark:border-gray-800 dark:bg-gray-950/50">
                               <div className="text-lg font-black text-gray-900 dark:text-gray-100">{activeCoveragePercent !== null ? `${Math.round(activeCoveragePercent)}%` : "--"}</div>
                               <div className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Area covered</div>
@@ -1288,17 +1317,43 @@ export default function SessionPage(props: {
                         </div>
 
                         <div className="flex flex-col gap-2 ml-auto">
-                            <div className="text-xs font-black uppercase tracking-widest opacity-50">Mapping</div>
+                            <div className="text-xs font-black uppercase tracking-widest opacity-50">Tracking</div>
                             <div className="flex gap-2">
                                 {isEdit ? (
                                     <>
-                                        <button 
+                                        {isTracking ? (
+                                          <button
+                                              type="button"
+                                              onClick={toggleTracking}
+                                              className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                                          >
+                                              <span>Stop Tracking</span>
+                                          </button>
+                                        ) : isAndroid ? (
+                                          <a
+                                              href={companionHref}
+                                              className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-4 py-1.5 text-xs font-bold text-emerald-600 shadow-sm transition-all active:scale-95 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-400"
+                                          >
+                                              <span>Track Session</span>
+                                          </a>
+                                        ) : (
+                                          <button
+                                              type="button"
+                                              onClick={toggleTracking}
+                                              className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-4 py-1.5 text-xs font-bold text-emerald-600 shadow-sm transition-all active:scale-95 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-400"
+                                          >
+                                              <span>Track Session</span>
+                                          </button>
+                                        )}
+                                        {!isTracking && (
+                                          <button
                                             type="button"
-                                            onClick={toggleTracking}
-                                            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold shadow-sm transition-all transform active:scale-95 text-xs ${isTracking ? 'bg-red-600 text-white animate-pulse' : 'bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-700'}`}
-                                        >
-                                            <span>{isTracking ? 'Stop Mapping' : 'Map Session'}</span>
-                                        </button>
+                                            onClick={() => nav(`/companion-import?session=${sessionId}`)}
+                                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                          >
+                                            Import trail
+                                          </button>
+                                        )}
                                         {isTracking && (
                                             <button 
                                                 type="button"
@@ -1311,7 +1366,7 @@ export default function SessionPage(props: {
                                         )}
                                     </>
                                 ) : (
-                                    <span className="text-2xs opacity-60 italic">Start session to enable mapping</span>
+                                    <span className="text-2xs opacity-60 italic">Start session to enable tracking</span>
                                 )}
                             </div>
                         </div>

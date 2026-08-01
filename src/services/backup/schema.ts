@@ -1,5 +1,7 @@
 import type {
   Field,
+  CompanionImportLedger,
+  CompanionRecordingRecord,
   Find,
   FindHotspotSignal,
   HotspotPrediction,
@@ -55,6 +57,8 @@ export type ValidatedBackupTables = {
   questionNotes: QuestionNote[];
   permissionSections: PermissionSection[];
   sessionCoverage: SessionCoverageObservation[];
+  companionRecordings: CompanionRecordingRecord[];
+  companionImports: CompanionImportLedger[];
 };
 
 /**

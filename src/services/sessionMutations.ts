@@ -1,5 +1,6 @@
 import { db } from '../db';
 import type { Session, Track } from '../db';
+import { applyCompanionTrackTrim, regenerateCompanionTracks } from './companionImport';
 
 export async function setSessionGroundConditions(
   sessionId: string,
@@ -22,9 +23,12 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
   const significantFinds = await db.significantFinds.where('sessionId').equals(sessionId).toArray();
   const findIds = finds.map(find => find.id);
   const significantFindIds = significantFinds.map(find => find.id);
+  const companionImports = await db.companionImports.where('sessionId').equals(sessionId).toArray();
+  const companionRecordingIds = companionImports.map(entry => entry.recordingId);
 
   await db.transaction('rw', [
     db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.sessionCoverage,
+    db.companionImports, db.companionRecordings,
   ], async () => {
     if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
     if (significantFindIds.length) await db.media.where('findId').anyOf(significantFindIds).delete();
@@ -32,6 +36,10 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
     await db.significantFinds.where('sessionId').equals(sessionId).delete();
     await db.tracks.where('sessionId').equals(sessionId).delete();
     await db.sessionCoverage.where('sessionId').equals(sessionId).delete();
+    await db.companionImports.where('sessionId').equals(sessionId).delete();
+    if (companionRecordingIds.length > 0) {
+      await db.companionRecordings.bulkDelete(companionRecordingIds);
+    }
     await db.sessions.delete(sessionId);
   });
 }
@@ -61,6 +69,12 @@ export async function trimSessionTrack(
   points: Track['points'],
   updatedAt: string,
 ): Promise<void> {
+  const track = await db.tracks.get(trackId);
+  if (!track) throw new Error('Track not found.');
+  if (await applyCompanionTrackTrim(track, points, updatedAt)) {
+    await regenerateCompanionTracks(track.sourceRecordingUuid!);
+    return;
+  }
   await db.tracks.update(trackId, { points, updatedAt });
 }
 

@@ -68,6 +68,8 @@ export async function auditDatabaseIntegrity(
     database.questionNotes,
     database.permissionSections,
     database.sessionCoverage,
+    database.companionRecordings,
+    database.companionImports,
   ];
 
   const rows = await database.transaction('r', tables, async () => {
@@ -75,7 +77,7 @@ export async function auditDatabaseIntegrity(
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
-      permissionSections, sessionCoverage,
+      permissionSections, sessionCoverage, companionRecordings, companionImports,
     ] = await Promise.all([
       database.projects.toArray(),
       database.permissions.toArray(),
@@ -93,12 +95,14 @@ export async function auditDatabaseIntegrity(
       database.questionNotes.toArray(),
       database.permissionSections.toArray(),
       database.sessionCoverage.toArray(),
+      database.companionRecordings.toArray(),
+      database.companionImports.toArray(),
     ]);
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
-      permissionSections, sessionCoverage,
+      permissionSections, sessionCoverage, companionRecordings, companionImports,
     };
   });
 
@@ -112,6 +116,8 @@ export async function auditDatabaseIntegrity(
     ...rows.significantFinds.map(row => row.id),
   ]);
   const sectionById = new Map(rows.permissionSections.map(row => [row.id, row]));
+  const trackIds = new Set(rows.tracks.map(row => row.id));
+  const companionRecordingsById = new Map(rows.companionRecordings.map(row => [row.id, row]));
 
   let danglingPermissionIds = 0;
   for (const row of [
@@ -191,6 +197,22 @@ export async function auditDatabaseIntegrity(
     if (!section.geometryVersions.some(version =>
       version.version === observation.sectionGeometryVersion
     )) orphanedRecords += 1;
+  }
+  for (const recording of rows.companionRecordings) {
+    if (!sessionIds.has(recording.associatedSessionId)) orphanedRecords += 1;
+  }
+  for (const entry of rows.companionImports) {
+    const recording = companionRecordingsById.get(entry.recordingId);
+    if (!recording || recording.contentHash !== entry.contentHash) orphanedRecords += 1;
+    if (!sessionIds.has(entry.sessionId)) orphanedRecords += 1;
+    for (const trackId of entry.trackIds) {
+      if (!trackIds.has(trackId)) orphanedRecords += 1;
+    }
+  }
+  for (const track of rows.tracks) {
+    if (track.sourceRecordingUuid && !companionRecordingsById.has(track.sourceRecordingUuid)) {
+      orphanedRecords += 1;
+    }
   }
 
   const retiredRules = rows.outstandingQuestions.filter(question =>

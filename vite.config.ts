@@ -29,6 +29,9 @@ export default defineConfig({
       // 'prompt' instead of 'autoUpdate' so a mid-session refresh doesn't
       // interrupt the user or risk a DB migration running without consent.
       registerType: 'prompt',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       includeAssets: ['logo.svg'],
       manifest: {
         name: 'FindSpot UK',
@@ -38,6 +41,21 @@ export default defineConfig({
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/findspot/",
+        share_target: {
+          action: "/findspot/companion-share",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            files: [{
+              name: "recording",
+              accept: [
+                "application/json",
+                "application/vnd.findspot.companion+json",
+                ".json",
+              ],
+            }],
+          },
+        },
         icons: [
           {
             src: "logo.svg",
@@ -53,7 +71,7 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         // Explicitly precache the PAS density index (not covered by glob above
         // which excludes .json to avoid caching clubs.json / events.json).
@@ -68,22 +86,6 @@ export default defineConfig({
         // Raise the limit to cover the main bundle (~2.4 MB uncompressed)
         // so the app works fully offline after installation.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        // External API calls must bypass the service worker entirely.
-        // These are read-only data fetches that must always go to the network.
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/findspot-static\.trials-uk\.workers\.dev\//,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /^https:\/\/findspot-bgs-proxy\.trials-uk\.workers\.dev\//,
-            handler: 'NetworkOnly',
-          },
-          {
-            urlPattern: /^https:\/\/findspot-geocode\.trials-uk\.workers\.dev\//,
-            handler: 'NetworkOnly',
-          },
-        ],
       },
       devOptions: {
         // Enable the virtual PWA module in dev mode so useRegisterSW

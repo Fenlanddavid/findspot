@@ -1,6 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "./fixtures";
 import { strToU8, zipSync } from "fflate";
+import {
+  companionPayloadHash,
+  type CompanionRecording,
+} from "../src/shared/companionRecording";
 
 function encodePack(pack: object): string {
   return Buffer.from(JSON.stringify(pack), "utf8")
@@ -97,9 +101,93 @@ test("home, settings and discover routes render without crashing", async ({ page
   await page.getByRole("button", { name: "App" }).click();
   await expect(page.getByText("Privacy Guarantee")).toBeVisible();
   await expect(page.getByText("Saved finds, permissions")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "FindSpot Companion" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download Companion app" }))
+    .toHaveAttribute("href", /releases\/download\/companion-v1\.0\.0-beta\.1\/findspot-companion-v1\.0\.0-beta\.1\.apk$/);
+  await expect(page.getByText("Beta software: complete a short test")).toBeVisible();
 
   await page.getByRole("link", { name: "Discover" }).click();
   await expect(page).toHaveURL(/\/discover$/);
+});
+
+test("Companion JSON import preserves segments and becomes idempotent", async ({ page }) => {
+  await page.goto("./companion-import");
+  await expect(page.getByText("UK Find Log", { exact: true })).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "companion-permission", projectId, name: "Companion Field", type: "individual",
+    lat: null, lon: null, gpsAccuracyM: null, collector: "", landType: "arable",
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "companion-session", projectId, permissionId: "companion-permission", fieldId: null,
+    date: now, lat: null, lon: null, gpsAccuracyM: null, landUse: "", cropType: "",
+    isStubble: false, notes: "", isFinished: false, createdAt: now, updatedAt: now,
+  });
+  await page.reload();
+  await expect(page.getByText("Import Companion trail")).toBeVisible();
+
+  const recording: CompanionRecording = {
+    schemaVersion: 1,
+    producer: { name: "FindSpot Companion", version: "1.0.0", platform: "android" },
+    recordingUuid: "00000000-0000-4000-8000-000000000099",
+    contentHash: `sha256:${"0".repeat(64)}`,
+    createdAtUtc: Date.parse(now), startedAtUtc: Date.parse(now),
+    stoppedAtUtc: Date.parse(now) + 60_000, state: "stopped", interruptionReason: null,
+    segments: [0, 1].map(segmentIndex => ({
+      segmentIndex,
+      startedAtUtc: Date.parse(now) + segmentIndex * 40_000,
+      endedAtUtc: Date.parse(now) + segmentIndex * 40_000 + 10_000,
+      observations: [0, 1].map(offset => ({
+        type: "trackPoint" as const,
+        sequence: segmentIndex * 2 + offset,
+        timestampUtc: Date.parse(now) + segmentIndex * 40_000 + offset * 5_000,
+        monotonicTimestampNs: String(1000 + segmentIndex * 2 + offset),
+        receivedTimestampUtc: Date.parse(now) + segmentIndex * 40_000 + offset * 5_000 + 10,
+        latitude: 52.2053 + segmentIndex * 0.001 + offset * 0.0001,
+        longitude: 0.1218 + segmentIndex * 0.001 + offset * 0.0001,
+        altitudeM: 8, horizontalAccuracyM: 4, verticalAccuracyM: 6,
+        headingDegrees: 90, speedMps: 1, provider: "gps",
+      })),
+    })),
+  };
+  recording.contentHash = await companionPayloadHash(recording);
+  const file = {
+    name: "field-test.findspot.json",
+    mimeType: "application/vnd.findspot.companion+json",
+    buffer: Buffer.from(JSON.stringify(recording)),
+  };
+  await page.locator('input[type="file"]').setInputFiles(file);
+  await expect(page.getByRole("button", { name: "Confirm and import" })).toBeVisible();
+  await page.locator("select").first().selectOption("companion-session");
+  await page.getByRole("button", { name: "Confirm and import" }).click();
+  await expect(page.getByRole("heading", { name: "Recording imported" })).toBeVisible();
+
+  const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sourceRecordingUuid?: string; sourceSegmentIndex?: number }>;
+  expect(tracks.filter(track => track.sourceRecordingUuid === recording.recordingUuid)
+    .map(track => track.sourceSegmentIndex).sort()).toEqual([0, 1]);
+  expect((await readIndexedDbStore(page, "companionRecordings"))).toHaveLength(1);
+  expect((await readIndexedDbStore(page, "companionImports"))).toHaveLength(1);
+
+  await page.reload();
+  await page.locator('input[type="file"]').setInputFiles(file);
+  await page.locator("select").first().selectOption("companion-session");
+  await page.getByRole("button", { name: "Confirm and import" }).click();
+  await expect(page.getByRole("heading", { name: "Already safely imported" })).toBeVisible();
+  expect((await readIndexedDbStore(page, "tracks") as Array<{ sourceRecordingUuid?: string }>)
+    .filter(track => track.sourceRecordingUuid === recording.recordingUuid)).toHaveLength(2);
+});
+
+test("missing Companion returns safely to FindSpot with the session preserved", async ({ page }) => {
+  await page.goto("./companion-import?companion=missing&session=session-1");
+  await expect(page.getByRole("heading", { name: "FindSpot Companion is not installed" })).toBeVisible();
+  await expect(page.getByText("Nothing has changed in this session and no data has been lost.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download Companion app" }))
+    .toHaveAttribute("href", /releases\/download\/companion-v1\.0\.0-beta\.1\/findspot-companion-v1\.0\.0-beta\.1\.apk$/);
+  await expect(page).toHaveURL(/companion=missing&session=session-1$/);
+  await expect(page.getByText("Companion · Android only")).toBeVisible();
 });
 
 test("settings clears regenerable Field Guide caches without deleting saved points", async ({ page }) => {
@@ -186,6 +274,7 @@ test("can create a permission, start a session and save a find", async ({ page }
   await page.getByRole("button", { name: "Start Session" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
   await expect(page.getByText("Session active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Track Session" })).toBeVisible();
 
   await page.getByRole("button", { name: "Add Find to Session" }).click();
   await expect(page).toHaveURL(/\/find\?/);

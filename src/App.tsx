@@ -62,6 +62,7 @@ const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
 const Discover = React.lazy(() => import("./pages/Discover"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
+const CompanionImport = React.lazy(() => import("./pages/CompanionImport"));
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -112,6 +113,14 @@ function Shell() {
       .then(() => aggregateAndSweepHotspotPredictions())
       .catch(error => {
         reportNonFatal('startup', 'Hotspot calibration maintenance failed', error);
+      });
+    void db.companionImports.filter(entry => entry.derivationStatus !== 'ready').count()
+      .then(pendingCount => pendingCount > 0
+        ? import('./services/companionImport')
+          .then(({ retryPendingCompanionDerivations }) => retryPendingCompanionDerivations())
+        : undefined)
+      .catch(error => {
+        reportNonFatal('companion-import', 'Companion derivation recovery failed', error);
       });
 
     // Track unique installation (one-time per device).
@@ -473,6 +482,7 @@ function Shell() {
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("auto", context); }} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/join" element={<JoinClubDay />} />
+            <Route path="/companion-import" element={<CompanionImport projectId={projectId} />} />
         </Routes>
         </Suspense>
         </PageErrorBoundary>

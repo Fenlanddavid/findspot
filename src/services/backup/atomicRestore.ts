@@ -72,6 +72,12 @@ export async function applyValidatedBackup(
     if (backup.sessionCoverage.length) {
       await database.sessionCoverage.bulkPut(backup.sessionCoverage);
     }
+    if (backup.companionRecordings.length) {
+      await database.companionRecordings.bulkPut(backup.companionRecordings);
+    }
+    if (backup.companionImports.length) {
+      await database.companionImports.bulkPut(backup.companionImports);
+    }
     await database.settings.put({ key: LAST_RESTORE_REPORT_SETTING_KEY, value: report });
   });
 }
