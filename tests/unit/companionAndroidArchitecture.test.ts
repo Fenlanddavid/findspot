@@ -13,23 +13,53 @@ describe('Android Companion architecture', () => {
     expect(manifest).not.toContain('android.permission.INTERNET');
   });
 
-  it('uses branded adaptive launcher resources and an in-app FindSpot mark', async () => {
+  it('uses a distinct trail launcher icon and an in-app FindSpot mark', async () => {
     const manifest = await readFile(new URL('AndroidManifest.xml', ANDROID), 'utf8');
     const activity = await readFile(new URL(
       'java/uk/findspot/companion/MainActivity.java',
       ANDROID,
     ), 'utf8');
     const launcher = await readFile(new URL('res/mipmap-anydpi-v26/ic_launcher.xml', ANDROID), 'utf8');
+    const launcherForeground = await readFile(new URL(
+      'res/drawable/ic_launcher_foreground.xml',
+      ANDROID,
+    ), 'utf8');
+    const launcherColours = await readFile(new URL('res/values/colors.xml', ANDROID), 'utf8');
     const logo = await readFile(new URL('res/drawable/findspot_logo.xml', ANDROID), 'utf8');
     expect(manifest).toContain('android:icon="@mipmap/ic_launcher"');
     expect(manifest).toContain('android:roundIcon="@mipmap/ic_launcher"');
     expect(launcher).toContain('@drawable/ic_launcher_foreground');
+    expect(launcherForeground).toContain('M154,352 C154,270');
+    expect(launcherForeground).not.toContain('M256,126 A130,130');
+    expect(launcherColours).toContain('#0F172A');
     expect(activity).toContain('R.drawable.findspot_logo');
     expect(activity).toContain('TextView title = text("FindSpot", 24');
     expect(activity).toContain('new LinearGradient(');
     expect(activity).toContain('TextView companion = text("COMPANION", 10');
     expect(logo).toContain('#FF10B981');
     expect(logo).toContain('#FF0EA5E9');
+  });
+
+  it('routes start and stop controls through FindSpot while keeping recovery available', async () => {
+    const manifest = await readFile(new URL('AndroidManifest.xml', ANDROID), 'utf8');
+    const activity = await readFile(new URL(
+      'java/uk/findspot/companion/MainActivity.java',
+      ANDROID,
+    ), 'utf8');
+    const notifications = await readFile(new URL(
+      'java/uk/findspot/companion/CompanionNotifications.java',
+      ANDROID,
+    ), 'utf8');
+    expect(manifest).toContain('android:pathPrefix="/"');
+    expect(manifest).toContain('android:name=".CompanionControlActivity"');
+    expect(manifest).toContain('android:theme="@style/ControlTheme"');
+    expect(activity).toContain('private static final String CONTROL_START = "start"');
+    expect(activity).toContain('private static final String CONTROL_STOP = "stop"');
+    expect(activity).toContain('Companion is ready.');
+    expect(activity).toContain('addPrimary("Open FindSpot", this::openFindSpot)');
+    expect(activity).toContain('shareStoppedRecording(active.uuid(), 0)');
+    expect(notifications).toContain('https://fenlanddavid.github.io/findspot/');
+    expect(notifications).not.toContain('builder.addAction');
   });
 
   it('guards startup recovery while the foreground service request is in flight', async () => {
@@ -45,6 +75,8 @@ describe('Android Companion architecture', () => {
     expect(activity).toContain('RecordingService.isRunningOrStarting()');
     expect(service).toContain('START_REQUEST_GRACE_NS');
     expect(service).toContain('clearStartRequested()');
+    expect(service).toContain('MAX_CONTINUOUS_RECORDING_MS = 12L * 60L * 60L * 1_000L');
+    expect(service).toContain('CompanionNotifications.showSafetyStop(this)');
   });
 
   it('commits delivered callbacks and preserves first-class segment rows', async () => {

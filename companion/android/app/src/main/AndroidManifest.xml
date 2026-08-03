@@ -26,13 +26,20 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".CompanionControlActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:theme="@style/ControlTheme">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="findspot-companion" android:host="record" android:path="/start" />
+                <data android:scheme="findspot-companion" android:host="record" android:pathPrefix="/" />
             </intent-filter>
-        </activity>
+        </activity-alias>
 
         <service
             android:name=".RecordingService"

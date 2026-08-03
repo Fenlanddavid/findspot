@@ -29,4 +29,9 @@ public final class RecordingServiceLifecycleTest {
 
         assertTrue(RecordingService.isRunningOrStartingAt(Long.MAX_VALUE));
     }
+
+    @Test
+    public void continuousRecordingHasATwelveHourSafetyLimit() {
+        assertTrue(RecordingService.MAX_CONTINUOUS_RECORDING_MS == 43_200_000L);
+    }
 }

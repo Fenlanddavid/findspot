@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 
 final class CompanionNotifications {
     static final String RECORDING_CHANNEL = "recording";
@@ -37,27 +38,23 @@ final class CompanionNotifications {
 
     static Notification recording(Context context, RecordingModels.Summary summary) {
         boolean paused = "paused".equals(summary.state());
-        Intent open = new Intent(context, MainActivity.class);
+        Intent open = new Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://fenlanddavid.github.io/findspot/")
+        );
         PendingIntent openIntent = PendingIntent.getActivity(
             context, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
         Notification.Builder builder = new Notification.Builder(context, RECORDING_CHANNEL)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setContentTitle(paused ? "FindSpot recording paused" : "FindSpot is recording")
-            .setContentText(summary.pointCount() + " raw GPS observations saved")
+            .setContentTitle(paused ? "Companion recording paused" : "Companion is recording")
+            .setContentText(summary.pointCount() + " observations saved · Tap FindSpot to stop")
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE);
 
-        builder.addAction(action(
-            context,
-            paused ? "Resume" : "Pause",
-            paused ? RecordingService.ACTION_RESUME : RecordingService.ACTION_PAUSE,
-            1
-        ));
-        builder.addAction(action(context, "Stop", RecordingService.ACTION_STOP, 2));
         return builder.build();
     }
 
@@ -77,22 +74,20 @@ final class CompanionNotifications {
         context.getSystemService(NotificationManager.class).notify(RECOVERY_ID, notification);
     }
 
-    private static Notification.Action action(
-        Context context,
-        String label,
-        String serviceAction,
-        int requestCode
-    ) {
-        Intent intent = new Intent(context, RecordingService.class).setAction(serviceAction);
-        PendingIntent pending = PendingIntent.getService(
-            context,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+    static void showSafetyStop(Context context) {
+        Intent open = new Intent(context, MainActivity.class)
+            .putExtra(MainActivity.EXTRA_SHOW_RECOVERY, true);
+        PendingIntent openIntent = PendingIntent.getActivity(
+            context, 4, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
-        int icon = RecordingService.ACTION_STOP.equals(serviceAction)
-            ? android.R.drawable.ic_media_pause
-            : android.R.drawable.ic_media_play;
-        return new Notification.Action.Builder(icon, label, pending).build();
+        Notification notification = new Notification.Builder(context, RECOVERY_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("Companion stopped after 12 hours")
+            .setContentText("Your trail is safe. Tap to close, export or resume it.")
+            .setContentIntent(openIntent)
+            .setAutoCancel(true)
+            .build();
+        context.getSystemService(NotificationManager.class).notify(RECOVERY_ID, notification);
     }
+
 }

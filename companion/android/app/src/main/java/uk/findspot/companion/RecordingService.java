@@ -11,7 +11,9 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.location.LocationRequest;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 public final class RecordingService extends Service implements LocationListener {
     static final String ACTION_START = "uk.findspot.companion.START";
@@ -20,6 +22,7 @@ public final class RecordingService extends Service implements LocationListener 
     static final String ACTION_STOP = "uk.findspot.companion.STOP";
     static final String EXTRA_RECORDING_UUID = "recordingUuid";
     private static final long START_REQUEST_GRACE_NS = 5_000_000_000L;
+    static final long MAX_CONTINUOUS_RECORDING_MS = 12L * 60L * 60L * 1_000L;
 
     static volatile boolean isRunning = false;
     private static volatile long startRequestedAtNs = Long.MIN_VALUE;
@@ -28,6 +31,11 @@ public final class RecordingService extends Service implements LocationListener 
     private LocationManager locations;
     private String recordingUuid;
     private boolean explicitShutdown;
+    private final Handler safetyHandler = new Handler(Looper.getMainLooper());
+    private final Runnable safetyStop = () -> {
+        interruptAndStop("maximum_duration");
+        CompanionNotifications.showSafetyStop(this);
+    };
 
     @Override
     public void onCreate() {
@@ -77,6 +85,7 @@ public final class RecordingService extends Service implements LocationListener 
             } else if (ACTION_PAUSE.equals(action)) {
                 resolveRecordingUuid();
                 locations.removeUpdates(this);
+                safetyHandler.removeCallbacks(safetyStop);
                 store.pause(recordingUuid);
                 refreshNotification();
             } else if (ACTION_RESUME.equals(action)) {
@@ -88,6 +97,7 @@ public final class RecordingService extends Service implements LocationListener 
                 resolveRecordingUuid();
                 explicitShutdown = true;
                 locations.removeUpdates(this);
+                safetyHandler.removeCallbacks(safetyStop);
                 store.stop(recordingUuid);
                 stopForeground(STOP_FOREGROUND_REMOVE);
                 stopSelf();
@@ -148,6 +158,8 @@ public final class RecordingService extends Service implements LocationListener 
         } else {
             locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5_000L, 5f, this);
         }
+        safetyHandler.removeCallbacks(safetyStop);
+        safetyHandler.postDelayed(safetyStop, MAX_CONTINUOUS_RECORDING_MS);
     }
 
     @Override
@@ -188,6 +200,7 @@ public final class RecordingService extends Service implements LocationListener 
             // Nothing recoverable remains to transition.
         }
         if (locations != null) locations.removeUpdates(this);
+        safetyHandler.removeCallbacks(safetyStop);
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
@@ -201,6 +214,7 @@ public final class RecordingService extends Service implements LocationListener 
         }
         isRunning = false;
         clearStartRequested();
+        safetyHandler.removeCallbacks(safetyStop);
         super.onDestroy();
     }
 

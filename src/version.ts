@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'FindSpot now links Android beta testers directly to Google Play.';
+export const UPDATE_NOTES = 'Companion now records in the background and stops safely from FindSpot.';

@@ -16,6 +16,10 @@ import {
   isAndroidUserAgent,
 } from '../services/companionLaunch';
 import { pagePersistence } from '../services/pagePersistence';
+import { setDurableSetting } from '../services/clientStorage';
+import { finishSessionRecord } from '../services/sessionMutations';
+import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
+import { reportNonFatal } from '../services/diagLog';
 
 type Props = { projectId: string };
 
@@ -42,8 +46,11 @@ export default function CompanionImport({ projectId }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompanionImportResult | null>(null);
+  const [didFinishSession, setDidFinishSession] = useState(false);
   const isAndroid = useMemo(() => isAndroidUserAgent(), []);
   const companionMissing = searchParams.get('companion') === 'missing';
+  const receivedCompanionShare = searchParams.get('shared') === '1';
+  const finishAfterImport = receivedCompanionShare && searchParams.get('finish') === '1';
   const companionHref = useMemo(
     () => companionRecordingHref(searchParams.get('session') ?? undefined),
     [searchParams],
@@ -69,6 +76,11 @@ export default function CompanionImport({ projectId }: Props) {
   const availableFields = fields.filter(field => field.permissionId === newPermissionId);
 
   useEffect(() => {
+    if (!companionMissing && !receivedCompanionShare) return;
+    void setDurableSetting('fs_companion_active_session', '');
+  }, [companionMissing, receivedCompanionShare]);
+
+  useEffect(() => {
     if (selectedSessionId || sessions.length === 0) return;
     const active = sessions.find(session => !session.isFinished);
     if (active) {
@@ -85,7 +97,7 @@ export default function CompanionImport({ projectId }: Props) {
   }, [preview, selectedSessionId, sessions]);
 
   useEffect(() => {
-    if (searchParams.get('shared') !== '1') return;
+    if (!receivedCompanionShare) return;
     void takePendingCompanionShare()
       .then(file => {
         if (!file) throw new Error('The shared recording is no longer available. Share it again from Companion.');
@@ -101,13 +113,44 @@ export default function CompanionImport({ projectId }: Props) {
     setError(null);
     setResult(null);
     try {
-      setPreview(await inspectCompanionRecording(file));
+      const inspected = await inspectCompanionRecording(file);
+      setPreview(inspected);
+      const automaticSessionId = receivedCompanionShare
+        ? searchParams.get('session') ?? ''
+        : '';
+      if (automaticSessionId) {
+        const target = await pagePersistence.sessions.get(automaticSessionId);
+        if (!target) throw new Error('The FindSpot session for this recording could not be found.');
+        await completeImport(inspected, automaticSessionId, undefined, finishAfterImport);
+      }
     } catch (cause) {
       setPreview(null);
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function completeImport(
+    inspected: CompanionImportPreview,
+    sessionId: string,
+    newSession?: Session,
+    finishSession = false,
+  ) {
+    const imported = await importCompanionRecording(inspected, sessionId, newSession);
+    if (finishSession) {
+      const stoppedAt = inspected.recording.stoppedAtUtc ?? Date.now();
+      await finishSessionRecord(imported.sessionId, new Date(stoppedAt).toISOString());
+      try {
+        await prepareSessionSearchedAreas(imported.sessionId);
+      } catch (error) {
+        // The session and raw imported trail remain safe; coverage can regenerate later.
+        reportNonFatal('companion-import', 'Finished session coverage preparation failed', error);
+      }
+      setDidFinishSession(true);
+    }
+    setResult(imported);
+    setSelectedSessionId(imported.sessionId);
   }
 
   function buildAssociatedSession(): Session {
@@ -150,9 +193,7 @@ export default function CompanionImport({ projectId }: Props) {
       const newSession = creatingSession ? buildAssociatedSession() : undefined;
       const sessionId = newSession?.id ?? selectedSessionId;
       if (!sessionId) throw new Error('Choose the session that this recording belongs to.');
-      const imported = await importCompanionRecording(preview, sessionId, newSession);
-      setResult(imported);
-      setSelectedSessionId(imported.sessionId);
+      await completeImport(preview, sessionId, newSession);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -306,6 +347,7 @@ export default function CompanionImport({ projectId }: Props) {
           </h2>
           <p className="mt-1 text-sm text-emerald-900/75 dark:text-emerald-200/75">
             {result.trackIds.length} segment{result.trackIds.length === 1 ? '' : 's'} preserved.
+            {didFinishSession && ' The session has been finished.'}
             {result.derivationStatus === 'failed' && ' Coverage regeneration will retry when FindSpot next opens.'}
           </p>
           <button type="button" onClick={() => nav(`/session/${selectedSessionId}`)} className="mt-4 rounded-xl bg-emerald-700 px-4 py-3 text-xs font-black uppercase tracking-widest text-white">

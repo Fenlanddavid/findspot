@@ -17,6 +17,8 @@ The app supports:
 - canonical hashed JSON export compatible with FindSpot;
 - segmented GPX 1.1 export;
 - Android Sharesheet handoff to FindSpot;
+- FindSpot-controlled start, stop and automatic session import;
+- a 12-hour continuous-recording safety cutoff with recovery notification;
 - 30-day retention for exported stopped recordings and indefinite retention
   for unexported recordings.
 

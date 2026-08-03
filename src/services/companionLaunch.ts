@@ -1,5 +1,7 @@
 export const COMPANION_PACKAGE_NAME = 'uk.findspot.companion';
 export const COMPANION_RECORDING_URL = 'findspot-companion://record/start';
+export const COMPANION_STOP_URL = 'findspot-companion://record/stop';
+export type CompanionControlAction = 'start' | 'stop';
 
 // Keep direct sideloading disabled. Public Android builds are distributed
 // through Google Play so security protections do not need to be weakened.
@@ -15,22 +17,56 @@ export function isAndroidUserAgent(userAgent = (
 export function companionFallbackPath(
   sessionId?: string,
   basePath = import.meta.env.BASE_URL,
+  finishSession = false,
 ): string {
   const params = new URLSearchParams({ companion: 'missing' });
   if (sessionId) params.set('session', sessionId);
+  if (finishSession) params.set('finish', '1');
   return `${basePath}companion-import?${params.toString()}`;
 }
 
-export function buildCompanionRecordingIntent(fallbackUrl: string): string {
-  return 'intent://record/start#Intent;'
+function companionControlQuery(sessionId?: string, finishSession = false): string {
+  const params = new URLSearchParams();
+  if (sessionId) params.set('session', sessionId);
+  if (finishSession) params.set('finish', '1');
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+export function buildCompanionControlIntent(
+  action: CompanionControlAction,
+  fallbackUrl: string,
+  sessionId?: string,
+  finishSession = false,
+): string {
+  return `intent://record/${action}${companionControlQuery(sessionId, finishSession)}#Intent;`
     + 'scheme=findspot-companion;'
     + `package=${COMPANION_PACKAGE_NAME};`
     + `S.browser_fallback_url=${encodeURIComponent(fallbackUrl)};end`;
 }
 
-export function companionRecordingHref(sessionId?: string): string {
-  const fallbackPath = companionFallbackPath(sessionId);
-  if (typeof window === 'undefined') return COMPANION_RECORDING_URL;
+export function buildCompanionRecordingIntent(fallbackUrl: string): string {
+  return buildCompanionControlIntent('start', fallbackUrl);
+}
+
+export function companionControlHref(
+  action: CompanionControlAction,
+  sessionId?: string,
+  finishSession = false,
+): string {
+  const baseUrl = action === 'start' ? COMPANION_RECORDING_URL : COMPANION_STOP_URL;
+  const directUrl = `${baseUrl}${companionControlQuery(sessionId, finishSession)}`;
+  const fallbackPath = companionFallbackPath(sessionId, import.meta.env.BASE_URL, finishSession);
+  if (typeof window === 'undefined') return directUrl;
   if (!isAndroidUserAgent()) return fallbackPath;
-  return buildCompanionRecordingIntent(new URL(fallbackPath, window.location.origin).href);
+  return buildCompanionControlIntent(
+    action,
+    new URL(fallbackPath, window.location.origin).href,
+    sessionId,
+    finishSession,
+  );
+}
+
+export function companionRecordingHref(sessionId?: string): string {
+  return companionControlHref('start', sessionId);
 }

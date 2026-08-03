@@ -33,12 +33,19 @@ import java.util.List;
 public final class MainActivity extends Activity {
     static final String EXTRA_SHOW_RECOVERY = "showRecovery";
     private static final int LOCATION_REQUEST = 100;
+    private static final String FINDSPOT_URL = "https://fenlanddavid.github.io/findspot/";
+    private static final String CONTROL_START = "start";
+    private static final String CONTROL_STOP = "stop";
 
     private final Handler refreshHandler = new Handler(Looper.getMainLooper());
     private RecordingStore store;
     private LinearLayout actions;
     private TextView status;
-    private boolean pendingStart;
+    private String pendingControl;
+    private boolean launchedFromFindSpot;
+    private boolean permissionPromptOpen;
+    private String targetSessionId;
+    private boolean finishSessionAfterImport;
     private String selectedRecordingUuid;
 
     private final Runnable refreshTask = new Runnable() {
@@ -53,18 +60,28 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         store = ((CompanionApplication) getApplication()).recordings();
-        pendingStart = isStartDeepLink(getIntent());
-        setContentView(buildContent());
+        pendingControl = controlAction(getIntent());
+        launchedFromFindSpot = pendingControl != null;
+        captureControlContext(getIntent());
+        if (launchedFromFindSpot) {
+            View transparent = new View(this);
+            transparent.setBackgroundColor(Color.TRANSPARENT);
+            setContentView(transparent);
+        } else {
+            setContentView(buildContent());
+        }
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if (isStartDeepLink(intent)) {
-            pendingStart = true;
-            beginStart();
-        }
+        String control = controlAction(intent);
+        if (control == null) return;
+        pendingControl = control;
+        launchedFromFindSpot = true;
+        captureControlContext(intent);
+        handlePendingControl();
     }
 
     @Override
@@ -80,8 +97,8 @@ public final class MainActivity extends Activity {
                     : "process_killed";
             store.interrupt(active.uuid(), reason);
         }
-        refreshHandler.post(refreshTask);
-        if (pendingStart) beginStart();
+        if (!launchedFromFindSpot) refreshHandler.post(refreshTask);
+        handlePendingControl();
     }
 
     @Override
@@ -137,7 +154,7 @@ public final class MainActivity extends Activity {
         brand.addView(brandCopy, new LinearLayout.LayoutParams(0, -2, 1f));
         page.addView(brand);
 
-        TextView principle = text("Records hardware. FindSpot owns meaning.", 14, Color.DKGRAY);
+        TextView principle = text("Background trail recorder for FindSpot", 14, Color.DKGRAY);
         principle.setPadding(0, dp(4), 0, dp(28));
         page.addView(principle);
 
@@ -170,8 +187,11 @@ public final class MainActivity extends Activity {
             : selectedRecording();
         actions.removeAllViews();
         if (current == null) {
-            status.setText("Ready\n\nNo recording is stored on this device.");
-            addPrimary("Start recording", this::beginStart);
+            status.setText(
+                "Companion is ready.\n\nOpen an active session in FindSpot to start or stop "
+                    + "tracking. Companion will record quietly in the background."
+            );
+            addPrimary("Open FindSpot", this::openFindSpot);
             return;
         }
 
@@ -188,15 +208,12 @@ public final class MainActivity extends Activity {
         if (current.exportedAtUtc() != null) details += "\nExported " + DateFormat.getDateTimeInstance().format(new Date(current.exportedAtUtc()));
         status.setText(details);
 
+        addPrimary("Open FindSpot", this::openFindSpot);
+
         switch (current.state()) {
-            case "recording" -> {
-                addSecondary("Pause", () -> serviceAction(RecordingService.ACTION_PAUSE, current.uuid()));
-                addDanger("Stop", () -> serviceAction(RecordingService.ACTION_STOP, current.uuid()));
-            }
-            case "paused" -> {
-                addPrimary("Resume in a new segment", () -> serviceAction(RecordingService.ACTION_RESUME, current.uuid()));
-                addDanger("Stop", () -> serviceAction(RecordingService.ACTION_STOP, current.uuid()));
-            }
+            case "recording", "paused" -> addMessage(
+                "Recording is controlled from the active FindSpot session."
+            );
             case "interrupted" -> {
                 addPrimary("Resume in a new segment", () -> resumeInterrupted(current));
                 addSecondary("Close recording", () -> { store.stop(current.uuid()); render(); });
@@ -205,22 +222,21 @@ public final class MainActivity extends Activity {
             case "stopped" -> {
                 addPrimary("Share JSON to FindSpot", () -> shareJson(current));
                 addSecondary("Export GPX", () -> shareGpx(current));
-                addSecondary("Start another recording", this::beginStart);
                 addDanger("Delete local copy", () -> confirmDiscard(current));
             }
         }
         if (store.recent().size() > 1) addSecondary("Choose another local recording", this::chooseRecording);
     }
 
+    private void handlePendingControl() {
+        if (CONTROL_START.equals(pendingControl)) beginStart();
+        else if (CONTROL_STOP.equals(pendingControl)) stopFromFindSpot();
+    }
+
     private void beginStart() {
         if (!hasFineLocation()) {
-            pendingStart = true;
-            List<String> permissions = new ArrayList<>();
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                permissions.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-            requestPermissions(permissions.toArray(new String[0]), LOCATION_REQUEST);
+            pendingControl = CONTROL_START;
+            showPermissionExplanation();
             return;
         }
         if (!getSystemService(android.location.LocationManager.class).isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)) {
@@ -228,29 +244,116 @@ public final class MainActivity extends Activity {
                 .setTitle("Turn on location")
                 .setMessage("GPS must be enabled before Companion can record.")
                 .setPositiveButton("Open settings", (dialog, which) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton("Cancel", (dialog, which) -> closeAfterControl())
                 .show();
             return;
         }
-        pendingStart = false;
+        pendingControl = null;
         RecordingModels.Summary active = store.activeRecording();
         if (active != null) {
             selectedRecordingUuid = active.uuid();
-            if ("interrupted".equals(active.state()) || "paused".equals(active.state())) resumeInterrupted(active);
+            if ("interrupted".equals(active.state()) || "paused".equals(active.state())) {
+                serviceAction(RecordingService.ACTION_RESUME, active.uuid());
+            }
+            confirmBackgroundStart();
             return;
         }
         RecordingModels.Summary recording = store.startNew();
         selectedRecordingUuid = recording.uuid();
         serviceAction(RecordingService.ACTION_START, recording.uuid());
+        confirmBackgroundStart();
     }
 
     private void resumeInterrupted(RecordingModels.Summary recording) {
         if (!hasFineLocation()) {
-            pendingStart = true;
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_REQUEST);
+            pendingControl = CONTROL_START;
+            showPermissionExplanation();
             return;
         }
         serviceAction(RecordingService.ACTION_RESUME, recording.uuid());
+    }
+
+    private void showPermissionExplanation() {
+        if (permissionPromptOpen) return;
+        permissionPromptOpen = true;
+        new AlertDialog.Builder(this)
+            .setTitle("Allow background trail recording")
+            .setMessage(
+                "Companion uses precise location while a trail is recording, including when "
+                    + "FindSpot is visible or the screen is locked. Trails stay on this device "
+                    + "until you share them."
+            )
+            .setPositiveButton("Continue", (dialog, which) -> requestLocationPermissions())
+            .setNegativeButton("Cancel", (dialog, which) -> {
+                permissionPromptOpen = false;
+                pendingControl = null;
+                closeAfterControl();
+            })
+            .setOnCancelListener(dialog -> {
+                permissionPromptOpen = false;
+                pendingControl = null;
+                closeAfterControl();
+            })
+            .show();
+    }
+
+    private void requestLocationPermissions() {
+        List<String> permissions = new ArrayList<>();
+        permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS);
+        }
+        requestPermissions(permissions.toArray(new String[0]), LOCATION_REQUEST);
+    }
+
+    private void stopFromFindSpot() {
+        pendingControl = null;
+        RecordingModels.Summary active = store.activeRecording();
+        if (active == null) {
+            Toast.makeText(this, "No Companion recording is active.", Toast.LENGTH_LONG).show();
+            closeAfterControl();
+            return;
+        }
+        selectedRecordingUuid = active.uuid();
+        serviceAction(RecordingService.ACTION_STOP, active.uuid());
+        refreshHandler.postDelayed(() -> shareStoppedRecording(active.uuid(), 0), 150L);
+    }
+
+    private void shareStoppedRecording(String uuid, int attempt) {
+        RecordingModels.Summary recording;
+        try {
+            recording = store.get(uuid);
+        } catch (RuntimeException missing) {
+            Toast.makeText(this, "The recording could not be found.", Toast.LENGTH_LONG).show();
+            closeAfterControl();
+            return;
+        }
+        if (!"stopped".equals(recording.state()) && attempt < 10) {
+            refreshHandler.postDelayed(() -> shareStoppedRecording(uuid, attempt + 1), 100L);
+            return;
+        }
+        if (!"stopped".equals(recording.state())) {
+            Toast.makeText(this, "The recording could not be stopped.", Toast.LENGTH_LONG).show();
+            closeAfterControl();
+            return;
+        }
+        shareJson(recording, true, findSpotImportContext());
+    }
+
+    private void confirmBackgroundStart() {
+        Toast.makeText(this, "Companion is recording in the background.", Toast.LENGTH_SHORT).show();
+        closeAfterControl();
+    }
+
+    private void closeAfterControl() {
+        if (!launchedFromFindSpot) return;
+        finish();
+        overridePendingTransition(0, 0);
+    }
+
+    private void openFindSpot() {
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(FINDSPOT_URL)));
     }
 
     private void serviceAction(String action, String uuid) {
@@ -268,19 +371,29 @@ public final class MainActivity extends Activity {
         } else {
             startService(service);
         }
-        refreshHandler.postDelayed(this::render, 250L);
+        if (actions != null) refreshHandler.postDelayed(this::render, 250L);
     }
 
     private void shareJson(RecordingModels.Summary recording) {
+        shareJson(recording, false, null);
+    }
+
+    private void shareJson(
+        RecordingModels.Summary recording,
+        boolean closeAfterShare,
+        String importContext
+    ) {
         try {
             Uri uri = ExportFiles.json(this, store.snapshot(recording.uuid()));
             Intent share = new Intent(Intent.ACTION_SEND)
                 .setType(RecordingJson.MIME_TYPE)
                 .putExtra(Intent.EXTRA_STREAM, uri)
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (importContext != null) share.putExtra(Intent.EXTRA_TEXT, importContext);
             store.markExported(recording.uuid());
             startActivity(Intent.createChooser(share, "Import with FindSpot"));
-            render();
+            if (closeAfterShare) closeAfterControl();
+            else render();
         } catch (IOException | RuntimeException error) {
             Toast.makeText(this, "Could not create JSON export: " + error.getMessage(), Toast.LENGTH_LONG).show();
         }
@@ -318,10 +431,12 @@ public final class MainActivity extends Activity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         if (requestCode != LOCATION_REQUEST) return;
+        permissionPromptOpen = false;
         if (hasFineLocation()) beginStart();
         else {
-            pendingStart = false;
+            pendingControl = null;
             Toast.makeText(this, "Precise location permission is required to record a trail.", Toast.LENGTH_LONG).show();
+            closeAfterControl();
         }
     }
 
@@ -329,10 +444,28 @@ public final class MainActivity extends Activity {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private static boolean isStartDeepLink(Intent intent) {
+    private static String controlAction(Intent intent) {
         Uri data = intent == null ? null : intent.getData();
-        return data != null && "findspot-companion".equals(data.getScheme())
-            && "record".equals(data.getHost()) && "/start".equals(data.getPath());
+        if (data == null || !"findspot-companion".equals(data.getScheme())
+            || !"record".equals(data.getHost())) return null;
+        if ("/start".equals(data.getPath())) return CONTROL_START;
+        if ("/stop".equals(data.getPath())) return CONTROL_STOP;
+        return null;
+    }
+
+    private void captureControlContext(Intent intent) {
+        Uri data = intent == null ? null : intent.getData();
+        if (data == null) return;
+        targetSessionId = data.getQueryParameter("session");
+        finishSessionAfterImport = "1".equals(data.getQueryParameter("finish"));
+    }
+
+    private String findSpotImportContext() {
+        if (targetSessionId == null || targetSessionId.isBlank()) return null;
+        Uri.Builder context = Uri.parse(FINDSPOT_URL + "companion-import").buildUpon()
+            .appendQueryParameter("session", targetSessionId);
+        if (finishSessionAfterImport) context.appendQueryParameter("finish", "1");
+        return context.build().toString();
     }
 
     private String friendlyReason(String reason) {
@@ -342,6 +475,7 @@ public final class MainActivity extends Activity {
             case "device_reboot" -> "device rebooted";
             case "permission_revoked" -> "location permission removed";
             case "location_disabled" -> "location switched off";
+            case "maximum_duration" -> "12-hour safety limit reached";
             default -> reason;
         };
     }
@@ -375,6 +509,12 @@ public final class MainActivity extends Activity {
     private void addPrimary(String label, Runnable action) { addButton(label, action, Color.rgb(5, 150, 105), Color.WHITE); }
     private void addSecondary(String label, Runnable action) { addButton(label, action, Color.WHITE, Color.rgb(6, 95, 70)); }
     private void addDanger(String label, Runnable action) { addButton(label, action, Color.rgb(254, 242, 242), Color.rgb(185, 28, 28)); }
+
+    private void addMessage(String value) {
+        TextView message = text(value, 13, Color.DKGRAY);
+        message.setPadding(dp(4), dp(8), dp(4), dp(16));
+        actions.addView(message, new LinearLayout.LayoutParams(-1, -2));
+    }
 
     private void addButton(String label, Runnable action, int background, int foreground) {
         Button button = new Button(this);

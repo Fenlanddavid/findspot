@@ -11,6 +11,8 @@ describe('durable client setting validation', () => {
         expect(isDurableSettingValue('fs_fg_default_map_style', 'streets')).toBe(true);
         expect(isDurableSettingValue('fs_fg_default_map_style', 'satellite')).toBe(true);
         expect(isDurableSettingValue('fs_fg_default_map_style', 'terrain')).toBe(false);
+        expect(isDurableSettingValue('fs_companion_active_session', 'session-1')).toBe(true);
+        expect(isDurableSettingValue('fs_companion_active_session', null)).toBe(false);
     });
 
     it('validates structured settings before they reach UI consumers', () => {

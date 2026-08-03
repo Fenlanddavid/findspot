@@ -38,7 +38,20 @@ self.addEventListener('fetch', event => {
           'Cache-Control': 'no-store',
         },
       }));
-      return Response.redirect(new URL('/findspot/companion-import?shared=1', self.location.origin), 303);
+      const destination = new URL('/findspot/companion-import?shared=1', self.location.origin);
+      const context = form.get('context');
+      const trustedContextPrefix = `${self.location.origin}/findspot/companion-import`;
+      if (typeof context === 'string' && context.startsWith(trustedContextPrefix)) {
+        const requested = new URL(context);
+        if (requested.pathname === '/findspot/companion-import') {
+          const sessionId = requested.searchParams.get('session');
+          if (sessionId) destination.searchParams.set('session', sessionId);
+          if (requested.searchParams.get('finish') === '1') {
+            destination.searchParams.set('finish', '1');
+          }
+        }
+      }
+      return Response.redirect(destination, 303);
     } catch {
       return new Response('The shared Companion recording could not be received.', { status: 400 });
     }

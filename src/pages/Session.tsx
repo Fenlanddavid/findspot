@@ -43,7 +43,7 @@ import {
   updateSessionDetails,
 } from '../services/sessionMutations';
 import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
-import { companionRecordingHref, isAndroidUserAgent } from '../services/companionLaunch';
+import { companionControlHref, isAndroidUserAgent } from '../services/companionLaunch';
 import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
 
 const FIRST_SESSION_KEY = "fs_first_session";
@@ -256,7 +256,12 @@ export default function SessionPage(props: {
   const [sessionId] = useState(id || uuid());
   const isEdit = !!id;
   const isAndroid = useMemo(() => isAndroidUserAgent(), []);
-  const companionHref = useMemo(() => companionRecordingHref(sessionId), [sessionId]);
+  const companionStartHref = useMemo(() => companionControlHref('start', sessionId), [sessionId]);
+  const companionStopHref = useMemo(() => companionControlHref('stop', sessionId), [sessionId]);
+  const companionStopAndFinishHref = useMemo(
+    () => companionControlHref('stop', sessionId, true),
+    [sessionId],
+  );
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
   const [lat, setLat] = useState<number | null>(null);
@@ -278,6 +283,12 @@ export default function SessionPage(props: {
   
   const [milestoneMsg, setMilestoneMsg] = useState<string | null>(null);
   const [hasStartedSessionBefore, setHasStartedSessionBefore] = useDurableSetting(FIRST_SESSION_KEY, false);
+  const [companionActiveSessionId, setCompanionActiveSessionId, companionStateReady] = useDurableSetting(
+    'fs_companion_active_session',
+    '',
+  );
+  const isCompanionTracking = companionActiveSessionId === sessionId;
+  const isOtherCompanionTracking = companionActiveSessionId !== '' && !isCompanionTracking;
   const [sessionCoachActive, setSessionCoachActive] = useState(false);
   const [sessionCoachStep, setSessionCoachStep] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -330,6 +341,7 @@ export default function SessionPage(props: {
     tracks,
     reportedAreas,
   );
+  const isAnyTracking = isTracking || isCompanionTracking;
 
   useEffect(() => {
     if (!isActiveSessionMode) return;
@@ -642,6 +654,10 @@ export default function SessionPage(props: {
   }
 
   async function finishSession() {
+    if (isCompanionTracking) {
+        setError("Stop Companion tracking before finishing this session.");
+        return;
+    }
     if (isTrackingActiveForSession(sessionId)) {
         await stopTracking();
         setIsTracking(false);
@@ -916,9 +932,9 @@ export default function SessionPage(props: {
                           <div className="border-l-4 border-emerald-500 p-3 sm:p-4">
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex min-w-0 items-center gap-2">
-                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
+                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isAnyTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
                                 <span className="truncate text-2xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                                  {isTracking ? "Tracking live" : "Session active"}
+                                  {isAnyTracking ? "Tracking live" : "Session active"}
                                 </span>
                               </div>
                               <button
@@ -967,12 +983,35 @@ export default function SessionPage(props: {
                                 >
                                   Stop Tracking
                                 </button>
+                              ) : isAndroid && isCompanionTracking ? (
+                                <div className="flex flex-1 gap-2">
+                                  <a
+                                    href={companionStopHref}
+                                    onClick={() => setCompanionActiveSessionId('')}
+                                    className="flex-1 rounded-xl border border-red-300 bg-white/80 px-3 py-2 text-center text-xs font-black text-red-700 transition-all active:scale-[0.98] dark:border-red-800 dark:bg-gray-900/70 dark:text-red-300"
+                                  >
+                                    Stop Tracking
+                                  </a>
+                                  <a
+                                    href={companionStopAndFinishHref}
+                                    onClick={() => setCompanionActiveSessionId('')}
+                                    className="flex-1 rounded-xl bg-red-600 px-3 py-2 text-center text-xs font-black text-white shadow-md shadow-red-600/20 transition-all active:scale-[0.98]"
+                                  >
+                                    Stop &amp; Finish
+                                  </a>
+                                </div>
                               ) : isAndroid ? (
                                 <a
-                                  href={companionHref}
-                                  className="flex-1 rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-center text-xs font-black text-emerald-700 transition-all hover:border-emerald-400 active:scale-[0.98] dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"
+                                  href={!companionStateReady || isOtherCompanionTracking ? undefined : companionStartHref}
+                                  onClick={() => {
+                                    if (companionStateReady && !isOtherCompanionTracking) {
+                                      setCompanionActiveSessionId(sessionId);
+                                    }
+                                  }}
+                                  aria-disabled={!companionStateReady || isOtherCompanionTracking}
+                                  className={`flex-1 rounded-xl border px-3 py-2 text-center text-xs font-black transition-all active:scale-[0.98] ${!companionStateReady || isOtherCompanionTracking ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800' : 'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300'}`}
                                 >
-                                  Track Session
+                                  {isOtherCompanionTracking ? 'Tracking another session' : 'Track Session'}
                                 </a>
                               ) : (
                                 <button
@@ -983,7 +1022,7 @@ export default function SessionPage(props: {
                                   Track Session
                                 </button>
                               )}
-                              {!isTracking && (
+                              {!isAnyTracking && (
                                 <button
                                   type="button"
                                   onClick={() => nav(`/companion-import?session=${sessionId}`)}
@@ -1015,6 +1054,11 @@ export default function SessionPage(props: {
                             {isTracking && (
                               <p className="mt-2 text-2xs font-bold text-amber-700 dark:text-amber-300">
                                 Keep the screen awake while browser tracking is active.
+                              </p>
+                            )}
+                            {isCompanionTracking && (
+                              <p className="mt-2 text-2xs font-bold text-emerald-700 dark:text-emerald-300">
+                                Companion keeps recording when FindSpot is hidden or the screen is locked. These controls remain here when you return.
                               </p>
                             )}
                           </div>
@@ -1329,12 +1373,35 @@ export default function SessionPage(props: {
                                           >
                                               <span>Stop Tracking</span>
                                           </button>
+                                        ) : isAndroid && isCompanionTracking ? (
+                                          <>
+                                            <a
+                                                href={companionStopHref}
+                                                onClick={() => setCompanionActiveSessionId('')}
+                                                className="flex items-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-1.5 text-xs font-bold text-red-700 shadow-sm transition-all active:scale-95 dark:border-red-800 dark:bg-gray-800 dark:text-red-300"
+                                            >
+                                                <span>Stop Tracking</span>
+                                            </a>
+                                            <a
+                                                href={companionStopAndFinishHref}
+                                                onClick={() => setCompanionActiveSessionId('')}
+                                                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+                                            >
+                                                <span>Stop Tracking &amp; Finish Session</span>
+                                            </a>
+                                          </>
                                         ) : isAndroid ? (
                                           <a
-                                              href={companionHref}
-                                              className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-4 py-1.5 text-xs font-bold text-emerald-600 shadow-sm transition-all active:scale-95 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-400"
+                                              href={!companionStateReady || isOtherCompanionTracking ? undefined : companionStartHref}
+                                              onClick={() => {
+                                                if (companionStateReady && !isOtherCompanionTracking) {
+                                                  setCompanionActiveSessionId(sessionId);
+                                                }
+                                              }}
+                                              aria-disabled={!companionStateReady || isOtherCompanionTracking}
+                                              className={`flex items-center gap-2 rounded-lg border px-4 py-1.5 text-xs font-bold shadow-sm transition-all active:scale-95 ${!companionStateReady || isOtherCompanionTracking ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800' : 'border-emerald-200 bg-white text-emerald-600 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-400'}`}
                                           >
-                                              <span>Track Session</span>
+                                              <span>{isOtherCompanionTracking ? 'Tracking another session' : 'Track Session'}</span>
                                           </a>
                                         ) : (
                                           <button
@@ -1345,7 +1412,7 @@ export default function SessionPage(props: {
                                               <span>Track Session</span>
                                           </button>
                                         )}
-                                        {!isTracking && (
+                                        {!isAnyTracking && (
                                           <button
                                             type="button"
                                             onClick={() => nav(`/companion-import?session=${sessionId}`)}

@@ -46,6 +46,7 @@ export default defineConfig({
           method: "POST",
           enctype: "multipart/form-data",
           params: {
+            text: "context",
             files: [{
               name: "recording",
               accept: [
