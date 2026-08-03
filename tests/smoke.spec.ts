@@ -102,7 +102,10 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page.getByText("Privacy Guarantee")).toBeVisible();
   await expect(page.getByText("Saved finds, permissions")).toBeVisible();
   await expect(page.getByRole("heading", { name: "FindSpot Companion" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Google Play beta coming soon" })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Get Companion on Google Play" })).toHaveAttribute(
+    "href",
+    "https://play.google.com/apps/internaltest/4701707452582884992",
+  );
   await expect(page.getByText("Do not disable your phone's security protections")).toBeVisible();
 
   await page.getByRole("link", { name: "Discover" }).click();
@@ -201,7 +204,10 @@ test("missing Companion returns safely to FindSpot with the session preserved", 
   await page.goto("./companion-import?companion=missing&session=session-1");
   await expect(page.getByRole("heading", { name: "FindSpot Companion is not installed" })).toBeVisible();
   await expect(page.getByText("Nothing has changed in this session and no data has been lost.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Google Play beta coming soon" })).toBeDisabled();
+  await expect(page.getByRole("link", { name: "Get Companion on Google Play" })).toHaveAttribute(
+    "href",
+    "https://play.google.com/apps/internaltest/4701707452582884992",
+  );
   await expect(page.getByText("do not disable your phone's security protections")).toBeVisible();
   await expect(page).toHaveURL(/companion=missing&session=session-1$/);
   await expect(page.getByText("Companion · Android only")).toBeVisible();
