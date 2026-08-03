@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
 import { computeSessionOutcomeResult, SessionOutcomeResult } from "../engines/session/sessionOutcomeEngine";
 import type { Permission, Session, Find, Media } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
@@ -315,6 +315,10 @@ export default function SessionPage(props: {
   const [landownerShareError, setLandownerShareError] = useState<string | null>(null);
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
   const isActiveSessionMode = isEdit && !isEditing && !isFinished;
+
+  useLayoutEffect(() => {
+    if (isActiveSessionMode) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [isActiveSessionMode, sessionId]);
 
   const { permission, fields, selectedField, session, finds, allMedia, tracks } = useSessionData({
     sessionId, permissionId, fieldId,

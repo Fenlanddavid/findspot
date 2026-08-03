@@ -294,8 +294,11 @@ test("can create a permission, start a session and save a find", async ({ page }
 
   await page.getByRole("button", { name: /\+ Start New Session/ }).click();
   await expect(page).toHaveURL(/\/session\/new/);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Start Session" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await expect(page.getByText("Session active", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Track Session" })).toBeVisible();
 
