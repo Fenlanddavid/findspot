@@ -1304,7 +1304,7 @@ export default function Settings() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Get Companion on Google Play
+                Open Google Play test
               </a>
             ) : (
               <button
@@ -1316,8 +1316,8 @@ export default function Settings() {
               </button>
             )}
           </div>
-          <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
-            Android beta: Google Play distribution is being prepared. Do not disable your phone's security protections to install an APK.
+          <p className="mt-3 text-xs font-bold leading-relaxed text-amber-700 dark:text-amber-300">
+            The Android beta is invite-only. Message us via Facebook with the Google account you use for the Play Store, and we’ll add you to the test. Do not disable your phone's security protections to install an APK.
           </p>
         </section>
 
