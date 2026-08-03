@@ -1,5 +1,48 @@
 import React, { useMemo, useState } from "react";
 
+type PreviewAnchor = { lat: number; lon: number };
+
+export function resolveStaticMapPreviewAnchor(
+    lat: number | null | undefined,
+    lon: number | null | undefined,
+    boundary: unknown,
+): PreviewAnchor | null {
+    const geometry = boundary && typeof boundary === "object"
+        ? boundary as { type?: unknown; coordinates?: unknown }
+        : null;
+    if (geometry?.type === "Polygon" || geometry?.type === "MultiPolygon") {
+        const points: [number, number][] = [];
+        const collectPoints = (value: unknown): void => {
+            if (!Array.isArray(value)) return;
+            if (
+                value.length >= 2
+                && typeof value[0] === "number"
+                && Number.isFinite(value[0])
+                && typeof value[1] === "number"
+                && Number.isFinite(value[1])
+            ) {
+                points.push([value[0], value[1]]);
+                return;
+            }
+            value.forEach(collectPoints);
+        };
+        collectPoints(geometry.coordinates);
+        if (points.length > 0) {
+            const lons = points.map(point => point[0]);
+            const lats = points.map(point => point[1]);
+            return {
+                lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+                lon: (Math.min(...lons) + Math.max(...lons)) / 2,
+            };
+        }
+    }
+
+    return typeof lat === "number" && Number.isFinite(lat)
+        && typeof lon === "number" && Number.isFinite(lon)
+        ? { lat, lon }
+        : null;
+}
+
 /**
  * A robust satellite/street snapshot component.
  * It uses a layered approach to ensure SOMETHING is always displayed.
@@ -8,11 +51,16 @@ export function StaticMapPreview({ lat, lon, boundary, tracks, className = "" }:
     const [errorCount, setErrorCount] = useState(0);
     const zoom = 15;
 
-    // Guard: If no coordinates, show a placeholder
-    const isValid = typeof lat === "number" && typeof lon === "number";
+    // A mapped boundary is authoritative. Permission coordinates may be an
+    // older search/default point and can be many miles away from the geometry.
+    const anchor = useMemo(
+        () => resolveStaticMapPreviewAnchor(lat, lon, boundary),
+        [lat, lon, boundary],
+    );
+    const isValid = anchor !== null;
 
-    const tileX = useMemo(() => isValid ? Math.floor(lonToTileFloat(lon!, zoom)) : 0, [lon, isValid, zoom]);
-    const tileY = useMemo(() => isValid ? Math.floor(latToTileFloat(lat!, zoom)) : 0, [lat, isValid, zoom]);
+    const tileX = useMemo(() => isValid ? Math.floor(lonToTileFloat(anchor.lon, zoom)) : 0, [anchor, isValid, zoom]);
+    const tileY = useMemo(() => isValid ? Math.floor(latToTileFloat(anchor.lat, zoom)) : 0, [anchor, isValid, zoom]);
 
     // Primary: Esri Satellite. Secondary: OpenStreetMap (via Error handling)
     const satelliteUrl = isValid 

@@ -1,7 +1,7 @@
 import type { EnrichedPermission } from "../services/permissions";
 import { rallyPersona } from "../utils/rallyPersona";
 import { RallyPersonaChip } from "./RallyPersonaChip";
-import { StaticMapPreview } from "./StaticMapPreview";
+import { resolveStaticMapPreviewAnchor, StaticMapPreview } from "./StaticMapPreview";
 
 type PermissionCardProps = {
   permission: EnrichedPermission;
@@ -14,6 +14,8 @@ type PermissionCardProps = {
 export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide, onTogglePin }: PermissionCardProps) {
   const isRally = permission.type === "rally";
   const persona = isRally ? rallyPersona(permission) : "not_rally";
+  const previewBoundary = permission.boundary || permission.fields?.[0]?.boundary;
+  const previewAnchor = resolveStaticMapPreviewAnchor(permission.lat, permission.lon, previewBoundary);
   const dateLabel = isRally && permission.validFrom
     ? new Date(permission.validFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
     : permission.createdAt
@@ -64,7 +66,7 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
         <StaticMapPreview
           lat={permission.lat}
           lon={permission.lon}
-          boundary={permission.boundary || permission.fields?.[0]?.boundary}
+          boundary={previewBoundary}
           tracks={permission.tracks}
           className="h-full w-full rounded-none"
         />
@@ -79,8 +81,8 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
           </div>
         )}
         <div className="absolute bottom-2 right-2 rounded border border-white/20 bg-black/50 px-1.5 py-0.5 font-mono text-[8px] text-white/60 backdrop-blur-sm">
-          {permission.lat != null && permission.lon != null
-            ? `${permission.lat.toFixed(3)}, ${permission.lon.toFixed(3)}`
+          {previewAnchor
+            ? `${previewAnchor.lat.toFixed(3)}, ${previewAnchor.lon.toFixed(3)}`
             : "No GPS"}
         </div>
       </div>
