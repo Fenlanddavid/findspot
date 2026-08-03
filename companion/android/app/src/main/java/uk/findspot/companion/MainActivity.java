@@ -3,8 +3,10 @@ package uk.findspot.companion;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Shader;
@@ -391,12 +393,56 @@ public final class MainActivity extends Activity {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             if (importContext != null) share.putExtra(Intent.EXTRA_TEXT, importContext);
             store.markExported(recording.uuid());
-            startActivity(Intent.createChooser(share, "Import with FindSpot"));
+            if (!sendDirectlyToFindSpot(share, uri)) {
+                startActivity(Intent.createChooser(share, "Import with FindSpot"));
+            }
             if (closeAfterShare) closeAfterControl();
             else render();
         } catch (IOException | RuntimeException error) {
             Toast.makeText(this, "Could not create JSON export: " + error.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private boolean sendDirectlyToFindSpot(Intent share, Uri uri) {
+        PackageManager packages = getPackageManager();
+        List<ResolveInfo> candidates;
+        long queryFlags = PackageManager.MATCH_DEFAULT_ONLY | PackageManager.GET_META_DATA;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            candidates = packages.queryIntentActivities(
+                share,
+                PackageManager.ResolveInfoFlags.of(queryFlags)
+            );
+        } else {
+            candidates = packages.queryIntentActivities(share, (int) queryFlags);
+        }
+
+        ResolveInfo findSpot = null;
+        for (ResolveInfo candidate : candidates) {
+            if (candidate.activityInfo == null) continue;
+            String packageName = candidate.activityInfo.packageName;
+            String label = String.valueOf(candidate.loadLabel(packages));
+            boolean trustedWebApk = packageName != null
+                && packageName.startsWith("org.chromium.webapk");
+            boolean findSpotLabel = "FindSpot".equals(label) || "FindSpot UK".equals(label);
+            Bundle metadata = candidate.activityInfo.applicationInfo.metaData;
+            String startUrl = metadata == null
+                ? null
+                : metadata.getString("org.chromium.webapk.shell_apk.startUrl");
+            boolean findSpotOrigin = startUrl != null && startUrl.startsWith(FINDSPOT_URL);
+            if (!trustedWebApk || !findSpotLabel || !findSpotOrigin) continue;
+            if (findSpot != null) return false;
+            findSpot = candidate;
+        }
+        if (findSpot == null) return false;
+
+        String packageName = findSpot.activityInfo.packageName;
+        grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Intent direct = new Intent(share).setComponent(new ComponentName(
+            packageName,
+            findSpot.activityInfo.name
+        ));
+        startActivity(direct);
+        return true;
     }
 
     private void shareGpx(RecordingModels.Summary recording) {

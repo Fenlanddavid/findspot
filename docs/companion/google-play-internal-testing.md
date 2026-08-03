@@ -1,14 +1,14 @@
 # Google Play internal testing handoff
 
-Prepared on 1 August 2026 for package `uk.findspot.companion`.
+Prepared on 3 August 2026 for package `uk.findspot.companion`.
 
 ## Upload artifact
 
 - file: `companion/android/app/build/outputs/bundle/release/app-release.aab`
-- version name: `1.0.0-beta.2`
-- version code: `2`
-- size: 166,820 bytes
-- SHA-256: `1c0e57d488daf87712061ed7337500bca4ed16574261e0d2d9aec7e446ea5ce9`
+- version name: `1.0.0-beta.3`
+- version code: `3`
+- size: 167,762 bytes
+- SHA-256: `19f7eaa5087664fd4379df080c87bf5ea4f6ffe181429aaff5a4a26b759a42be`
 - upload certificate SHA-256: `8852a4c12f0921292416d2467df8de783c3ddf9b693744867cdaec3e5cdc3ce5`
 
 The release unit tests, release lint, R8, bundle signing, PWA unit suite and
@@ -50,12 +50,12 @@ signatures differ.
    Google Account used on the test phone.
 3. Select **Create new release** and upload `app-release.aab` from the path
    above.
-4. Use release name `1.0.0-beta.2` and release notes:
+4. Use release name `1.0.0-beta.3` and release notes:
 
    ```text
-   Companion is now controlled from FindSpot and records quietly in the
-   background. This update adds a distinct icon, stop-and-finish import, and a
-   12-hour recording safety limit.
+   Completed Companion trails now return directly to their FindSpot session.
+   The Android share chooser remains available only as a fallback when the
+   installed FindSpot app cannot be identified safely.
    ```
 
 5. Save, review and start the internal-test rollout.

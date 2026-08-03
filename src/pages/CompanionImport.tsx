@@ -121,7 +121,13 @@ export default function CompanionImport({ projectId }: Props) {
       if (automaticSessionId) {
         const target = await pagePersistence.sessions.get(automaticSessionId);
         if (!target) throw new Error('The FindSpot session for this recording could not be found.');
-        await completeImport(inspected, automaticSessionId, undefined, finishAfterImport);
+        const imported = await completeImport(
+          inspected,
+          automaticSessionId,
+          undefined,
+          finishAfterImport,
+        );
+        nav(`/session/${imported.sessionId}`, { replace: true });
       }
     } catch (cause) {
       setPreview(null);
@@ -151,6 +157,7 @@ export default function CompanionImport({ projectId }: Props) {
     }
     setResult(imported);
     setSelectedSessionId(imported.sessionId);
+    return imported;
   }
 
   function buildAssociatedSession(): Session {

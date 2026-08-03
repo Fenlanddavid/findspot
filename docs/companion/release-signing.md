@@ -46,8 +46,8 @@ This is a GitHub pre-release. It remains subject to the six-hour battery,
 Samsung power-management, installed-PWA sharesheet, network-capture and field
 acceptance gates documented in the physical-validation record.
 
-The current Google Play internal-test update is `1.0.0-beta.2`
-(`versionCode` 2). Its app-bundle hash is recorded in
+The current Google Play internal-test update is `1.0.0-beta.3`
+(`versionCode` 3). Its app-bundle hash is recorded in
 [`google-play-internal-testing.md`](google-play-internal-testing.md) after each
 release build.
 

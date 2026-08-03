@@ -51,6 +51,8 @@ describe('Android Companion architecture', () => {
       ANDROID,
     ), 'utf8');
     expect(manifest).toContain('android:pathPrefix="/"');
+    expect(manifest).toContain('android:name="android.intent.action.SEND"');
+    expect(manifest).toContain('application/vnd.findspot.companion+json');
     expect(manifest).toContain('android:name=".CompanionControlActivity"');
     expect(manifest).toContain('android:theme="@style/ControlTheme"');
     expect(activity).toContain('private static final String CONTROL_START = "start"');
@@ -58,6 +60,9 @@ describe('Android Companion architecture', () => {
     expect(activity).toContain('Companion is ready.');
     expect(activity).toContain('addPrimary("Open FindSpot", this::openFindSpot)');
     expect(activity).toContain('shareStoppedRecording(active.uuid(), 0)');
+    expect(activity).toContain('sendDirectlyToFindSpot(share, uri)');
+    expect(activity).toContain('packageName.startsWith("org.chromium.webapk")');
+    expect(activity).toContain('org.chromium.webapk.shell_apk.startUrl');
     expect(notifications).toContain('https://fenlanddavid.github.io/findspot/');
     expect(notifications).not.toContain('builder.addAction');
   });
