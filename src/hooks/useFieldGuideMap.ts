@@ -64,6 +64,7 @@ export type UseFieldGuideMapOptions = {
     historicRoutes: HistoricRoute[];
     fieldBoundaries: Array<{ id: string; name: string; permissionId: string; boundary: any }>;
     isSatellite: boolean;
+    mapPreferenceReady: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
     historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
@@ -80,10 +81,9 @@ export type UseFieldGuideMapOptions = {
     devAnnotations: DevAnnotation[];
     callbacks: FieldGuideMapCallbacks;
 };
-
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
-    isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
+    isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
     savedPoints, showSavedPoints,
     initLat, initLng, initPinLabel, devMode, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
@@ -105,7 +105,7 @@ export function useFieldGuideMap({
 
     // ── Map initialisation (runs once) ────────────────────────────────────────
     useEffect(() => {
-        if (mapRef.current || !mapContainerRef.current) return;
+        if (!mapPreferenceReady || mapRef.current || !mapContainerRef.current) return;
 
         const showLabel = (label: string) => {
             if (clickLabelTimer.current) clearTimeout(clickLabelTimer.current);
@@ -117,7 +117,7 @@ export function useFieldGuideMap({
 
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
-            style: createFieldGuideMapStyle(),
+            style: createFieldGuideMapStyle(isSatellite),
             center: [-2.0, 54.5],
             zoom: 5.5,
             clickTolerance: 40,
@@ -193,7 +193,7 @@ export function useFieldGuideMap({
             initialPinMarkerRef.current = null;
             if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
         };
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [mapPreferenceReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Basemap toggle ────────────────────────────────────────────────────────
     useEffect(() => {
@@ -201,7 +201,7 @@ export function useFieldGuideMap({
         if (!map) return;
         if (map.getLayer('osm'))       map.setLayoutProperty('osm',       'visibility', isSatellite ? 'none' : 'visible');
         if (map.getLayer('satellite')) map.setLayoutProperty('satellite',  'visibility', isSatellite ? 'visible' : 'none');
-    }, [isSatellite]);
+    }, [isSatellite, mapReadyVersion]);
 
     // ── Config-driven layer visibility ────────────────────────────────────────
     useEffect(() => {

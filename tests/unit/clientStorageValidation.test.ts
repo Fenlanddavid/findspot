@@ -8,6 +8,9 @@ describe('durable client setting validation', () => {
         expect(isDurableSettingValue('findRecordMode', 'unexpected')).toBe(false);
         expect(isDurableSettingValue('fs_discover_radius', 25)).toBe(true);
         expect(isDurableSettingValue('fs_discover_radius', 30)).toBe(false);
+        expect(isDurableSettingValue('fs_fg_default_map_style', 'streets')).toBe(true);
+        expect(isDurableSettingValue('fs_fg_default_map_style', 'satellite')).toBe(true);
+        expect(isDurableSettingValue('fs_fg_default_map_style', 'terrain')).toBe(false);
     });
 
     it('validates structured settings before they reach UI consumers', () => {

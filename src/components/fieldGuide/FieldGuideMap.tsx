@@ -522,7 +522,7 @@ export function FieldGuideMap() {
                     {showLayerPicker && (
                         <div className="absolute top-12 right-0 z-[60] bg-slate-900/95 border border-white/12 rounded-xl shadow-2xl backdrop-blur-xl p-2 min-w-[130px] animate-in fade-in slide-in-from-top-1 duration-150">
                             <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mb-1.5">Map Style</p>
-                            <button onClick={() => setIsSatellite(v => !v)} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 ${isSatellite ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                            <button aria-pressed={isSatellite} onClick={() => setIsSatellite(v => !v)} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 ${isSatellite ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                                 Satellite
                             </button>
@@ -604,6 +604,8 @@ export function FieldGuideMap() {
                 </button>
                 <button
                     onClick={() => setIsSatellite(!isSatellite)}
+                    aria-pressed={isSatellite}
+                    aria-label="Satellite"
                     className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 ${isSatellite ? 'bg-emerald-500 border-white text-white' : 'bg-slate-900/90 border-white/10 text-slate-300'}`}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>

@@ -122,6 +122,15 @@ describe('FieldGuide map layer registry', () => {
       'overlay-os1930',
     ]);
   });
+
+  it('can initialise directly into the saved satellite basemap', () => {
+    const style = createFieldGuideMapStyle(true);
+    const osm = style.layers.find(layer => layer.id === 'osm');
+    const satellite = style.layers.find(layer => layer.id === 'satellite');
+
+    expect(osm?.layout?.visibility).toBe('none');
+    expect(satellite?.layout?.visibility).toBe('visible');
+  });
 });
 
 describe('FieldGuide map interaction router', () => {

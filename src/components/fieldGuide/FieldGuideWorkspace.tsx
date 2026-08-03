@@ -71,7 +71,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         selectedId, setSelectedId, selectedHotspotId, setSelectedHotspotId,
         showSuggestion, setShowSuggestion, scanStatus, setScanStatus,
         systemLog, setSystemLog, zoomWarning, setZoomWarning,
-        isSatellite, setIsSatellite, scanCount, setScanCount,
+        isSatellite, setIsSatellite, mapPreferenceReady, scanCount, setScanCount,
         searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen,
         isIntelOpen, setIsIntelOpen, intelDetailsOpen, setIntelDetailsOpen,
         intelLayersOpen, setIntelLayersOpen, targetPeriod, isLocating, setIsLocating,
@@ -254,7 +254,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
             // Fall back to the permission's own boundary when no fields have been drawn
             ...permissions.filter(p => p.boundary && !fields.some(f => f.permissionId === p.id)).map(p => ({ id: p.id, name: p.name, permissionId: p.id, boundary: p.boundary! })),
         ],
-        isSatellite, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity,
+        isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity,
         userFinds: projectFinds,
         savedPoints, showSavedPoints,
         initLat, initLng, initPinLabel,

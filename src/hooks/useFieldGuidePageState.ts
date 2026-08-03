@@ -6,7 +6,7 @@ import type {
     NHLEResponse,
     SMUnavailableReason,
 } from '../services/historicScanService';
-import { useDurableSetting } from '../services/clientStorage';
+import { useDurableSetting, useInitialFieldGuideMapStyle } from '../services/clientStorage';
 import type { GeologyContext } from '../engines/geologyContext';
 import type {
     AnnotationConfidence,
@@ -38,7 +38,6 @@ export const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
 };
 
 export const RASTER_OVERLAY_STORAGE_KEY = 'fs_fg_overlay_opacity';
-
 export type ScanPhase = 'idle' | 'terrain' | 'historic' | 'complete';
 export type HotspotVersion = 'terrain' | 'enhanced' | 'geology-enhanced' | null;
 
@@ -125,7 +124,7 @@ export function useFieldGuidePageState() {
         makeLog('READY. Run scan to read landscape signals.'),
     ]);
     const [zoomWarning, setZoomWarning] = useState(false);
-    const [isSatellite, setIsSatellite] = useState(false);
+    const [isSatellite, setIsSatellite, mapPreferenceReady] = useInitialFieldGuideMapStyle();
     const [scanCount, setScanCount] = useDurableSetting('fs_fg_scan_count', 0);
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -230,12 +229,13 @@ export function useFieldGuidePageState() {
     const sheetScrollRef = useRef<HTMLDivElement>(null);
     const scoring = usePotentialScore();
 
+    // Expose one composed state surface to the Field Guide workspace.
     return {
         engineState, dispatch,
         selectedId, setSelectedId, selectedHotspotId, setSelectedHotspotId,
         showSuggestion, setShowSuggestion, scanStatus, setScanStatus,
         systemLog, setSystemLog, zoomWarning, setZoomWarning,
-        isSatellite, setIsSatellite, scanCount, setScanCount,
+        isSatellite, setIsSatellite, mapPreferenceReady, scanCount, setScanCount,
         searchQuery, setSearchQuery, isSearchOpen, setIsSearchOpen,
         isIntelOpen, setIsIntelOpen, intelDetailsOpen, setIntelDetailsOpen,
         intelLayersOpen, setIntelLayersOpen, targetPeriod, isLocating, setIsLocating,

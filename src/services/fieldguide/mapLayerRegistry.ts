@@ -19,7 +19,7 @@ export function ensureFieldGuideMapProtocolsRegistered(): void {
     protocolsRegistered = true;
 }
 
-export function createFieldGuideMapStyle(): maplibregl.StyleSpecification {
+export function createFieldGuideMapStyle(isSatellite = false): maplibregl.StyleSpecification {
     return {
         version: 8,
         sources: {
@@ -31,8 +31,8 @@ export function createFieldGuideMapStyle(): maplibregl.StyleSpecification {
             'overlay-os1880': { type: 'raster', tiles: ['https://mapseries-tilesets.s3.amazonaws.com/1inch_2nd_ed/{z}/{x}/{y}.png'], tileSize: 256, minzoom: 6, maxzoom: 15, attribution: '&copy; National Library of Scotland' },
         },
         layers: [
-            { id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19 },
-            { id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: 'none' } },
+            { id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'none' : 'visible' } },
+            { id: 'satellite', type: 'raster', source: 'satellite', minzoom: 0, maxzoom: 19, layout: { visibility: isSatellite ? 'visible' : 'none' } },
             { id: 'overlay-lidar', type: 'raster', source: 'overlay-lidar', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.3, 'raster-brightness-max': 0.9, 'raster-fade-duration': 0 } },
             { id: 'overlay-lidar-wales', type: 'raster', source: 'overlay-lidar-wales', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.8, 'raster-contrast': 0.6, 'raster-brightness-max': 0.9, 'raster-saturation': -1, 'raster-fade-duration': 0 } },
             { id: 'overlay-os1880', type: 'raster', source: 'overlay-os1880', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 } },

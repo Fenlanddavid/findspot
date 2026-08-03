@@ -27,6 +27,7 @@ import {
 } from '../services/integrityAudit';
 import { pagePersistence } from "../services/pagePersistence";
 import {
+  FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY,
   ephemeralLocal,
   removeDurableSetting,
   setThemeSetting,
@@ -245,6 +246,10 @@ export default function Settings() {
   const [easterEggUnlocked, setEasterEggUnlocked] = useDurableSetting('fs_dev_egg', false);
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [geologyEnabled, setGeologyEnabled] = useState(true);
+  const [fieldGuideDefaultMapStyle, setFieldGuideDefaultMapStyle] = useDurableSetting(
+    FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY,
+    'streets',
+  );
   const [fieldGuideCacheConfirming, setFieldGuideCacheConfirming] = useState(false);
   const [fieldGuideCacheClearing, setFieldGuideCacheClearing] = useState(false);
   const [fieldGuideCacheNotice, setFieldGuideCacheNotice] = useState<{
@@ -1224,6 +1229,34 @@ export default function Settings() {
             >
               {theme === "dark" ? "Dark" : "Light"}
             </button>
+          </div>
+          <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-medium text-gray-800 dark:text-gray-100">Field Guide starting map</div>
+              <div className="text-sm text-gray-500">
+                Choose the base map used at the start of each Field Guide visit.
+              </div>
+            </div>
+            <div
+              className="grid shrink-0 grid-cols-2 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-900"
+              aria-label="Field Guide starting map"
+            >
+              {(['streets', 'satellite'] as const).map(style => (
+                <button
+                  key={style}
+                  type="button"
+                  aria-pressed={fieldGuideDefaultMapStyle === style}
+                  onClick={() => setFieldGuideDefaultMapStyle(style)}
+                  className={`min-h-10 rounded-lg px-3 py-2 text-xs font-black transition-colors ${
+                    fieldGuideDefaultMapStyle === style
+                      ? 'bg-white text-emerald-700 shadow-sm dark:bg-gray-800 dark:text-emerald-300'
+                      : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {style === 'streets' ? 'Streets' : 'Satellite'}
+                </button>
+              ))}
+            </div>
           </div>
         </section>
 

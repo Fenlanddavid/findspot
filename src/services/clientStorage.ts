@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db';
 
+export const FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY = 'fs_fg_default_map_style' as const;
+
 export type DurableClientSettingKey =
     | 'findRecordMode'
     | 'fs_club_rally_home_card_dismissed'
@@ -13,6 +15,7 @@ export type DurableClientSettingKey =
     | 'fs_discover_type'
     | 'fs_fab_used'
     | 'fs_fg_devmode'
+    | typeof FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY
     | 'fs_fg_overlay_opacity'
     | 'fs_fg_scan_count'
     | 'fs_fg_sheet'
@@ -57,6 +60,8 @@ export function isDurableSettingValue(key: DurableClientSettingKey, value: unkno
     switch (key) {
         case 'findRecordMode':
             return value === 'quick' || value === 'full';
+        case 'fs_fg_default_map_style':
+            return value === 'streets' || value === 'satellite';
         case 'fs_discover_radius':
             return value === 10 || value === 25 || value === 50 || value === 100;
         case 'fs_discover_tab':
@@ -187,6 +192,24 @@ export function useDurableSetting<T>(
     return [value, update, ready];
 }
 
+/** Loads the saved Field Guide basemap once, while leaving visit-time toggles temporary. */
+export function useInitialFieldGuideMapStyle() {
+    const [isSatellite, setIsSatellite] = useState(false);
+    const [ready, setReady] = useState(false);
+    useEffect(() => {
+        let active = true;
+        getDurableSetting<'streets' | 'satellite'>(FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY, 'streets')
+            .then(style => {
+                if (active) {
+                    setIsSatellite(style === 'satellite');
+                    setReady(true);
+                }
+            });
+        return () => { active = false; };
+    }, []);
+    return [isSatellite, setIsSatellite, ready] as const;
+}
+
 export const ephemeralLocal = {
     get(key: EphemeralLocalKey): string | null {
         return localStorage.getItem(key);
@@ -230,6 +253,7 @@ export async function migrateLegacyClientStorage(): Promise<void> {
         fs_discover_type: 'all',
         fs_fab_used: false,
         fs_fg_devmode: false,
+        fs_fg_default_map_style: 'streets',
         fs_fg_overlay_opacity: {},
         fs_fg_scan_count: 0,
         fs_fg_sheet: false,

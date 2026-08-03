@@ -109,6 +109,24 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page).toHaveURL(/\/discover$/);
 });
 
+test("Field Guide starts with the preferred basemap without persisting visit-time toggles", async ({ page }) => {
+  await page.goto("./settings?tab=app");
+  const savedSatellite = page.getByRole("button", { name: "Satellite", exact: true });
+  await expect(savedSatellite).toHaveAttribute("aria-pressed", "false");
+  await savedSatellite.click();
+  await expect(savedSatellite).toHaveAttribute("aria-pressed", "true");
+
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  await page.getByRole("button", { name: "Map layers" }).click();
+  const visitSatellite = page.getByRole("button", { name: "Satellite", exact: true });
+  await expect(visitSatellite).toHaveAttribute("aria-pressed", "true");
+  await visitSatellite.click();
+  await expect(visitSatellite).toHaveAttribute("aria-pressed", "false");
+
+  await page.goto("./settings?tab=app");
+  await expect(page.getByRole("button", { name: "Satellite", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
 test("Companion JSON import preserves segments and becomes idempotent", async ({ page }) => {
   await page.goto("./companion-import");
   await expect(page.getByText("UK Find Log", { exact: true })).toBeVisible();
