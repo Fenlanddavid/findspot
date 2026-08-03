@@ -13,8 +13,10 @@ describe('Companion launch handoff', () => {
     expect(COMPANION_RECORDING_URL).toBe('findspot-companion://record/start');
   });
 
-  it('does not offer a direct APK sideload while Play distribution is pending', () => {
-    expect(COMPANION_DOWNLOAD_URL).toBe('');
+  it('offers the Google Play internal-test opt-in instead of a direct APK', () => {
+    expect(COMPANION_DOWNLOAD_URL).toBe(
+      'https://play.google.com/apps/internaltest/4701707452582884992',
+    );
   });
 
   it('limits the native launch handoff to Android devices', () => {

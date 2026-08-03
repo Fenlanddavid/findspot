@@ -3,9 +3,8 @@ export const COMPANION_RECORDING_URL = 'findspot-companion://record/start';
 
 // Keep direct sideloading disabled. Public Android builds are distributed
 // through Google Play so security protections do not need to be weakened.
-// Set this to the immutable Play testing opt-in URL once the internal release
-// has been created in Play Console.
-export const COMPANION_DOWNLOAD_URL = '';
+// Internal testers install through Google Play's immutable opt-in URL.
+export const COMPANION_DOWNLOAD_URL = 'https://play.google.com/apps/internaltest/4701707452582884992';
 
 export function isAndroidUserAgent(userAgent = (
   typeof navigator === 'undefined' ? '' : navigator.userAgent
