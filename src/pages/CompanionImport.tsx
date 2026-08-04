@@ -355,7 +355,7 @@ export default function CompanionImport({ projectId }: Props) {
           <p className="mt-1 text-sm text-emerald-900/75 dark:text-emerald-200/75">
             {result.trackIds.length} segment{result.trackIds.length === 1 ? '' : 's'} preserved.
             {didFinishSession && ' The session has been finished.'}
-            {result.derivationStatus === 'failed' && ' Coverage regeneration will retry when FindSpot next opens.'}
+            {result.derivationStatus === 'failed' && ' The recording and trail are safe, but coverage could not be regenerated.'}
           </p>
           <button type="button" onClick={() => nav(`/session/${selectedSessionId}`)} className="mt-4 rounded-xl bg-emerald-700 px-4 py-3 text-xs font-black uppercase tracking-widest text-white">
             Open session

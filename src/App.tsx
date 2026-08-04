@@ -8,10 +8,6 @@ import { setSetting, getSetting } from "./services/data";
 import { ensureProtectionOnStartup } from "./services/storagePersistence";
 import { closeStaleActiveTracks } from "./services/tracking";
 import { healAimMeta } from "./services/offlinePack";
-import {
-  aggregateAndSweepHotspotPredictions,
-  refreshHotspotPredictionOutcomes,
-} from './services/hotspotPredictionService';
 import { UPDATE_NOTES } from "./version";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -109,12 +105,7 @@ function Shell() {
     healAimMeta().catch(error => {
       reportNonFatal('startup', 'AIM metadata backfill failed', error);
     });
-    refreshHotspotPredictionOutcomes()
-      .then(() => aggregateAndSweepHotspotPredictions())
-      .catch(error => {
-        reportNonFatal('startup', 'Hotspot calibration maintenance failed', error);
-      });
-    void db.companionImports.filter(entry => entry.derivationStatus !== 'ready').count()
+    void db.companionImports.where('derivationStatus').equals('pending').count()
       .then(pendingCount => pendingCount > 0
         ? import('./services/companionImport')
           .then(({ retryPendingCompanionDerivations }) => retryPendingCompanionDerivations())

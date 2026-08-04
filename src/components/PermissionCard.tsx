@@ -67,7 +67,6 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
           lat={permission.lat}
           lon={permission.lon}
           boundary={previewBoundary}
-          tracks={permission.tracks}
           className="h-full w-full rounded-none"
         />
         {!isRally && permission.cumulativePercent !== null && (

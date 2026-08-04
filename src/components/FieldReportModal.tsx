@@ -178,7 +178,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
 
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
   const [customNote, setCustomNote] = useState("");
-  const [scrapCount, setScrapCount] = useState(0);
+  const [scrapCount, setScrapCount] = useState<number | "">(0);
 
   const [mapUrl, setMapUrl] = useState<string | null>(null);
   const [mapCapturing, setMapCapturing] = useState(true);
@@ -499,6 +499,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
   const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat != null && f.lon != null));
   const notableFinds = getNotableFindLabels(finds);
   const gpsFindCount = finds.filter(f => f.lat != null && f.lon != null).length;
+  const reportedScrapCount = scrapCount === "" ? 0 : scrapCount;
   const siteNoteCount = keyNotes.length + (customNote.trim() ? 1 : 0);
   const showCoverage = coveragePct != null && coveragePct >= 1;
   const coverageLabel = showCoverage ? `${Math.round(coveragePct!)}% of field` : "Not recorded";
@@ -514,7 +515,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
   const metricStats = [
     { label: "Finds", value: String(summary.total) },
     { label: "GPS finds", value: String(gpsFindCount) },
-    { label: "Scrap removed", value: String(scrapCount) },
+    { label: "Scrap removed", value: String(reportedScrapCount) },
     ...(duration ? [{ label: "Time on site", value: duration }] : []),
     ...(showCoverage ? [{ label: "Area covered", value: coverageLabel }] : []),
     ...(siteNoteCount > 0 ? [{ label: "Site notes", value: String(siteNoteCount) }] : []),
@@ -563,12 +564,13 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             ))}
           </div>
           <div className="flex items-center gap-3 mb-3">
-            <label className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">Scrap metal removed:</label>
+            <label htmlFor="field-report-scrap-count" className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">Scrap metal removed:</label>
             <input
+              id="field-report-scrap-count"
               type="number"
               min={0}
               value={scrapCount}
-              onChange={e => setScrapCount(Math.max(0, parseInt(e.target.value) || 0))}
+              onChange={e => setScrapCount(e.target.value === "" ? "" : Math.max(0, parseInt(e.target.value, 10) || 0))}
               className="w-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
             />
             <span className="text-sm text-gray-500">items</span>
@@ -678,7 +680,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
             )}
 
             {/* Site Conduct Summary */}
-            {(keyNotes.length > 0 || scrapCount > 0 || customNote.trim()) && (
+            {(keyNotes.length > 0 || reportedScrapCount > 0 || customNote.trim()) && (
               <div data-pdf-block style={{ ...reportKeepTogetherStyle, background: REPORT.accentSoft, border: "1px solid #bdebd2", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ fontSize: 9, fontFamily: "sans-serif", letterSpacing: "0.12em", textTransform: "uppercase", color: REPORT.accentDark, marginBottom: 8, fontWeight: 800 }}>Site Conduct Summary</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -688,14 +690,14 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
                       {note}
                     </div>
                   ))}
-                  {scrapCount > 0 && (
+                  {reportedScrapCount > 0 && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: REPORT.ink }}>
                       <span style={{ color: REPORT.accentDark, fontWeight: 900, fontSize: 11 }}>✓</span>
-                      Scrap metal removed: {scrapCount} {scrapCount === 1 ? "item" : "items"}
+                      Scrap metal removed: {reportedScrapCount} {reportedScrapCount === 1 ? "item" : "items"}
                     </div>
                   )}
                   {customNote.trim() && (
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 13, color: REPORT.ink, marginTop: (keyNotes.length > 0 || scrapCount > 0) ? 4 : 0 }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 13, color: REPORT.ink, marginTop: (keyNotes.length > 0 || reportedScrapCount > 0) ? 4 : 0 }}>
                       <span style={{ fontWeight: 760, fontFamily: "sans-serif", fontSize: 11, color: REPORT.muted, flexShrink: 0 }}>Note:</span>
                       {customNote.trim()}
                     </div>

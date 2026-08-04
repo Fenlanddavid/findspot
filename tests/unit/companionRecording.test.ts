@@ -20,6 +20,7 @@ const {
   importCompanionRecording,
   inspectCompanionRecording,
   regenerateCompanionTracks,
+  retryPendingCompanionDerivations,
 } = await import('../../src/services/companionImport');
 
 async function recordingFixture(
@@ -177,5 +178,33 @@ describe('Companion import pipeline', () => {
     await applyCompanionTrackTrim(track, [track.points[1]], new Date().toISOString());
     await regenerateCompanionTracks(recording.recordingUuid);
     expect((await db.tracks.get(track.id))?.points.map(point => point.sourceSequence)).toEqual([1]);
+  });
+
+  it('retries pending derivations but leaves failed imports alone on launch', async () => {
+    await seedSession();
+    const recording = await recordingFixture();
+    await importCompanionRecording(
+      await inspectCompanionRecording(JSON.stringify(recording)),
+      'session-1',
+    );
+
+    await db.companionImports.update(recording.recordingUuid, {
+      derivationStatus: 'failed',
+      derivationError: 'Needs explicit repair',
+    });
+    await retryPendingCompanionDerivations();
+    expect(await db.companionImports.get(recording.recordingUuid)).toMatchObject({
+      derivationStatus: 'failed',
+      derivationError: 'Needs explicit repair',
+    });
+
+    await db.companionImports.update(recording.recordingUuid, {
+      derivationStatus: 'pending',
+      derivationError: undefined,
+    });
+    await retryPendingCompanionDerivations();
+    expect(await db.companionImports.get(recording.recordingUuid)).toMatchObject({
+      derivationStatus: 'ready',
+    });
   });
 });

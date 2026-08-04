@@ -8,6 +8,7 @@ const { refreshHotspotPredictionOutcomes } = vi.hoisted(() => ({
 
 vi.mock('../../src/services/hotspotPredictionService', () => ({
   refreshHotspotPredictionOutcomes,
+  aggregateAndSweepHotspotPredictions: vi.fn().mockResolvedValue(0),
 }));
 
 import { saveSessionSearchedAreas } from '../../src/services/sessionCoverageCommands';

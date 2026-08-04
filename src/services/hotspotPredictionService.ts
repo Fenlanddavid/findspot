@@ -103,10 +103,12 @@ export async function resolveHotspotPredictionOutcomes(
     const predictions = scopePermissionId
         ? unresolved.filter(prediction => prediction.permissionId === scopePermissionId)
         : unresolved;
-    const [sections, observations] = await Promise.all([
-        db.permissionSections.toArray(),
-        db.sessionCoverage.toArray(),
-    ]);
+    const [sections, observations] = await Promise.all(scopePermissionId
+        ? [
+              db.permissionSections.where('permissionId').equals(scopePermissionId).toArray(),
+              db.sessionCoverage.where('permissionId').equals(scopePermissionId).toArray(),
+          ]
+        : [db.permissionSections.toArray(), db.sessionCoverage.toArray()]);
     const trackedCoverageByPrediction = new Map(predictions.map(prediction => [
         prediction.id,
         predictionTrackCoverage(prediction, tracks, sessions),
@@ -160,6 +162,22 @@ export async function refreshHotspotPredictionOutcomes(
     hits: number;
     searchedNoFind: number;
 }> {
+    if (scopePermissionId) {
+        const [finds, sessions] = await Promise.all([
+            db.finds.where('permissionId').equals(scopePermissionId).toArray(),
+            db.sessions.where('permissionId').equals(scopePermissionId).toArray(),
+        ]);
+        const sessionIds = sessions.map(session => session.id);
+        const tracks = sessionIds.length > 0
+            ? await db.tracks.where('sessionId').anyOf(sessionIds).toArray()
+            : [];
+        return resolveHotspotPredictionOutcomes(
+            finds,
+            tracks,
+            sessions,
+            scopePermissionId,
+        );
+    }
     const [finds, tracks, sessions] = await Promise.all([
         db.finds.toArray(),
         db.tracks.toArray(),

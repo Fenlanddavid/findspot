@@ -30,6 +30,8 @@ let trackName: string | null = null;
 let trackColor: string | null = null;
 let trackCreatedAt: string | null = null;
 
+export const ACTIVE_BROWSER_TRACK_SETTING = 'fs_active_browser_track_id';
+
 function resetLivenessState() {
   lastFixAt = null;
   lastAcceptedFixAt = null;
@@ -63,19 +65,23 @@ function formatGeolocationError(err: GeolocationPositionError) {
 export async function closeStaleActiveTracks(staleAfterMs = 0): Promise<number> {
     if (watchId !== null || isStarting) return 0;
 
+    const pointer = await db.settings.get(ACTIVE_BROWSER_TRACK_SETTING);
+    if (typeof pointer?.value !== 'string' || !pointer.value) return 0;
+    const activeTrack = await db.tracks.get(pointer.value);
+    if (!activeTrack || !activeTrack.isActive) {
+        await db.settings.delete(ACTIVE_BROWSER_TRACK_SETTING);
+        return 0;
+    }
+
     const cutoff = Date.now() - staleAfterMs;
-    const activeTracks = await db.tracks
-        .filter(track => !!track.isActive && new Date(track.updatedAt).getTime() < cutoff)
-        .toArray();
-    if (activeTracks.length === 0) return 0;
+    if (new Date(activeTrack.updatedAt).getTime() >= cutoff) return 0;
 
     const now = new Date().toISOString();
-    await db.tracks.bulkPut(activeTracks.map(track => ({
-        ...track,
-        isActive: false,
-        updatedAt: now,
-    })));
-    return activeTracks.length;
+    await db.transaction('rw', [db.tracks, db.settings], async () => {
+        await db.tracks.update(activeTrack.id, { isActive: false, updatedAt: now });
+        await db.settings.delete(ACTIVE_BROWSER_TRACK_SETTING);
+    });
+    return 1;
 }
 
 // ── Status API (poll-based) ─────────────────────────────────────────
@@ -160,17 +166,20 @@ async function handleFix(pos: GeolocationPosition) {
 
   const updatedAt = new Date().toISOString();
   if (!trackCreated) {
-    await db.tracks.add({
-      id: currentTrackId,
-      projectId: trackProjectId!,
-      sessionId: trackSessionId,
-      name: trackName!,
-      points: pointsBuffer,
-      gaps,
-      isActive: true,
-      color: trackColor!,
-      createdAt: trackCreatedAt!,
-      updatedAt,
+    await db.transaction('rw', [db.tracks, db.settings], async () => {
+      await db.tracks.add({
+        id: currentTrackId!,
+        projectId: trackProjectId!,
+        sessionId: trackSessionId,
+        name: trackName!,
+        points: pointsBuffer,
+        gaps,
+        isActive: true,
+        color: trackColor!,
+        createdAt: trackCreatedAt!,
+        updatedAt,
+      });
+      await db.settings.put({ key: ACTIVE_BROWSER_TRACK_SETTING, value: currentTrackId });
     });
     trackCreated = true;
   } else {
@@ -339,10 +348,14 @@ export async function stopTracking() {
     document.removeEventListener('visibilitychange', visibilityHandler);
 
     if (currentTrackId) {
-        await db.tracks.update(currentTrackId, {
-            isActive: false,
-            gaps,
-            updatedAt: new Date().toISOString()
+        const trackId = currentTrackId;
+        await db.transaction('rw', [db.tracks, db.settings], async () => {
+            await db.tracks.update(trackId, {
+                isActive: false,
+                gaps,
+                updatedAt: new Date().toISOString()
+            });
+            await db.settings.delete(ACTIVE_BROWSER_TRACK_SETTING);
         });
         currentTrackId = null;
     }

@@ -1,12 +1,10 @@
-import { db, Permission, Field, Track } from "../db";
-import { calculateCoverage } from "./coverage";
-import { area as turfArea } from "@turf/turf";
+import { db, Permission, Field } from "../db";
+import { geometryAreaM2, persistedCoveragePercent } from './permissionSummary';
 
 export type EnrichedPermission = Permission & {
   fields: Field[];
   cumulativePercent: number | null;
   totalAcres: number | null;
-  tracks: Track[];
   sessionCount: number;
   lastSessionDate: string | null;
   findCount: number;
@@ -15,7 +13,7 @@ export type EnrichedPermission = Permission & {
 };
 
 /**
- * Enriches a list of permissions with fields, sessions, tracks, coverage %,
+ * Enriches a list of permissions with fields, sessions, saved coverage,
  * and coordinate fallbacks. Uses a fixed set of batched queries regardless of
  * how many permissions are in the list, avoiding the previous N+1 pattern.
  */
@@ -27,12 +25,22 @@ export async function enrichPermissions(
 
   const permissionIds = rows.map(p => p.id);
 
-  const [allFields, allSessions, allFinds, allOpenSignals, allQuestions] = await Promise.all([
+  const [
+    allFields,
+    allSessions,
+    allFinds,
+    allOpenSignals,
+    allQuestions,
+    allSections,
+    allCoverage,
+  ] = await Promise.all([
     db.fields.where("permissionId").anyOf(permissionIds).toArray(),
     db.sessions.where("permissionId").anyOf(permissionIds).toArray(),
     db.finds.where("permissionId").anyOf(permissionIds).toArray(),
     db.undugSignals.where("status").equals("open").toArray(),
     db.outstandingQuestions.where("permissionId").anyOf(permissionIds).toArray(),
+    db.permissionSections.where('permissionId').anyOf(permissionIds).toArray(),
+    db.sessionCoverage.where('permissionId').anyOf(permissionIds).toArray(),
   ]);
 
   // Count open signals per permission (filter in memory — single query for all)
@@ -52,11 +60,6 @@ export async function enrichPermissions(
       );
     }
   }
-
-  const allSessionIds = allSessions.map(s => s.id);
-  const allTracks = allSessionIds.length > 0
-    ? await db.tracks.where("sessionId").anyOf(allSessionIds).toArray()
-    : [];
 
   // Group everything in memory
   const fieldsByPermission = new Map<string, Field[]>();
@@ -92,41 +95,16 @@ export async function enrichPermissions(
   return rows.map(p => {
     const fields = fieldsByPermission.get(p.id) ?? [];
     const sessions = sessionsByPermission.get(p.id) ?? [];
-    const sessionIds = new Set(sessions.map(s => s.id));
-    const permissionTracks = allTracks.filter(t => t.sessionId && sessionIds.has(t.sessionId));
-    const unassignedSessionIds = new Set(sessions.filter(s => !s.fieldId).map(s => s.id));
 
     // Sort sessions to find the latest date
     const lastSessionDate = sessions.length > 0 
       ? [...sessions].sort((a, b) => (b.date || "").localeCompare(a.date || ""))[0].date 
       : null;
 
-    let totalAreaM2 = 0;
-    let totalDetectedM2 = 0;
-
-    if (fields.length > 0) {
-      // Coverage per sub-field
-      for (const f of fields) {
-        const fieldSessionIds = new Set(sessions.filter(s => s.fieldId === f.id).map(s => s.id));
-        const fieldTracks = permissionTracks.filter(t =>
-          t.sessionId && (fieldSessionIds.has(t.sessionId) || unassignedSessionIds.has(t.sessionId))
-        );
-        const result = calculateCoverage(f.boundary, fieldTracks);
-        if (result) {
-          totalAreaM2 += result.totalAreaM2;
-          totalDetectedM2 += result.detectedAreaM2;
-        }
-      }
-    } else if (p.boundary) {
-      // No sub-fields — use the permission boundary itself
-      const result = calculateCoverage(p.boundary, permissionTracks);
-      if (result) {
-        totalAreaM2 += result.totalAreaM2;
-        totalDetectedM2 += result.detectedAreaM2;
-      }
-    }
-
-    const cumulativePercent = totalAreaM2 > 0 ? (totalDetectedM2 / totalAreaM2) * 100 : null;
+    const cumulativePercent = persistedCoveragePercent(
+      allSections.filter(section => section.permissionId === p.id),
+      allCoverage.filter(observation => observation.permissionId === p.id),
+    );
 
     // Multi-layered coordinate fallback
     let lat = typeof p.lat === "number" ? p.lat : null;
@@ -162,9 +140,9 @@ export async function enrichPermissions(
     const fieldsWithBoundary = fields.filter(f => f.boundary);
     let totalAcres: number | null = null;
     if (p.boundary) {
-      totalAcres = turfArea(p.boundary) / 4046.86;
+      totalAcres = geometryAreaM2(p.boundary) / 4046.86;
     } else if (fieldsWithBoundary.length > 0) {
-      const totalM2 = fieldsWithBoundary.reduce((sum, f) => sum + turfArea(f.boundary), 0);
+      const totalM2 = fieldsWithBoundary.reduce((sum, f) => sum + geometryAreaM2(f.boundary), 0);
       totalAcres = totalM2 / 4046.86;
     }
 
@@ -175,7 +153,6 @@ export async function enrichPermissions(
       fields,
       cumulativePercent,
       totalAcres,
-      tracks: permissionTracks,
       sessionCount: sessions.length,
       lastSessionDate,
       findCount,

@@ -6,7 +6,10 @@ import {
   prepareSessionCoverageEvidence,
   saveReportedSessionCoverage,
 } from './coverageMutations';
-import { refreshHotspotPredictionOutcomes } from './hotspotPredictionService';
+import {
+  aggregateAndSweepHotspotPredictions,
+  refreshHotspotPredictionOutcomes,
+} from './hotspotPredictionService';
 
 export type SaveSessionSearchedAreasResult = {
   observations: SessionCoverageObservation[];
@@ -32,7 +35,21 @@ export async function prepareSessionSearchedAreas(
   sessionId: string,
 ): Promise<SessionCoverageObservation[]> {
   try {
-    return await prepareSessionCoverageEvidence(sessionId);
+    const observations = await prepareSessionCoverageEvidence(sessionId);
+    const session = await db.sessions.get(sessionId);
+    if (session) {
+      try {
+        await refreshHotspotPredictionOutcomes(session.permissionId);
+        await aggregateAndSweepHotspotPredictions();
+      } catch (error) {
+        reportNonFatal(
+          'session-coverage',
+          'Coverage prepared but prediction outcomes could not be refreshed',
+          error,
+        );
+      }
+    }
+    return observations;
   } catch (error) {
     reportNonFatal(
       'session-coverage',
@@ -55,6 +72,7 @@ export async function saveSessionSearchedAreas(input: {
   );
   try {
     await refreshHotspotPredictionOutcomes(session.permissionId);
+    await aggregateAndSweepHotspotPredictions();
     return { observations, predictionRefresh: 'completed' };
   } catch (error) {
     reportNonFatal(

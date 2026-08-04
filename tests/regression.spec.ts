@@ -653,6 +653,13 @@ test("field report summary stays inside the card on narrow Android viewports", a
   await expect(page.getByRole("dialog")).toContainText("Preview");
   await expect(page.getByText("Key highlights")).toBeVisible();
 
+  const scrapCount = page.getByLabel("Scrap metal removed:");
+  await expect(scrapCount).toHaveValue("0");
+  await scrapCount.fill("");
+  await expect(scrapCount).toHaveValue("");
+  await scrapCount.fill("3");
+  await expect(page.getByText("Scrap metal removed: 3 items")).toBeVisible();
+
   const layout = await page.evaluate(() => {
     const summary = Array.from(document.querySelectorAll<HTMLElement>("[data-pdf-block]"))
       .find(el => el.textContent?.includes("At a glance") && el.textContent?.includes("Key highlights"));

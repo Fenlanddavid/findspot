@@ -259,7 +259,7 @@ export async function regenerateCompanionTracks(recordingUuid: string): Promise<
 
 export async function retryPendingCompanionDerivations(): Promise<void> {
   const pending = await db.companionImports
-    .filter(entry => entry.derivationStatus !== 'ready')
+    .where('derivationStatus').equals('pending')
     .toArray();
   for (const entry of pending) {
     try {
