@@ -4,6 +4,9 @@ import * as turf from '@turf/turf';
 import type { HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
 import { reportNonFatal } from '../services/diagLog';
+import { fetchRomanRoads } from '../services/romanRoadService';
+import { ROMAN_STANDALONE_MIN_ZOOM } from '../services/fieldguide/mapLayerRegistry';
+import type { RomanStandaloneLayerStatus } from './useFieldGuidePageState';
 import {
     routeLabel,
     type FieldGuideMapCallbacks,
@@ -14,14 +17,87 @@ type Options = {
     mapReadyVersion: number;
     pasFinds: HistoricFind[];
     historicRoutes: HistoricRoute[];
+    romanStandaloneEnabled: boolean;
+    onRomanStandaloneStatusChange: (status: RomanStandaloneLayerStatus) => void;
     callbacksRef: MutableRefObject<FieldGuideMapCallbacks>;
 };
+
+export type RomanStandaloneBounds = {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+};
+
+type RomanRoadFetcher = (
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+) => Promise<HistoricRoute[]>;
+
+function emptyFeatureCollection(): GeoJSON.FeatureCollection {
+    return { type: 'FeatureCollection', features: [] };
+}
+
+function viewportBounds(map: maplibregl.Map): RomanStandaloneBounds {
+    const bounds = map.getBounds();
+    return {
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+    };
+}
+
+export function romanBoundsContain(
+    fetched: RomanStandaloneBounds,
+    viewport: RomanStandaloneBounds,
+): boolean {
+    return fetched.west <= viewport.west
+        && fetched.south <= viewport.south
+        && fetched.east >= viewport.east
+        && fetched.north >= viewport.north;
+}
+
+export async function populateRomanStandaloneRoads(
+    map: maplibregl.Map,
+    bounds: RomanStandaloneBounds,
+    fetchRoads: RomanRoadFetcher = fetchRomanRoads,
+): Promise<RomanStandaloneLayerStatus> {
+    if (map.getZoom() < ROMAN_STANDALONE_MIN_ZOOM) return 'zoom-in';
+    const source = map.getSource('roman-roads-standalone') as maplibregl.GeoJSONSource | undefined;
+    try {
+        const routes = await fetchRoads(bounds.west, bounds.south, bounds.east, bounds.north);
+        source?.setData({
+            type: 'FeatureCollection',
+            features: routes.map(route => ({
+                type: 'Feature' as const,
+                geometry: { type: 'LineString' as const, coordinates: route.geometry },
+                properties: {
+                    id: route.id,
+                    source: route.source,
+                    name: route.name,
+                    reference: route.reference,
+                    confidenceClass: route.confidenceClass,
+                },
+            })),
+        });
+        return 'available';
+    } catch (error) {
+        source?.setData(emptyFeatureCollection());
+        reportNonFatal('field-guide-map', 'Roman roads layer unavailable', error);
+        return 'unavailable';
+    }
+}
 
 export function useFieldGuideHistoricLayers({
     mapRef,
     mapReadyVersion,
     pasFinds,
     historicRoutes,
+    romanStandaloneEnabled,
+    onRomanStandaloneStatusChange,
     callbacksRef,
 }: Options): void {
     useEffect(() => {
@@ -65,6 +141,43 @@ export function useFieldGuideHistoricLayers({
         });
         return () => { canceled = true; };
     }, [mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!mapReadyVersion || !map || !romanStandaloneEnabled) {
+            onRomanStandaloneStatusChange('idle');
+            return;
+        }
+        let canceled = false;
+        let fetchedBounds: RomanStandaloneBounds | null = null;
+        let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+        let requestVersion = 0;
+        const refresh = async () => {
+            const nextBounds = viewportBounds(map);
+            if (map.getZoom() < ROMAN_STANDALONE_MIN_ZOOM) {
+                onRomanStandaloneStatusChange('zoom-in');
+                return;
+            }
+            if (fetchedBounds && romanBoundsContain(fetchedBounds, nextBounds)) return;
+            fetchedBounds = nextBounds;
+            const version = ++requestVersion;
+            onRomanStandaloneStatusChange('loading');
+            const status = await populateRomanStandaloneRoads(map, nextBounds);
+            if (!canceled && version === requestVersion) onRomanStandaloneStatusChange(status);
+        };
+        const scheduleRefresh = () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => { void refresh(); }, 300);
+        };
+        map.on('moveend', scheduleRefresh);
+        void refresh();
+        return () => {
+            canceled = true;
+            requestVersion++;
+            if (debounceTimer) clearTimeout(debounceTimer);
+            map.off('moveend', scheduleRefresh);
+        };
+    }, [mapReadyVersion, romanStandaloneEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const map = mapRef.current;

@@ -23,15 +23,15 @@ describe('FieldGuide map architecture characterization', () => {
       readFile(INTERACTIONS, 'utf8'),
     ]);
 
-    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(294);
+    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(309);
     expect(registry.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(interactions.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(occurrences(hook, /map\.addSource\(/g)).toBe(0);
     expect(occurrences(hook, /map\.addLayer\(/g)).toBe(0);
     expect(occurrences(hook, /map\.on\(/g)).toBe(0);
-    expect(occurrences(registry, /map\.addSource\(/g)).toBe(16);
-    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(34);
-    expect(occurrences(interactions, /map\.on\(/g)).toBe(18);
+    expect(occurrences(registry, /map\.addSource\(/g)).toBe(17);
+    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(36);
+    expect(occurrences(interactions, /map\.on\(/g)).toBe(19);
     expect(hook).toContain('registerFieldGuideMapLayers(map)');
     expect(hook).toContain('bindFieldGuideMapInteractions(map, {');
   });

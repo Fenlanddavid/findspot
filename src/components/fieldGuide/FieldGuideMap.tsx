@@ -17,17 +17,22 @@ import {
     type AnnotationType, type BroadPeriod, type LandscapeType, type AnnotationConfidence,
 } from '../../utils/devAnnotation';
 import { useFieldGuideContext } from './FieldGuideContext';
-import { HOTSPOT_TITLES, HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
+import {
+    HOTSPOT_TITLES,
+    HISTORIC_LAYER_OPTIONS,
+    type OverlayOpacityKey,
+} from './FieldGuideContext';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { GeologyContextCard } from './GeologyContextCard';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
-const RASTER_OVERLAY_LABELS: Record<'lidar' | 'lidar-wales' | 'os1880' | 'os1930', string> = {
+const OVERLAY_OPACITY_LABELS: Record<OverlayOpacityKey, string> = {
     lidar:          'LiDAR',
     'lidar-wales':  'LiDAR Wales',
     os1880:         'OS 1895',
     os1930:         'OS 1900',
+    romanStandalone: 'Roman Roads',
 };
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
@@ -166,7 +171,9 @@ export function FieldGuideMap() {
         activeOverlayOpacityLayer,
         rasterOverlayButtonClass,
         handleRasterOverlayPress,
-        updateRasterOverlayOpacity,
+        handleRomanStandalonePress,
+        updateOverlayOpacity,
+        romanStandaloneStatus,
         historicLayerVisibility,
         setHistoricLayerVisibility,
         showSavedPoints,
@@ -486,7 +493,7 @@ export function FieldGuideMap() {
             )}
 
             {/* Map Layer Toggle + Search */}
-            <div className="absolute top-4 right-4 z-[59] flex flex-col gap-2">
+            <div className="absolute top-4 right-4 z-[90] flex flex-col gap-2">
                 <button
                     onClick={() => { setIsSearchOpen(!isSearchOpen); setShowLayerPicker(false); }}
                     aria-label={isSearchOpen ? 'Close search' : 'Search place'}
@@ -508,14 +515,14 @@ export function FieldGuideMap() {
                     <button
                         onClick={() => setShowLayerPicker(v => !v)}
                         aria-label="Map layers"
-                        className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930 || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
+                        className={`w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
                     >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
                             <polyline points="2 17 12 22 22 17"/>
                             <polyline points="2 12 12 17 22 12"/>
                         </svg>
-                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930) && (
+                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone) && (
                             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         )}
                     </button>
@@ -542,6 +549,19 @@ export function FieldGuideMap() {
                             <button onClick={() => handleRasterOverlayPress('os1930')} className={rasterOverlayButtonClass('os1930', 'bg-orange-500/20 border-orange-500/40 text-orange-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
                                 OS 1900
+                            </button>
+                            <button
+                                onClick={handleRomanStandalonePress}
+                                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 border ${historicLayerVisibility.romanStandalone ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' : 'text-white/50 hover:text-white hover:bg-white/5 border-transparent'}`}
+                            >
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 18c5-7 9-7 18-12"/><path d="M5 20c5-7 9-7 18-12"/></svg>
+                                {romanStandaloneStatus === 'zoom-in'
+                                    ? 'Roman Roads — zoom in'
+                                    : romanStandaloneStatus === 'unavailable'
+                                        ? 'Roman Roads — unavailable'
+                                        : romanStandaloneStatus === 'loading'
+                                            ? 'Roman Roads — loading'
+                                            : 'Roman Roads'}
                             </button>
                             <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Finds</p>
                             <button onClick={() => setHistoricLayerVisibility(p => ({ ...p, userFinds: !p.userFinds }))} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all ${historicLayerVisibility.userFinds ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
@@ -580,12 +600,12 @@ export function FieldGuideMap() {
                         min={0}
                         max={100}
                         value={Math.round(historicLayerOpacity[activeOverlayOpacityLayer] * 100)}
-                        onChange={e => updateRasterOverlayOpacity(activeOverlayOpacityLayer, Number(e.target.value) / 100)}
-                        aria-label={`${RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]} opacity`}
+                        onChange={e => updateOverlayOpacity(activeOverlayOpacityLayer, Number(e.target.value) / 100)}
+                        aria-label={`${OVERLAY_OPACITY_LABELS[activeOverlayOpacityLayer]} opacity`}
                         className="min-h-0 flex-1 w-8 accent-emerald-400"
                         style={{ writingMode: 'vertical-rl', direction: 'rtl' }}
                     />
-                    <span className="text-[0.4375rem] font-black text-white/45 uppercase tracking-widest leading-tight text-center">{RASTER_OVERLAY_LABELS[activeOverlayOpacityLayer]}</span>
+                    <span className="text-[0.4375rem] font-black text-white/45 uppercase tracking-widest leading-tight text-center">{OVERLAY_OPACITY_LABELS[activeOverlayOpacityLayer]}</span>
                 </div>
             )}
 
@@ -1198,8 +1218,12 @@ export function FieldGuideMap() {
                                 {intelLayersOpen && (
                                     <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
                                         {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
-                                            <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
-                                                {label}
+                                            <button key={key} onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                                {key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'zoom-in'
+                                                    ? 'Roman Roads — zoom in to show'
+                                                    : key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'unavailable'
+                                                        ? 'Roman Roads — unavailable'
+                                                        : label}
                                             </button>
                                         ))}
                                     </div>

@@ -10,6 +10,9 @@ function emptyGeoJSON(): GeoJSON.FeatureCollection {
 // LiDAR preparation brief is complete.
 const WALES_LIDAR_COG_URL = 'https://findspot-wales-lidar.trials-uk.workers.dev/wales_hillshade_3857.tif';
 
+export const ROMAN_STANDALONE_MIN_ZOOM = 11;
+export const ROMAN_ROADS_ATTRIBUTION = 'Digital Britannia © Mike Haken 2026, Roman Roads Research Association (RRRA). Licensed CC BY-NC 4.0.';
+
 let protocolsRegistered = false;
 
 export function ensureFieldGuideMapProtocolsRegistered(): void {
@@ -178,6 +181,38 @@ export function registerFieldGuideMapLayers(map: maplibregl.Map): boolean {
     map.addLayer({ id: 'historic-routes-roman', type: 'line', source: 'historic-routes', filter: ['==', ['get', 'type'], 'roman_road'], layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3b82f6', 'line-width': 5, 'line-opacity': 0.97 } });
     map.addLayer({ id: 'historic-routes-trackway-casing', type: 'line', source: 'historic-routes', filter: ['!=', ['get', 'type'], 'roman_road'], layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.2 } });
     map.addLayer({ id: 'historic-routes-trackway', type: 'line', source: 'historic-routes', filter: ['!=', ['get', 'type'], 'roman_road'], layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#93c5fd', 'line-width': 3, 'line-opacity': 0.95, 'line-dasharray': [5, 4] } });
+
+    map.addSource('roman-roads-standalone', {
+        type: 'geojson',
+        data: emptyGeoJSON(),
+        attribution: ROMAN_ROADS_ATTRIBUTION,
+    });
+    map.addLayer({
+        id: 'roman-standalone-casing',
+        type: 'line',
+        source: 'roman-roads-standalone',
+        minzoom: ROMAN_STANDALONE_MIN_ZOOM,
+        layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+            'line-color': '#ffffff',
+            'line-width': 5.5,
+            'line-opacity': 0.35,
+            'line-dasharray': [5, 3],
+        },
+    });
+    map.addLayer({
+        id: 'roman-standalone',
+        type: 'line',
+        source: 'roman-roads-standalone',
+        minzoom: ROMAN_STANDALONE_MIN_ZOOM,
+        layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+            'line-color': '#3b82f6',
+            'line-width': 2.5,
+            'line-opacity': 0.97,
+            'line-dasharray': [5, 3],
+        },
+    });
 
     map.addSource('corridors', { type: 'geojson', data: emptyGeoJSON() });
     map.addLayer({ id: 'corridors-fill', type: 'fill', source: 'corridors', layout: { visibility: 'none' }, paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.12 } });

@@ -23,16 +23,16 @@ describe('FieldGuide map-data architecture characterization', () => {
       readFile(HISTORIC_LAYERS_HOOK, 'utf8'),
     ]);
 
-    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(294);
+    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(309);
     expect(scanLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
-    expect(historicLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
+    expect(historicLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(325);
     expect(occurrences(mapHook, /useEffect\(/g)).toBe(6);
     expect(occurrences(scanLayersHook, /useEffect\(/g)).toBe(7);
-    expect(occurrences(historicLayersHook, /useEffect\(/g)).toBe(4);
+    expect(occurrences(historicLayersHook, /useEffect\(/g)).toBe(5);
     expect(occurrences(
       `${scanLayersHook}\n${historicLayersHook}`,
-      /getSource\('(hotspots-overlay|targets|trace-targets|cluster-links|pas-finds|pas-density|historic-routes|corridors|crossings|landscape-context)'/g,
-    )).toBe(11);
+      /getSource\('(hotspots-overlay|targets|trace-targets|cluster-links|pas-finds|pas-density|historic-routes|roman-roads-standalone|corridors|crossings|landscape-context)'/g,
+    )).toBe(12);
     expect(mapHook).toContain('useFieldGuideScanLayers({');
     expect(mapHook).toContain('useFieldGuideHistoricLayers({');
     expect(mapHook).not.toContain('getPASDensityGeoJSON');

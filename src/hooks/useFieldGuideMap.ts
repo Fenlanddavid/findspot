@@ -16,19 +16,25 @@ import {
     bindFieldGuideMapInteractions,
     type FieldGuideMapCallbacks,
 } from '../services/fieldguide/mapInteractions';
+import type {
+    OverlayOpacity,
+    RomanStandaloneLayerStatus,
+} from './useFieldGuidePageState';
 
 interface LayerState {
     historicMode: boolean;
     devMode:      boolean;
-    visibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean };
+    visibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean };
 }
 
-const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) => boolean }> = [
+export const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) => boolean }> = [
     { id: 'pas-circles',                     visibleWhen: s => s.historicMode && s.visibility.monuments },
     { id: 'historic-routes-roman-casing',    visibleWhen: s => s.historicMode && s.visibility.routes },
     { id: 'historic-routes-roman',           visibleWhen: s => s.historicMode && s.visibility.routes },
     { id: 'historic-routes-trackway-casing', visibleWhen: s => s.historicMode && s.visibility.routes },
     { id: 'historic-routes-trackway',        visibleWhen: s => s.historicMode && s.visibility.routes },
+    { id: 'roman-standalone-casing',         visibleWhen: s => s.visibility.romanStandalone },
+    { id: 'roman-standalone',                visibleWhen: s => s.visibility.romanStandalone },
     { id: 'aim-fill',                        visibleWhen: s => s.historicMode && s.visibility.aim },
     { id: 'aim-outline',                     visibleWhen: s => s.historicMode && s.visibility.aim },
     { id: 'pas-density-fill',               visibleWhen: s => s.historicMode && s.visibility.pasDensity },
@@ -67,10 +73,11 @@ export type UseFieldGuideMapOptions = {
     mapPreferenceReady: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
+    historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
-    historicLayerOpacity: { lidar: number; 'lidar-wales': number; os1930: number; os1880: number };
+    historicLayerOpacity: OverlayOpacity;
+    onRomanStandaloneStatusChange: (status: RomanStandaloneLayerStatus) => void;
     savedPoints: SavedPoint[];
     showSavedPoints: boolean;
     initLat?: number;
@@ -83,7 +90,7 @@ export type UseFieldGuideMapOptions = {
 };
 export function useFieldGuideMap({
     hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
-    isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, userFinds,
+    isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, onRomanStandaloneStatusChange, userFinds,
     savedPoints, showSavedPoints,
     initLat, initLng, initPinLabel, devMode, annotationMode, devAnnotations, callbacks,
 }: UseFieldGuideMapOptions) {
@@ -233,6 +240,12 @@ export function useFieldGuideMap({
             map.setLayoutProperty('overlay-os1880', 'visibility', historicLayerToggles.os1880 ? 'visible' : 'none');
             map.setPaintProperty('overlay-os1880', 'raster-opacity', historicLayerOpacity.os1880);
         }
+        if (map.getLayer('roman-standalone')) {
+            map.setPaintProperty('roman-standalone', 'line-opacity', 0.97 * historicLayerOpacity.romanStandalone);
+        }
+        if (map.getLayer('roman-standalone-casing')) {
+            map.setPaintProperty('roman-standalone-casing', 'line-opacity', 0.35 * historicLayerOpacity.romanStandalone);
+        }
     }, [historicLayerToggles, historicLayerOpacity, mapReadyVersion]);
 
     useFieldGuideScanLayers({
@@ -253,6 +266,8 @@ export function useFieldGuideMap({
         mapReadyVersion,
         pasFinds,
         historicRoutes,
+        romanStandaloneEnabled: historicLayerVisibility.romanStandalone,
+        onRomanStandaloneStatusChange,
         callbacksRef,
     });
 

@@ -40,6 +40,7 @@ import { runFieldGuideScan } from '../../services/fieldguide/scanOrchestrator';
 import { persistPostScanOutcomes } from '../../services/fieldguide/postScanOrchestrator';
 import {
     useFieldGuidePageState,
+    type OverlayOpacityKey,
     type RasterOverlayKey,
 } from '../../hooks/useFieldGuidePageState';
 import { useFieldGuideProjectData } from '../../hooks/useFieldGuideProjectData';
@@ -49,6 +50,32 @@ import {
 } from '../../services/fieldguide/fieldGuidePageSupport';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
+
+const RASTER_OVERLAY_LAYER_IDS: Record<RasterOverlayKey, string> = {
+    lidar: 'overlay-lidar',
+    'lidar-wales': 'overlay-lidar-wales',
+    os1880: 'overlay-os1880',
+    os1930: 'overlay-os1930',
+};
+
+export function applyOverlayOpacity(
+    map: maplibregl.Map | null,
+    key: OverlayOpacityKey,
+    value: number,
+): void {
+    if (!map) return;
+    if (key === 'romanStandalone') {
+        if (map.getLayer('roman-standalone')) {
+            map.setPaintProperty('roman-standalone', 'line-opacity', 0.97 * value);
+        }
+        if (map.getLayer('roman-standalone-casing')) {
+            map.setPaintProperty('roman-standalone-casing', 'line-opacity', 0.35 * value);
+        }
+        return;
+    }
+    const layerId = RASTER_OVERLAY_LAYER_IDS[key];
+    if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'raster-opacity', value);
+}
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
 
@@ -78,8 +105,9 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         selectedMonument, setSelectedMonument, historicMode, setHistoricMode,
         historicScanCompleted, setHistoricScanCompleted,
         historicLayerToggles, setHistoricLayerToggles,
-        historicLayerOpacity, setHistoricLayerOpacity,
+        historicLayerOpacity, setHistoricLayerOpacity, setRomanStandaloneOpacity,
         activeOpacityLayer, setActiveOpacityLayer,
+        romanStandaloneStatus, setRomanStandaloneStatus,
         historicLayerVisibility, setHistoricLayerVisibility,
         showFields, setShowFields, showFieldsPicker, setShowFieldsPicker,
         showLayerPicker, setShowLayerPicker, helperActive, setHelperActive,
@@ -158,9 +186,17 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         setShowLayerPicker(false);
     }, [activeOpacityLayer, historicLayerToggles]);
 
-    const updateRasterOverlayOpacity = useCallback((key: RasterOverlayKey, value: number) => {
-        setHistoricLayerOpacity(prev => ({ ...prev, [key]: clampOpacity(value, prev[key]) }));
-    }, []);
+    const handleRomanStandalonePress = useCallback(() => {
+        const enabled = historicLayerVisibility.romanStandalone;
+        setHistoricLayerVisibility(prev => ({ ...prev, romanStandalone: !enabled }));
+        if (enabled) {
+            if (activeOpacityLayer === 'romanStandalone') setActiveOpacityLayer(null);
+        } else {
+            setRomanStandaloneOpacity(1);
+            setActiveOpacityLayer('romanStandalone');
+        }
+        setShowLayerPicker(false);
+    }, [activeOpacityLayer, historicLayerVisibility.romanStandalone]);
 
     const persistSheetExpanded = useCallback((expanded: boolean) => {
         setSheetExpanded(expanded);
@@ -230,8 +266,12 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
     }, [systemLog]);
 
     useEffect(() => {
-        if (activeOpacityLayer && !historicLayerToggles[activeOpacityLayer]) setActiveOpacityLayer(null);
-    }, [activeOpacityLayer, historicLayerToggles]);
+        if (!activeOpacityLayer) return;
+        const enabled = activeOpacityLayer === 'romanStandalone'
+            ? historicLayerVisibility.romanStandalone
+            : historicLayerToggles[activeOpacityLayer];
+        if (!enabled) setActiveOpacityLayer(null);
+    }, [activeOpacityLayer, historicLayerToggles, historicLayerVisibility.romanStandalone]);
 
     // ─── Scan hooks ───────────────────────────────────────────────────────────
 
@@ -255,6 +295,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
             ...permissions.filter(p => p.boundary && !fields.some(f => f.permissionId === p.id)).map(p => ({ id: p.id, name: p.name, permissionId: p.id, boundary: p.boundary! })),
         ],
         isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity,
+        onRomanStandaloneStatusChange: setRomanStandaloneStatus,
         userFinds: projectFinds,
         savedPoints, showSavedPoints,
         initLat, initLng, initPinLabel,
@@ -301,6 +342,16 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
             },
         },
     });
+
+    const updateOverlayOpacity = useCallback((key: OverlayOpacityKey, value: number) => {
+        const nextOpacity = clampOpacity(value, historicLayerOpacity[key]);
+        if (key === 'romanStandalone') {
+            setRomanStandaloneOpacity(nextOpacity);
+        } else {
+            setHistoricLayerOpacity(prev => ({ ...prev, [key]: nextOpacity }));
+        }
+        applyOverlayOpacity(mapRef.current, key, nextOpacity);
+    }, [historicLayerOpacity, mapRef]);
 
     const initialFieldFocusedRef = React.useRef(false);
     useEffect(() => {
@@ -394,7 +445,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         setHistoricScanCompleted(false);
         setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, os1930: false, os1880: false });
         setActiveOpacityLayer(null);
-        setHistoricLayerVisibility(prev => ({ routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
+        setHistoricLayerVisibility(prev => ({ romanStandalone: prev.romanStandalone, routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
         setMapClickLabel(null);
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
@@ -937,7 +988,11 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
     const terrainScanComplete = hasScanned && !analyzing && !isTerrainScanning;
     const historicScanComplete = historicMode && historicScanCompleted && !loadingPAS;
     const selectedTarget = selectedId ? detectedFeatures.find(f => f.id === selectedId) ?? null : null;
-    const activeOverlayOpacityLayer = activeOpacityLayer && historicLayerToggles[activeOpacityLayer] ? activeOpacityLayer : null;
+    const activeOverlayOpacityLayer = activeOpacityLayer && (
+        activeOpacityLayer === 'romanStandalone'
+            ? historicLayerVisibility.romanStandalone
+            : historicLayerToggles[activeOpacityLayer]
+    ) ? activeOpacityLayer : null;
     const rasterOverlayButtonClass = (key: RasterOverlayKey, selectedClass: string) => {
         const enabled = historicLayerToggles[key];
         const selected = activeOverlayOpacityLayer === key;
@@ -995,7 +1050,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         targetPeriod, isLocating, selectedMonument, setSelectedMonument,
         historicMode, setHistoricMode, historicScanCompleted, setHistoricScanCompleted,
         historicLayerToggles, setHistoricLayerToggles, historicLayerOpacity,
-        activeOpacityLayer, setActiveOpacityLayer, historicLayerVisibility, setHistoricLayerVisibility,
+        activeOpacityLayer, setActiveOpacityLayer, romanStandaloneStatus,
+        historicLayerVisibility, setHistoricLayerVisibility,
         showFields, setShowFields, showFieldsPicker, setShowFieldsPicker,
         showLayerPicker, setShowLayerPicker, helperActive, setHelperActive,
         helperTipIndex, setHelperTipIndex, fieldPickerStep, setFieldPickerStep,
@@ -1016,7 +1072,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         isTerrainScanning, isHistoricScanning, loadingPAS,
         terrainScanComplete, historicScanComplete, selectedTarget,
         activeOverlayOpacityLayer, rasterOverlayButtonClass,
-        handleRasterOverlayPress, updateRasterOverlayOpacity,
+        handleRasterOverlayPress, handleRomanStandalonePress, updateOverlayOpacity,
         helperTips,
         persistSheetExpanded, handleSheetTouchStart, handleSheetTouchEnd,
         clearMapItemSelections, focusTarget, clearScan,

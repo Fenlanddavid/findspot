@@ -31,7 +31,7 @@ export function routeLabel(type: unknown, nameValue: unknown, fallback?: string)
 }
 
 function romanRoadLabel(props: Record<string, unknown> | undefined): string {
-    return routeLabel('roman_road', props?.name, 'Roman Road');
+    return routeLabel('roman_road', props?.name ?? props?.reference, 'Roman Road');
 }
 
 export function bindFieldGuideMapInteractions(
@@ -101,6 +101,9 @@ export function bindFieldGuideMapInteractions(
     map.on('move', () => callbacks().onZoomChange(map.getZoom()));
 
     map.on('click', 'historic-routes-roman', (event) => {
+        if (!isAnnotating()) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
+    });
+    map.on('click', 'roman-standalone', (event) => {
         if (!isAnnotating()) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
     });
     map.on('click', 'historic-routes-trackway', () => {

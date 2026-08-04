@@ -220,6 +220,8 @@ export function MobileBottomSheet() {
         setIntelLayersOpen,
         historicLayerVisibility,
         setHistoricLayerVisibility,
+        handleRomanStandalonePress,
+        romanStandaloneStatus,
         geologyContext,
         geologyContextLoading,
         landscapeIntelligenceMap,
@@ -389,10 +391,16 @@ export function MobileBottomSheet() {
                                         return (
                                             <button
                                                 key={key}
-                                                onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))}
+                                                onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))}
                                                 className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'}`}
                                             >
-                                                <span className="text-[0.6875rem] font-black uppercase tracking-widest leading-tight">{label}</span>
+                                                <span className="text-[0.6875rem] font-black uppercase tracking-widest leading-tight">
+                                                    {key === 'romanStandalone' && active && romanStandaloneStatus === 'zoom-in'
+                                                        ? 'Roman Roads — zoom in to show'
+                                                        : key === 'romanStandalone' && active && romanStandaloneStatus === 'unavailable'
+                                                            ? 'Roman Roads — unavailable'
+                                                            : label}
+                                                </span>
                                                 <span className={`h-2 w-2 rounded-full shrink-0 ${active ? 'bg-blue-300 shadow-[0_0_8px_rgba(147,197,253,0.8)]' : 'bg-slate-700'}`} />
                                             </button>
                                         );

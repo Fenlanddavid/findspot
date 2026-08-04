@@ -12,14 +12,24 @@ import type { LogEntry } from '../../utils/scanLogger';
 import type { DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence } from '../../utils/devAnnotation';
 import type { WorkflowState } from '../../types/significantFind';
 import type { SMUnavailableReason } from '../../services/historicScanService';
+import type {
+    OverlayOpacityKey,
+    RasterOverlayKey,
+    RomanStandaloneLayerStatus,
+} from '../../hooks/useFieldGuidePageState';
 
 // ─── Re-exported types used by child components ───────────────────────────────
 
-export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
+export type {
+    OverlayOpacityKey,
+    RasterOverlayKey,
+    RomanStandaloneLayerStatus,
+} from '../../hooks/useFieldGuidePageState';
 
 export const HISTORIC_LAYER_OPTIONS = [
     { key: 'context',    label: 'Recorded Heritage' },
     { key: 'routes',     label: 'Roman Roads & Trackways' },
+    { key: 'romanStandalone', label: 'Roman Roads' },
     { key: 'corridors',  label: 'Movement Corridors' },
     { key: 'crossings',  label: 'Crossing Points' },
     { key: 'monuments',  label: 'Scheduled Monuments' },
@@ -126,11 +136,12 @@ export interface FieldGuideContextValue {
     historicScanCompleted: boolean;
     historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
     setHistoricLayerToggles: React.Dispatch<React.SetStateAction<{ lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean }>>;
-    historicLayerOpacity: Record<RasterOverlayKey, number>;
-    activeOpacityLayer: RasterOverlayKey | null;
-    setActiveOpacityLayer: React.Dispatch<React.SetStateAction<RasterOverlayKey | null>>;
-    historicLayerVisibility: { routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
-    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean }>>;
+    historicLayerOpacity: Record<OverlayOpacityKey, number>;
+    activeOpacityLayer: OverlayOpacityKey | null;
+    setActiveOpacityLayer: React.Dispatch<React.SetStateAction<OverlayOpacityKey | null>>;
+    romanStandaloneStatus: RomanStandaloneLayerStatus;
+    historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
+    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean }>>;
     showFields: false | 'all' | string;
     setShowFields: React.Dispatch<React.SetStateAction<false | 'all' | string>>;
     showFieldsPicker: boolean;
@@ -226,10 +237,11 @@ export interface FieldGuideContextValue {
     selectedTarget: Cluster | null;
 
     // Raster overlay helpers
-    activeOverlayOpacityLayer: RasterOverlayKey | null;
+    activeOverlayOpacityLayer: OverlayOpacityKey | null;
     rasterOverlayButtonClass: (key: RasterOverlayKey, selectedClass: string) => string;
     handleRasterOverlayPress: (key: RasterOverlayKey) => void;
-    updateRasterOverlayOpacity: (key: RasterOverlayKey, value: number) => void;
+    handleRomanStandalonePress: () => void;
+    updateOverlayOpacity: (key: OverlayOpacityKey, value: number) => void;
 
     // Coach tips
     helperTips: CoachTip[];

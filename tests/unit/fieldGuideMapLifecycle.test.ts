@@ -20,6 +20,7 @@ const EXPECTED_SOURCE_IDS = [
   'targets',
   'pas-finds',
   'historic-routes',
+  'roman-roads-standalone',
   'corridors',
   'landscape-context',
   'crossings',
@@ -51,6 +52,8 @@ const EXPECTED_LAYER_IDS = [
   'historic-routes-roman',
   'historic-routes-trackway-casing',
   'historic-routes-trackway',
+  'roman-standalone-casing',
+  'roman-standalone',
   'corridors-fill',
   'corridors-outline',
   'landscape-context-fill',
@@ -259,6 +262,9 @@ describe('FieldGuide map interaction router', () => {
     handlers.get('click:historic-routes-roman')!({
       features: [{ properties: { name: 'Ermine Street' } }],
     });
+    handlers.get('click:roman-standalone')!({
+      features: [{ properties: { name: 'Fen Causeway', reference: 'Margary 2b' } }],
+    });
     handlers.get('click:historic-routes-trackway')!({ features: [] });
 
     expect(routed.onFeatureClick).toHaveBeenCalledWith('target-1');
@@ -274,6 +280,7 @@ describe('FieldGuide map interaction router', () => {
     expect(routed.onUserFindClick).toHaveBeenCalledWith('find-1');
     expect(routed.onMonumentClick).toHaveBeenCalledWith('Scheduled Site');
     expect(showLabel).toHaveBeenNthCalledWith(1, 'Roman Road - Ermine Street');
-    expect(showLabel).toHaveBeenNthCalledWith(2, 'Historic Trackway');
+    expect(showLabel).toHaveBeenNthCalledWith(2, 'Roman Road - Fen Causeway');
+    expect(showLabel).toHaveBeenNthCalledWith(3, 'Historic Trackway');
   });
 });

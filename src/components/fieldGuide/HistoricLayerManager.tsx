@@ -140,6 +140,8 @@ export function HistoricLayerManager() {
         setIntelDetailsOpen,
         historicLayerVisibility,
         setHistoricLayerVisibility,
+        handleRomanStandalonePress,
+        romanStandaloneStatus,
         potentialScore,
         scanConfidence,
         pasFinds,
@@ -381,8 +383,12 @@ export function HistoricLayerManager() {
                     {intelLayersOpen && !historicScanComplete && (
                         <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
                             {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
-                                <button key={key} onClick={() => setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key as keyof typeof p] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key as keyof typeof historicLayerVisibility] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
-                                    {label}
+                                <button key={key} onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                    {key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'zoom-in'
+                                        ? 'Roman Roads — zoom in to show'
+                                        : key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'unavailable'
+                                            ? 'Roman Roads — unavailable'
+                                            : label}
                                 </button>
                             ))}
                         </div>

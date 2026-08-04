@@ -29,6 +29,9 @@ import { usePotentialScore } from './usePotentialScore';
 
 export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
 export type RasterOverlayOpacity = Record<RasterOverlayKey, number>;
+export type OverlayOpacityKey = RasterOverlayKey | 'romanStandalone';
+export type OverlayOpacity = Record<OverlayOpacityKey, number>;
+export type RomanStandaloneLayerStatus = 'idle' | 'loading' | 'available' | 'unavailable' | 'zoom-in';
 
 export const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
     lidar: 1,
@@ -147,8 +150,16 @@ export function useFieldGuidePageState() {
             RASTER_OVERLAY_STORAGE_KEY,
             DEFAULT_RASTER_OVERLAY_OPACITY,
         );
-    const [activeOpacityLayer, setActiveOpacityLayer] = useState<RasterOverlayKey | null>(null);
+    const [romanStandaloneOpacity, setRomanStandaloneOpacity] = useState(1);
+    const overlayOpacity: OverlayOpacity = {
+        ...historicLayerOpacity,
+        romanStandalone: romanStandaloneOpacity,
+    };
+    const [activeOpacityLayer, setActiveOpacityLayer] = useState<OverlayOpacityKey | null>(null);
+    const [romanStandaloneStatus, setRomanStandaloneStatus] =
+        useState<RomanStandaloneLayerStatus>('idle');
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({
+        romanStandalone: false,
         routes: true,
         corridors: true,
         crossings: true,
@@ -242,8 +253,10 @@ export function useFieldGuidePageState() {
         selectedMonument, setSelectedMonument, historicMode, setHistoricMode,
         historicScanCompleted, setHistoricScanCompleted,
         historicLayerToggles, setHistoricLayerToggles,
-        historicLayerOpacity, setHistoricLayerOpacity,
+        historicLayerOpacity: overlayOpacity,
+        setHistoricLayerOpacity, setRomanStandaloneOpacity,
         activeOpacityLayer, setActiveOpacityLayer,
+        romanStandaloneStatus, setRomanStandaloneStatus,
         historicLayerVisibility, setHistoricLayerVisibility,
         showFields, setShowFields, showFieldsPicker, setShowFieldsPicker,
         showLayerPicker, setShowLayerPicker, helperActive, setHelperActive,
