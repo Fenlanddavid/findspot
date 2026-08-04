@@ -12,19 +12,19 @@ type StartupLayoutMetrics = {
 declare global {
   interface Window {
     __findspotStartupLayoutShifts?: StartupLayoutMetrics["entries"];
-    __findspotTrackReadCount?: number;
+    __findspotTrackReads?: string[];
   }
 }
 
 async function installTrackReadObserver(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    window.__findspotTrackReadCount = 0;
+    window.__findspotTrackReads = [];
     const indexPrototype = IDBIndex.prototype as IDBIndex & Record<string, unknown>;
     for (const method of ['get', 'getAll', 'getAllKeys', 'openCursor', 'openKeyCursor', 'count']) {
       const original = indexPrototype[method];
       if (typeof original !== 'function') continue;
       indexPrototype[method] = function (this: IDBIndex, ...args: unknown[]) {
-        if (this.objectStore.name === 'tracks') window.__findspotTrackReadCount! += 1;
+        if (this.objectStore.name === 'tracks') window.__findspotTrackReads!.push(`index:${method}`);
         return (original as (...callArgs: unknown[]) => unknown).apply(this, args);
       };
     }
@@ -33,7 +33,7 @@ async function installTrackReadObserver(page: Page): Promise<void> {
       const original = storePrototype[method];
       if (typeof original !== 'function') continue;
       storePrototype[method] = function (this: IDBObjectStore, ...args: unknown[]) {
-        if (this.name === 'tracks') window.__findspotTrackReadCount! += 1;
+        if (this.name === 'tracks') window.__findspotTrackReads!.push(`store:${method}`);
         return (original as (...callArgs: unknown[]) => unknown).apply(this, args);
       };
     }
@@ -115,7 +115,7 @@ async function seedDenseCompanionTrack(page: Page, permissionName: string): Prom
         }
         const sessionId = 'dense-companion-session';
         const now = new Date().toISOString();
-        const write = database.transaction(['sessions', 'tracks', 'settings'], 'readwrite');
+        const write = database.transaction(['sessions', 'tracks'], 'readwrite');
         write.onerror = () => reject(write.error);
         write.oncomplete = () => resolve();
         write.objectStore('sessions').put({
@@ -145,10 +145,6 @@ async function seedDenseCompanionTrack(page: Page, permissionName: string): Prom
           updatedAt: now,
           sourceRecordingUuid: 'performance-recording',
           sourceSegmentIndex: 0,
-        });
-        write.objectStore('settings').put({
-          key: 'integrityAuditSchemaVersion',
-          value: database.version,
         });
       };
     };
@@ -202,11 +198,14 @@ test("returning-user Home waits for persisted records before presenting its layo
 test('returning-user Home does not read a dense Companion trail on launch', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: 'Skip Quick Start' }).click();
+  await expect.poll(() => durableSetting(page, 'integrityAuditSchemaVersion'))
+    .toEqual(expect.any(Number));
   await createPermission(page, 'Dense Companion Farm');
   await seedDenseCompanionTrack(page, 'Dense Companion Farm');
   await installTrackReadObserver(page);
 
   await page.goto('./');
   await expect(page.getByText('Dense Companion Farm')).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__findspotTrackReadCount)).toBe(0);
+  await page.waitForTimeout(1_000);
+  expect(await page.evaluate(() => window.__findspotTrackReads)).toEqual([]);
 });
