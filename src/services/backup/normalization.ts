@@ -6,6 +6,7 @@ import type {
   UnvalidatedRow,
 } from './schema';
 import { BACKED_UP_TABLE_NAMES } from './tableRegistry';
+import { canonicalSurfacePeriod } from '../../shared/surfacePeriodVocabulary';
 
 export type NormalizedBackupInput = {
   version: number;
@@ -37,10 +38,35 @@ export function normalizeBackupInput(data: RawBackupData): NormalizedBackupInput
   }
 
   const raw = data as Record<string, unknown>;
-  const tableEntries = BACKED_UP_TABLE_NAMES.map(name => [
-    name,
-    requireArray(raw, name, name === 'projects'),
-  ] as const);
+  const tableEntries = BACKED_UP_TABLE_NAMES.map(name => {
+    const rows = requireArray(raw, name, name === 'projects');
+    if (name !== 'surfaceObservations') return [name, rows] as const;
+    return [name, rows.map(row => ({
+      ...row,
+      periodImpression: canonicalSurfacePeriod(row.periodImpression),
+      reassessments: Array.isArray(row.reassessments)
+        ? row.reassessments.map(value => {
+            if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+            const reassessment = value as UnvalidatedRow;
+            const normalizeAssessment = (assessment: unknown) => (
+              assessment && typeof assessment === 'object' && !Array.isArray(assessment)
+                ? {
+                    ...(assessment as UnvalidatedRow),
+                    periodImpression: canonicalSurfacePeriod(
+                      (assessment as UnvalidatedRow).periodImpression,
+                    ),
+                  }
+                : assessment
+            );
+            return {
+              ...reassessment,
+              previous: normalizeAssessment(reassessment.previous),
+              current: normalizeAssessment(reassessment.current),
+            };
+          })
+        : row.reassessments,
+    }))] as const;
+  });
 
   return {
     version: typeof raw.version === 'number' && Number.isFinite(raw.version)

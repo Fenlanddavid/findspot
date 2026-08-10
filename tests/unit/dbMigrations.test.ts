@@ -185,4 +185,52 @@ describe('FindSpot IndexedDB forward migrations', () => {
     expect(await current.permissions.count()).toBe(1);
     current.close();
   });
+
+  it('normalizes legacy surface periods without manufacturing reassessments', async () => {
+    const name = 'findspot-migration-v43-surface-periods';
+    const assessment = (periodImpression: string) => ({
+      material: 'pottery', abundance: 'few', materialConfidence: 'confident',
+      periodImpression, datingConfidence: 'fairly_sure',
+    });
+    await createFixtureDb(name, 43, {
+      projects: [{ id: 'project-1' }],
+      permissions: [{ id: 'permission-1', projectId: 'project-1' }],
+      surfaceObservations: [
+        {
+          id: 'anglo-saxon', projectId: 'project-1', permissionId: 'permission-1',
+          fieldId: null, sectionId: null, sessionId: null,
+          ...assessment('anglo_saxon'), reassessments: [],
+          lat: 52.2, lon: 0.12, gpsAccuracyM: 4,
+          observedAt: '2026-08-01', createdAt: '2026-08-01', updatedAt: '2026-08-01',
+        },
+        {
+          id: 'prehistoric', projectId: 'project-1', permissionId: 'permission-1',
+          fieldId: null, sectionId: null, sessionId: null,
+          ...assessment('prehistoric'),
+          reassessments: [{
+            previous: assessment('anglo_saxon'),
+            current: assessment('prehistoric'),
+            reassessedAt: '2026-08-02',
+          }],
+          lat: 52.2, lon: 0.12, gpsAccuracyM: 4,
+          observedAt: '2026-08-01', createdAt: '2026-08-01', updatedAt: '2026-08-02',
+        },
+      ],
+    });
+
+    const current = await openCurrent(name);
+    expect(await current.surfaceObservations.get('anglo-saxon')).toMatchObject({
+      periodImpression: 'early_medieval', reassessments: [], updatedAt: '2026-08-01',
+    });
+    expect(await current.surfaceObservations.get('prehistoric')).toMatchObject({
+      periodImpression: 'unknown',
+      reassessments: [{
+        previous: { periodImpression: 'early_medieval' },
+        current: { periodImpression: 'unknown' },
+        reassessedAt: '2026-08-02',
+      }],
+      updatedAt: '2026-08-02',
+    });
+    current.close();
+  });
 });

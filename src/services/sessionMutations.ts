@@ -28,7 +28,7 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
 
   await db.transaction('rw', [
     db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.sessionCoverage,
-    db.companionImports, db.companionRecordings,
+    db.companionImports, db.companionRecordings, db.surfaceObservations,
   ], async () => {
     if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
     if (significantFindIds.length) await db.media.where('findId').anyOf(significantFindIds).delete();
@@ -40,6 +40,10 @@ export async function deleteSessionCascade(sessionId: string): Promise<void> {
     if (companionRecordingIds.length > 0) {
       await db.companionRecordings.bulkDelete(companionRecordingIds);
     }
+    await db.surfaceObservations.where('sessionId').equals(sessionId).modify(observation => {
+      observation.sessionId = null;
+      observation.updatedAt = new Date().toISOString();
+    });
     await db.sessions.delete(sessionId);
   });
 }

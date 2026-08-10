@@ -136,6 +136,42 @@ describe('backup import characterization', () => {
     )).rejects.toThrow('Add a mapped field');
   });
 
+  it('normalizes legacy surface-period vocabulary during restore', async () => {
+    const legacy = {
+      ...BACKUP_FIXTURE_FACTORIES.surfaceObservations(),
+      fieldId: null,
+      sectionId: null,
+      sessionId: null,
+      periodImpression: 'anglo_saxon',
+      reassessments: [{
+        previous: {
+          material: 'pottery', abundance: 'few', materialConfidence: 'confident',
+          periodImpression: 'prehistoric', datingConfidence: 'fairly_sure',
+        },
+        current: {
+          material: 'pottery', abundance: 'dense', materialConfidence: 'confident',
+          periodImpression: 'anglo_saxon', datingConfidence: 'confident',
+        },
+        reassessedAt: '2026-07-23T12:00:00.000Z',
+      }],
+    };
+
+    await importData(JSON.stringify(backup({
+      version: 8,
+      projects: [BACKUP_FIXTURE_FACTORIES.projects()],
+      permissions: [BACKUP_FIXTURE_FACTORIES.permissions()],
+      surfaceObservations: [legacy],
+    })));
+
+    expect(await db.surfaceObservations.get(legacy.id)).toMatchObject({
+      periodImpression: 'early_medieval',
+      reassessments: [{
+        previous: { periodImpression: 'unknown' },
+        current: { periodImpression: 'early_medieval' },
+      }],
+    });
+  });
+
   it('drills the complete restore without replacing live data or recording a restore', async () => {
     await db.projects.put({
       id: 'live-project',
@@ -152,7 +188,7 @@ describe('backup import characterization', () => {
       backupVersion: 6,
       totals: expect.objectContaining({ imported: 1, damaged: 0 }),
     }));
-    expect(Object.keys(report.tables)).toHaveLength(21);
+    expect(Object.keys(report.tables)).toHaveLength(22);
     expect((await db.projects.toArray()).map(row => row.id)).toEqual(['live-project']);
     expect(await getSetting('lastRestoreReport', null)).toBeNull();
     expect(await stagingDatabaseNames()).toEqual([]);

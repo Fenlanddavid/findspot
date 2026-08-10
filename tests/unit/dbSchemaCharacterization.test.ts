@@ -43,6 +43,7 @@ describe('current FindSpot persistence schema', () => {
         "sessions",
         "settings",
         "significantFinds",
+        "surfaceObservations",
         "tracks",
         "undugSignals",
       ]

@@ -27,6 +27,7 @@ async function collectManifestData(database: FindSpotDB): Promise<BackupExportMa
     undugSignals, findHotspotSignals, hotspotPredictions,
     hotspotPredictionAggregates, outstandingQuestions, questionNotes,
     permissionSections, sessionCoverage, companionRecordings, companionImports,
+    surfaceObservations,
   ] = await Promise.all([
     database.projects.toArray(),
     database.permissions.toArray(),
@@ -48,6 +49,7 @@ async function collectManifestData(database: FindSpotDB): Promise<BackupExportMa
     database.sessionCoverage.toArray(),
     database.companionRecordings.toArray(),
     database.companionImports.toArray(),
+    database.surfaceObservations.toArray(),
   ]);
 
   return {
@@ -78,6 +80,7 @@ async function collectManifestData(database: FindSpotDB): Promise<BackupExportMa
     sessionCoverage,
     companionRecordings,
     companionImports,
+    surfaceObservations,
   };
 }
 

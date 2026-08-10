@@ -49,9 +49,9 @@ function sorted(values: readonly string[]): string[] {
 
 describe('backup format registry', () => {
   it('defines one ordered current format and every characterized legacy format', () => {
-    expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     expect(DEFAULT_LEGACY_BACKUP_FORMAT_VERSION).toBe(1);
-    expect(CURRENT_BACKUP_FORMAT_VERSION).toBe(7);
+    expect(CURRENT_BACKUP_FORMAT_VERSION).toBe(8);
     expect(BACKUP_FORMAT_DEFINITIONS.filter(format => format.lifecycle === 'current'))
       .toEqual([expect.objectContaining({ version: CURRENT_BACKUP_FORMAT_VERSION })]);
   });
@@ -105,7 +105,7 @@ describe('backup table registry', () => {
   it('partitions the registry into backed-up and excluded tables', () => {
     expect(new Set([...BACKED_UP_TABLE_NAMES, ...EXCLUDED_TABLE_NAMES]).size)
       .toBe(Object.keys(BACKUP_TABLE_REGISTRY).length);
-    expect(BACKED_UP_TABLE_NAMES).toHaveLength(21);
+    expect(BACKED_UP_TABLE_NAMES).toHaveLength(22);
     expect(EXCLUDED_TABLE_NAMES).toHaveLength(5);
   });
 

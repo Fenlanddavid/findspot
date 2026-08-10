@@ -4,7 +4,7 @@
  * are normalized during import.
  */
 export const DEFAULT_LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
-export const CURRENT_BACKUP_FORMAT_VERSION = 7 as const;
+export const CURRENT_BACKUP_FORMAT_VERSION = 8 as const;
 
 export type BackupContainer = 'json' | 'json-or-zip';
 
@@ -61,10 +61,16 @@ export const BACKUP_FORMAT_DEFINITIONS = [
     description: 'Current manifest including question and hotspot accuracy history.',
   },
   {
+    version: 7,
+    lifecycle: 'legacy',
+    container: 'json-or-zip',
+    description: 'Adds immutable Companion recordings, import identity and derivation rules.',
+  },
+  {
     version: CURRENT_BACKUP_FORMAT_VERSION,
     lifecycle: 'current',
     container: 'json-or-zip',
-    description: 'Adds immutable Companion recordings, import identity and derivation rules.',
+    description: 'Adds local surface observations; legacy period synonyms normalize on restore.',
   },
 ] as const satisfies readonly BackupFormatDefinition[];
 

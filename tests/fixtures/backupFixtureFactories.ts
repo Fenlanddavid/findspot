@@ -157,6 +157,14 @@ export const BACKUP_FIXTURE_FACTORIES = {
     }],
     derivationStatus: 'ready', importedAt: ISO, updatedAt: ISO,
   }),
+  surfaceObservations: () => ({
+    id: 'surface-1', projectId: 'project-1', permissionId: 'permission-1',
+    fieldId: 'field-1', sectionId: 'field-1:whole', sessionId: 'session-1',
+    material: 'pottery', abundance: 'dense', materialConfidence: 'confident',
+    periodImpression: 'roman', datingConfidence: 'confident', reassessments: [],
+    lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4,
+    observedAt: ISO, createdAt: ISO, updatedAt: ISO,
+  }),
 } satisfies Record<BackedUpTableName, FixtureFactory>;
 
 export async function seedBackupFixture(database: FindSpotDB): Promise<void> {

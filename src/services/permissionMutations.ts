@@ -55,6 +55,7 @@ export async function deletePermissionCascade(
       db.questionNotes,
       db.permissionSections,
       db.sessionCoverage,
+      db.surfaceObservations,
     ],
     async () => {
       if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
@@ -67,6 +68,7 @@ export async function deletePermissionCascade(
       await db.fields.where('permissionId').equals(permissionId).delete();
       await db.sessionCoverage.where('permissionId').equals(permissionId).delete();
       await db.permissionSections.where('permissionId').equals(permissionId).delete();
+      await db.surfaceObservations.where('permissionId').equals(permissionId).delete();
 
       const questionIds = (
         await db.outstandingQuestions.where('permissionId').equals(permissionId).toArray()
@@ -155,15 +157,24 @@ export async function removeClubDaySharing(permissionId: string, updatedAt: stri
 }
 
 export async function deleteFieldAndUnlinkRecords(fieldId: string, updatedAt: string): Promise<void> {
-  await db.transaction('rw', [db.fields, db.sessions, db.finds, db.permissionSections], async () => {
+  await db.transaction(
+    'rw',
+    [db.fields, db.sessions, db.finds, db.permissionSections, db.surfaceObservations],
+    async () => {
     await db.sessions.where('fieldId').equals(fieldId).modify({ fieldId: null, updatedAt });
     await db.finds.where('fieldId').equals(fieldId).modify({ fieldId: null, updatedAt });
     await db.permissionSections.where('fieldId').equals(fieldId).modify(section => {
       section.retiredAt = updatedAt;
       section.updatedAt = updatedAt;
     });
+    await db.surfaceObservations.where('fieldId').equals(fieldId).modify(observation => {
+      observation.fieldId = null;
+      observation.sectionId = null;
+      observation.updatedAt = updatedAt;
+    });
     await db.fields.delete(fieldId);
-  });
+    },
+  );
 }
 
 export async function createFieldRecord(field: Field): Promise<void> {

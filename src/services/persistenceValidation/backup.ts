@@ -1,4 +1,5 @@
 import type { NormalizedBackupInput } from '../backup/normalization';
+import { SURFACE_PERIOD_VALUES } from '../../shared/surfacePeriodVocabulary';
 import {
   MAX_BACKUP_RECORDS,
   type BackupValidationOptions,
@@ -77,6 +78,32 @@ function assertPermissionIntelligence(permission: UnvalidatedRow, index: number)
       }
     }
     if (!isIsoDateString(context.evaluatedAt)) throw invalid('pasContext.evaluatedAt');
+  }
+}
+
+const SURFACE_MATERIALS = new Set([
+  'pottery', 'ceramic_building_material', 'field_drain', 'flint', 'glass',
+  'slag', 'stone', 'bone', 'shell', 'modern_material', 'other',
+]);
+const SURFACE_ABUNDANCES = new Set(['single', 'few', 'frequent', 'dense']);
+const SURFACE_CONFIDENCES = new Set(['unsure', 'fairly_sure', 'confident']);
+const SURFACE_PERIODS = new Set<string>(SURFACE_PERIOD_VALUES);
+
+function assertSurfaceAssessment(
+  assessment: UnvalidatedRow,
+  invalid: (field: string) => Error,
+  prefix = '',
+) {
+  if (!SURFACE_MATERIALS.has(assessment.material as string)) throw invalid(`${prefix}material`);
+  if (!SURFACE_ABUNDANCES.has(assessment.abundance as string)) throw invalid(`${prefix}abundance`);
+  if (!SURFACE_CONFIDENCES.has(assessment.materialConfidence as string)) {
+    throw invalid(`${prefix}materialConfidence`);
+  }
+  if (!SURFACE_PERIODS.has(assessment.periodImpression as string)) {
+    throw invalid(`${prefix}periodImpression`);
+  }
+  if (!SURFACE_CONFIDENCES.has(assessment.datingConfidence as string)) {
+    throw invalid(`${prefix}datingConfidence`);
   }
 }
 
@@ -215,13 +242,14 @@ export function validatePersistedBackupTables(
     'projects', 'permissions', 'fields', 'sessions', 'finds', 'significantFinds',
     'tracks', 'media', 'importedPackages', 'savedPoints', 'undugSignals',
     'outstandingQuestions', 'questionNotes', 'permissionSections', 'sessionCoverage',
-    'companionRecordings', 'companionImports',
+    'companionRecordings', 'companionImports', 'surfaceObservations',
   ] as const) {
     assertRowsHaveId(backup[table], table);
   }
 
   const projectIds = new Set(backup.projects.map(row => row.id));
   const permissionIds = new Set(backup.permissions.map(row => row.id));
+  const fieldIds = new Set(backup.fields.map(row => row.id));
   const sessionIds = new Set(backup.sessions.map(row => row.id));
   const findIds = new Set(backup.finds.map(row => row.id));
   const significantFindIds = new Set(backup.significantFinds.map(row => row.id));
@@ -253,6 +281,57 @@ export function validatePersistedBackupTables(
     }
     if (find.sessionId && !sessionIds.has(find.sessionId)) {
       throw new Error(`Invalid format: finds[${index}] references an unknown session`);
+    }
+  });
+  backup.surfaceObservations.forEach((observation, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: surfaceObservations[${index}] has an invalid ${field}`);
+    if (!projectIds.has(observation.projectId)) throw invalid('projectId');
+    if (!permissionIds.has(observation.permissionId)) throw invalid('permissionId');
+    if (observation.fieldId !== null && !fieldIds.has(observation.fieldId as string)) {
+      throw invalid('fieldId');
+    }
+    if (observation.sectionId !== null && !sectionIds.has(observation.sectionId as string)) {
+      throw invalid('sectionId');
+    }
+    if (observation.sessionId !== null && !sessionIds.has(observation.sessionId as string)) {
+      throw invalid('sessionId');
+    }
+    if (!Number.isFinite(observation.lat) || (observation.lat as number) < -90 ||
+        (observation.lat as number) > 90 || !Number.isFinite(observation.lon) ||
+        (observation.lon as number) < -180 || (observation.lon as number) > 180) {
+      throw invalid('location');
+    }
+    if (observation.gpsAccuracyM !== null &&
+        (!Number.isFinite(observation.gpsAccuracyM) || (observation.gpsAccuracyM as number) < 0)) {
+      throw invalid('gpsAccuracyM');
+    }
+    assertSurfaceAssessment(observation, invalid);
+    if (!Array.isArray(observation.reassessments)) throw invalid('reassessments');
+    observation.reassessments.forEach((value: unknown, reassessmentIndex: number) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw invalid(`reassessments[${reassessmentIndex}]`);
+      }
+      const reassessment = value as UnvalidatedRow;
+      for (const key of ['previous', 'current'] as const) {
+        if (!reassessment[key] || typeof reassessment[key] !== 'object' ||
+            Array.isArray(reassessment[key])) {
+          throw invalid(`reassessments[${reassessmentIndex}].${key}`);
+        }
+        assertSurfaceAssessment(
+          reassessment[key] as UnvalidatedRow,
+          invalid,
+          `reassessments[${reassessmentIndex}].${key}.`,
+        );
+      }
+      if (!isIsoDateString(reassessment.reassessedAt)) {
+        throw invalid(`reassessments[${reassessmentIndex}].reassessedAt`);
+      }
+    });
+    if (!isIsoDateString(observation.observedAt) || !isIsoDateString(observation.createdAt) ||
+        !isIsoDateString(observation.updatedAt)) throw invalid('timestamps');
+    if (observation.retiredAt !== undefined && !isIsoDateString(observation.retiredAt)) {
+      throw invalid('retiredAt');
     }
   });
   backup.significantFinds.forEach((find, index) => {
@@ -527,5 +606,7 @@ export function validatePersistedBackupTables(
       backup.companionRecordings as unknown as ValidatedBackupData['companionRecordings'],
     companionImports:
       backup.companionImports as unknown as ValidatedBackupData['companionImports'],
+    surfaceObservations:
+      backup.surfaceObservations as unknown as ValidatedBackupData['surfaceObservations'],
   };
 }

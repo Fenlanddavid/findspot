@@ -1,6 +1,7 @@
 // Build a portable text snapshot of the repository's permanent architecture.
 // External verification must use `CI=1 npx vitest run` so missing or stale
 // snapshots fail instead of being silently written into the extracted dump.
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,6 +13,7 @@ const INCLUDED_DIRECTORIES = [
   '.github/workflows/',
   'companion/',
   'docs/',
+  'public/',
   'scripts/',
   'src/',
   'tests/',
@@ -34,10 +36,19 @@ const INCLUDED_ROOT_FILES = new Set([
   'vitest.worker.config.ts',
 ]);
 
-const TEXT_EXTENSIONS = new Set([
-  '.cjs', '.css', '.d.ts', '.html', '.js', '.json', '.jsonc', '.jsx',
-  '.java', '.kts', '.md', '.mjs', '.pro', '.sh', '.snap', '.toml', '.ts',
-  '.tsx', '.txt', '.xml', '.yaml', '.yml',
+const DUMP_EXTENSIONS = new Set([
+  '.cjs', '.css', '.d.ts', '.geojson', '.html', '.js', '.json', '.jsonc', '.jsx',
+  '.java', '.kts', '.md', '.mjs', '.png', '.pro', '.sh', '.snap', '.toml', '.ts',
+  '.tsx', '.txt', '.svg', '.xml', '.yaml', '.yml',
+]);
+const BASE64_EXTENSIONS = new Set(['.png']);
+
+const REQUIRED_PRODUCTION_ASSETS = new Set([
+  'public/apple-touch-icon.png',
+  'public/logo.svg',
+  'public/logo-2.png',
+  'public/pas-density-gb.json',
+  'public/roman-roads-gb.geojson',
 ]);
 
 function extensionOf(path) {
@@ -97,7 +108,7 @@ export function listDumpFiles() {
       INCLUDED_ROOT_FILES.has(path)
       || INCLUDED_DIRECTORIES.some(directory => path.startsWith(directory))
     ))
-    .filter(path => TEXT_EXTENSIONS.has(extensionOf(path)))
+    .filter(path => DUMP_EXTENSIONS.has(extensionOf(path)))
     .sort();
 }
 
@@ -105,12 +116,13 @@ export function requiredDumpFiles() {
   const candidates = candidateFiles();
   return candidates.filter(path => (
     path === SELF
+    || REQUIRED_PRODUCTION_ASSETS.has(path)
     || path.startsWith('companion/')
     || path.startsWith('docs/')
     || path.startsWith('.github/workflows/')
     || /(^|\/)wrangler\.(?:toml|json|jsonc)$/.test(path)
     || path.endsWith('.d.ts')
-  )).filter(path => TEXT_EXTENSIONS.has(extensionOf(path))).sort();
+  )).filter(path => DUMP_EXTENSIONS.has(extensionOf(path))).sort();
 }
 
 export function verifyDumpCoverage(files = listDumpFiles()) {
@@ -122,17 +134,46 @@ export function verifyDumpCoverage(files = listDumpFiles()) {
   return files;
 }
 
+export function renderDumpManifest(files = verifyDumpCoverage()) {
+  const entries = files.map(path => {
+    const contents = readFileSync(resolve(ROOT, path));
+    return {
+      path,
+      bytes: contents.byteLength,
+      encoding: BASE64_EXTENSIONS.has(extensionOf(path)) ? 'base64' : 'utf8',
+      sha256: createHash('sha256').update(contents).digest('hex'),
+    };
+  });
+  const fileSetSha256 = createHash('sha256')
+    .update(entries.map(entry => `${entry.path}\0${entry.bytes}\0${entry.sha256}`).join('\n'))
+    .digest('hex');
+  return JSON.stringify({
+    format: 'findspot-architecture-dump',
+    formatVersion: 1,
+    generatedBy: SELF,
+    selection: 'generator-verified',
+    fileCount: entries.length,
+    fileSetSha256,
+    files: entries,
+  }, null, 2);
+}
+
 export function renderDump(files = verifyDumpCoverage()) {
-  return files.map(path => {
-    const contents = readFileSync(resolve(ROOT, path), 'utf8');
+  const manifest = `===== BEGIN __MANIFEST__ =====\n${renderDumpManifest(files)}\n===== END __MANIFEST__ =====`;
+  const fileBlocks = files.map(path => {
+    const contents = BASE64_EXTENSIONS.has(extensionOf(path))
+      ? readFileSync(resolve(ROOT, path)).toString('base64')
+      : readFileSync(resolve(ROOT, path), 'utf8');
     return `===== BEGIN ${path} =====\n${contents}\n===== END ${path} =====`;
-  }).join('\n\n');
+  });
+  return [manifest, ...fileBlocks].join('\n\n');
 }
 
 function usage() {
   return [
     'Usage:',
     '  node scripts/dumpArchitecture.mjs --list',
+    '  node scripts/dumpArchitecture.mjs --manifest',
     '  node scripts/dumpArchitecture.mjs --verify',
     '  node scripts/dumpArchitecture.mjs [--output <path>]',
   ].join('\n');
@@ -151,6 +192,10 @@ function main(args) {
   }
   if (args.includes('--list')) {
     console.log(files.join('\n'));
+    return;
+  }
+  if (args.includes('--manifest')) {
+    console.log(renderDumpManifest(files));
     return;
   }
 

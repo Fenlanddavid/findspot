@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 // @ts-expect-error No separate declaration file is needed for this test import.
 import {
   listDumpFiles,
+  renderDump,
+  renderDumpManifest,
   verifyDumpCoverage,
 } from '../../scripts/dumpArchitecture.mjs';
 
@@ -33,10 +35,43 @@ describe('architecture dump coverage', () => {
     expect(files).toContain('src/vite-env.d.ts');
     expect(files).toContain('workers/geocode-proxy/wrangler.toml');
     expect(files).toContain('workers/findspot-static/worker-configuration.d.ts');
+    expect(files).toContain('public/logo.svg');
+    expect(files).toContain('public/apple-touch-icon.png');
+    expect(files).toContain('public/logo-2.png');
+    expect(files).toContain('public/pas-density-gb.json');
+    expect(files).toContain('public/roman-roads-gb.geojson');
   });
 
   it('passes its dynamic coverage verification', () => {
     expect(verifyDumpCoverage()).toEqual(listDumpFiles());
+  });
+
+  it('starts generated output with a self-verifying manifest', () => {
+    const files = listDumpFiles();
+    const manifest = JSON.parse(renderDumpManifest(files));
+    const dump = renderDump(files);
+
+    expect(manifest).toMatchObject({
+      format: 'findspot-architecture-dump',
+      formatVersion: 1,
+      generatedBy: 'scripts/dumpArchitecture.mjs',
+      selection: 'generator-verified',
+      fileCount: files.length,
+    });
+    expect(manifest.fileSetSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(manifest.files).toHaveLength(files.length);
+    expect(manifest.files[0]).toMatchObject({
+      path: files[0],
+      encoding: 'utf8',
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(manifest.files.find((entry: { path: string }) =>
+      entry.path === 'public/apple-touch-icon.png')).toMatchObject({
+        encoding: 'base64',
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    expect(dump.startsWith('===== BEGIN __MANIFEST__ =====\n')).toBe(true);
+    expect(dump).toContain('\n===== END __MANIFEST__ =====\n\n===== BEGIN ');
   });
 
   it('includes source directories whose names overlap generated-output names', () => {

@@ -22,4 +22,5 @@ export const pagePersistence = {
   undugSignals: db.undugSignals,
   permissionSections: db.permissionSections,
   sessionCoverage: db.sessionCoverage,
+  surfaceObservations: db.surfaceObservations,
 } as const;

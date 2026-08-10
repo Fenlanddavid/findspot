@@ -25,6 +25,7 @@ import { terminalSupersedingQuestionId } from "../outstandingQuestions/transitio
 import { getPermissionScanTarget } from "../outstandingQuestions/permissionScanTarget";
 import { ChevronDownIcon } from "./AppIcons";
 import { PermissionPulseCard } from "./PermissionPulseCard";
+import { PermissionSurfaceObservations } from "./surfaceScatter/PermissionSurfaceObservations";
 import { saveQuestionInvestigationNote, setQuestionDismissed } from "../services/investigationMutations";
 
 // ─── Protection banner ─────────────────────────────────────────────────────
@@ -616,6 +617,8 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
       {permission.boundary && <ProtectionBanner protection={permission.protectionStatus} />}
 
       <PermissionPulseCard permissionId={permissionId} embedded />
+
+      <PermissionSurfaceObservations permission={permission} />
 
       <div className="relative p-4 sm:p-5">
         <div className="mb-2.5 flex items-end justify-between gap-3">

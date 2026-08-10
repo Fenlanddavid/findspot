@@ -78,6 +78,9 @@ export async function applyValidatedBackup(
     if (backup.companionImports.length) {
       await database.companionImports.bulkPut(backup.companionImports);
     }
+    if (backup.surfaceObservations.length) {
+      await database.surfaceObservations.bulkPut(backup.surfaceObservations);
+    }
     await database.settings.put({ key: LAST_RESTORE_REPORT_SETTING_KEY, value: report });
   });
 }

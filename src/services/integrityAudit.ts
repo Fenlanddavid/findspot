@@ -70,6 +70,7 @@ export async function auditDatabaseIntegrity(
     database.sessionCoverage,
     database.companionRecordings,
     database.companionImports,
+    database.surfaceObservations,
   ];
 
   const rows = await database.transaction('r', tables, async () => {
@@ -78,6 +79,7 @@ export async function auditDatabaseIntegrity(
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
+      surfaceObservations,
     ] = await Promise.all([
       database.projects.toArray(),
       database.permissions.toArray(),
@@ -97,12 +99,14 @@ export async function auditDatabaseIntegrity(
       database.sessionCoverage.toArray(),
       database.companionRecordings.toArray(),
       database.companionImports.toArray(),
+      database.surfaceObservations.toArray(),
     ]);
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
+      surfaceObservations,
     };
   });
 
@@ -129,6 +133,7 @@ export async function auditDatabaseIntegrity(
     ...rows.findHotspotSignals,
     ...rows.permissionSections,
     ...rows.sessionCoverage,
+    ...rows.surfaceObservations,
   ]) {
     if (!isKnownId(row.permissionId, permissionIds)) danglingPermissionIds += 1;
   }
@@ -148,10 +153,11 @@ export async function auditDatabaseIntegrity(
     ...rows.tracks,
     ...rows.media,
     ...rows.savedPoints,
+    ...rows.surfaceObservations,
   ]) {
     if (!isKnownId(row.projectId, projectIds)) orphanedRecords += 1;
   }
-  for (const row of [...rows.sessions, ...rows.finds]) {
+  for (const row of [...rows.sessions, ...rows.finds, ...rows.surfaceObservations]) {
     if (missingOptionalId(row.fieldId, fieldIds)) orphanedRecords += 1;
   }
   for (const section of rows.permissionSections) {
@@ -168,6 +174,7 @@ export async function auditDatabaseIntegrity(
     ...rows.hotspotPredictions,
     ...rows.questionNotes,
     ...rows.sessionCoverage,
+    ...rows.surfaceObservations,
   ]) {
     if (missingOptionalId(row.sessionId, sessionIds)) orphanedRecords += 1;
   }
@@ -197,6 +204,9 @@ export async function auditDatabaseIntegrity(
     if (!section.geometryVersions.some(version =>
       version.version === observation.sectionGeometryVersion
     )) orphanedRecords += 1;
+  }
+  for (const observation of rows.surfaceObservations) {
+    if (missingOptionalId(observation.sectionId, new Set(sectionById.keys()))) orphanedRecords += 1;
   }
   for (const recording of rows.companionRecordings) {
     if (!sessionIds.has(recording.associatedSessionId)) orphanedRecords += 1;

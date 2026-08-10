@@ -18,6 +18,7 @@ import type {
   SessionCoverageObservation,
   Setting,
   SignificantFind,
+  SurfaceObservation,
   Track,
   UndugSignal,
 } from '../../db';
@@ -59,6 +60,7 @@ export type ValidatedBackupTables = {
   sessionCoverage: SessionCoverageObservation[];
   companionRecordings: CompanionRecordingRecord[];
   companionImports: CompanionImportLedger[];
+  surfaceObservations: SurfaceObservation[];
 };
 
 /**

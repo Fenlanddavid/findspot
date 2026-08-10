@@ -118,6 +118,11 @@ export const BACKUP_TABLE_REGISTRY = {
     storageRole: 'user-data',
     reason: 'Import identity and derivation rules prevent duplicate coverage and preserve user trimming intent.',
   },
+  surfaceObservations: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'User-authored observations of visible surface material and their reassessment provenance.',
+  },
   fieldGuideCache: {
     classification: 'excluded',
     storageRole: 'cache',

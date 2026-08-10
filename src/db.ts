@@ -6,6 +6,10 @@ import type {
   PermissionSection,
   SessionCoverageObservation,
 } from './shared/coverageTypes';
+import {
+  canonicalSurfacePeriod,
+  type SurfacePeriod,
+} from './shared/surfacePeriodVocabulary';
 export type {
   CoverageEvidence,
   GeoJSONArea,
@@ -14,6 +18,7 @@ export type {
   PermissionSectionGeometryVersion,
   SessionCoverageObservation,
 } from './shared/coverageTypes';
+export type { SurfacePeriod } from './shared/surfacePeriodVocabulary';
 
 export type TreasureOutcome =
   | "not_treasure_returned"
@@ -631,6 +636,53 @@ export type UndugSignal = {
   dugNothingCause?: UndugSignalDugNothingCause;
 };
 
+// ─── Surface Scatter ─────────────────────────────────────────────────────────
+
+export type SurfaceMaterial =
+  | 'pottery'
+  | 'ceramic_building_material'
+  | 'field_drain'
+  | 'flint'
+  | 'glass'
+  | 'slag'
+  | 'stone'
+  | 'bone'
+  | 'shell'
+  | 'modern_material'
+  | 'other';
+export type SurfaceAbundance = 'single' | 'few' | 'frequent' | 'dense';
+export type SurfaceConfidence = 'unsure' | 'fairly_sure' | 'confident';
+export type SurfaceAssessmentSnapshot = {
+  material: SurfaceMaterial;
+  abundance: SurfaceAbundance;
+  materialConfidence: SurfaceConfidence;
+  periodImpression: SurfacePeriod;
+  datingConfidence: SurfaceConfidence;
+};
+
+export type SurfaceReassessment = {
+  previous: SurfaceAssessmentSnapshot;
+  current: SurfaceAssessmentSnapshot;
+  reassessedAt: string;
+};
+
+export type SurfaceObservation = SurfaceAssessmentSnapshot & {
+  id: string;
+  projectId: string;
+  permissionId: string;
+  fieldId: string | null;
+  sectionId: string | null;
+  sessionId: string | null;
+  lat: number;
+  lon: number;
+  gpsAccuracyM: number | null;
+  observedAt: string;
+  reassessments: SurfaceReassessment[];
+  retiredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FindSpotVersionSpec = {
   version: number;
   stores: Record<string, string | null>;
@@ -643,7 +695,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 42;
+export const FINDSPOT_CURRENT_VERSION = 44;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -692,6 +744,7 @@ export class FindSpotDB extends Dexie {
   sessionCoverage!: Table<SessionCoverageObservation, string>;
   companionRecordings!: Table<CompanionRecordingRecord, string>;
   companionImports!: Table<CompanionImportLedger, string>;
+  surfaceObservations!: Table<SurfaceObservation, string>;
   landscapeInterpretations!: Table<LandscapeInterpretationRecord, string>;
   diagnosticLog!: Table<DiagLogEntry, string>;
   undugSignals!: Table<UndugSignal, string>;
@@ -1001,6 +1054,35 @@ export class FindSpotDB extends Dexie {
     declareFindSpotVersion(42).stores({
       companionRecordings: 'id, &contentHash, associatedSessionId, importedAt',
       companionImports: 'id, &contentHash, sessionId, derivationStatus, importedAt',
+    });
+
+    // v43: local user-authored surface observations. Descriptive only: this
+    // table is never read by FieldGuide scoring, ranking or target generation.
+    declareFindSpotVersion(43).stores({
+      surfaceObservations: 'id, projectId, permissionId, fieldId, sectionId, sessionId',
+    });
+
+    // v44: align Surface Scatter periods to the PAS broad-period vocabulary.
+    // This is vocabulary normalization, not a user reassessment: do not add
+    // reassessment entries or change observation timestamps. Anglo-Saxon is a
+    // synonym for Early Medieval; broad Prehistoric cannot be narrowed safely.
+    declareFindSpotVersion(44).stores({}).upgrade(async tx => {
+      await tx.table('surfaceObservations').toCollection().modify(observation => {
+        observation.periodImpression = canonicalSurfacePeriod(observation.periodImpression);
+        if (!Array.isArray(observation.reassessments)) return;
+        for (const reassessment of observation.reassessments) {
+          if (reassessment?.previous) {
+            reassessment.previous.periodImpression = canonicalSurfacePeriod(
+              reassessment.previous.periodImpression,
+            );
+          }
+          if (reassessment?.current) {
+            reassessment.current.periodImpression = canonicalSurfacePeriod(
+              reassessment.current.periodImpression,
+            );
+          }
+        }
+      });
     });
 
     // Production and migration fixtures both replay this exact registry.

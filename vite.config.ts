@@ -88,11 +88,10 @@ export default defineConfig({
         // so the app works fully offline after installation.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
-      devOptions: {
-        // Enable the virtual PWA module in dev mode so useRegisterSW
-        // works the same way in development as in production builds.
-        enabled: true,
-      }
+      // Do not register a service worker on localhost. Offline/PWA behavior is
+      // covered by production previews; a development worker can retain stale
+      // lazy chunks and interfere with Vite Fast Refresh.
+      devOptions: { enabled: false },
     })
   ],
   build: {

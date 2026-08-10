@@ -45,6 +45,7 @@ import {
 import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
 import { companionControlHref, isAndroidUserAgent } from '../services/companionLaunch';
 import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
+import { RecordSurfaceFindButton } from '../components/surfaceScatter/ObservedByYouBlock';
 
 const FIRST_SESSION_KEY = "fs_first_session";
 const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
@@ -1104,6 +1105,16 @@ export default function SessionPage(props: {
                           >
                             Finish Session
                           </button>
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+                          <RecordSurfaceFindButton
+                            compact
+                            projectId={props.projectId}
+                            permissionId={permission?.id ?? null}
+                            sessionId={sessionId}
+                            getLocation={captureGPS}
+                          />
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
