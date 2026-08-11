@@ -112,12 +112,22 @@ async function capture(database: FindSpotDB): Promise<SurfaceObservation> {
 }
 
 describe('Scatter capture UX', () => {
-  it('T1 persists on abundance before optional period interaction', async () => {
+  it('T1 persists material, abundance and the selected period in the explicit save', async () => {
     const database = await captureDatabase();
-    const saved = await capture(database);
+    const saved = await recordSurfaceObservation({
+      projectId: 'project-1',
+      permissionId: 'permission-1',
+      sessionId: null,
+      material: 'pottery',
+      abundance: 'dense',
+      periodImpression: 'roman',
+      point: scope.point,
+      gpsAccuracyM: 4,
+    }, database);
 
     expect(await database.surfaceObservations.get(saved.id)).toEqual(expect.objectContaining({
-      materialConfidence: 'fairly_sure', periodImpression: 'unknown', datingConfidence: 'unsure', reassessments: [],
+      material: 'pottery', abundance: 'dense', materialConfidence: 'fairly_sure',
+      periodImpression: 'roman', datingConfidence: 'fairly_sure', reassessments: [],
     }));
     database.close();
   });

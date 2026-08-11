@@ -210,6 +210,7 @@ export type RecordSurfaceObservationInput = {
   sessionId: string | null;
   material: SurfaceMaterial;
   abundance: SurfaceAbundance;
+  periodImpression?: SurfacePeriod;
   point: ScatterPoint;
   gpsAccuracyM?: number | null;
 };
@@ -280,8 +281,10 @@ export async function recordSurfaceObservation(
     material: input.material,
     abundance: input.abundance,
     materialConfidence: 'fairly_sure',
-    periodImpression: 'unknown',
-    datingConfidence: 'unsure',
+    periodImpression: input.periodImpression ?? 'unknown',
+    datingConfidence: input.periodImpression && input.periodImpression !== 'unknown'
+      ? CAPTURE_DATING_CONFIDENCE
+      : 'unsure',
     lat: input.point.lat,
     lon: input.point.lon,
     gpsAccuracyM: input.gpsAccuracyM ?? null,

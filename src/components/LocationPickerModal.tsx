@@ -5,10 +5,13 @@ import { Modal } from "./Modal";
 import { db } from "../db";
 import { searchLocations } from "../services/geocode";
 import { saveLocationMapPreferences } from "../services/mapPreferenceMutations";
+import type { GeoJSONPolygon } from "../db";
 
 export function LocationPickerModal(props: {
   initialLat?: number | null;
   initialLon?: number | null;
+  boundary?: GeoJSONPolygon;
+  title?: string;
   onClose: () => void;
   onSelect: (lat: number, lon: number) => void;
 }) {
@@ -197,6 +200,33 @@ export function LocationPickerModal(props: {
   
       map.on("load", () => {
           map.resize();
+          if (props.boundary) {
+              map.addSource("location-picker-boundary", {
+                  type: "geojson",
+                  data: {
+                      type: "Feature",
+                      properties: {},
+                      geometry: props.boundary,
+                  },
+              });
+              map.addLayer({
+                  id: "location-picker-boundary-fill",
+                  type: "fill",
+                  source: "location-picker-boundary",
+                  paint: { "fill-color": "#10b981", "fill-opacity": 0.1 },
+              });
+              map.addLayer({
+                  id: "location-picker-boundary-outline",
+                  type: "line",
+                  source: "location-picker-boundary",
+                  paint: { "line-color": "#059669", "line-width": 3 },
+              });
+              const bounds = new maplibregl.LngLatBounds();
+              props.boundary.coordinates.flat().forEach(([pointLon, pointLat]) => {
+                  bounds.extend([pointLon, pointLat]);
+              });
+              if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 48, maxZoom: 18, duration: 0 });
+          }
       });
 
       map.on("moveend", () => {
@@ -238,7 +268,7 @@ export function LocationPickerModal(props: {
   }, [mapStyle, showLidar]);
 
   return (
-    <Modal title="Pick Findspot Location" onClose={props.onClose}>
+    <Modal title={props.title ?? "Pick Findspot Location"} onClose={props.onClose}>
       <div className="grid gap-4 no-print">
         <div className="h-[60vh] rounded-2xl overflow-hidden border-2 border-gray-100 dark:border-gray-800 relative shadow-inner bg-gray-50 dark:bg-black">
           <div ref={mapDivRef} className="absolute inset-0" />

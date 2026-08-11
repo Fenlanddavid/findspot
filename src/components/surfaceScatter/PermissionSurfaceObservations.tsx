@@ -26,6 +26,7 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
   const [fieldFilter, setFieldFilter] = useState<string>('all');
   const [mapSelectedId, setMapSelectedId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [previousMapLocation, setPreviousMapLocation] = useState<{ lat: number; lon: number } | null>(null);
   const rows = useLiveQuery(async () => {
     const [observations, sections, fields] = await Promise.all([
       db.surfaceObservations.where('permissionId').equals(permission.id).toArray(),
@@ -67,6 +68,7 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
   const mapSelectedObservation = filteredObservations.find(row => row.id === mapSelectedId) ?? null;
   const selectObservation = useCallback((observationId: string) => setDetailId(observationId), []);
   const selectMapObservation = useCallback((observationId: string) => setMapSelectedId(observationId), []);
+  const mapLocationStart = getPermissionScanTarget(permission);
 
   const recordButton = (
     <RecordSurfaceFindButton
@@ -74,6 +76,11 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
       projectId={permission.projectId}
       permissionId={permission.id}
       getLocation={captureGPS}
+      allowMapLocation
+      mapLocationStart={mapLocationStart}
+      mapBoundary={permission.boundary}
+      previousMapLocation={previousMapLocation}
+      onMapLocationSelected={setPreviousMapLocation}
     />
   );
   const recordIconButton = (
@@ -82,6 +89,11 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
       projectId={permission.projectId}
       permissionId={permission.id}
       getLocation={captureGPS}
+      allowMapLocation
+      mapLocationStart={mapLocationStart}
+      mapBoundary={permission.boundary}
+      previousMapLocation={previousMapLocation}
+      onMapLocationSelected={setPreviousMapLocation}
     />
   );
 
@@ -115,7 +127,7 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
               <label className="grid gap-1 text-3xs font-black text-gray-500">Field context<select value={fieldFilter} onChange={event => { setFieldFilter(event.target.value); setMapSelectedId(null); }} className="min-h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs dark:border-gray-600 dark:bg-gray-900"><option value="all">All fields</option>{(rows?.fields ?? []).map(field => <option key={field.id} value={field.id}>{field.name}</option>)}<option value="unassigned">No field link</option></select></label>
             </div>
             {filteredObservations.length > 0 ? <SurfaceObservationsMap observations={filteredObservations} selectedId={mapSelectedId} onSelect={selectMapObservation} /> : <div className="grid h-32 place-items-center rounded-xl border border-dashed border-gray-300 text-xs font-bold text-gray-400">No current observations match these filters.</div>}
-            {mapSelectedObservation && <button type="button" onClick={() => setDetailId(mapSelectedObservation.id)} className="mt-2 flex min-h-12 w-full items-center justify-between rounded-xl border border-sky-200 bg-sky-50 px-3 text-left dark:border-sky-800 dark:bg-sky-950/20"><span><span className="block text-xs font-black">{SURFACE_MATERIAL_LABELS[mapSelectedObservation.material]} · {mapSelectedObservation.abundance}</span><span className="block text-3xs font-bold text-gray-500">{mapSelectedObservation.gpsAccuracyM == null ? 'GPS accuracy unknown' : `GPS ±${Math.round(mapSelectedObservation.gpsAccuracyM)} m`} · Observed by you</span></span><span className="text-xs font-black text-sky-700 dark:text-sky-300">View details</span></button>}
+            {mapSelectedObservation && <button type="button" onClick={() => setDetailId(mapSelectedObservation.id)} className="mt-2 flex min-h-12 w-full items-center justify-between rounded-xl border border-sky-200 bg-sky-50 px-3 text-left dark:border-sky-800 dark:bg-sky-950/20"><span><span className="block text-xs font-black">{SURFACE_MATERIAL_LABELS[mapSelectedObservation.material]} · {mapSelectedObservation.periodImpression === 'unknown' ? 'Period not sure' : SURFACE_PERIOD_LABELS[mapSelectedObservation.periodImpression]}</span><span className="block text-3xs font-bold text-gray-500">{mapSelectedObservation.abundance} · {mapSelectedObservation.gpsAccuracyM == null ? 'GPS accuracy unknown' : `GPS ±${Math.round(mapSelectedObservation.gpsAccuracyM)} m`} · Observed by you</span></span><span className="text-xs font-black text-sky-700 dark:text-sky-300">View details</span></button>}
           </div>}
           {clusters.length > 0 && (
             <div className="mt-3 space-y-2">

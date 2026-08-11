@@ -19,6 +19,7 @@ import {
 } from '../../services/surfaceScatter';
 import { addSurfaceObservationPhoto } from '../../services/surfaceScatterMedia';
 import Modal from '../Modal';
+import { LocationPickerModal } from '../LocationPickerModal';
 import {
     contextDraftFrom,
     contextInputFrom,
@@ -47,6 +48,11 @@ type RecordSurfaceFindButtonProps = {
     getLocation: () => Promise<SurfaceCaptureLocation>;
     compact?: boolean;
     icon?: boolean;
+    allowMapLocation?: boolean;
+    mapLocationStart?: ScatterPoint | null;
+    mapBoundary?: import('../../db').GeoJSONPolygon;
+    previousMapLocation?: ScatterPoint | null;
+    onMapLocationSelected?: (point: ScatterPoint) => void;
 };
 
 export function RecordSurfaceFindButton({
@@ -56,11 +62,16 @@ export function RecordSurfaceFindButton({
     getLocation,
     compact = false,
     icon = false,
+    allowMapLocation = false,
+    mapLocationStart = null,
+    mapBoundary,
+    previousMapLocation = null,
+    onMapLocationSelected,
 }: RecordSurfaceFindButtonProps) {
     const [open, setOpen] = useState(false);
     const [material, setMaterial] = useState<SurfaceMaterial | null>(null);
     const [abundance, setAbundance] = useState<SurfaceAbundance | null>(null);
-    const [selectedPeriod, setSelectedPeriod] = useState<Exclude<SurfacePeriod, 'unknown'> | null>(null);
+    const [selectedPeriod, setSelectedPeriod] = useState<SurfacePeriod | null>(null);
     const [saving, setSaving] = useState(false);
     const [savedObservationId, setSavedObservationId] = useState<string | null>(null);
     const [showDetails, setShowDetails] = useState(false);
@@ -69,6 +80,9 @@ export function RecordSurfaceFindButton({
     const [periodSuggestions, setPeriodSuggestions] = useState<Array<Exclude<SurfacePeriod, 'unknown'>>>([]);
     const [showAllPeriods, setShowAllPeriods] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
+    const [locationMode, setLocationMode] = useState<'gps' | 'map'>('gps');
+    const [mapLocation, setMapLocation] = useState<ScatterPoint | null>(null);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
 
     const resetAndClose = () => {
         setOpen(false);
@@ -80,6 +94,9 @@ export function RecordSurfaceFindButton({
         setShowDetails(false);
         setContext(contextDraftFrom());
         setMaterialConfidence('fairly_sure');
+        setLocationMode('gps');
+        setMapLocation(null);
+        setShowLocationPicker(false);
     };
     const close = () => {
         if (saving) return;
@@ -96,6 +113,9 @@ export function RecordSurfaceFindButton({
         setShowDetails(false);
         setContext(contextDraftFrom());
         setMaterialConfidence('fairly_sure');
+        setLocationMode('gps');
+        setMapLocation(null);
+        setShowLocationPicker(false);
         setMessage(null);
         if (permissionId) {
             setPeriodSuggestions(recentSurfacePeriods([], permissionId));
@@ -108,25 +128,28 @@ export function RecordSurfaceFindButton({
         setOpen(true);
     };
 
-    const chooseAbundance = async (abundance: SurfaceAbundance) => {
-        if (!material || saving) return;
-        setAbundance(abundance);
+    const saveCapture = async () => {
+        if (!material || !abundance || !selectedPeriod || saving) return;
         setSaving(true);
         setMessage(null);
         try {
             if (!permissionId) throw new Error('Move into a mapped permission before recording a surface find.');
-            const location = await getLocation();
+            const location = locationMode === 'map' ? mapLocation : await getLocation();
+            if (!location) throw new Error('Choose the surface find location on the map before saving.');
             const observation = await recordSurfaceObservation({
                 projectId,
                 permissionId,
                 sessionId,
                 material,
                 abundance,
+                periodImpression: selectedPeriod,
                 point: { lat: location.lat, lon: location.lon },
-                gpsAccuracyM: location.accuracyM ?? null,
+                gpsAccuracyM: locationMode === 'gps'
+                    ? (location as SurfaceCaptureLocation).accuracyM ?? null
+                    : null,
             });
 
-            // The durable write is complete before the optional enrichment UI.
+            // The required material, abundance and period are durable together.
             setSavedObservationId(observation.id);
         } catch (cause) {
             setMessage(cause instanceof Error ? cause.message : 'Could not record this surface find.');
@@ -143,7 +166,6 @@ export function RecordSurfaceFindButton({
             await completeSurfaceCapture(savedObservationId, {
                 ...contextInputFrom(context),
                 materialConfidence,
-                periodImpression: selectedPeriod ?? undefined,
             });
             resetAndClose();
         } catch (cause) {
@@ -158,11 +180,7 @@ export function RecordSurfaceFindButton({
         setSaving(true);
         setMessage(null);
         try {
-            if (selectedPeriod) {
-                await completeSurfaceCapture(savedObservationId, { periodImpression: selectedPeriod });
-            } else {
-                await finishSurfaceCapture(savedObservationId);
-            }
+            await finishSurfaceCapture(savedObservationId);
             resetAndClose();
         } catch (cause) {
             setMessage(cause instanceof Error ? cause.message : 'The observation is saved, but capture could not be completed.');
@@ -194,7 +212,7 @@ export function RecordSurfaceFindButton({
             {message && !open && (
                 <p role="status" className="mt-1 text-2xs font-bold text-amber-500">{message}</p>
             )}
-            {open && (
+            {open && !showLocationPicker && (
                 <Modal title="Record surface find" onClose={close}>
                     <div
                         data-testid="surface-capture-sheet"
@@ -202,10 +220,10 @@ export function RecordSurfaceFindButton({
                     >
                         <div className={`rounded-xl border px-3 py-2.5 ${savedObservationId ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/60'}`}>
                             <p className={`text-xs font-black ${savedObservationId ? 'text-emerald-800 dark:text-emerald-300' : 'text-gray-700 dark:text-gray-200'}`}>
-                                {savedObservationId ? 'Saved to this device' : 'Choose material and abundance to save'}
+                                {savedObservationId ? 'Saved to this device' : 'Record what you found'}
                             </p>
                             <p className="mt-0.5 text-2xs font-bold text-gray-500 dark:text-gray-400">
-                                {savedObservationId ? 'Continue detecting now, or add optional context.' : 'Your observation saves immediately after abundance.'}
+                                {savedObservationId ? 'Continue detecting now, or add optional context.' : 'Choose material, abundance and period, then save.'}
                             </p>
                         </div>
 
@@ -234,7 +252,7 @@ export function RecordSurfaceFindButton({
                                         key={value}
                                         type="button"
                                         disabled={!material || !!savedObservationId || saving}
-                                        onClick={() => void chooseAbundance(value)}
+                                        onClick={() => setAbundance(value)}
                                         className={`min-h-12 rounded-xl border px-1.5 py-2 text-2xs font-black disabled:opacity-40 ${abundance === value ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300' : 'border-gray-200 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200'}`}
                                     >
                                         {SURFACE_ABUNDANCE_LABELS[value]}
@@ -243,18 +261,81 @@ export function RecordSurfaceFindButton({
                             </div>
                         </div>}
 
-                        {savedObservationId && !showDetails && <div className="grid gap-2">
-                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
-                                <p className="text-3xs font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Period / age (optional)</p>
-                                <p className="mt-0.5 text-2xs font-bold text-gray-500 dark:text-gray-400">Your impression — this does not affect FieldGuide.</p>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    {(showAllPeriods ? ALL_PERIODS : periodSuggestions).map(period => (
-                                        <button key={period} type="button" disabled={saving} onClick={() => setSelectedPeriod(current => current === period ? null : period)} className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-black ${selectedPeriod === period ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}>{SURFACE_PERIOD_LABELS[period]}</button>
-                                    ))}
-                                    {!showAllPeriods && <button type="button" onClick={() => setShowAllPeriods(true)} className="min-h-11 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-black text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">More…</button>}
-                                </div>
+                        {!savedObservationId && <div>
+                            <p className="mb-1 text-3xs font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">3 · Period / age</p>
+                            <p className="mb-2 text-2xs font-bold text-gray-500 dark:text-gray-400">Your best impression is useful. Choose Not sure if it cannot be identified.</p>
+                            <div className="flex flex-wrap gap-2">
+                                {(showAllPeriods ? ALL_PERIODS : periodSuggestions).map(period => (
+                                    <button
+                                        key={period}
+                                        type="button"
+                                        disabled={!abundance || saving}
+                                        onClick={() => setSelectedPeriod(period)}
+                                        className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-black disabled:opacity-40 ${selectedPeriod === period ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
+                                    >
+                                        {SURFACE_PERIOD_LABELS[period]}
+                                    </button>
+                                ))}
+                                {!showAllPeriods && (
+                                    <button type="button" disabled={!abundance || saving} onClick={() => setShowAllPeriods(true)} className="min-h-11 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-black text-gray-500 disabled:opacity-40 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                        More…
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    disabled={!abundance || saving}
+                                    onClick={() => setSelectedPeriod('unknown')}
+                                    className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-black disabled:opacity-40 ${selectedPeriod === 'unknown' ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
+                                >
+                                    Not sure
+                                </button>
                             </div>
-                            <button type="button" disabled={saving} onClick={() => void finishCapture()} className="min-h-12 w-full rounded-xl bg-emerald-600 text-xs font-black text-white">{selectedPeriod ? `Done — save ${SURFACE_PERIOD_LABELS[selectedPeriod]}` : 'Done without period'}</button>
+                        </div>}
+
+                        {!savedObservationId && (
+                            allowMapLocation && <div>
+                                <p className="mb-2 text-3xs font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">4 · Location</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => { setLocationMode('gps'); setMapLocation(null); }}
+                                        className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-black ${locationMode === 'gps' ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200'}`}
+                                    >
+                                        Use my current location
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => { setLocationMode('map'); setShowLocationPicker(true); }}
+                                        className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-black ${locationMode === 'map' ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/35 dark:text-emerald-300' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200'}`}
+                                    >
+                                        {mapLocation ? 'Change map location' : 'Choose on map'}
+                                    </button>
+                                </div>
+                                <p className="mt-1.5 text-2xs font-bold text-gray-500 dark:text-gray-400">
+                                    {locationMode === 'map' && mapLocation
+                                        ? `Map point selected · ${mapLocation.lat.toFixed(5)}, ${mapLocation.lon.toFixed(5)}`
+                                        : locationMode === 'map'
+                                            ? 'Choose a point before saving.'
+                                            : 'GPS will be requested only when you press Save.'}
+                                </p>
+                            </div>
+                        )}
+
+                        {!savedObservationId && (
+                            <button
+                                type="button"
+                                disabled={!material || !abundance || !selectedPeriod || saving || (locationMode === 'map' && !mapLocation)}
+                                onClick={() => void saveCapture()}
+                                className="min-h-12 w-full rounded-xl bg-emerald-600 px-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                {saving ? 'Saving location…' : 'Save surface find'}
+                            </button>
+                        )}
+
+                        {savedObservationId && !showDetails && <div className="grid gap-2">
+                            <button type="button" disabled={saving} onClick={() => void finishCapture()} className="min-h-12 w-full rounded-xl bg-emerald-600 text-xs font-black text-white">Done</button>
                             <button type="button" onClick={() => setShowDetails(true)} className="min-h-12 w-full rounded-xl border border-gray-300 bg-white text-xs font-black dark:border-gray-600 dark:bg-gray-900">Add more details</button>
                             <label className="min-h-12 w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-3 text-center text-xs font-black dark:border-gray-600 dark:bg-gray-900">Add photo<input type="file" accept="image/*" capture="environment" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void addSurfaceObservationPhoto(savedObservationId, file).then(() => setMessage('Photo saved locally.')).catch(cause => setMessage(cause instanceof Error ? cause.message : 'Could not add photo.')); event.currentTarget.value = ''; }} /></label>
                         </div>}
@@ -264,36 +345,31 @@ export function RecordSurfaceFindButton({
                           <label className="grid gap-1 text-xs font-black text-gray-600 dark:text-gray-300">Identification confidence
                             <select value={materialConfidence} onChange={event => setMaterialConfidence(event.target.value as 'fairly_sure' | 'confident')} className="min-h-12 rounded-xl border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"><option value="fairly_sure">Fairly sure</option><option value="confident">Confident</option></select>
                           </label>
-                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
-                            <div className="mb-2">
-                                <p className="text-3xs font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Period / age (optional)</p>
-                                <p className="mt-0.5 text-2xs font-bold text-gray-500 dark:text-gray-400">Your impression; confidence can be adjusted in review.</p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {(showAllPeriods ? ALL_PERIODS : periodSuggestions).map(period => (
-                                    <button
-                                        key={period}
-                                        type="button"
-                                        disabled={saving}
-                                        onClick={() => setSelectedPeriod(current => current === period ? null : period)}
-                                        className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-black disabled:opacity-45 ${selectedPeriod === period ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
-                                    >
-                                        {SURFACE_PERIOD_LABELS[period]}
-                                    </button>
-                                ))}
-                                {!showAllPeriods && (
-                                    <button type="button" onClick={() => setShowAllPeriods(true)} className="min-h-12 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-black text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                                        More…
-                                    </button>
-                                )}
-                            </div>
-                        </div>
                         <div className="flex gap-2"><button type="button" disabled={saving} onClick={() => void saveDetails()} className="min-h-12 flex-1 rounded-xl bg-emerald-600 text-xs font-black text-white">Save details</button><button type="button" onClick={() => setShowDetails(false)} className="min-h-12 rounded-xl border px-4 text-xs font-black">Back</button></div>
                         </div>}
 
                         {message && <p role="alert" className="text-2xs font-bold text-amber-700 dark:text-amber-300">{message}</p>}
                     </div>
                 </Modal>
+            )}
+            {open && showLocationPicker && (
+                <LocationPickerModal
+                    title="Choose surface-find location"
+                    initialLat={(mapLocation ?? previousMapLocation ?? mapLocationStart)?.lat}
+                    initialLon={(mapLocation ?? previousMapLocation ?? mapLocationStart)?.lon}
+                    boundary={mapBoundary}
+                    onClose={() => {
+                        setShowLocationPicker(false);
+                        if (!mapLocation) setLocationMode('gps');
+                    }}
+                    onSelect={(lat, lon) => {
+                        const point = { lat, lon };
+                        setMapLocation(point);
+                        onMapLocationSelected?.(point);
+                        setLocationMode('map');
+                        setShowLocationPicker(false);
+                    }}
+                />
             )}
         </>
     );
