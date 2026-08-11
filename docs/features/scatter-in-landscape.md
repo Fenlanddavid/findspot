@@ -2,10 +2,9 @@
 
 ## Decision and product boundary
 
-Surface observations are local, user-authored records displayed only in the
-`Landscape investigations` card on the Permission page. They do not appear in
-FieldGuide: not on its map, in Glance, in Landscape Intelligence, in engine
-evidence, or in interpretation detail.
+Surface observations are local, user-authored records displayed in the
+Permission experience and its `Landscape investigations` card. They do not
+appear in FieldGuide engines, engine evidence, scores, targets or predictions.
 
 They never change a FieldGuide score, confidence value, target, rank, list
 order, hotspot or engine result. This decision may be revisited only through
@@ -53,17 +52,32 @@ The same normalization runs before validating an older backup. Reassessment
 snapshots are normalized as well, preventing a vocabulary-only transition from
 being counted later as an identification correction.
 
+## Observation context and provenance
+
+`lat`/`lon` remain the canonical observation geometry. Optional extent is an
+approximate diameter/spread and never replaces that point. Visibility, ground
+condition and a bounded 500-character note are contextual enrichment. Context
+edits cannot change assessment fields; later material, abundance, confidence
+or period changes must use the reassessment service.
+
+New captures copy the live session's ID and ISO date/time fields into immutable
+`originSession*` provenance. The live `sessionId` may be cleared when its
+Session is deleted, but the origin ID remains and is deliberately not a foreign
+key. Only distinct origin IDs count as recorded visits. Unsessioned records are
+reported separately and never grouped into invented visits.
+
 ## Permission scope
 
 The Permission page reads all active observations whose `permissionId` matches
 the displayed permission. Retired observations are excluded from the count,
 list and pottery-plus-CBM combination.
 
-There is no hidden proximity radius. Section identity is derived where
-possible. The compact permission list does not decorate same-section records
-with a distance. The pottery-and-CBM rule uses the same section where the
-current section is known; otherwise it uses the same permission and states the
-distance between the paired records.
+Section identity is derived where possible. The compact permission list does
+not decorate same-section records with a distance. Spatial relationships use
+canonical coordinates. Deterministic cluster algorithm v1 creates connected
+components with a documented 50 m recorded-position edge and reports maximum
+pairwise recorded-position distance as spread. Singleton points are not called
+clusters.
 
 ## Capture flow
 
@@ -72,13 +86,11 @@ same maximum dimensions as other card dialogs. Six field materials and four
 abundance choices are large touch targets. Choosing abundance completes the
 durable write, preserving the mandatory two-tap path.
 
-Period / age is a clearly labelled optional section on that same card. It
-shows up to three recently used period chips for the current permission and
-`More…` for the full list. With no history, the fixed suggestions are Roman,
-Medieval and Post-medieval. A period can be chosen before abundance, but the
-valid base record is always written first and the period appended only after
-that succeeds. Dismissing or losing the app before enrichment leaves the saved
-record intact with an `unknown` period impression.
+After the durable base write the user can finish immediately, add details or
+attach a local photo. Add Details shows context, identification confidence and
+optional period chips. The service keeps an in-memory creation capability so
+only the active capture flow can enrich the original assessment. Closing or
+losing that UI ends the capability; later assessment changes are reassessments.
 
 The capture-time dating-confidence default is `fairly_sure`. It renders as
 `Possible Roman — your impression` and remains adjustable in review.
@@ -104,13 +116,32 @@ create a reassessment; a later review edit does.
   supporting or contradicting evidence, confidence, priority, ordering or
   timeline.
 
+## Permission map, summary and relationships
+
+The dedicated Surface Observations map plots exact recorded coordinates. Every
+live material value has its own colour/glyph, including distinct CBM and field
+drain symbols. Marker size represents abundance only. Selecting a point can
+show its GPS-accuracy circle, detail, context, original/current assessment,
+reassessment history and private photos.
+
+Permission and cluster summaries report observation/material counts, first and
+latest observation, distinct saved visits and unsessioned records separately.
+Retired records remain stored but are excluded. Permanent deletion removes the
+observation and its exclusively owned local media.
+
 ## Pottery and CBM combination
 
-Confident frequent/dense pottery and CBM may produce the descriptive `Strong
-structural activity signal` when they share the resolved area and their period
-impressions agree, or either period is unknown. Conflicting known periods do
-not combine. The wording is suggestive and never determines a villa, bathhouse,
-settlement or other site type.
+Nearby pottery and CBM may produce `Nearby material association` within the
+documented clustering distance. It reports only that both were recorded and
+the approximate distance between their recorded positions. Period agreement
+is not assumed and no occupation, building or site type is inferred.
+
+## Private media and export boundary
+
+Surface photos use the existing local `media` table through
+`surfaceObservationId`. They are included only in an explicit full private ZIP
+backup. Surface observations and photos are excluded from permission/landowner
+reports, rally packages, shared packages, analytics and diagnostic telemetry.
 
 ## Calibration boundary
 

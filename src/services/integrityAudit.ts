@@ -119,6 +119,7 @@ export async function auditDatabaseIntegrity(
     ...findIds,
     ...rows.significantFinds.map(row => row.id),
   ]);
+  const surfaceObservationIds = new Set(rows.surfaceObservations.map(row => row.id));
   const sectionById = new Map(rows.permissionSections.map(row => [row.id, row]));
   const trackIds = new Set(rows.tracks.map(row => row.id));
   const companionRecordingsById = new Map(rows.companionRecordings.map(row => [row.id, row]));
@@ -186,6 +187,7 @@ export async function auditDatabaseIntegrity(
   }
   for (const row of rows.media) {
     if (missingOptionalId(row.findId, mediaOwnerIds)) orphanedRecords += 1;
+    if (missingOptionalId(row.surfaceObservationId, surfaceObservationIds)) orphanedRecords += 1;
   }
   for (const row of rows.undugSignals) {
     if (missingOptionalId(row.resolvedFindId, findIds)) orphanedRecords += 1;

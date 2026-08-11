@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import React from 'react';
 import Dexie from 'dexie';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FindSpotDB, type SurfaceObservation } from '../../src/db';
@@ -15,14 +15,22 @@ import {
 } from '../../src/components/surfaceScatter/surfaceScatterPresentation';
 import {
   CAPTURE_DATING_CONFIDENCE,
+  clusterSurfaceObservations,
+  completeSurfaceCapture,
+  deleteSurfaceObservationPermanently,
+  editSurfaceObservationContext,
   recentSurfacePeriods,
+  readSurfaceCalibration,
   reassessSurfaceObservation,
   recordSurfaceObservation,
+  retireSurfaceObservation,
   resolveEffectiveScatter,
   setSurfaceCapturePeriod,
+  summarizeSurfaceObservations,
   type EffectiveScatter,
   type SurfaceScope,
 } from '../../src/services/surfaceScatter';
+import { deleteSessionCascade } from '../../src/services/sessionMutations';
 
 const ISO = '2026-08-10T10:00:00.000Z';
 const databaseNames = new Set<string>();
@@ -109,7 +117,7 @@ describe('Scatter capture UX', () => {
     const saved = await capture(database);
 
     expect(await database.surfaceObservations.get(saved.id)).toEqual(expect.objectContaining({
-      periodImpression: 'unknown', datingConfidence: 'unsure', reassessments: [],
+      materialConfidence: 'fairly_sure', periodImpression: 'unknown', datingConfidence: 'unsure', reassessments: [],
     }));
     database.close();
   });
@@ -206,6 +214,67 @@ describe('Scatter capture UX', () => {
     expect(surfaceObservationDistanceText(same)).toBeNull();
     expect(surfaceObservationDistanceText(different)).toContain('Recorded about');
   });
+
+  it('keeps context editing separate from assessment and closes original enrichment', async () => {
+    const database = await captureDatabase();
+    const saved = await capture(database);
+    await completeSurfaceCapture(saved.id, {
+      extent: 'approx_25m', surfaceVisibility: 'good', groundCondition: 'cultivated',
+      note: 'Coarse grey fabric.', periodImpression: 'roman', materialConfidence: 'confident',
+    }, database);
+    await editSurfaceObservationContext(saved.id, {
+      extent: 'small_patch', note: 'Corrected contextual note.',
+      // Runtime callers cannot smuggle assessment fields through the context service.
+      ...({ material: 'slag' } as Record<string, unknown>),
+    }, database);
+    const edited = await database.surfaceObservations.get(saved.id);
+    expect(edited).toMatchObject({
+      material: 'pottery', materialConfidence: 'confident', periodImpression: 'roman',
+      extent: 'small_patch', note: 'Corrected contextual note.',
+    });
+    await expect(completeSurfaceCapture(saved.id, { periodImpression: 'medieval' }, database))
+      .rejects.toThrow('Use Reassess');
+    database.close();
+  });
+
+  it('preserves immutable origin visit provenance when the live session is deleted', async () => {
+    const database = await captureDatabase();
+    await database.sessions.put({
+      id: 'session-1', projectId: 'project-1', permissionId: 'permission-1', fieldId: null,
+      date: ISO, startTime: '2026-08-10T09:00:00.000Z', endTime: '2026-08-10T12:00:00.000Z',
+      lat: scope.point.lat, lon: scope.point.lon, gpsAccuracyM: 4,
+      landUse: 'arable', cropType: '', isStubble: false, notes: '', isFinished: true,
+      createdAt: ISO, updatedAt: ISO,
+    });
+    const saved = await recordSurfaceObservation({
+      projectId: 'project-1', permissionId: 'permission-1', sessionId: 'session-1',
+      material: 'flint', abundance: 'few', point: scope.point, gpsAccuracyM: 4,
+    }, database);
+    await deleteSessionCascade('session-1', database);
+    expect(await database.surfaceObservations.get(saved.id)).toMatchObject({
+      sessionId: null,
+      originSessionId: 'session-1',
+      originSessionDate: ISO,
+      originSessionStartTime: '2026-08-10T09:00:00.000Z',
+    });
+    database.close();
+  });
+
+  it('permanently deletes only media owned by the surface observation', async () => {
+    const database = await captureDatabase();
+    const saved = await capture(database);
+    await database.media.bulkPut([
+      { id: 'surface-photo', projectId: 'project-1', permissionId: 'permission-1', surfaceObservationId: saved.id, type: 'photo', filename: 'surface.jpg', mime: 'image/jpeg', blob: new Blob(['surface']), caption: '', scalePresent: false, createdAt: ISO },
+      { id: 'permission-document', projectId: 'project-1', permissionId: 'permission-1', type: 'document', filename: 'agreement.txt', mime: 'text/plain', blob: new Blob(['agreement']), caption: '', scalePresent: false, createdAt: ISO },
+    ]);
+    await retireSurfaceObservation(saved.id, database);
+    expect(await database.media.get('surface-photo')).toBeDefined();
+    await deleteSurfaceObservationPermanently(saved.id, database);
+    expect(await database.surfaceObservations.get(saved.id)).toBeUndefined();
+    expect(await database.media.get('surface-photo')).toBeUndefined();
+    expect(await database.media.get('permission-document')).toBeDefined();
+    database.close();
+  });
 });
 
 describe('Scatter presentation invariants', () => {
@@ -223,22 +292,25 @@ describe('Scatter presentation invariants', () => {
     expect(surfaceObservationDetailText(resolved)).toBe('Possible Roman — your impression');
   });
 
-  it('combines unknown with Roman but rejects conflicting known periods', () => {
+  it('describes nearby pottery and CBM without implying that period impressions agree', () => {
     const pottery = observation({ id: 'pottery', periodImpression: 'roman' });
     const unknownCbm = observation({ id: 'cbm', material: 'ceramic_building_material' });
     const medievalCbm = observation({
       ...unknownCbm, periodImpression: 'medieval', datingConfidence: 'confident',
     });
     expect(scatter([pottery, unknownCbm]).combination).not.toBeNull();
-    expect(scatter([pottery, medievalCbm]).combination).toBeNull();
+    expect(scatter([pottery, medievalCbm]).combination).toEqual(expect.objectContaining({
+      title: 'Nearby material association',
+      explanation: expect.stringContaining('recorded positions'),
+    }));
   });
 
-  it('does not combine observations assigned to different known permission sections', () => {
+  it('uses canonical coordinates for nearby observations in different sections', () => {
     const pottery = observation({ id: 'pottery', sectionId: 'section-a' });
     const cbm = observation({
       id: 'cbm', material: 'ceramic_building_material', sectionId: 'section-b',
     });
-    expect(scatter([pottery, cbm]).combination).toBeNull();
+    expect(scatter([pottery, cbm]).combination).not.toBeNull();
   });
 
   it('keeps reassessment provenance on the second line', () => {
@@ -261,6 +333,59 @@ describe('Scatter presentation invariants', () => {
       .toBe('Reassessed from Ceramic building material (CBM)');
   });
 
+  it('counts only durable origin ids as visits and reports unsessioned observations separately', () => {
+    const rows = [
+      observation({ id: 'a', originSessionId: 'visit-1' }),
+      observation({ id: 'b', originSessionId: 'visit-1' }),
+      observation({ id: 'c', originSessionId: 'visit-2' }),
+      observation({ id: 'd', sessionId: null }),
+      observation({ id: 'e', sessionId: 'legacy-live-link' }),
+    ];
+    expect(summarizeSurfaceObservations(rows)).toMatchObject({
+      observationCount: 5,
+      distinctOriginVisitCount: 2,
+      outsideSavedVisitCount: 2,
+    });
+  });
+
+  it('pins deterministic cluster v1 membership and maximum recorded-position spread', () => {
+    const rows = [
+      observation({ id: 'c', lat: 52.2053, lon: 0.1218 }),
+      observation({ id: 'a', lat: 52.2054, lon: 0.1218 }),
+      observation({ id: 'b', lat: 52.2055, lon: 0.1218 }),
+      observation({ id: 'far', lat: 52.2153, lon: 0.1218 }),
+    ];
+    const first = clusterSurfaceObservations(rows);
+    const second = clusterSurfaceObservations([...rows].reverse());
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({ algorithmVersion: 1, observationCount: 3 });
+    expect(first[0]!.observations.map(row => row.id)).toEqual(['a', 'b', 'c']);
+    expect(first[0]!.spreadM).toBeGreaterThan(20);
+  });
+
+  it('exposes measurement-only calibration counts without scores or coordinates', () => {
+    const previous = {
+      material: 'ceramic_building_material' as const, abundance: 'few' as const,
+      materialConfidence: 'fairly_sure' as const, periodImpression: 'roman' as const,
+      datingConfidence: 'fairly_sure' as const,
+    };
+    const current = { ...previous, material: 'field_drain' as const, periodImpression: 'unknown' as const };
+    const readout = readSurfaceCalibration([observation({
+      ...current,
+      surfaceVisibility: 'good', groundCondition: 'cultivated', originSessionId: 'visit-1',
+      reassessments: [{ previous, current, reassessedAt: ISO }],
+    })]);
+    expect(readout).toMatchObject({
+      observationCount: 1, reassessedObservationCount: 1,
+      materialChangeCount: 1, periodChangeCount: 1,
+      distinctOriginVisitCount: 1,
+      visibilityCounts: { good: 1 }, groundConditionCounts: { cultivated: 1 },
+    });
+    expect(readout).not.toHaveProperty('score');
+    expect(readout).not.toHaveProperty('coordinates');
+  });
+
   it('keeps all FieldGuide component files free of surface observation integration', () => {
     const files = [
       'src/components/fieldGuide/GlanceCard.tsx',
@@ -273,5 +398,27 @@ describe('Scatter presentation invariants', () => {
     }
     const permissionCard = readFileSync('src/components/OutstandingQuestionsCard.tsx', 'utf8');
     expect(permissionCard).toContain('PermissionSurfaceObservations');
+  });
+
+  it('keeps every FieldGuide engine source free of Surface Scatter reads', () => {
+    const engineFiles = readdirSync('src/engines', { recursive: true, encoding: 'utf8' })
+      .filter(file => file.endsWith('.ts') || file.endsWith('.tsx'));
+    for (const file of engineFiles) {
+      const source = readFileSync(`src/engines/${file}`, 'utf8');
+      expect(source, file).not.toMatch(/surfaceScatter|surfaceObservations|SurfaceObservation/);
+    }
+  });
+
+  it('keeps private Surface Scatter data out of report, rally, share and diagnostic modules', () => {
+    for (const file of [
+      'src/components/PermissionReportModal.tsx',
+      'src/components/FieldReportModal.tsx',
+      'src/components/ClubDayModals.tsx',
+      'src/components/ShareCard.tsx',
+      'src/services/diagLog.ts',
+    ]) {
+      expect(readFileSync(file, 'utf8'), file)
+        .not.toMatch(/surfaceScatter|surfaceObservations|SurfaceObservation/);
+    }
   });
 });

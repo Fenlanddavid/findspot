@@ -49,9 +49,9 @@ function sorted(values: readonly string[]): string[] {
 
 describe('backup format registry', () => {
   it('defines one ordered current format and every characterized legacy format', () => {
-    expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(SUPPORTED_BACKUP_FORMAT_VERSIONS).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(DEFAULT_LEGACY_BACKUP_FORMAT_VERSION).toBe(1);
-    expect(CURRENT_BACKUP_FORMAT_VERSION).toBe(8);
+    expect(CURRENT_BACKUP_FORMAT_VERSION).toBe(9);
     expect(BACKUP_FORMAT_DEFINITIONS.filter(format => format.lifecycle === 'current'))
       .toEqual([expect.objectContaining({ version: CURRENT_BACKUP_FORMAT_VERSION })]);
   });

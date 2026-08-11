@@ -88,6 +88,11 @@ const SURFACE_MATERIALS = new Set([
 const SURFACE_ABUNDANCES = new Set(['single', 'few', 'frequent', 'dense']);
 const SURFACE_CONFIDENCES = new Set(['unsure', 'fairly_sure', 'confident']);
 const SURFACE_PERIODS = new Set<string>(SURFACE_PERIOD_VALUES);
+const SURFACE_EXTENTS = new Set(['point', 'small_patch', 'approx_10m', 'approx_25m', 'widespread']);
+const SURFACE_VISIBILITIES = new Set(['poor', 'moderate', 'good', 'excellent']);
+const SURFACE_GROUND_CONDITIONS = new Set([
+  'ploughed', 'cultivated', 'stubble', 'crop', 'pasture', 'disturbed', 'other',
+]);
 
 function assertSurfaceAssessment(
   assessment: UnvalidatedRow,
@@ -254,6 +259,8 @@ export function validatePersistedBackupTables(
   const findIds = new Set(backup.finds.map(row => row.id));
   const significantFindIds = new Set(backup.significantFinds.map(row => row.id));
   const sectionIds = new Set(backup.permissionSections.map(row => row.id));
+  const surfaceObservationIds = new Set(backup.surfaceObservations.map(row => row.id));
+  const surfaceObservationsById = new Map(backup.surfaceObservations.map(row => [row.id, row]));
   const companionRecordingIds = new Set(backup.companionRecordings.map(row => row.id));
   const trackIds = new Set(backup.tracks.map(row => row.id));
   const companionRecordingsById = new Map(backup.companionRecordings.map(row => [row.id, row]));
@@ -307,6 +314,37 @@ export function validatePersistedBackupTables(
       throw invalid('gpsAccuracyM');
     }
     assertSurfaceAssessment(observation, invalid);
+    if (observation.extent !== undefined && !SURFACE_EXTENTS.has(observation.extent as string)) {
+      throw invalid('extent');
+    }
+    if (observation.surfaceVisibility !== undefined &&
+        !SURFACE_VISIBILITIES.has(observation.surfaceVisibility as string)) {
+      throw invalid('surfaceVisibility');
+    }
+    if (observation.groundCondition !== undefined &&
+        !SURFACE_GROUND_CONDITIONS.has(observation.groundCondition as string)) {
+      throw invalid('groundCondition');
+    }
+    if (observation.groundConditionOther !== undefined &&
+        (observation.groundCondition !== 'other' ||
+         typeof observation.groundConditionOther !== 'string' ||
+         !observation.groundConditionOther.trim() ||
+         [...observation.groundConditionOther].length > 80)) {
+      throw invalid('groundConditionOther');
+    }
+    if (observation.note !== undefined &&
+        (typeof observation.note !== 'string' || [...observation.note].length > 500)) {
+      throw invalid('note');
+    }
+    if (observation.originSessionId !== undefined &&
+        (typeof observation.originSessionId !== 'string' || !observation.originSessionId.trim())) {
+      throw invalid('originSessionId');
+    }
+    for (const field of [
+      'originSessionDate', 'originSessionStartTime', 'originSessionEndTime', 'captureCompletedAt',
+    ] as const) {
+      if (observation[field] !== undefined && !isIsoDateString(observation[field])) throw invalid(field);
+    }
     if (!Array.isArray(observation.reassessments)) throw invalid('reassessments');
     observation.reassessments.forEach((value: unknown, reassessmentIndex: number) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -421,6 +459,18 @@ export function validatePersistedBackupTables(
     }
     if (media.permissionId && !permissionIds.has(media.permissionId)) {
       throw new Error(`Invalid format: media[${index}] references an unknown permission`);
+    }
+    if (media.surfaceObservationId) {
+      if (!surfaceObservationIds.has(media.surfaceObservationId)) {
+        throw new Error(`Invalid format: media[${index}] references an unknown surface observation`);
+      }
+      const observation = surfaceObservationsById.get(media.surfaceObservationId);
+      if (observation?.projectId !== media.projectId || observation?.permissionId !== media.permissionId) {
+        throw new Error(`Invalid format: media[${index}] has mismatched surface observation ownership`);
+      }
+      if (media.findId) {
+        throw new Error(`Invalid format: media[${index}] has multiple record owners`);
+      }
     }
   });
   backup.settings.forEach((setting, index) => {

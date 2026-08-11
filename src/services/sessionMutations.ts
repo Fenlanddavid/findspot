@@ -1,5 +1,5 @@
 import { db } from '../db';
-import type { Session, Track } from '../db';
+import type { FindSpotDB, Session, Track } from '../db';
 import { applyCompanionTrackTrim, regenerateCompanionTracks } from './companionImport';
 
 export async function setSessionGroundConditions(
@@ -18,33 +18,33 @@ export async function setSessionLocation(
   await db.sessions.update(sessionId, { ...location, updatedAt });
 }
 
-export async function deleteSessionCascade(sessionId: string): Promise<void> {
-  const finds = await db.finds.where('sessionId').equals(sessionId).toArray();
-  const significantFinds = await db.significantFinds.where('sessionId').equals(sessionId).toArray();
+export async function deleteSessionCascade(sessionId: string, database: FindSpotDB = db): Promise<void> {
+  const finds = await database.finds.where('sessionId').equals(sessionId).toArray();
+  const significantFinds = await database.significantFinds.where('sessionId').equals(sessionId).toArray();
   const findIds = finds.map(find => find.id);
   const significantFindIds = significantFinds.map(find => find.id);
-  const companionImports = await db.companionImports.where('sessionId').equals(sessionId).toArray();
+  const companionImports = await database.companionImports.where('sessionId').equals(sessionId).toArray();
   const companionRecordingIds = companionImports.map(entry => entry.recordingId);
 
-  await db.transaction('rw', [
-    db.sessions, db.finds, db.significantFinds, db.media, db.tracks, db.sessionCoverage,
-    db.companionImports, db.companionRecordings, db.surfaceObservations,
+  await database.transaction('rw', [
+    database.sessions, database.finds, database.significantFinds, database.media, database.tracks, database.sessionCoverage,
+    database.companionImports, database.companionRecordings, database.surfaceObservations,
   ], async () => {
-    if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
-    if (significantFindIds.length) await db.media.where('findId').anyOf(significantFindIds).delete();
-    await db.finds.where('sessionId').equals(sessionId).delete();
-    await db.significantFinds.where('sessionId').equals(sessionId).delete();
-    await db.tracks.where('sessionId').equals(sessionId).delete();
-    await db.sessionCoverage.where('sessionId').equals(sessionId).delete();
-    await db.companionImports.where('sessionId').equals(sessionId).delete();
+    if (findIds.length) await database.media.where('findId').anyOf(findIds).delete();
+    if (significantFindIds.length) await database.media.where('findId').anyOf(significantFindIds).delete();
+    await database.finds.where('sessionId').equals(sessionId).delete();
+    await database.significantFinds.where('sessionId').equals(sessionId).delete();
+    await database.tracks.where('sessionId').equals(sessionId).delete();
+    await database.sessionCoverage.where('sessionId').equals(sessionId).delete();
+    await database.companionImports.where('sessionId').equals(sessionId).delete();
     if (companionRecordingIds.length > 0) {
-      await db.companionRecordings.bulkDelete(companionRecordingIds);
+      await database.companionRecordings.bulkDelete(companionRecordingIds);
     }
-    await db.surfaceObservations.where('sessionId').equals(sessionId).modify(observation => {
+    await database.surfaceObservations.where('sessionId').equals(sessionId).modify(observation => {
       observation.sessionId = null;
       observation.updatedAt = new Date().toISOString();
     });
-    await db.sessions.delete(sessionId);
+    await database.sessions.delete(sessionId);
   });
 }
 

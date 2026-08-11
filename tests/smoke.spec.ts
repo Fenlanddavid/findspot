@@ -314,6 +314,54 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect(page.getByRole("button").filter({ hasText: "Smoke Test Buckle" })).toBeVisible();
 });
 
+test("Surface Scatter saves fast capture, enriches it and reopens full private detail", async ({ page }) => {
+  test.setTimeout(60_000);
+  await createPermission(page, "Surface Smoke Farm");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  if (!permissionId) throw new Error("Could not read surface permission id from URL");
+
+  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
+  await page.getByRole("button", { name: "Start Session" }).click();
+  await expect(page.getByText("Session active", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Record surface find", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Pottery", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Frequent", exact: true }).click();
+  await expect(page.getByText("Saved to this device")).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Roman", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Done — save Roman", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Add more details", exact: true }).click();
+  await page.getByLabel("Extent (approximate diameter / spread)").selectOption("approx_25m");
+  await page.getByLabel("Surface visibility").selectOption("good");
+  await page.getByLabel("Ground condition").selectOption("cultivated");
+  await page.getByLabel("Observation note").fill("Coarse grey fabric with occasional oxidised sherd.");
+  await page.getByRole("button", { name: "Save details", exact: true }).click();
+
+  const observations = await readIndexedDbStore(page, "surfaceObservations") as Array<Record<string, unknown>>;
+  expect(observations).toHaveLength(1);
+  expect(observations[0]).toMatchObject({
+    permissionId,
+    material: "pottery",
+    abundance: "frequent",
+    materialConfidence: "fairly_sure",
+    extent: "approx_25m",
+    surfaceVisibility: "good",
+    groundCondition: "cultivated",
+    periodImpression: "roman",
+  });
+  expect(observations[0]?.originSessionId).toBeTruthy();
+
+  await page.goto(`./permission/${permissionId}`);
+  await page.getByRole("button", { name: "View map", exact: true }).click();
+  await expect(page.getByLabel("Surface observations map")).toBeVisible();
+  await page.getByRole("button", { name: "Pottery — frequent", exact: true }).click();
+  await expect(page.getByText(/GPS ±\d+ m · Observed by you/)).toBeVisible();
+  await page.getByRole("button", { name: /Your observations \(1\)/ }).click();
+  await page.getByRole("button", { name: /Pottery · frequent Possible/ }).click();
+  await expect(page.getByRole("dialog").getByText("Coarse grey fabric with occasional oxidised sherd.")).toBeVisible();
+  await expect(page.getByRole("dialog").getByText("Possible Roman — your impression")).toBeVisible();
+});
+
 test("session coverage is saved in three taps and appears on the permission", async ({ page }) => {
   test.setTimeout(60_000);
 

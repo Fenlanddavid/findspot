@@ -172,6 +172,58 @@ describe('backup import characterization', () => {
     });
   });
 
+  it('restores V2 surface context, non-relational origin provenance and owned media', async () => {
+    const observation = {
+      ...BACKUP_FIXTURE_FACTORIES.surfaceObservations(),
+      fieldId: null,
+      sectionId: null,
+      sessionId: null,
+      originSessionId: 'deleted-session',
+      originSessionDate: '2026-07-20T10:00:00.000Z',
+    };
+    const surfacePhoto = {
+      id: 'surface-photo-1', projectId: 'project-1', permissionId: 'permission-1',
+      surfaceObservationId: observation.id, type: 'photo', photoType: 'other',
+      filename: 'surface.jpg', mime: 'image/jpeg',
+      blob: 'data:image/jpeg;base64,/9j/2Q==', caption: '', scalePresent: false,
+      createdAt: '2026-07-23T12:00:00.000Z',
+    };
+
+    await importData(JSON.stringify(backup({
+      version: 9,
+      projects: [BACKUP_FIXTURE_FACTORIES.projects()],
+      permissions: [BACKUP_FIXTURE_FACTORIES.permissions()],
+      surfaceObservations: [observation],
+      media: [surfacePhoto],
+    })));
+
+    expect(await db.surfaceObservations.get(observation.id)).toMatchObject({
+      originSessionId: 'deleted-session', extent: 'approx_25m', surfaceVisibility: 'good',
+    });
+    expect(await db.media.get(surfacePhoto.id)).toMatchObject({
+      surfaceObservationId: observation.id, permissionId: 'permission-1',
+    });
+  });
+
+  it('rejects invalid V2 context while leaving optional legacy values absent', async () => {
+    const base = {
+      ...BACKUP_FIXTURE_FACTORIES.surfaceObservations(),
+      fieldId: null, sectionId: null, sessionId: null,
+    };
+    await expect(importData(JSON.stringify(backup({
+      version: 9,
+      projects: [BACKUP_FIXTURE_FACTORIES.projects()],
+      permissions: [BACKUP_FIXTURE_FACTORIES.permissions()],
+      surfaceObservations: [{ ...base, note: 'x'.repeat(501) }],
+    })))).rejects.toThrow('note');
+    await expect(importData(JSON.stringify(backup({
+      version: 9,
+      projects: [BACKUP_FIXTURE_FACTORIES.projects()],
+      permissions: [BACKUP_FIXTURE_FACTORIES.permissions()],
+      surfaceObservations: [{ ...base, groundCondition: 'pasture', groundConditionOther: 'Muddy verge' }],
+    })))).rejects.toThrow('groundConditionOther');
+  });
+
   it('drills the complete restore without replacing live data or recording a restore', async () => {
     await db.projects.put({
       id: 'live-project',

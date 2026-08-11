@@ -233,4 +233,30 @@ describe('FindSpot IndexedDB forward migrations', () => {
     });
     current.close();
   });
+
+  it('adds V2 media ownership without fabricating optional surface context or provenance', async () => {
+    const name = 'findspot-migration-v44-surface-v2';
+    await createFixtureDb(name, 44, {
+      projects: [{ id: 'project-1' }],
+      permissions: [{ id: 'permission-1', projectId: 'project-1' }],
+      surfaceObservations: [{
+        id: 'legacy-surface', projectId: 'project-1', permissionId: 'permission-1',
+        fieldId: null, sectionId: null, sessionId: null,
+        material: 'flint', abundance: 'few', materialConfidence: 'confident',
+        periodImpression: 'unknown', datingConfidence: 'unsure', reassessments: [],
+        lat: 52.2, lon: 0.12, gpsAccuracyM: 8,
+        observedAt: '2026-08-01', createdAt: '2026-08-01', updatedAt: '2026-08-01',
+      }],
+    });
+    const current = await openCurrent(name);
+    const row = await current.surfaceObservations.get('legacy-surface');
+    expect(row).toBeDefined();
+    for (const key of [
+      'extent', 'surfaceVisibility', 'groundCondition', 'groundConditionOther', 'note',
+      'originSessionId', 'originSessionDate', 'originSessionStartTime',
+      'originSessionEndTime', 'captureCompletedAt',
+    ]) expect(row).not.toHaveProperty(key);
+    expect(current.media.schema.indexes.map(index => index.name)).toContain('surfaceObservationId');
+    current.close();
+  });
 });

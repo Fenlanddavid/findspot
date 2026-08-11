@@ -350,6 +350,8 @@ export type Media = {
   projectId: string;
   findId?: string;
   permissionId?: string;
+  /** Local-only owner link for Surface Scatter photographs. */
+  surfaceObservationId?: string;
 
   type: "photo" | "document";
   photoType?: "in-situ" | "cleaned" | "photo1" | "photo2" | "photo3" | "photo4" | "other";
@@ -652,6 +654,16 @@ export type SurfaceMaterial =
   | 'other';
 export type SurfaceAbundance = 'single' | 'few' | 'frequent' | 'dense';
 export type SurfaceConfidence = 'unsure' | 'fairly_sure' | 'confident';
+export type SurfaceExtent = 'point' | 'small_patch' | 'approx_10m' | 'approx_25m' | 'widespread';
+export type SurfaceVisibility = 'poor' | 'moderate' | 'good' | 'excellent';
+export type SurfaceGroundCondition =
+  | 'ploughed'
+  | 'cultivated'
+  | 'stubble'
+  | 'crop'
+  | 'pasture'
+  | 'disturbed'
+  | 'other';
 export type SurfaceAssessmentSnapshot = {
   material: SurfaceMaterial;
   abundance: SurfaceAbundance;
@@ -677,6 +689,19 @@ export type SurfaceObservation = SurfaceAssessmentSnapshot & {
   lon: number;
   gpsAccuracyM: number | null;
   observedAt: string;
+  /** Approximate diameter/spread of the observation, never a replacement geometry. */
+  extent?: SurfaceExtent;
+  surfaceVisibility?: SurfaceVisibility;
+  groundCondition?: SurfaceGroundCondition;
+  groundConditionOther?: string;
+  note?: string;
+  /** Immutable visit provenance. Unlike sessionId, this is not a live foreign key. */
+  originSessionId?: string;
+  originSessionDate?: string;
+  originSessionStartTime?: string;
+  originSessionEndTime?: string;
+  /** Ends the one-time original-capture enrichment path. */
+  captureCompletedAt?: string;
   reassessments: SurfaceReassessment[];
   retiredAt?: string;
   createdAt: string;
@@ -695,7 +720,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 44;
+export const FINDSPOT_CURRENT_VERSION = 45;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -1083,6 +1108,13 @@ export class FindSpotDB extends Dexie {
           }
         }
       });
+    });
+
+    // v45: Surface Scatter V2 context/provenance fields are optional and need
+    // no fabricated migration values. Media gains a dedicated local owner
+    // index so observation photos can be restored and deleted atomically.
+    declareFindSpotVersion(45).stores({
+      media: 'id, projectId, findId, permissionId, surfaceObservationId, createdAt',
     });
 
     // Production and migration fixtures both replay this exact registry.

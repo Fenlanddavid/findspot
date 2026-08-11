@@ -6,9 +6,10 @@ import {
     type SurfacePeriod,
 } from '../../db';
 import {
+    completeSurfaceCapture,
+    finishSurfaceCapture,
     recentSurfacePeriods,
     recordSurfaceObservation,
-    setSurfaceCapturePeriod,
     SURFACE_ABUNDANCE_LABELS,
     SURFACE_MATERIAL_LABELS,
     SURFACE_CAPTURE_PERIODS,
@@ -16,7 +17,14 @@ import {
     type EffectiveScatter,
     type ScatterPoint,
 } from '../../services/surfaceScatter';
+import { addSurfaceObservationPhoto } from '../../services/surfaceScatterMedia';
 import Modal from '../Modal';
+import {
+    contextDraftFrom,
+    contextInputFrom,
+    SurfaceContextFields,
+    type SurfaceContextDraft,
+} from './SurfaceObservationDetails';
 import {
     surfaceObservationDetailText,
     surfaceObservationDistanceText,
@@ -55,6 +63,9 @@ export function RecordSurfaceFindButton({
     const [selectedPeriod, setSelectedPeriod] = useState<Exclude<SurfacePeriod, 'unknown'> | null>(null);
     const [saving, setSaving] = useState(false);
     const [savedObservationId, setSavedObservationId] = useState<string | null>(null);
+    const [showDetails, setShowDetails] = useState(false);
+    const [context, setContext] = useState<SurfaceContextDraft>(() => contextDraftFrom());
+    const [materialConfidence, setMaterialConfidence] = useState<'fairly_sure' | 'confident'>('fairly_sure');
     const [periodSuggestions, setPeriodSuggestions] = useState<Array<Exclude<SurfacePeriod, 'unknown'>>>([]);
     const [showAllPeriods, setShowAllPeriods] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
@@ -66,9 +77,13 @@ export function RecordSurfaceFindButton({
         setSelectedPeriod(null);
         setSavedObservationId(null);
         setShowAllPeriods(false);
+        setShowDetails(false);
+        setContext(contextDraftFrom());
+        setMaterialConfidence('fairly_sure');
     };
     const close = () => {
         if (saving) return;
+        if (savedObservationId) void finishSurfaceCapture(savedObservationId);
         resetAndClose();
     };
 
@@ -78,6 +93,9 @@ export function RecordSurfaceFindButton({
         setSelectedPeriod(null);
         setSavedObservationId(null);
         setShowAllPeriods(false);
+        setShowDetails(false);
+        setContext(contextDraftFrom());
+        setMaterialConfidence('fairly_sure');
         setMessage(null);
         if (permissionId) {
             setPeriodSuggestions(recentSurfacePeriods([], permissionId));
@@ -110,10 +128,6 @@ export function RecordSurfaceFindButton({
 
             // The durable write is complete before the optional enrichment UI.
             setSavedObservationId(observation.id);
-            if (selectedPeriod) {
-                await setSurfaceCapturePeriod(observation.id, selectedPeriod);
-                resetAndClose();
-            }
         } catch (cause) {
             setMessage(cause instanceof Error ? cause.message : 'Could not record this surface find.');
         } finally {
@@ -121,16 +135,37 @@ export function RecordSurfaceFindButton({
         }
     };
 
-    const choosePeriod = async (period: Exclude<SurfacePeriod, 'unknown'>) => {
-        if (saving) return;
-        setSelectedPeriod(period);
-        if (!savedObservationId) return;
+    const saveDetails = async () => {
+        if (!savedObservationId || saving) return;
         setSaving(true);
+        setMessage(null);
         try {
-            await setSurfaceCapturePeriod(savedObservationId, period);
+            await completeSurfaceCapture(savedObservationId, {
+                ...contextInputFrom(context),
+                materialConfidence,
+                periodImpression: selectedPeriod ?? undefined,
+            });
             resetAndClose();
         } catch (cause) {
-            setMessage(cause instanceof Error ? cause.message : 'The find is saved, but its period could not be added.');
+            setMessage(cause instanceof Error ? cause.message : 'The observation is saved, but details could not be added.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const finishCapture = async () => {
+        if (!savedObservationId || saving) return;
+        setSaving(true);
+        setMessage(null);
+        try {
+            if (selectedPeriod) {
+                await completeSurfaceCapture(savedObservationId, { periodImpression: selectedPeriod });
+            } else {
+                await finishSurfaceCapture(savedObservationId);
+            }
+            resetAndClose();
+        } catch (cause) {
+            setMessage(cause instanceof Error ? cause.message : 'The observation is saved, but capture could not be completed.');
         } finally {
             setSaving(false);
         }
@@ -170,11 +205,11 @@ export function RecordSurfaceFindButton({
                                 {savedObservationId ? 'Saved to this device' : 'Choose material and abundance to save'}
                             </p>
                             <p className="mt-0.5 text-2xs font-bold text-gray-500 dark:text-gray-400">
-                                Period is optional and can be selected before or after saving.
+                                {savedObservationId ? 'Continue detecting now, or add optional context.' : 'Your observation saves immediately after abundance.'}
                             </p>
                         </div>
 
-                        <div>
+                        {!savedObservationId && <div>
                             <p className="mb-2 text-3xs font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">1 · Material</p>
                             <div className="grid grid-cols-3 gap-2">
                                 {CAPTURE_MATERIALS.map(value => (
@@ -189,9 +224,9 @@ export function RecordSurfaceFindButton({
                                     </button>
                                 ))}
                             </div>
-                        </div>
+                        </div>}
 
-                        <div>
+                        {!savedObservationId && <div>
                             <p className="mb-2 text-3xs font-black uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">2 · Abundance</p>
                             <div className="grid grid-cols-4 gap-2">
                                 {ABUNDANCES.map(value => (
@@ -206,8 +241,29 @@ export function RecordSurfaceFindButton({
                                     </button>
                                 ))}
                             </div>
-                        </div>
+                        </div>}
 
+                        {savedObservationId && !showDetails && <div className="grid gap-2">
+                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
+                                <p className="text-3xs font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Period / age (optional)</p>
+                                <p className="mt-0.5 text-2xs font-bold text-gray-500 dark:text-gray-400">Your impression — this does not affect FieldGuide.</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {(showAllPeriods ? ALL_PERIODS : periodSuggestions).map(period => (
+                                        <button key={period} type="button" disabled={saving} onClick={() => setSelectedPeriod(current => current === period ? null : period)} className={`min-h-11 rounded-xl border px-3 py-2 text-xs font-black ${selectedPeriod === period ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}>{SURFACE_PERIOD_LABELS[period]}</button>
+                                    ))}
+                                    {!showAllPeriods && <button type="button" onClick={() => setShowAllPeriods(true)} className="min-h-11 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-black text-gray-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">More…</button>}
+                                </div>
+                            </div>
+                            <button type="button" disabled={saving} onClick={() => void finishCapture()} className="min-h-12 w-full rounded-xl bg-emerald-600 text-xs font-black text-white">{selectedPeriod ? `Done — save ${SURFACE_PERIOD_LABELS[selectedPeriod]}` : 'Done without period'}</button>
+                            <button type="button" onClick={() => setShowDetails(true)} className="min-h-12 w-full rounded-xl border border-gray-300 bg-white text-xs font-black dark:border-gray-600 dark:bg-gray-900">Add more details</button>
+                            <label className="min-h-12 w-full cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-3 text-center text-xs font-black dark:border-gray-600 dark:bg-gray-900">Add photo<input type="file" accept="image/*" capture="environment" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void addSurfaceObservationPhoto(savedObservationId, file).then(() => setMessage('Photo saved locally.')).catch(cause => setMessage(cause instanceof Error ? cause.message : 'Could not add photo.')); event.currentTarget.value = ''; }} /></label>
+                        </div>}
+
+                        {savedObservationId && showDetails && <div className="space-y-4">
+                          <SurfaceContextFields value={context} onChange={setContext} />
+                          <label className="grid gap-1 text-xs font-black text-gray-600 dark:text-gray-300">Identification confidence
+                            <select value={materialConfidence} onChange={event => setMaterialConfidence(event.target.value as 'fairly_sure' | 'confident')} className="min-h-12 rounded-xl border border-gray-300 bg-white px-3 dark:border-gray-600 dark:bg-gray-900"><option value="fairly_sure">Fairly sure</option><option value="confident">Confident</option></select>
+                          </label>
                         <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
                             <div className="mb-2">
                                 <p className="text-3xs font-black uppercase tracking-[0.18em] text-gray-600 dark:text-gray-300">Period / age (optional)</p>
@@ -219,7 +275,7 @@ export function RecordSurfaceFindButton({
                                         key={period}
                                         type="button"
                                         disabled={saving}
-                                        onClick={() => void choosePeriod(period)}
+                                        onClick={() => setSelectedPeriod(current => current === period ? null : period)}
                                         className={`min-h-12 rounded-xl border px-3 py-2 text-xs font-black disabled:opacity-45 ${selectedPeriod === period ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
                                     >
                                         {SURFACE_PERIOD_LABELS[period]}
@@ -232,12 +288,9 @@ export function RecordSurfaceFindButton({
                                 )}
                             </div>
                         </div>
+                        <div className="flex gap-2"><button type="button" disabled={saving} onClick={() => void saveDetails()} className="min-h-12 flex-1 rounded-xl bg-emerald-600 text-xs font-black text-white">Save details</button><button type="button" onClick={() => setShowDetails(false)} className="min-h-12 rounded-xl border px-4 text-xs font-black">Back</button></div>
+                        </div>}
 
-                        {savedObservationId && (
-                            <button type="button" onClick={close} className="min-h-12 w-full rounded-xl border border-gray-300 bg-white text-xs font-black text-gray-600 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300">
-                                Done without period
-                            </button>
-                        )}
                         {message && <p role="alert" className="text-2xs font-bold text-amber-700 dark:text-amber-300">{message}</p>}
                     </div>
                 </Modal>
@@ -250,10 +303,12 @@ export function ObservedByYouBlock({
     scatter,
     recordButton,
     recordIconButton,
+    onSelectObservation,
 }: {
     scatter: EffectiveScatter;
     recordButton: React.ReactNode;
     recordIconButton: React.ReactNode;
+    onSelectObservation?: (observationId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
     if (scatter.count === 0) return <div>{recordButton}</div>;
@@ -280,11 +335,11 @@ export function ObservedByYouBlock({
                             const detail = surfaceObservationDetailText(observation);
                             const distance = surfaceObservationDistanceText(observation);
                             return (
-                                <div key={observation.source.id} className="py-2 first:pt-0">
+                                <button type="button" onClick={() => onSelectObservation?.(observation.source.id)} key={observation.source.id} className="block w-full py-2 text-left first:pt-0">
                                     <p className="truncate whitespace-nowrap text-2xs font-bold leading-snug text-gray-800 dark:text-gray-200">{surfaceObservationText(observation)}</p>
                                     {detail && <p className="mt-0.5 text-3xs font-bold text-gray-500 dark:text-gray-400">{detail}</p>}
                                     {distance && <p className="mt-0.5 text-3xs font-bold text-gray-400 dark:text-gray-500">{distance}</p>}
-                                </div>
+                                </button>
                             );
                         })}
                     </div>
