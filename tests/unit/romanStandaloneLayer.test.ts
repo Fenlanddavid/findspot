@@ -4,9 +4,9 @@ import type maplibregl from 'maplibre-gl';
 import type { HistoricRoute } from '../../src/pages/fieldGuideTypes';
 import * as diagLog from '../../src/services/diagLog';
 import {
-  ROMAN_ROADS_ATTRIBUTION,
   registerFieldGuideMapLayers,
 } from '../../src/services/fieldguide/mapLayerRegistry';
+import { ROMAN_ROADS_ATTRIBUTION } from '../../src/services/fieldguide/romanRoadLayerConfig';
 import {
   LAYER_VISIBILITY_CONFIG,
 } from '../../src/hooks/useFieldGuideMap';
@@ -148,7 +148,7 @@ describe('standalone Roman roads map layer', () => {
     expect(setData).not.toHaveBeenCalled();
   });
 
-  it('uses the licensing-record attribution byte-for-byte', async () => {
+  it('keeps Roman Roads credit in Settings without expanding the map attribution control', async () => {
     const sources = new Map<string, unknown>();
     const map = {
       getSource: vi.fn(() => undefined),
@@ -163,9 +163,14 @@ describe('standalone Roman roads map layer', () => {
       new URL('../../docs/rrra-digital-britannia-licensing.md', import.meta.url),
       'utf8',
     );
+    const settings = await readFile(
+      new URL('../../src/pages/Settings.tsx', import.meta.url),
+      'utf8',
+    );
     const documented = licence.match(/Attribution: “([^”]+)\n\s+([^”]+)”/)?.slice(1).join(' ');
-    expect(source.attribution).toBe(ROMAN_ROADS_ATTRIBUTION);
-    expect(source.attribution).toBe(documented);
+    expect(source.attribution).toBeUndefined();
+    expect(ROMAN_ROADS_ATTRIBUTION).toBe(documented);
+    expect(settings).toContain('{ROMAN_ROADS_ATTRIBUTION} Not for use in fee-charging applications');
   });
 
   it('declares each overlay key union only once in src', async () => {

@@ -65,7 +65,10 @@ export async function finishSessionRecord(sessionId: string, endTime: string): P
 }
 
 export async function reopenSessionRecord(sessionId: string): Promise<void> {
-  await db.sessions.update(sessionId, { isFinished: false });
+  await db.sessions.update(sessionId, {
+    isFinished: false,
+    activatedAt: new Date().toISOString(),
+  });
 }
 
 export async function trimSessionTrack(
@@ -84,4 +87,18 @@ export async function trimSessionTrack(
 
 export async function saveSessionKeyNotes(sessionId: string, keyNotes: string[]): Promise<void> {
   await db.sessions.update(sessionId, { keyNotes });
+}
+
+export async function appendSessionNote(sessionId: string, note: string, recordedAt = new Date()): Promise<string> {
+  const clean = note.trim();
+  if (!clean) throw new Error('Write a note before saving.');
+  return db.transaction('rw', db.sessions, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session) throw new Error('Session not found.');
+    const time = recordedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const entry = `[${time}] ${clean}`;
+    const notes = session.notes.trim() ? `${session.notes.trim()}\n${entry}` : entry;
+    await db.sessions.update(sessionId, { notes, updatedAt: recordedAt.toISOString() });
+    return notes;
+  });
 }

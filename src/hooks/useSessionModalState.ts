@@ -1,22 +1,20 @@
 import { useState } from 'react';
-import type { SessionOutcomeResult } from '../engines/session/sessionOutcomeEngine';
-
 export type SessionSummaryData = {
-    coverage: number;
     findsCount: number;
     durationMins: number | null;
     totalTime: string | null;
-    outcomeResult: SessionOutcomeResult | null;
     openSignalCount: number;
+    surfaceObservationCount: number;
+    walkedDistanceMetres: number | null;
 };
 
 const EMPTY_SUMMARY: SessionSummaryData = {
-    coverage: 0,
     findsCount: 0,
     durationMins: null,
     totalTime: null,
-    outcomeResult: null,
     openSignalCount: 0,
+    surfaceObservationCount: 0,
+    walkedDistanceMetres: null,
 };
 
 /** Owns report, summary, find, notes, signal, and trim modal visibility. */

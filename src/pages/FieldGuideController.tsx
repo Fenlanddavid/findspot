@@ -1,5 +1,5 @@
 import type { WorkflowState } from '../types/significantFind';
-import { FieldGuideWorkspace } from '../components/fieldGuide/FieldGuideWorkspace';
+import { ActiveSessionGuideWorkspace } from '../components/session/ActiveSessionGuideWorkspace';
 
 type FieldGuideControllerProps = {
   projectId: string;
@@ -11,5 +11,5 @@ type FieldGuideControllerProps = {
  * persistence and interaction state live behind the FieldGuide workspace.
  */
 export default function FieldGuideController(props: FieldGuideControllerProps) {
-  return <FieldGuideWorkspace {...props} />;
+  return <ActiveSessionGuideWorkspace {...props} />;
 }

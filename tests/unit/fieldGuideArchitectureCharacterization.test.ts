@@ -11,6 +11,10 @@ const FIELD_GUIDE_MODULES = {
     '../../src/components/fieldGuide/FieldGuideWorkspace.tsx',
     import.meta.url,
   ),
+  'components/session/ActiveSessionGuideWorkspace.tsx': new URL(
+    '../../src/components/session/ActiveSessionGuideWorkspace.tsx',
+    import.meta.url,
+  ),
   'hooks/useFieldGuideMap.ts': new URL('../../src/hooks/useFieldGuideMap.ts', import.meta.url),
   'hooks/useTerrainScan.ts': new URL('../../src/hooks/useTerrainScan.ts', import.meta.url),
   'hooks/useHistoricScan.ts': new URL('../../src/hooks/useHistoricScan.ts', import.meta.url),
@@ -40,6 +44,18 @@ const FIELD_GUIDE_MODULES = {
   ),
   'hooks/useFieldGuideProjectData.ts': new URL(
     '../../src/hooks/useFieldGuideProjectData.ts',
+    import.meta.url,
+  ),
+  'hooks/useFieldGuideRouteActions.ts': new URL(
+    '../../src/hooks/useFieldGuideRouteActions.ts',
+    import.meta.url,
+  ),
+  'hooks/useActiveSessionGuideAutoScan.ts': new URL(
+    '../../src/hooks/useActiveSessionGuideAutoScan.ts',
+    import.meta.url,
+  ),
+  'hooks/useActiveSessionGuideContext.ts': new URL(
+    '../../src/hooks/useActiveSessionGuideContext.ts',
     import.meta.url,
   ),
   'services/fieldguide/fieldGuidePageSupport.ts': new URL(
@@ -73,12 +89,16 @@ describe('FieldGuide architecture characterization', () => {
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
       'pages/FieldGuideController.tsx': 15,
-      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_338,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_318,
+      'components/session/ActiveSessionGuideWorkspace.tsx': 44,
       'hooks/useFieldGuideMap.ts': 309,
       'hooks/useTerrainScan.ts': 77,
       'hooks/useHistoricScan.ts': 82,
       'hooks/useFieldGuidePageState.ts': 293,
       'hooks/useFieldGuideProjectData.ts': 297,
+      'hooks/useFieldGuideRouteActions.ts': 94,
+      'hooks/useActiveSessionGuideAutoScan.ts': 53,
+      'hooks/useActiveSessionGuideContext.ts': 55,
       'services/fieldguide/terrainScanCoordinator.ts': 473,
       'services/fieldguide/terrainScanSupport.ts': 142,
       'services/fieldguide/historicScanCoordinator.ts': 405,
@@ -99,13 +119,19 @@ describe('FieldGuide architecture characterization', () => {
       FIELD_GUIDE_MODULES['components/fieldGuide/FieldGuideWorkspace.tsx'],
       'utf8',
     );
+    const sessionGuideWorkspace = await readFile(
+      FIELD_GUIDE_MODULES['components/session/ActiveSessionGuideWorkspace.tsx'],
+      'utf8',
+    );
     const orchestrator = await readFile(
       FIELD_GUIDE_MODULES['services/fieldguide/scanOrchestrator.ts'],
       'utf8',
     );
 
-    expect(page).toContain('<FieldGuideWorkspace {...props} />');
+    expect(page).toContain('<ActiveSessionGuideWorkspace {...props} />');
     expect(page).not.toContain('runFieldGuideScan');
+    expect(sessionGuideWorkspace).toContain('<FieldGuideWorkspace key="field-guide-workspace"');
+    expect(sessionGuideWorkspace).not.toContain('runFieldGuideScan');
     expect(workspace).toContain('runFieldGuideScan({');
     expect(workspace).toContain('const runHistoricPhase = useCallback(async (');
     expect(workspace).not.toContain('await runTerrainScan(');

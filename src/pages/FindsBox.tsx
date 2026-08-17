@@ -106,6 +106,11 @@ export default function FindsBox(props: { projectId: string }) {
   const filterMaterial = searchParams.get("material");
   const filterType = searchParams.get("type");
   const openSfParam = searchParams.get("sf");
+  const openSignalParam = searchParams.get('signal');
+
+  useEffect(() => {
+    if (openSignalParam) setOpenSignalId(openSignalParam);
+  }, [openSignalParam]);
 
   useEffect(() => {
     if (!openSfParam) return;

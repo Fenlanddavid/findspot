@@ -44,6 +44,8 @@ import {
     type RasterOverlayKey,
 } from '../../hooks/useFieldGuidePageState';
 import { useFieldGuideProjectData } from '../../hooks/useFieldGuideProjectData';
+import { useFieldGuideAutoScan, useInitialFieldGuideRouteContext } from '../../hooks/useFieldGuideRouteActions';
+import { useActiveSessionGuideCalm } from '../../hooks/useActiveSessionGuideCalm';
 import {
     buildMonumentBufferGeoJSON,
     clampOpacity,
@@ -90,7 +92,7 @@ function getPotentialTier(score: number): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void }) {
+export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSessionShell = false }: { projectId: string; onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void; embeddedSessionShell?: boolean }) {
     const navigate = useNavigate();
     const pageState = useFieldGuidePageState();
     const {
@@ -197,11 +199,10 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         }
         setShowLayerPicker(false);
     }, [activeOpacityLayer, historicLayerVisibility.romanStandalone]);
-
     const persistSheetExpanded = useCallback((expanded: boolean) => {
         setSheetExpanded(expanded);
     }, [setSheetExpanded]);
-
+    useActiveSessionGuideCalm({ embedded: embeddedSessionShell, hasScanned, analyzing, setSheetExpanded });
     const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
         sheetDragStartY.current = e.touches[0].clientY;
     }, []);
@@ -215,13 +216,12 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
     }, [persistSheetExpanded]);
 
     const [searchParams, setSearchParams] = useSearchParams();
-    const initLat = parseFloat(searchParams.get('lat') ?? '');
-    const initLng = parseFloat(searchParams.get('lng') ?? '');
-    const initFieldId = searchParams.get('fieldId') ?? undefined;
-    const initPinLabel = searchParams.get('pin') === 'signal' ? 'Un-dug signal' : undefined;
-    const openSavedPointsParam = searchParams.get('savedPoints') === '1';
-    const questionScanRequested = searchParams.get('scan') === 'questions';
-    const questionPermissionId = questionScanRequested ? searchParams.get('permissionId') ?? undefined : undefined;
+    const initialRouteContext = useInitialFieldGuideRouteContext(searchParams);
+    const initLat = initialRouteContext.lat;
+    const initLng = initialRouteContext.lng;
+    const initFieldId = initialRouteContext.fieldId;
+    const initPinLabel = initialRouteContext.pinLabel;
+    const openSavedPointsParam = initialRouteContext.openSavedPoints;
 
     // Clear one-shot URL actions after the map/sheet uses them.
     useEffect(() => {
@@ -722,35 +722,15 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
         if (run.status === 'historic_started') void run.completion;
     };
 
-    // Permission-page Questions CTA: wait for the map and permission data, then
-    // run the same combined terrain + historic scan as the primary Scan action.
-    useEffect(() => {
-        if (!questionScanRequested || questionScanAutoStartedRef.current) return;
-        let cancelled = false;
-        let attempts = 0;
-        let timer: number | undefined;
-
-        const tryStart = () => {
-            if (cancelled || questionScanAutoStartedRef.current) return;
-            if (mapRef.current && permissions.length > 0 && !analyzing && !isTerrainScanning && !isHistoricScanning) {
-                questionScanAutoStartedRef.current = true;
-                const nextParams = new URLSearchParams(window.location.search);
-                nextParams.delete('scan');
-                nextParams.delete('permissionId');
-                setSearchParams(nextParams, { replace: true });
-                void executeScan(questionPermissionId);
-                return;
-            }
-            attempts += 1;
-            if (attempts < 40) timer = window.setTimeout(tryStart, 250);
-        };
-
-        timer = window.setTimeout(tryStart, 300);
-        return () => {
-            cancelled = true;
-            if (timer !== undefined) window.clearTimeout(timer);
-        };
-    }, [questionScanRequested, questionPermissionId, permissions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    useFieldGuideAutoScan({
+        route: initialRouteContext,
+        mapRef,
+        permissions,
+        isBusy: analyzing || isTerrainScanning || isHistoricScanning,
+        questionScanAutoStartedRef,
+        setSearchParams, setShowFields,
+        executeScan,
+    });
 
     // ─── Standalone historic scan (context drawer / historic layers button) ───
 
@@ -1033,7 +1013,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
     // ─── Context value ────────────────────────────────────────────────────────
 
     const contextValue = {
-        projectId, onSignificantFind,
+        projectId, onSignificantFind, embeddedSessionShell,
         mapRef, mapContainerRef,
         logContainerRef, sheetScrollRef, sheetDragStartY, traceCardRefs,
         savedPointJustClickedRef, terrainScanCenterRef, terrainScanBoundsRef,
@@ -1089,7 +1069,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind }: { projectI
 
     return (
         <FieldGuideContext.Provider value={contextValue}>
-        <div className={focusMode ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : 'flex flex-col h-[calc(100dvh-140px)] landscape:h-[calc(100dvh-100px)] sm:h-[calc(100dvh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
+        <div className={focusMode && !embeddedSessionShell ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : embeddedSessionShell ? 'flex h-full flex-col overflow-hidden bg-slate-950 relative' : 'flex flex-col h-[calc(100dvh-140px)] landscape:h-[calc(100dvh-100px)] sm:h-[calc(100dvh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
             <header className={`bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md${focusMode ? ' hidden' : ''}`}>
                 {/* Bottom Row: Primary FieldGuide Actions */}
                 <div className="hidden justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">

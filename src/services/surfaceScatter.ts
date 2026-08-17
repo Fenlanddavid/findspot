@@ -67,6 +67,7 @@ export const SURFACE_GROUND_LABELS: Record<SurfaceGroundCondition, string> = {
 export const SURFACE_NOTE_MAX_LENGTH = 500;
 export const SURFACE_GROUND_OTHER_MAX_LENGTH = 80;
 export const SURFACE_CLUSTER_ALGORITHM_VERSION = 1 as const;
+export const SURFACE_CAPTURE_FLOW_VERSION = 1 as const;
 export const SURFACE_CLUSTER_DISTANCE_M = 50;
 
 export const SURFACE_PERIOD_LABELS: Record<SurfacePeriod, string> = {
@@ -293,6 +294,7 @@ export async function recordSurfaceObservation(
     originSessionDate: session?.date,
     originSessionStartTime: session?.startTime,
     originSessionEndTime: session?.endTime,
+    captureFlowVersion: SURFACE_CAPTURE_FLOW_VERSION,
     reassessments: [],
     createdAt: now,
     updatedAt: now,

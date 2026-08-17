@@ -16,6 +16,7 @@ import {
   sectionGeometryAtVersion,
 } from '../../shared/coverageRecords';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
+import { segmentCrossesRecordedGap } from '../../shared/trackSegments';
 
 export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v4';
 export const SECTION_TARGET_COUNT = 6;
@@ -29,12 +30,13 @@ export const REPORTED_IMMEDIATE_MAX_AREA_M2 = 10_000;
 export const REPORTED_LARGE_SECTION_CONFIRMATIONS = 3;
 export const TRACK_SECTION_COVERAGE_THRESHOLD = 0.15;
 export const TRACK_SECTION_SWATH_RADIUS_M = 5;
-export const TRACK_SECTION_CALCULATION_VERSION = 'sample-grid-12-swath-5m-v1';
+export const TRACK_SECTION_CALCULATION_VERSION = 'sample-grid-12-swath-5m-gap-aware-v2';
 export const PREDICTION_TRACK_COVERAGE_THRESHOLD = 0.2;
 const TRACK_SAMPLE_GRID_SIZE = 12;
 
 type TrackPath = {
   points: Array<{ lat: number; lon: number; timestamp: number }>;
+  gaps?: Array<{ start: number; end: number }>;
 };
 
 type FindEvidence = {
@@ -333,6 +335,7 @@ function interpolateTrack(track: TrackPath): Array<[number, number]> {
   for (let index = 1; index < sorted.length; index++) {
     const previous = sorted[index - 1];
     const current = sorted[index];
+    if (segmentCrossesRecordedGap(previous.timestamp, current.timestamp, track.gaps)) continue;
     const timestampGap = current.timestamp - previous.timestamp;
     const distanceM = getDistance([previous.lon, previous.lat], [current.lon, current.lat]);
     if (timestampGap > 120_000 || distanceM > 200) continue;

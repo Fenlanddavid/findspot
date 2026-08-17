@@ -26,17 +26,34 @@ export type {
     RomanStandaloneLayerStatus,
 } from '../../hooks/useFieldGuidePageState';
 
-export const HISTORIC_LAYER_OPTIONS = [
-    { key: 'context',    label: 'Recorded Heritage' },
-    { key: 'routes',     label: 'Roman Roads & Trackways' },
-    { key: 'romanStandalone', label: 'Roman Roads' },
-    { key: 'corridors',  label: 'Movement Corridors' },
-    { key: 'crossings',  label: 'Crossing Points' },
-    { key: 'monuments',  label: 'Scheduled Monuments' },
-    { key: 'aim',        label: 'Aerial Archaeology' },
-    { key: 'pasDensity', label: 'PAS Record Density' },
-    { key: 'userFinds',  label: 'Your Finds' },
+export const HISTORIC_LAYER_GROUPS = [
+    {
+        label: 'Heritage Records',
+        options: [
+            { key: 'context', label: 'Recorded Heritage' },
+            { key: 'monuments', label: 'Scheduled Monuments' },
+            { key: 'aim', label: 'Aerial Archaeology' },
+            { key: 'pasDensity', label: 'PAS Record Density' },
+        ],
+    },
+    {
+        label: 'Routes & Movement',
+        options: [
+            { key: 'routes', label: 'Roman Roads & Trackways' },
+            { key: 'romanStandalone', label: 'Roman Roads' },
+            { key: 'corridors', label: 'Movement Corridors' },
+            { key: 'crossings', label: 'Crossing Points' },
+        ],
+    },
+    {
+        label: 'Your Records',
+        options: [
+            { key: 'userFinds', label: 'Your Finds' },
+        ],
+    },
 ] as const;
+
+export const HISTORIC_LAYER_OPTIONS = HISTORIC_LAYER_GROUPS.flatMap(group => [...group.options]);
 
 export const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
     'Crossing Point Candidate':         'Crossing Point',
@@ -64,6 +81,7 @@ export interface FieldGuideContextValue {
     // Props passed in
     projectId: string;
     onSignificantFind?: (initialContext?: Partial<WorkflowState>) => void;
+    embeddedSessionShell: boolean;
 
     // Map refs
     mapRef: RefObject<maplibregl.Map | null>;

@@ -11,34 +11,22 @@ import { deriveTreasureClock, TreasureClockItem } from "../services/treasureCloc
 import { ClubRallyChoiceModal } from "../components/ClubRallyChoiceModal";
 import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
-import { getPackMeta, isPackStale } from "../services/offlinePack";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { LockIcon, SearchIcon } from "../components/AppIcons";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 import { getBackupReminderState } from '../services/backupReminder';
 import { setPermissionPinned } from '../services/permissionMutations';
 import { reportNonFatal } from '../services/diagLog';
+import { getHomeContext } from '../services/home/homeContext';
+import { resolveContinuityForPermission } from '../services/continuity/continuityResolver';
+import { sessionStartedAt } from '../services/session/activeSessionContext';
+import { SignalMarkerIcon } from '../components/SignalMarkerIcon';
 
 const FindModal = React.lazy(() =>
   import("../components/FindModal").then((mod) => ({ default: mod.FindModal }))
 );
 
-function SignalMarkerIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
-      <path d="M10 2.25c-2.42 0-4.4 1.9-4.4 4.25 0 3.15 3.35 6.35 4.05 6.98.2.18.5.18.7 0 .7-.63 4.05-3.83 4.05-6.98 0-2.35-1.98-4.25-4.4-4.25Z" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="10" cy="6.6" r="1.35" fill="currentColor" />
-      <path d="M5.1 14.5c1.22.78 2.9 1.25 4.9 1.25s3.68-.47 4.9-1.25M7.65 12.85c.68.26 1.48.4 2.35.4s1.67-.14 2.35-.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 const CLUB_RALLY_HOME_CARD_DISMISSED_KEY = "fs_club_rally_home_card_dismissed";
-
-type FieldGuidePackPrompt =
-  | { kind: "permission"; id: string; name: string; stale: boolean }
-  | { kind: "savedPoint"; id: string; name: string; stale: boolean }
-  | null;
 
 export default function Home(props: {
   projectId: string;
@@ -66,12 +54,7 @@ export default function Home(props: {
       return ephemeralSession.get('fs_install_next_step_dismissed') === 'true';
     } catch { return false; }
   });
-  const [usedActions, setUsedActions] = useState<Set<string>>(() => {
-    try {
-      const stored = ephemeralSession.get('fs_used_actions');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+  const [showMoreActions, setShowMoreActions] = useState(false);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
   const [showHomeSignalSheet, setShowHomeSignalSheet] = useState(false);
   const [homeSignalToast, setHomeSignalToast] = useState<{ openCount: number } | null>(null);
@@ -80,12 +63,6 @@ export default function Home(props: {
   React.useEffect(() => {
     return () => { if (homeSignalToastTimerRef.current !== null) window.clearTimeout(homeSignalToastTimerRef.current); };
   }, []);
-  const [dismissedNextMoves, setDismissedNextMoves] = useDurableSetting<Record<string, number>>('fs_nextmove_dismissed', {});
-
-  const dismissNextMove = useCallback((key: string) => {
-    setDismissedNextMoves(prev => ({ ...prev, [key]: Date.now() }));
-  }, []);
-
   const dismissInstallNextStep = useCallback(() => {
     try {
       ephemeralSession.set('fs_install_next_step_dismissed', 'true');
@@ -111,15 +88,12 @@ export default function Home(props: {
     dismissInstallNextStep();
   }, [dismissInstallNextStep]);
 
-  const isDismissed = useCallback((key: string, type: string): boolean => {
-    if (type === 'active_session' || type === 'treasure_clock') return false;
-    const ts = dismissedNextMoves[key];
-    if (!ts) return false;
-    if (type === 'stale_permission') {
-      return Date.now() - ts < 7 * 24 * 60 * 60 * 1000;
-    }
-    return true;
-  }, [dismissedNextMoves]);
+  const offerInstall = useCallback(() => {
+    props.promptInstall().then(prompted => {
+      if (prompted) dismissInstallNextStep();
+      else setShowInstallGuide(true);
+    });
+  }, [dismissInstallNextStep, props.promptInstall]);
 
   const permissions = useLiveQuery(
     async () => {
@@ -141,13 +115,19 @@ export default function Home(props: {
     [props.projectId]
   );
 
-  const activeSession = useLiveQuery(async () => {
-    const sessions = await pagePersistence.sessions
-      .where("projectId").equals(props.projectId)
-      .filter(s => !s.isFinished)
-      .toArray();
-    return sessions.length > 0 ? sessions.sort((a, b) => b.date.localeCompare(a.date))[0] : null;
-  }, [props.projectId]);
+  const homeContext = useLiveQuery(
+    () => getHomeContext(props.projectId),
+    [props.projectId],
+  );
+  const activeSession = homeContext?.active.session ?? null;
+  const returnContext = homeContext?.returnTo ?? null;
+  const [continuityEnabled] = useDurableSetting('fs_v5_continuity_preview', true);
+  const continuityItem = useLiveQuery(
+    () => continuityEnabled && returnContext && returnContext.reason !== 'active-session'
+      ? resolveContinuityForPermission(returnContext.permission.id)
+      : Promise.resolve(null),
+    [continuityEnabled, returnContext?.permission.id, returnContext?.reason],
+  );
 
   const treasureClock = useLiveQuery(
     () => deriveTreasureClock(props.projectId, new Date()),
@@ -181,7 +161,6 @@ export default function Home(props: {
   const recentFinds = useMemo(() => finds?.filter(f => !f.isPending && !f.scatterId && !f.isNotableFind), [finds]);
   const completedFindCount = recentFinds?.length ?? 0;
   const isFirstRun = !!permissions && realPermissions.length === 0 && completedFindCount === 0;
-  const [fieldGuideScanCount] = useDurableSetting('fs_fg_scan_count', 0);
 
   const appSettings = useLiveQuery(async () => {
     const detectorist = await pagePersistence.settings.get('detectorist');
@@ -191,203 +170,20 @@ export default function Home(props: {
   });
   const backupReminder = useLiveQuery(() => getBackupReminderState());
 
-  const fieldGuidePackPrompt = useLiveQuery<FieldGuidePackPrompt>(async () => {
-    const [permissionRows, savedPointRows] = await Promise.all([
-      pagePersistence.permissions.where("projectId").equals(props.projectId).toArray(),
-      pagePersistence.savedPoints.where("projectId").equals(props.projectId).toArray(),
-    ]);
-
-    const mappedPermissions = permissionRows
-      .filter(p => !p.isDefault && !p.isClubDayMember && !!p.boundary)
-      .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""));
-
-    for (const permission of mappedPermissions.slice(0, 8)) {
-      const meta = await getPackMeta({ ownerType: "permission", ownerId: permission.id }).catch(() => null);
-      if (!meta || isPackStale(meta)) {
-        return { kind: "permission", id: permission.id, name: permission.name || "Unnamed permission", stale: !!meta };
-      }
-    }
-
-    const savedPoints = savedPointRows
-      .slice()
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    for (const point of savedPoints.slice(0, 8)) {
-      const meta = await getPackMeta({ ownerType: "savedPoint", ownerId: point.id }).catch(() => null);
-      if (!meta || isPackStale(meta)) {
-        return { kind: "savedPoint", id: point.id, name: point.label || "Saved point", stale: !!meta };
-      }
-    }
-
-    return null;
-  }, [props.projectId, realPermissions.length]);
-
-  const nextMoveItems = useMemo(() => {
-    const items: Array<{
-      type: string;
-      dismissKey: string;
-      message: string;
-      detail?: string;
-      cta: string;
-      action: () => void;
-    }> = [];
-
-    // ── Treasure clock — statutory reporting window (non-dismissable) ────
-    if (treasureClock && treasureClock.length > 0) {
-      const most = treasureClock[0]; // most urgent (sorted daysElapsed desc)
-      const isScotland = most.jurisdiction === "scotland";
-      const tierDetail = isScotland
-        ? "Report to the Treasure Trove Unit \u2014 significant finds in Scotland must be reported."
-        : most.tier === "overdue"
-          ? "If you haven\u2019t reported yet, contact your FLO now \u2014 report late rather than not at all."
-          : most.tier === "red"
-            ? "The 14-day reporting window is closing. Contact your FLO as soon as possible."
-            : most.tier === "amber"
-              ? "Treasure finds must be reported within 14 days of realising they may be Treasure."
-              : "Treasure finds must be reported within 14 days of realising they may be Treasure.";
-      const rider = treasureClock.length > 1
-        ? ` +${treasureClock.length - 1} more awaiting report`
-        : "";
-      items.push({
-        type: "treasure_clock",
-        dismissKey: `treasure_clock:${most.sfId}`,
-        message: isScotland
-          ? `${most.permissionName}: significant find recorded`
-          : `${most.permissionName}: significant find recorded ${most.daysElapsed} days ago`,
-        detail: tierDetail + rider,
-        cta: "Review Find",
-        action: () => nav(`/finds-box?tab=significant&sf=${most.sfId}`),
-      });
-    }
-
-    if (activeSession) {
-      const sessionPermName = permissions?.find(p => p.id === activeSession.permissionId)?.name;
-      items.push({
-        type: 'active_session',
-        dismissKey: `active_session:${activeSession.id}`,
-        message: 'You are currently in an active session',
-        detail: sessionPermName ? `Session on: ${sessionPermName}` : undefined,
-        cta: 'Resume Session',
-        action: () => nav(`/session/${activeSession.id}`),
-      });
-    }
-    const hasNoSavedFieldwork = !!permissions && !!finds && realPermissions.length === 0 && completedFindCount === 0 && (pendingFinds?.length ?? 0) === 0;
-    if (hasNoSavedFieldwork && fieldGuideScanCount === 0) {
-      items.push({
-        type: 'first_fieldguide_scan',
-        dismissKey: 'first_fieldguide_scan',
-        message: 'Read a field before setting anything up',
-        detail: 'Run a Field Guide scan to compare terrain, movement, landscape and historic context.',
-        cta: 'Scan Land',
-        action: props.goFieldGuide,
-      });
-    } else if (hasNoSavedFieldwork && fieldGuideScanCount > 0) {
-      items.push({
-        type: 'post_fieldguide_scan',
-        dismissKey: 'post_fieldguide_scan',
-        message: 'Save the land you want to work',
-        detail: 'Create a simple permission now; boundaries and landowner details can come later.',
-        cta: 'Create Permission',
-        action: props.goPermission,
-      });
-    }
-    if (!props.isStandalone && !installNextStepDismissed) {
-      items.push({
-        type: 'install_app',
-        dismissKey: 'install_app',
-        message: 'Install FindSpot on this device',
-        detail: 'Use it from your home screen without the browser bar.',
-        cta: 'Install App',
-        action: () => {
-          props.promptInstall().then(prompted => {
-            if (prompted) {
-              dismissInstallNextStep();
-              return;
-            }
-            setShowInstallGuide(true);
-          });
-        },
-      });
-    }
-    if (pendingFinds && pendingFinds.length > 0) {
-      items.push({
-        type: 'pending',
-        dismissKey: `pending:${pendingFinds[0]?.id ?? pendingFinds.length}`,
-        message: pendingFinds.length === 1
-          ? 'You have a pending find to finish'
-          : `You have ${pendingFinds.length} pending finds to finish`,
-        cta: 'Finish Records',
-        action: () => props.goFindsWithFilter("filter=pending"),
-      });
-    }
-    if (fieldGuidePackPrompt) {
-      items.push({
-        type: `fieldguide_pack_${fieldGuidePackPrompt.kind}`,
-        dismissKey: `fieldguide_pack:${fieldGuidePackPrompt.kind}:${fieldGuidePackPrompt.id}:${fieldGuidePackPrompt.stale ? 'stale' : 'missing'}`,
-        message: fieldGuidePackPrompt.stale
-          ? 'Refresh your offline Field Guide data'
-          : 'Download Field Guide data for offline use',
-        detail: fieldGuidePackPrompt.kind === 'permission'
-          ? `${fieldGuidePackPrompt.name}: terrain, heritage layers and PAS density for use before you lose signal.`
-          : `${fieldGuidePackPrompt.name}: save the nearby Field Guide layers for a return visit.`,
-        cta: fieldGuidePackPrompt.kind === 'permission' ? 'Prepare Data' : 'Open Points',
-        action: fieldGuidePackPrompt.kind === 'permission'
-          ? () => props.goPermissionEdit(fieldGuidePackPrompt.id)
-          : () => nav('/fieldguide?savedPoints=1'),
-      });
-    }
-    if (permissions && permissions.length > 0) {
-      const real = permissions.filter(p => !p.isDefault);
-      const now = Date.now();
-      const upcomingRallies = real
-        .filter(p => p.type === "rally" && p.validFrom)
-        .map(p => ({ ...p, daysUntil: Math.ceil((new Date(p.validFrom!).getTime() - now) / 86400000) }))
-        .filter(p => p.daysUntil >= 0 && p.daysUntil <= 14)
-        .sort((a, b) => a.daysUntil - b.daysUntil);
-      for (const rally of upcomingRallies) {
-        const dayLabel = rally.daysUntil === 0 ? "Today!" : rally.daysUntil === 1 ? "Tomorrow" : `${rally.daysUntil} days away`;
-        items.push({
-          type: 'upcoming_rally',
-          dismissKey: `upcoming_rally:${rally.id}`,
-          message: rally.name,
-          detail: dayLabel,
-          cta: 'View Rally',
-          action: () => props.goPermissionEdit(rally.id),
-        });
-      }
-      const stalePerms = real.filter(p => {
-        if (p.type === "rally") return false;
-        if (!p.lastSessionDate) return false;
-        const days = (now - new Date(p.lastSessionDate).getTime()) / 86400000;
-        return days > 30 && p.cumulativePercent !== null && p.cumulativePercent < 70;
-      });
-      for (const stale of stalePerms) {
-        const days = Math.round((now - new Date(stale.lastSessionDate!).getTime()) / 86400000);
-        const covered = Math.round(stale.cumulativePercent!);
-        items.push({
-          type: 'stale_permission',
-          dismissKey: `stale_permission:${stale.id}`,
-          message: `${stale.name} is ${covered}% covered`,
-          detail: `Not visited in ${days} days`,
-          cta: 'Review Permission',
-          action: () => props.goPermissionEdit(stale.id),
-        });
-      }
-      const newPerms = real.filter(p => p.type !== "rally" && p.sessionCount === 0);
-      for (const newPerm of newPerms) {
-        items.push({
-          type: 'new_permission',
-          dismissKey: `new_permission:${newPerm.id}`,
-          message: `${newPerm.name} has not been detected yet`,
-          cta: 'Start First Session',
-          action: () => nav(`/session/new?permissionId=${newPerm.id}`),
-        });
-      }
-    }
-    return items;
-  }, [pendingFinds, activeSession, permissions, realPermissions, completedFindCount, finds, fieldGuideScanCount, nav, props, installNextStepDismissed, fieldGuidePackPrompt, treasureClock]);
-
-  const nextMove = nextMoveItems.find(item => !isDismissed(item.dismissKey, item.type)) ?? null;
+  const reportingMove = useMemo(() => {
+    const most = treasureClock?.[0];
+    if (!most) return null;
+    return {
+      message: most.jurisdiction === 'scotland'
+        ? `${most.permissionName}: significant find recorded`
+        : `${most.permissionName}: significant find recorded ${most.daysElapsed} days ago`,
+      action: () => nav(`/finds-box?tab=significant&sf=${most.sfId}`),
+    };
+  }, [nav, treasureClock]);
+  const backupCanSurface = (homeContext?.completedSessionCount ?? 0) > 0;
+  const contextualBackup = backupCanSurface && backupReminder?.level !== 'none'
+    ? backupReminder
+    : null;
 
   const installPlatform = useMemo(() => {
     const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
@@ -449,8 +245,7 @@ export default function Home(props: {
     // ── Action pool ──────────────────────────────────────────────────────────
     // Only shown when "Your Next Move" has no content.
     // Each entry is null when its condition isn't met — nulls are filtered out.
-    // Add, rotate, or remove entries here to adapt to user behaviour.
-    // The first 4 non-null entries are available on mobile; larger screens show the first 2.
+    // Keep the order stable so frequent actions do not move after a tap.
     const pool: Action[] = isNewUser ? [
       { label: 'Create Permission',    mobileLabel: 'Permission', action: props.goPermission },
       { label: 'Scan with Field Guide', mobileLabel: 'Field Guide',  action: props.goFieldGuide },
@@ -474,27 +269,8 @@ export default function Home(props: {
     ];
     // ────────────────────────────────────────────────────────────────────────
 
-    const availableActions = pool.filter(Boolean) as NonNullable<Action>[];
-    const unusedActions = availableActions.filter(a => !usedActions.has(a.label));
-    const visibleActions = unusedActions.length > 0 ? unusedActions : availableActions;
-
-    return visibleActions
-      .slice(0, 4)
-      .map(a => ({
-        ...a,
-        action: () => {
-          try {
-            const stored = ephemeralSession.get('fs_used_actions');
-            const current: string[] = stored ? JSON.parse(stored) : [];
-            ephemeralSession.set('fs_used_actions', JSON.stringify([...new Set([...current, a.label])]));
-          } catch (error) {
-            reportNonFatal('home', 'Quick action history save failed', error);
-          }
-          setUsedActions(prev => new Set(prev).add(a.label));
-          a.action();
-        },
-      }));
-  }, [permissions, realPermissions, finds, appSettings, backupReminder, usedActions, nav, props]);
+    return (pool.filter(Boolean) as NonNullable<Action>[]).slice(0, 8);
+  }, [permissions, realPermissions, finds, appSettings, backupReminder, nav, props]);
 
   const firstMediaMap = useLiveQuery(async () => {
     if (findIds.length === 0) return new Map<string, Media>();
@@ -511,7 +287,7 @@ export default function Home(props: {
     return m;
   }, [findIds]);
 
-  const homePresentationReady = permissions !== undefined && finds !== undefined;
+  const homePresentationReady = permissions !== undefined && finds !== undefined && homeContext !== undefined;
   if (!homePresentationReady) {
     return (
       <div
@@ -551,19 +327,39 @@ export default function Home(props: {
           </span>
         </div>
       )}
-      <button
-        onClick={() => setPrivacyExpanded(v => !v)}
-        className="flex items-center justify-center gap-2 py-1 px-1 w-full text-left text-gray-600 transition-colors hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
-      >
-        <LockIcon className="h-3.5 w-3.5 shrink-0" />
-        {privacyExpanded ? (
-          <p className="text-xs font-normal m-0">
-            Your saved finds, GPS coordinates, photos and landowner details stay on this device unless you export or share them. Online features may request map tiles, search results or landscape data for the area you are viewing; Discover only sends details you type into its submit forms.
-          </p>
-        ) : (
-          <span className="text-xs font-normal">Local-first storage · No subscriptions · No accounts</span>
+      <div className="flex items-start justify-center gap-2 px-1 text-gray-600 dark:text-gray-300">
+        <button
+          onClick={() => setPrivacyExpanded(v => !v)}
+          className="flex min-w-0 items-start justify-center gap-2 py-1 text-left transition-colors hover:text-gray-800 dark:hover:text-gray-100"
+        >
+          <LockIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {privacyExpanded ? (
+            <span className="text-xs font-normal">
+              Your saved finds, GPS coordinates, photos and landowner details stay on this device unless you export or share them. Online features may request map tiles, search results or landscape data for the area you are viewing; Discover only sends details you type into its submit forms.
+            </span>
+          ) : (
+            <span className="text-xs font-normal">Local-first storage · No subscriptions · No accounts</span>
+          )}
+        </button>
+        {contextualBackup?.level === 'recommended' && !privacyExpanded && (
+          <button
+            type="button"
+            onClick={() => nav('/settings')}
+            className="shrink-0 rounded-full border border-teal-700/40 px-2 py-1 text-2xs font-black uppercase tracking-wide text-teal-700 dark:text-teal-300"
+          >
+            Back up
+          </button>
         )}
-      </button>
+        {!props.isStandalone && !installNextStepDismissed && contextualBackup?.level !== 'recommended' && !privacyExpanded && (
+          <button
+            type="button"
+            onClick={offerInstall}
+            className="shrink-0 rounded-full border border-teal-700/40 px-2 py-1 text-2xs font-black uppercase tracking-wide text-teal-700 dark:text-teal-300"
+          >
+            Install
+          </button>
+        )}
+      </div>
 
       <section className="grid gap-3">
         <div>
@@ -603,108 +399,129 @@ export default function Home(props: {
             ))}
           </div>
         </section>
-      ) : nextMove ? (
-        <div className={`relative rounded-2xl p-4 pr-7 flex items-center justify-between gap-4 ${
-          nextMove.type === 'treasure_clock'
-            ? (treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
-                ? 'bg-red-50 dark:bg-red-900/15 border border-red-200 dark:border-red-800'
-                : treasureClock?.[0]?.tier === 'amber'
-                  ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800'
-                  : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700')
-            : nextMove.type === 'upcoming_rally'
-              ? 'bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800'
-              : 'bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700'
-        }`}>
-          {nextMove.type !== 'active_session' && nextMove.type !== 'treasure_clock' && (
+      ) : activeSession ? (
+        <div className="relative overflow-hidden rounded-2xl border border-teal-600/50 bg-gradient-to-br from-teal-950 to-gray-950 p-4 text-white shadow-lg shadow-teal-950/20">
+          <div className="absolute inset-y-0 left-0 w-1 bg-teal-400" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2 text-2xs font-black uppercase tracking-[0.18em] text-teal-300">
+                <span className="h-2 w-2 rounded-full bg-teal-400 shadow-[0_0_0_4px_rgba(45,212,191,0.14)]" />
+                Detecting now
+              </div>
+              <p className="truncate text-base font-black">
+                {returnContext?.permission.name ?? 'Active session'}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-300">
+                Started {new Date(sessionStartedAt(activeSession)).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
             <button
-              onClick={() => {
-                if (nextMove.type === 'install_app') {
-                  dismissInstallNextStep();
-                  return;
-                }
-                dismissNextMove(nextMove.dismissKey);
-              }}
-              className="absolute top-1.5 right-1.5 flex h-8 w-8 items-center justify-center leading-none text-red-500 hover:text-red-600 transition-colors text-base outline-none border-0"
-              aria-label="Dismiss"
+              type="button"
+              onClick={() => nav(`/session/${activeSession.id}`)}
+              className="min-h-11 shrink-0 rounded-xl bg-teal-500 px-4 py-2 text-xs font-black uppercase tracking-wider text-gray-950 shadow-sm hover:bg-teal-400"
             >
-              ×
+              Resume
             </button>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className={`text-xs font-black mb-1 ${
-              nextMove.type === 'active_session'
-                ? 'uppercase tracking-widest text-amber-600 dark:text-amber-400'
-                : nextMove.type === 'treasure_clock'
-                  ? 'uppercase tracking-widest ' + (
-                      treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
-                        ? 'text-red-600 dark:text-red-400'
-                        : treasureClock?.[0]?.tier === 'amber'
-                          ? 'text-amber-600 dark:text-amber-400'
-                          : 'text-gray-600 dark:text-gray-400')
-                  : 'uppercase tracking-widest ' + (nextMove.type === 'upcoming_rally' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400')
-            }`}>
-              {nextMove.type === 'active_session' ? 'Session in progress' : nextMove.type === 'treasure_clock' ? 'Reporting obligation' : nextMove.type === 'upcoming_rally' ? 'Upcoming Rally' : 'Your next move'}
-            </p>
-            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-snug">{nextMove.message}</p>
-            {'detail' in nextMove && nextMove.detail && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{nextMove.detail}</p>
-            )}
           </div>
-          <div className="flex shrink-0 flex-col sm:flex-row gap-2">
-            {nextMove.type === 'active_session' && activeSession && (
-              <>
-                <button
-                  onClick={() => setShowHomeSignalSheet(true)}
-                  className="min-h-11 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-sm"
-                  title="Log a signal you chose not to dig"
-                >
-                  <SignalMarkerIcon className="w-3.5 h-3.5 shrink-0" />
-                  Log Signal
-                </button>
-                <button
-                  onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}&mode=quick${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
-                  className="min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20"
-                >
-                  Quick Find
-                </button>
-              </>
-            )}
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
             <button
-              onClick={nextMove.action}
-              className={`min-h-11 text-white text-xs font-black uppercase tracking-wider px-3 py-2 rounded-xl transition-all whitespace-nowrap ${
-                nextMove.type === 'treasure_clock'
-                  ? (treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
-                      ? 'bg-red-600 hover:bg-red-500 shadow-sm shadow-red-600/20'
-                      : treasureClock?.[0]?.tier === 'amber'
-                        ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20'
-                        : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20')
-                  : nextMove.type === 'upcoming_rally'
-                    ? 'bg-amber-500 hover:bg-amber-400 shadow-sm shadow-amber-500/20'
-                    : 'bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20'
-              }`}
+              type="button"
+              onClick={() => nav(`/find?permissionId=${activeSession.permissionId}&sessionId=${activeSession.id}&mode=quick${activeSession.fieldId ? `&fieldId=${activeSession.fieldId}` : ''}`)}
+              className="min-h-11 rounded-xl bg-amber-500 px-3 py-2 text-xs font-black uppercase tracking-wider text-gray-950 hover:bg-amber-400"
             >
-              {nextMove.cta}
+              Quick Find
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowHomeSignalSheet(true)}
+              className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-teal-400/30 bg-white/5 px-3 py-2 text-xs font-black uppercase tracking-wider text-teal-100 hover:bg-white/10"
+            >
+              <SignalMarkerIcon className="h-3.5 w-3.5" /> Log Signal
             </button>
           </div>
         </div>
+      ) : returnContext ? (
+        <button
+          type="button"
+          onClick={() => nav(continuityItem?.action.href ?? `/permission/${returnContext.permission.id}`)}
+          className="group flex min-h-[76px] w-full items-center gap-3 rounded-2xl border border-teal-800/50 bg-gradient-to-r from-gray-950 to-teal-950 px-3 py-2 text-left text-white shadow-md transition-transform active:scale-[0.99]"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-teal-400/25 bg-teal-400/10 text-xl text-teal-300" aria-hidden="true">↩</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-2xs font-black uppercase tracking-[0.18em] text-teal-300">Return to</span>
+            <span className="mt-0.5 block truncate text-base font-black">{returnContext.permission.name}</span>
+            <span className="mt-1 block truncate text-xs text-gray-300">
+              {continuityItem
+                ? `${continuityItem.title} · ${continuityItem.explanation}`
+                : returnContext.lastVisitAt
+                  ? `Last visit ${new Date(returnContext.lastVisitAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}`
+                  : 'Open permission'}
+            </span>
+          </span>
+          <span className="shrink-0 text-lg text-teal-300 transition-transform group-hover:translate-x-0.5" aria-hidden="true">→</span>
+        </button>
       ) : (
         <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-            {adaptiveActions.map((item, index) => (
+            {adaptiveActions.slice(0, showMoreActions ? adaptiveActions.length : 2).map((item) => (
               <button
                 key={item.label}
                 onClick={item.action}
-                className={`${index >= 2 ? 'min-[400px]:hidden' : ''} min-h-11 min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-700 transition-all active:scale-[0.98] dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-200 hover:border-emerald-400 dark:hover:border-emerald-500 sm:shrink-0 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal`}
+                className="min-h-11 min-w-0 rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-700 transition-all active:scale-[0.98] dark:border-gray-600 dark:bg-gray-700/50 dark:text-gray-200 hover:border-emerald-400 dark:hover:border-emerald-500 sm:shrink-0 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-sm sm:font-medium sm:normal-case sm:tracking-normal"
               >
                 <span className="sm:hidden">{item.mobileLabel ?? item.label}</span>
                 <span className="hidden sm:inline">{item.label}</span>
               </button>
             ))}
+            {adaptiveActions.length > 2 && (
+              <button
+                type="button"
+                aria-expanded={showMoreActions}
+                onClick={() => setShowMoreActions(current => !current)}
+                className="min-h-11 min-w-0 rounded-xl border border-dashed border-gray-300 px-2 py-2 text-center text-[10px] font-black uppercase tracking-wide text-gray-500 transition-colors hover:border-emerald-400 hover:text-emerald-700 dark:border-gray-600 dark:text-gray-300 dark:hover:border-emerald-500 dark:hover:text-emerald-300 sm:shrink-0 sm:rounded-full sm:px-4 sm:text-sm sm:normal-case sm:tracking-normal"
+              >
+                {showMoreActions ? 'Less' : `More (${adaptiveActions.length - 2})`}
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {pendingFinds && pendingFinds.length > 0 && nextMove?.type !== 'pending' && (
+      {reportingMove ? (
+        <button
+          type="button"
+          onClick={reportingMove.action}
+          className={`flex w-full items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left ${
+            treasureClock?.[0]?.tier === 'red' || treasureClock?.[0]?.tier === 'overdue'
+              ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-900/15'
+              : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/15'
+          }`}
+        >
+          <span className="min-w-0">
+            <span className="block text-2xs font-black uppercase tracking-widest text-red-700 dark:text-red-300">Reporting obligation</span>
+            <span className="block truncate text-sm font-bold text-gray-900 dark:text-gray-100">{reportingMove.message}</span>
+          </span>
+          <span className="shrink-0 text-xs font-black uppercase tracking-wider text-red-700 dark:text-red-300">Review</span>
+        </button>
+      ) : contextualBackup && (contextualBackup.level === 'important' || contextualBackup.level === 'urgent') ? (
+        <button
+          type="button"
+          onClick={() => nav('/settings')}
+          className={`flex w-full items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left ${
+            contextualBackup.level === 'urgent'
+              ? 'border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-900/15'
+              : 'border-teal-500 bg-gray-50 dark:border-teal-800 dark:bg-gray-800/70'
+          }`}
+        >
+          <span>
+            <span className="block text-2xs font-black uppercase tracking-widest text-teal-700 dark:text-teal-300">Protect your local records</span>
+            <span className="block text-sm font-bold text-gray-900 dark:text-gray-100">{contextualBackup.message}</span>
+          </span>
+          <span className="shrink-0 text-xs font-black uppercase tracking-wider text-teal-700 dark:text-teal-300">Open</span>
+        </button>
+      ) : null}
+
+      {pendingFinds && pendingFinds.length > 0 && (
         <button
           onClick={() => props.goFindsWithFilter("filter=pending")}
           className="flex items-center justify-between gap-4 w-full bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3 hover:bg-amber-100 dark:hover:bg-amber-900/20 transition-colors text-left"
@@ -871,6 +688,9 @@ export default function Home(props: {
                         </p>
                         <button onClick={props.goPermission} className={`${isFirstRun ? "mt-1 px-4 py-2 text-xs" : "min-h-11 px-6 py-3 text-sm"} bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-black uppercase tracking-widest shadow-sm active:translate-y-1 transition-all`}>
                             Add Permission
+                        </button>
+                        <button onClick={() => nav('/land-access')} className="px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-700 hover:underline dark:text-emerald-300">
+                            Need help asking? Open the land access guide
                         </button>
                     </div>
                 )}

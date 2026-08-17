@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
 import { ensureDefaultProject, ensureDefaultPermission } from "./app/seed";
-import { setSetting, getSetting } from "./services/data";
+import { setSetting } from "./services/data";
 import { ensureProtectionOnStartup } from "./services/storagePersistence";
 import { closeStaleActiveTracks } from "./services/tracking";
 import { healAimMeta } from "./services/offlinePack";
@@ -56,6 +56,7 @@ const PendingFinds = React.lazy(() => import("./pages/PendingFinds"));
 const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
 const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
 const Discover = React.lazy(() => import("./pages/Discover"));
+const LandAccess = React.lazy(() => import("./pages/LandAccess"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 const CompanionImport = React.lazy(() => import("./pages/CompanionImport"));
@@ -79,6 +80,7 @@ function Shell() {
   const nav = useNavigate();
   const location = useLocation();
   const isFieldGuideRoute = location.pathname === "/fieldguide";
+  const isActiveSessionGuide = isFieldGuideRoute && new URLSearchParams(location.search).has('sessionId');
   useViewportScrollLock(isFieldGuideRoute);
   const sfWorkflow = useSignificantFindWorkflow(projectId ?? "");
   const [resumableSf, setResumableSf] = React.useState<SignificantFind | null>(null);
@@ -114,20 +116,9 @@ function Shell() {
         reportNonFatal('companion-import', 'Companion derivation recovery failed', error);
       });
 
-    // Track unique installation (one-time per device).
-    // Flag lives in IndexedDB (durable) with a one-time migration from localStorage.
-    const trackInstallation = async () => {
-      const inDB = await getSetting<boolean>("fs_installed", false);
-      if (!inDB) {
-        try {
-          await fetch("https://findspot-counter.trials-uk.workers.dev/up");
-          await setSetting("fs_installed", true);
-        } catch (error) {
-          reportNonFatal('startup', 'Installation count update failed', error);
-        }
-      }
-    };
-    migrateLegacyClientStorage().then(trackInstallation).catch(() => trackInstallation());
+    void migrateLegacyClientStorage().catch(error => {
+      reportNonFatal('startup', 'Legacy settings migration failed', error);
+    });
 
     // Detect Standalone mode
     try {
@@ -303,7 +294,7 @@ function Shell() {
   if (!projectId || !project) return <div className="p-4 text-center font-bold text-emerald-600 animate-pulse">Loading FindSpot…</div>;
 
   const shouldShowBackupReminder = backupReminder !== null && backupReminder.level !== 'none'
-    && (location.pathname === "/" || location.pathname === "/settings");
+    && location.pathname === "/settings";
 
   return (
     <div className={`max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
@@ -341,7 +332,7 @@ function Shell() {
         </div>
       )}
 
-      <header className="mb-4 flex flex-col gap-3 border-b border-gray-200/80 bg-white/80 px-3 pb-3 pt-2 backdrop-blur dark:border-gray-800 dark:bg-gray-900/75 sm:mb-6 sm:gap-4 sm:px-4 sm:pt-3">
+      {!isActiveSessionGuide && <header className="mb-4 flex flex-col gap-3 border-b border-gray-200/80 bg-white/80 px-3 pb-3 pt-2 backdrop-blur dark:border-gray-800 dark:bg-gray-900/75 sm:mb-6 sm:gap-4 sm:px-4 sm:pt-3">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0 outline-none [-webkit-tap-highlight-color:transparent] focus:outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-emerald-400/60">
               <Logo />
@@ -383,7 +374,7 @@ function Shell() {
                 <div className="opacity-60 text-[10px] font-mono bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded max-w-[100px] truncate">{project.name}</div>
             </div>
         </div>
-      </header>
+      </header>}
 
       <main>
         {needRefresh && (
@@ -423,25 +414,25 @@ function Shell() {
           </div>
         )}
         {shouldShowBackupReminder && (
-          <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-top-4">
+          <div className={`mb-6 rounded-xl border p-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-top-4 ${backupReminder?.level === 'urgent' ? 'border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-900/20' : 'border-teal-300 bg-white dark:border-teal-800 dark:bg-gray-800'}`}>
             <div className="flex items-center gap-3 min-w-0">
               <span className="text-2xl">🛡️</span>
               <div>
-                <h4 className="text-sm font-bold text-amber-900 dark:text-amber-100">{backupReminder?.title}</h4>
-                <p className="text-xs text-amber-800 dark:text-amber-300 opacity-80">{backupReminder?.message} Since FindSpot is local-only, exporting protects it if this device is lost or broken.</p>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100">{backupReminder?.title}</h4>
+                <p className="text-xs text-gray-600 dark:text-gray-300 opacity-80">{backupReminder?.message} Since FindSpot is local-only, exporting protects it if this device is lost or broken.</p>
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
               <button
                 onClick={() => { setBackupReminder(null); nav("/settings"); }}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
+                className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
               >
                 Go to Settings →
               </button>
               {backupReminder?.level !== 'urgent' && (
                 <button
                   onClick={snoozeBackup}
-                  className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline px-2"
+                  className="text-teal-700 dark:text-teal-300 text-xs font-bold hover:underline px-2"
                 >
                   Later
                 </button>
@@ -467,6 +458,7 @@ function Shell() {
             <Route path="/session/:id" element={<SessionPage projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/find" element={<FindRouter projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/discover" element={<Discover projectId={projectId} />} />
+            <Route path="/land-access" element={<LandAccess />} />
             <Route path="/finds" element={<AllFinds projectId={projectId} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/pending" element={<PendingFinds projectId={projectId} />} />
@@ -479,14 +471,14 @@ function Shell() {
         </PageErrorBoundary>
       </main>
 
-      <footer className="hidden sm:flex items-center justify-between gap-4 border-t border-gray-200/80 px-4 py-3 text-[10px] font-bold text-gray-400 dark:border-gray-800 dark:text-gray-600">
+      {!isActiveSessionGuide && <footer className="hidden sm:flex items-center justify-between gap-4 border-t border-gray-200/80 px-4 py-3 text-[10px] font-bold text-gray-400 dark:border-gray-800 dark:text-gray-600">
         <span>{FINDSPOT_COPYRIGHT_NOTICE}</span>
         <Link to="/settings?tab=app&section=terms" className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">
           Terms &amp; IP
         </Link>
-      </footer>
+      </footer>}
 
-      <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
+      {!isActiveSessionGuide && <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {[
             { to: "/", label: "Home", icon: HomeIcon },
@@ -506,7 +498,7 @@ function Shell() {
             </NavLink>
           ))}
         </div>
-      </nav>
+      </nav>}
 
       {showClubRallyModal && (
         <ClubRallyChoiceModal
@@ -519,7 +511,7 @@ function Shell() {
         />
       )}
 
-      <GlobalActions projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />
+      {!isActiveSessionGuide && <GlobalActions projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />}
       <OnboardingFlow />
       {confirmDialog}
       <SignificantFindWorkflow

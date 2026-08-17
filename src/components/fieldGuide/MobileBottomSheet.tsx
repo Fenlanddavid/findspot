@@ -8,7 +8,7 @@ import type { Cluster, Hotspot, HotspotClassification, LandscapeIntelligence } f
 import { ScaledImage } from '../ScaledImage';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
-import { HOTSPOT_TITLES, HISTORIC_LAYER_OPTIONS } from './FieldGuideContext';
+import { HOTSPOT_TITLES, HISTORIC_LAYER_GROUPS } from './FieldGuideContext';
 import { ScanControlPanel } from './ScanControlPanel';
 import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
@@ -386,25 +386,30 @@ export function MobileBottomSheet() {
                             </div>
                             {intelLayersOpen && (
                                 <div className="rounded-xl border border-white/10 bg-slate-950/85 p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.24)] animate-in fade-in slide-in-from-top-1 duration-150">
-                                    {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => {
-                                        const active = historicLayerVisibility[key];
-                                        return (
-                                            <button
-                                                key={key}
-                                                onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))}
-                                                className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'}`}
-                                            >
-                                                <span className="text-[0.6875rem] font-black uppercase tracking-widest leading-tight">
-                                                    {key === 'romanStandalone' && active && romanStandaloneStatus === 'zoom-in'
-                                                        ? 'Roman Roads — zoom in to show'
-                                                        : key === 'romanStandalone' && active && romanStandaloneStatus === 'unavailable'
-                                                            ? 'Roman Roads — unavailable'
-                                                            : label}
-                                                </span>
-                                                <span className={`h-2 w-2 rounded-full shrink-0 ${active ? 'bg-blue-300 shadow-[0_0_8px_rgba(147,197,253,0.8)]' : 'bg-slate-700'}`} />
-                                            </button>
-                                        );
-                                    })}
+                                    {HISTORIC_LAYER_GROUPS.map(group => (
+                                        <div key={group.label} className="py-1">
+                                            <p className="px-3 pb-1 pt-1 text-[0.5625rem] font-black uppercase tracking-widest text-slate-600">{group.label}</p>
+                                            {group.options.map(({ key, label }) => {
+                                                const active = historicLayerVisibility[key];
+                                                return (
+                                                    <button
+                                                        key={key}
+                                                        onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))}
+                                                        className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-blue-500/15 text-blue-200' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'}`}
+                                                    >
+                                                        <span className="text-[0.6875rem] font-black uppercase tracking-widest leading-tight">
+                                                            {key === 'romanStandalone' && active && romanStandaloneStatus === 'zoom-in'
+                                                                ? 'Roman Roads — zoom in to show'
+                                                                : key === 'romanStandalone' && active && romanStandaloneStatus === 'unavailable'
+                                                                    ? 'Roman Roads — unavailable'
+                                                                    : label}
+                                                        </span>
+                                                        <span className={`h-2 w-2 rounded-full shrink-0 ${active ? 'bg-blue-300 shadow-[0_0_8px_rgba(147,197,253,0.8)]' : 'bg-slate-700'}`} />
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>

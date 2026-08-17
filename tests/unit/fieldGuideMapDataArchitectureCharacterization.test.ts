@@ -10,6 +10,10 @@ const HISTORIC_LAYERS_HOOK = new URL(
   '../../src/hooks/useFieldGuideHistoricLayers.ts',
   import.meta.url,
 );
+const ROMAN_STANDALONE_SERVICE = new URL(
+  '../../src/services/fieldguide/romanStandaloneLayer.ts',
+  import.meta.url,
+);
 
 function occurrences(source: string, expression: RegExp): number {
   return source.match(expression)?.length ?? 0;
@@ -17,10 +21,11 @@ function occurrences(source: string, expression: RegExp): number {
 
 describe('FieldGuide map-data architecture characterization', () => {
   it('ratchets scan and historic overlays out of the parent map hook', async () => {
-    const [mapHook, scanLayersHook, historicLayersHook] = await Promise.all([
+    const [mapHook, scanLayersHook, historicLayersHook, romanStandaloneService] = await Promise.all([
       readFile(MAP_HOOK, 'utf8'),
       readFile(SCAN_LAYERS_HOOK, 'utf8'),
       readFile(HISTORIC_LAYERS_HOOK, 'utf8'),
+      readFile(ROMAN_STANDALONE_SERVICE, 'utf8'),
     ]);
 
     expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(309);
@@ -30,13 +35,14 @@ describe('FieldGuide map-data architecture characterization', () => {
     expect(occurrences(scanLayersHook, /useEffect\(/g)).toBe(7);
     expect(occurrences(historicLayersHook, /useEffect\(/g)).toBe(5);
     expect(occurrences(
-      `${scanLayersHook}\n${historicLayersHook}`,
+      `${scanLayersHook}\n${historicLayersHook}\n${romanStandaloneService}`,
       /getSource\('(hotspots-overlay|targets|trace-targets|cluster-links|pas-finds|pas-density|historic-routes|roman-roads-standalone|corridors|crossings|landscape-context)'/g,
     )).toBe(12);
     expect(mapHook).toContain('useFieldGuideScanLayers({');
     expect(mapHook).toContain('useFieldGuideHistoricLayers({');
     expect(mapHook).not.toContain('getPASDensityGeoJSON');
     expect(mapHook).not.toContain('turf.');
+    expect(romanStandaloneService).toContain("getSource('roman-roads-standalone')");
   });
 
   it('keeps target, route and PAS behaviour in bounded owners', async () => {

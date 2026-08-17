@@ -186,7 +186,7 @@ test("returning-user Home waits for persisted records before presenting its layo
   await installLayoutShiftObserver(page);
   await page.goto("./");
 
-  await expect(page.getByText("Performance Characterization Farm")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Performance Characterization Farm", exact: true })).toBeVisible();
   await expect(page.getByPlaceholder("Search permissions...")).toBeVisible();
   await expect(page.getByText("Build your first field record")).toHaveCount(0);
 
@@ -205,7 +205,7 @@ test('returning-user Home does not read a dense Companion trail on launch', asyn
   await installTrackReadObserver(page);
 
   await page.goto('./');
-  await expect(page.getByText('Dense Companion Farm')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dense Companion Farm', exact: true })).toBeVisible();
   await page.waitForTimeout(1_000);
   expect(await page.evaluate(() => window.__findspotTrackReads)).toEqual([]);
 });

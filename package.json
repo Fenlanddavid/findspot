@@ -1,7 +1,7 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "4.12.24",
+  "version": "5.0.0",
   "type": "module",
   "engines": {
     "node": ">=22.22.0"
@@ -12,6 +12,7 @@
     "check:any": "node scripts/checkAnyBaseline.mjs",
     "check:dump": "node scripts/dumpArchitecture.mjs --verify",
     "check:release": "node scripts/checkReleaseNotes.mjs",
+    "release:prepare": "node scripts/prepareRelease.mjs",
     "typefloor": "node scripts/checkTypeFloor.mjs",
     "typecheck": "tsc -b --pretty false",
     "typecheck:worker": "tsc -p workers/findspot-static/tsconfig.json --pretty false && tsc -p workers/geocode-proxy/tsconfig.json --pretty false",

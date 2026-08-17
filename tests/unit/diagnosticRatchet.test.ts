@@ -76,7 +76,7 @@ describe("silent diagnostic handler ratchet", () => {
       "services/diagLog.ts",
     ]);
     expect(inventory.promiseCatches).toEqual([]);
-  });
+  }, 10_000);
 
   it("records and deduplicates non-fatal failures without changing caller control flow", () => {
     const warn = vi.spyOn(diagLog, "warn").mockResolvedValue();

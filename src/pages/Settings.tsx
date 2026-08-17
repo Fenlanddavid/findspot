@@ -45,6 +45,7 @@ import {
 import { clearFieldGuideCaches } from "../services/fieldGuideMutations";
 import { BGS_ATTRIBUTION } from "../shared/bgsAttribution";
 import { COMPANION_DOWNLOAD_URL } from "../services/companionLaunch";
+import { ROMAN_ROADS_ATTRIBUTION } from '../services/fieldguide/romanRoadLayerConfig';
 
 type RestoreCounts = {
   projects: number;
@@ -242,13 +243,16 @@ export default function Settings() {
   const [damagedMediaCount, setDamagedMediaCount] = useState<number | null>(null);
   const [mediaWarnPending, setMediaWarnPending] = useState(false);
   const [exportingDiagLog, setExportingDiagLog] = useState(false);
-  const [installCount, setInstallCount] = useState<number | null>(null);
   const [easterEggUnlocked, setEasterEggUnlocked] = useDurableSetting('fs_dev_egg', false);
   const [versionTapCount, setVersionTapCount] = useState(0);
   const [geologyEnabled, setGeologyEnabled] = useState(true);
   const [fieldGuideDefaultMapStyle, setFieldGuideDefaultMapStyle] = useDurableSetting(
     FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY,
     'streets',
+  );
+  const [v5ContinuityEnabled, setV5ContinuityEnabled] = useDurableSetting(
+    'fs_v5_continuity_preview',
+    true,
   );
   const [fieldGuideCacheConfirming, setFieldGuideCacheConfirming] = useState(false);
   const [fieldGuideCacheClearing, setFieldGuideCacheClearing] = useState(false);
@@ -261,16 +265,6 @@ export default function Settings() {
     getProtectionState().then(setStorageProtection);
     getLatestIntegrityAuditSummary().then(setIntegritySummary).catch(() => setIntegritySummary(null));
 
-    // Fetch community install count — non-critical, abort after 5s
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    fetch("https://findspot-counter.trials-uk.workers.dev/count", { signal: controller.signal })
-      .then(res => res.json())
-      .then(data => {
-        clearTimeout(timeoutId);
-        if (typeof data.count === 'number') setInstallCount(data.count);
-      })
-      .catch(() => clearTimeout(timeoutId));
     getSetting("detectorist", "").then(setDetectorist);
     getSetting("recorderName", "").then(setRecorderName);
     getSetting("detectoristEmail", "").then(setEmail);
@@ -1214,7 +1208,7 @@ export default function Settings() {
         <>
         <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            App Appearance
+            Appearance
           </h2>
           <div className="flex justify-between items-center py-2">
             <div>
@@ -1256,6 +1250,49 @@ export default function Settings() {
                   {style === 'streets' ? 'Streets' : 'Satellite'}
                 </button>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <h2 className="text-xl font-bold mb-1">Features</h2>
+          <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">Choose optional interface and Field Guide features.</p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-medium text-gray-800 dark:text-gray-100">Show return reminders</div>
+                <div className="text-sm text-gray-500">Explain a suggested return using recent open signals you recorded.</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={v5ContinuityEnabled}
+                onClick={() => setV5ContinuityEnabled(current => !current)}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${v5ContinuityEnabled ? 'bg-teal-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${v5ContinuityEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                <span className="sr-only">Show return reminders</span>
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="font-medium text-gray-800 dark:text-gray-100">BGS Geology Context</div>
+                <div className="text-sm text-gray-500">Use an optional public BGS geology lookup for the current Field Guide map area.</div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={geologyEnabled}
+                onClick={async () => {
+                  const next = !geologyEnabled;
+                  setGeologyEnabled(next);
+                  await setSetting("fs_geology_enabled", next);
+                }}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${geologyEnabled ? 'bg-emerald-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${geologyEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                <span className="sr-only">Use BGS Geology Context</span>
+              </button>
             </div>
           </div>
         </section>
@@ -1336,35 +1373,12 @@ export default function Settings() {
 	            Field Guide may request public map and heritage datasets for the area being viewed. These requests do not include your finds, permissions, sessions, notes or photos.
 	          </p>
 
-          <div className="flex justify-between items-start py-3 border-t border-gray-100 dark:border-gray-700">
-            <div className="flex-1 pr-4">
-	              <div className="font-medium text-gray-800 dark:text-gray-100 text-sm">BGS Geology Context</div>
-	              <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-	                Optional public BGS geology lookup for the current map area. Personal FindSpot records are never sent.
-	              </div>
-            </div>
-            <button
-              onClick={async () => {
-                const next = !geologyEnabled;
-                setGeologyEnabled(next);
-                await setSetting("fs_geology_enabled", next);
-              }}
-              className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm border transition-colors ${
-                geologyEnabled
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-400'
-                  : 'bg-gray-100 border-gray-200 text-gray-500 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-500'
-              }`}
-            >
-	              {geologyEnabled ? 'On' : 'Off'}
-	            </button>
-	          </div>
-
           <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
             <div className="space-y-2 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
               <p>{BGS_ATTRIBUTION} BGS data is used under the Open Government Licence.</p>
               <p>Scheduled Monument and AIM data are provided through public Historic England map services. Welsh Scheduled Ancient Monument data is provided by The Welsh Historic Environment Service (Cadw) under the Open Government Licence v3.0. Contains Historic Environment Scotland and OS data © Historic Environment Scotland and Crown Copyright and [database right] 2026, licensed under the Open Government Licence v3.0.</p>
               <p>Contains Portable Antiquities Scheme public data from finds.org.uk, used under CC-BY attribution terms. PAS density is aggregated to H3 landscape cells and reflects recording activity, not a complete archaeological inventory.</p>
-              <p>Digital Britannia © Mike Haken 2026, Roman Roads Research Association (RRRA). Licensed CC BY-NC 4.0. Not for use in fee-charging applications without prior written consent.</p>
+              <p>{ROMAN_ROADS_ATTRIBUTION} Not for use in fee-charging applications without prior written consent.</p>
               <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
               <p>Wales LiDAR data © Crown copyright, Natural Resources Wales / Welsh Government. Licensed under the Open Government Licence v3.0. Source: DataMapWales (datamap.gov.wales).</p>
               <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>
@@ -1448,18 +1462,9 @@ export default function Settings() {
                 }
               }}
             >
-              Version&nbsp;&nbsp;{__APP_VERSION__}
+              Version&nbsp;&nbsp;{__APP_VERSION__.replace(/^([0-9]+\.[0-9]+)\.0$/, 'V$1')}
             </button>
-            {easterEggUnlocked ? (
-              typeof installCount === 'number' && (
-                <div className="flex items-center gap-1 opacity-80">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-400">#</span>
-                  <span className="text-[9px] font-black text-emerald-900 dark:text-emerald-200 tabular-nums">{installCount.toLocaleString()}</span>
-                </div>
-              )
-            ) : (
-              <span className="text-[9px] font-black text-emerald-800 dark:text-emerald-300 opacity-60">Trusted by 7,000+ detectorists</span>
-            )}
+            <span className="text-[9px] font-black text-emerald-800 dark:text-emerald-300 opacity-60">Trusted by +10,000 Detectorists</span>
           </div>
         </div>
         </>

@@ -608,7 +608,7 @@ export default function OnboardingFlow() {
                                     <span className="text-base mt-0.5">📊</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Coverage &amp; sessions</p>
-                                        <p className="text-2xs text-white/45 leading-snug">Each visit is logged as a session. Over time you can see what ground you've covered and what's still undetected.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Each visit opens a focused Map, Record, Session and Guide workspace. Over time you can see what ground you've covered and what's still undetected.</p>
                                     </div>
                                 </div>
                             </div>

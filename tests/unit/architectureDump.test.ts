@@ -31,6 +31,7 @@ describe('architecture dump coverage', () => {
 
     expect(files).toContain('scripts/dumpArchitecture.mjs');
     expect(files).toContain('docs/adr/0001-local-only-data-model.md');
+    expect(files).toContain('docs/adr/0002-retire-classic-active-session.md');
     expect(files).toContain('.github/workflows/deploy.yml');
     expect(files).toContain('src/vite-env.d.ts');
     expect(files).toContain('workers/geocode-proxy/wrangler.toml');

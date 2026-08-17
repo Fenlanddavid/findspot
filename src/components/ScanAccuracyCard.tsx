@@ -70,11 +70,13 @@ export function ScanAccuracyCard({ permissionId }: { permissionId: string }) {
     : "text-gray-400 dark:text-gray-500";
 
   return (
-    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
-      <div className="text-3xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">
-        Scan Accuracy
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+    <details className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3.5 [&::-webkit-details-marker]:hidden sm:px-6">
+        <span><span className="block text-xs font-black text-gray-800 dark:text-gray-100">Field Guide performance</span><span className="mt-0.5 block text-2xs text-gray-400">Scan accuracy and evidence</span></span>
+        <span className="flex shrink-0 items-center gap-2"><span className={`text-xs font-bold ${calibrationColor}`}>{calibrationLabel}</span><span className="text-base text-gray-400 transition-transform group-open:rotate-180">⌄</span></span>
+      </summary>
+      <div className="border-t border-gray-100 px-5 pb-5 pt-4 dark:border-gray-700 sm:px-6 sm:pb-6">
+      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
         How FieldGuide predictions compared against your actual finds on this permission.
       </p>
 
@@ -153,6 +155,7 @@ export function ScanAccuracyCard({ permissionId }: { permissionId: string }) {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </details>
   );
 }

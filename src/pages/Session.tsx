@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
-import { computeSessionOutcomeResult, SessionOutcomeResult } from "../engines/session/sessionOutcomeEngine";
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Permission, Session, Find, Media } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
@@ -11,8 +11,6 @@ import { FindModal } from "../components/FindModal";
 import FieldReportModal from "../components/FieldReportModal";
 import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording } from "../services/tracking";
-import { calculateCoverage } from "../services/coverage";
-import { Modal } from "../components/Modal";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
 import { TrackingOverlay } from "../components/TrackingOverlay";
@@ -20,18 +18,18 @@ import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { LandownerUpdateCard } from "../components/LandownerUpdateCard";
 import { shareElementAsImage } from "../services/share";
-import { CoachTip, CoachTips } from "../components/CoachTips";
 import { getNotableFindScore } from "../components/ReportChrome";
 import type { WorkflowState } from "../types/significantFind";
 import { area as turfArea } from "@turf/turf";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useDurableSetting } from '../services/clientStorage';
+import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
-import { useSessionMap } from '../hooks/useSessionMap';
+import { useSessionMap, type SessionMapMarker } from '../hooks/useSessionMap';
 import { useReportedCoverageGeometries } from '../hooks/useReportedCoverageGeometries';
 import {
+  appendSessionNote,
   createSessionRecord,
   deleteSessionCascade,
   finishSessionRecord,
@@ -46,190 +44,21 @@ import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands
 import { companionControlHref, isAndroidUserAgent } from '../services/companionLaunch';
 import { SessionCoverageReview } from '../components/coverage/SessionCoverageReview';
 import { RecordSurfaceFindButton } from '../components/surfaceScatter/ObservedByYouBlock';
-
+import { createSavedPoint } from '../services/fieldGuideMutations';
+import { sessionStartedAt } from '../services/session/activeSessionContext';
+import { getSessionReview } from '../services/session/sessionReview';
+import { ActiveSessionWorkspace, type ActiveWorkspaceTab } from '../components/session/ActiveSessionWorkspace';
+import { SessionMapLayerPicker } from '../components/session/SessionMapLayerPicker';
+import { getPermissionScanTarget } from '../outstandingQuestions/permissionScanTarget';
+import { SessionReviewModal } from '../components/session/SessionReviewModal';
+import { SessionQuickFindSheet } from '../components/session/SessionQuickFindSheet';
+import { SessionSavedPointSheet } from '../components/session/SessionSavedPointSheet';
+import type { FieldLocation } from '../services/session/sessionFieldPosition';
+import type { SessionActivityItem } from '../services/session/sessionActivity';
+import { useActiveSessionFieldContext } from '../hooks/useActiveSessionFieldContext';
+import { buildActiveSessionGuideHref } from '../services/session/activeSessionGuideRoute';
+import { NewSessionStartCard } from '../components/session/NewSessionStartCard';
 const FIRST_SESSION_KEY = "fs_first_session";
-const SESSION_HELPERS_SEEN_KEY = "fs_session_helpers_seen";
-
-function SessionSummary({
-  sessionId,
-  coverage,
-  findsCount,
-  pendingCount,
-  durationMins,
-  totalTime,
-  permissionId,
-  sharedPermissionId,
-  isClubDayMember,
-  outcomeResult,
-  onClose,
-  onFieldReport,
-  onLandownerReport,
-  onShareLandownerUpdate,
-  isSharingLandowner,
-  landownerShareError,
-  onExportClubDay,
-  openSignalCount,
-}: {
-  sessionId: string,
-  coverage: number,
-  findsCount: number,
-  pendingCount: number,
-  durationMins: number | null,
-  totalTime: string | null,
-  permissionId: string | null,
-  sharedPermissionId: string | undefined,
-  isClubDayMember: boolean,
-  outcomeResult: SessionOutcomeResult | null,
-  onClose: () => void,
-  onFieldReport: () => void,
-  onLandownerReport: (forField: boolean) => void,
-  onShareLandownerUpdate: () => void,
-  isSharingLandowner: boolean,
-  landownerShareError: string | null,
-  onExportClubDay: () => void,
-  openSignalCount: number,
-}) {
-  // Fourth stat: % detected if tracked, finds/hr if untracked + duration, else win phrase
-  let fourthStat: { label: string; value: string } | null = null;
-  if (coverage > 0) {
-    fourthStat = { label: "Field Detected", value: `${Math.round(coverage)}%` };
-  } else if (durationMins && durationMins > 0 && findsCount > 0) {
-    const rate = (findsCount / durationMins) * 60;
-    fourthStat = { label: "Find Rate", value: `${rate.toFixed(1)}/hr` };
-  } else if (findsCount >= 5) {
-    fourthStat = { label: "Result", value: "Cracking!" };
-  } else if (findsCount > 0) {
-    fourthStat = { label: "Result", value: "Good hunt" };
-  }
-
-  const outcomeColours = {
-    emerald: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-800', label: 'text-emerald-700 dark:text-emerald-300', sub: 'text-emerald-600 dark:text-emerald-400' },
-    amber:   { bg: 'bg-amber-50 dark:bg-amber-950/30',   border: 'border-amber-200 dark:border-amber-800',   label: 'text-amber-700 dark:text-amber-300',   sub: 'text-amber-600 dark:text-amber-400' },
-    gray:    { bg: 'bg-gray-50 dark:bg-gray-900/30',     border: 'border-gray-200 dark:border-gray-700',     label: 'text-gray-700 dark:text-gray-300',     sub: 'text-gray-500 dark:text-gray-400' },
-  };
-
-  return (
-      <Modal title="Session Complete" onClose={onClose}>
-          <div className="flex flex-col gap-5 py-2">
-              <SessionCoverageReview sessionId={sessionId} initiallyOpen />
-
-              {/* Phase 2 — Session Outcome card */}
-              {outcomeResult && (
-                <div className={`rounded-2xl border p-4 ${outcomeColours[outcomeResult.outcome.colour].bg} ${outcomeColours[outcomeResult.outcome.colour].border}`}>
-                  <p className={`text-xs font-black uppercase tracking-widest opacity-50 mb-1`}>Session result</p>
-                  <p className={`text-lg font-black leading-tight mb-1 ${outcomeColours[outcomeResult.outcome.colour].label}`}>{outcomeResult.outcome.label}</p>
-                  <p className={`text-xs font-bold leading-snug ${outcomeColours[outcomeResult.outcome.colour].sub}`}>{outcomeResult.outcome.subtitle}</p>
-                  {outcomeResult.spread && outcomeResult.spread !== null && (
-                    <p className="text-2xs font-black uppercase tracking-widest opacity-60 mt-2">
-                      Spread: {outcomeResult.spread === 'clustered' ? 'Finds clustered' : outcomeResult.spread === 'linear' ? 'Linear pattern' : 'Spread across field'}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Stats grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                      <span className="text-2xs font-black uppercase tracking-widest opacity-60">Finds</span>
-                      <span className="text-sm font-black text-emerald-600">{findsCount}</span>
-                  </div>
-                  {totalTime && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                        <span className="text-2xs font-black uppercase tracking-widest opacity-60">Duration</span>
-                        <span className="text-sm font-black text-emerald-600">{totalTime}</span>
-                    </div>
-                  )}
-                  {fourthStat && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-xl border border-gray-100 dark:border-gray-800 text-center flex flex-col gap-1">
-                        <span className="text-2xs font-black uppercase tracking-widest opacity-60">{fourthStat.label}</span>
-                        <span className="text-sm font-black text-emerald-600">{fourthStat.value}</span>
-                    </div>
-                  )}
-              </div>
-
-              {/* Phase 3 — Next Move */}
-              {outcomeResult?.nextMove && (
-                <div className="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30 rounded-2xl p-4">
-                  <p className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Next move</p>
-                  <p className="text-sm font-black text-gray-800 dark:text-gray-100 mb-1">{outcomeResult.nextMove.action}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 leading-snug">{outcomeResult.nextMove.reason}</p>
-                </div>
-              )}
-
-              {openSignalCount > 0 && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true" className="text-sky-500 shrink-0">
-                    <circle cx="8" cy="12" r="1.5" fill="currentColor" />
-                    <path d="M4.5 8.5 A5 5 0 0 1 11.5 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                    <path d="M1.5 5.5 A9 9 0 0 1 14.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    {openSignalCount} {openSignalCount === 1 ? 'signal' : 'signals'} left for revisit
-                  </span>
-                </div>
-              )}
-
-              {permissionId && isClubDayMember && sharedPermissionId && (
-                <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-4 flex flex-col gap-3">
-                    <div>
-                        <p className="text-2xs font-black uppercase tracking-widest opacity-60 mb-1">Club / Rally</p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                            {pendingCount > 0
-                                ? `You have ${pendingCount} pending ${pendingCount === 1 ? 'find' : 'finds'}. Finish those before sending your data to the organiser.`
-                                : "Send your sessions and finds to the organiser."}
-                        </p>
-                    </div>
-                    <button
-                        onClick={onExportClubDay}
-                        className="w-full bg-amber-500 hover:bg-amber-400 text-white font-black py-2 rounded-xl transition-all uppercase tracking-widest text-2xs"
-                    >
-                        Send to Organiser
-                    </button>
-                </div>
-              )}
-              {permissionId && !isClubDayMember && (
-                <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 flex flex-col gap-3">
-                    <p className="text-2xs font-black uppercase tracking-widest opacity-60">Landowner Report</p>
-                    <button
-                        onClick={onShareLandownerUpdate}
-                        disabled={isSharingLandowner}
-                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-2xs flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        {isSharingLandowner ? 'Preparing…' : 'Share with Landowner'}
-                    </button>
-                    {landownerShareError && (
-                        <p className="text-xs font-semibold text-red-600 dark:text-red-400 leading-snug">
-                            {landownerShareError}
-                        </p>
-                    )}
-                    <button
-                        onClick={() => onLandownerReport(false)}
-                        className="w-full border border-emerald-600 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-black py-2.5 rounded-xl transition-all uppercase tracking-widest text-2xs"
-                    >
-                        Full Report (PDF)
-                    </button>
-                </div>
-              )}
-
-              {!isClubDayMember && (
-                <button
-                    onClick={onFieldReport}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg shadow-emerald-600/20 transition-all uppercase tracking-widest text-2xs flex items-center justify-center gap-2"
-                >
-                    Generate Field Report
-                </button>
-              )}
-              <button
-                  onClick={onClose}
-                  className="w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-black py-3 rounded-xl transition-all uppercase tracking-widest text-2xs"
-              >
-                  Close & Finish
-              </button>
-          </div>
-      </Modal>
-  );
-}
-
 function formatDeleteCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -250,6 +79,7 @@ export default function SessionPage(props: {
   const [searchParams] = useSearchParams();
   const permissionId = searchParams.get("permissionId");
   const urlFieldId = searchParams.get("fieldId");
+  const finishRequested = searchParams.get("finish") === "1";
   const nav = useNavigate();
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   
@@ -290,9 +120,17 @@ export default function SessionPage(props: {
   );
   const isCompanionTracking = companionActiveSessionId === sessionId;
   const isOtherCompanionTracking = companionActiveSessionId !== '' && !isCompanionTracking;
-  const [sessionCoachActive, setSessionCoachActive] = useState(false);
-  const [sessionCoachStep, setSessionCoachStep] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [workspaceTab, setWorkspaceTabState] = useState<ActiveWorkspaceTab>(() => {
+    const saved = ephemeralSession.get(`fs_v5_workspace_tab:${sessionId}`);
+    return saved === 'map' || saved === 'session' ? saved : 'record';
+  });
+  const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [showWorkspaceQuickFind, setShowWorkspaceQuickFind] = useState(false);
+  const [showSavedPointSheet, setShowSavedPointSheet] = useState(false);
+  const [savedPointDefaultLabel, setSavedPointDefaultLabel] = useState<string | undefined>();
+  const [workspaceGpsLocation, setWorkspaceGpsLocation] = useState<FieldLocation | null>(null);
+  const finishRequestHandledRef = useRef(false);
 
   const [trimStartMins, setTrimStartMins] = useState(0);
   const [trimEndMins, setTrimEndMins] = useState(0);
@@ -317,6 +155,11 @@ export default function SessionPage(props: {
   const [keyNotes, setKeyNotes] = useState<string[]>([]);
   const isActiveSessionMode = isEdit && !isEditing && !isFinished;
 
+  function setWorkspaceTab(tab: ActiveWorkspaceTab) {
+    ephemeralSession.set(`fs_v5_workspace_tab:${sessionId}`, tab);
+    setWorkspaceTabState(tab);
+  }
+
   useLayoutEffect(() => {
     if (isActiveSessionMode) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [isActiveSessionMode, sessionId]);
@@ -324,6 +167,9 @@ export default function SessionPage(props: {
   const { permission, fields, selectedField, session, finds, allMedia, tracks } = useSessionData({
     sessionId, permissionId, fieldId,
   });
+  useEffect(() => {
+    if (!isEdit && !fieldId && fields?.length === 1) setFieldId(fields[0].id);
+  }, [fieldId, fields, isEdit]);
   const reportedCoverage = useReportedCoverageGeometries(
     permission?.id ?? permissionId ?? undefined,
     sessionId,
@@ -339,7 +185,7 @@ export default function SessionPage(props: {
     showTrackingOverlay, setShowTrackingOverlay,
     showCoverage, setShowCoverage,
     coverageResult, coverageError,
-    activeDistanceKm, activeCoverage,
+    activeDistanceKm, activeCoverage, trackingStatus,
   } = useSessionTracking(
     sessionId,
     selectedField?.boundary || permission?.boundary,
@@ -435,14 +281,54 @@ export default function SessionPage(props: {
     }
     return info;
   }, [allMedia, finds]);
-  const mapDivRef = useSessionMap({
+  const activeBoundary = selectedField?.boundary || permission?.boundary;
+  const activeFieldContext = useActiveSessionFieldContext({
+    projectId: props.projectId, sessionId, finds, tracks,
+    trackingPoint: trackingStatus.lastAcceptedPoint, trackFallbackEnabled: isCompanionTracking,
+    manualLocation: workspaceGpsLocation, boundary: activeBoundary,
+  });
+  const {
+    signals: activeSignals, observations: activeObservations, savedPoints: activeSavedPoints,
+    liveLocation, markers: sessionMapMarkers, startPoint, startPointDistanceText,
+    recentActivity: workspaceRecentActivity, findActivity: workspaceFindActivity, boundaryStatus,
+    openSignalCount: activeOpenSignalCount, observationCount: activeObservationCount,
+  } = activeFieldContext;
+  const sessionMapCenter = useMemo(
+    () => lat != null && lon != null ? { lat, lon } : null,
+    [lat, lon],
+  );
+  const {
+    mapDivRef,
+    layerControl: sessionMapLayerControl,
+  } = useSessionMap({
+    enabled: !isActiveSessionMode || workspaceTab === 'map',
+    center: sessionMapCenter,
+    markers: sessionMapMarkers,
+    liveLocation,
     boundary: selectedField?.boundary || permission?.boundary,
     tracks,
     isTracking,
     isFinished,
     showCoverage,
     coverageResult,
+    onMarkerSelect: openWorkspaceMapMarker,
   });
+
+  useEffect(() => {
+    if (!isActiveSessionMode || workspaceTab !== 'map' || isTracking || isCompanionTracking) return;
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      position => setWorkspaceGpsLocation({
+        lat: position.coords.latitude,
+        lon: position.coords.longitude,
+        accuracyM: position.coords.accuracy,
+        headingDegrees: position.coords.heading,
+      }),
+      () => undefined,
+      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isActiveSessionMode, isCompanionTracking, isTracking, workspaceTab]);
 
   useEffect(() => {
     if (sessionId) {
@@ -557,8 +443,8 @@ export default function SessionPage(props: {
     setSaving(true);
     setError(null);
     try {
-      const isoDate = new Date(date).toISOString();
       const now = new Date().toISOString();
+      const isoDate = isEdit ? new Date(date).toISOString() : now;
 
       let resolvedPermissionId: string;
       if (isEdit) {
@@ -607,6 +493,8 @@ export default function SessionPage(props: {
         permissionId: resolvedPermissionId,
         ...clubDayAttribution,
         ...sessionFields,
+        sessionStartedAt: now,
+        activatedAt: now,
         createdAt: now,
       };
 
@@ -641,7 +529,12 @@ export default function SessionPage(props: {
         try {
             await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
             setIsTracking(true);
-            setShowTrackingOverlay(true);
+            if (isActiveSessionMode) {
+              setWorkspaceNotice('Trail recording started');
+              window.setTimeout(() => setWorkspaceNotice(null), 3000);
+            } else {
+              setShowTrackingOverlay(true);
+            }
 
             // Record start time if not already set
             const s = await pagePersistence.sessions.get(sessionId);
@@ -671,14 +564,17 @@ export default function SessionPage(props: {
     const now = new Date();
     const endTimeIso = now.toISOString();
 
-    // Calculate final stats for summary
-    const boundary = selectedField?.boundary || permission?.boundary;
-    let finalCoverage = 0;
-    if (boundary && tracks && tracks.length > 0) {
-        const result = calculateCoverage(boundary, tracks);
-        if (result) finalCoverage = result.percentCovered;
+    // Completion is the authoritative write. Everything below is derived and
+    // must be allowed to fail without leaving the visit open or blocking exit.
+    try {
+        await finishSessionRecord(sessionId, endTimeIso);
+        setIsFinished(true);
+    } catch (e: any) {
+        setError("Could not finish session: " + (e?.message ?? "Unknown error"));
+        setIsTracking(isTrackingActiveForSession(sessionId));
+        return;
     }
-    
+
     const count = await pagePersistence.finds.where("sessionId").equals(sessionId).count();
 
     // Session time starts when the session record was created. Tracking may
@@ -686,12 +582,7 @@ export default function SessionPage(props: {
     let durationStr: string | null = null;
     let durationMins: number | null = null;
     const s = await pagePersistence.sessions.get(sessionId);
-    const startT = [s?.createdAt, s?.startTime, s?.date]
-      .reduce<number | null>((resolved, candidate) => {
-        if (resolved !== null || !candidate) return resolved;
-        const parsed = Date.parse(candidate);
-        return Number.isFinite(parsed) ? parsed : null;
-      }, null);
+    const startT = s ? sessionStartedAt(s) : null;
 
     if (startT) {
         const ms = now.getTime() - startT;
@@ -717,59 +608,61 @@ export default function SessionPage(props: {
         }
     }
 
-    // Phase 2+3 — compute outcome + next move
-    const sessionFinds = await pagePersistence.finds.where("sessionId").equals(sessionId).toArray();
-    const findPoints = sessionFinds
-        .filter(f => f.lat !== null && f.lon !== null)
-        .map(f => ({ lat: f.lat!, lon: f.lon! }));
-
-    let prevSessionSummaries: { findsCount: number }[] = [];
-    const currentSession = await pagePersistence.sessions.get(sessionId);
-    const resolvedPermId = currentSession?.permissionId;
-    if (resolvedPermId) {
-        const prevSessions = await pagePersistence.sessions
-            .where("permissionId").equals(resolvedPermId)
-            .filter(s => s.id !== sessionId && !!s.isFinished)
-            .toArray();
-        prevSessionSummaries = await Promise.all(
-            prevSessions.map(async ps => ({
-                findsCount: await pagePersistence.finds.where("sessionId").equals(ps.id).count(),
-            }))
-        );
-    }
-
-    const outcomeResult = computeSessionOutcomeResult(count, finalCoverage, durationMins, findPoints, prevSessionSummaries);
-
     const openSignalCount = sessionId
         ? await pagePersistence.undugSignals.where('sessionId').equals(sessionId).filter(s => s.status === 'open').count()
         : 0;
+    const durableReview = await getSessionReview(sessionId).catch(() => null);
 
     setSummaryData({
-        coverage: finalCoverage,
         findsCount: count,
         durationMins,
         totalTime: durationStr,
-        outcomeResult,
         openSignalCount,
+        surfaceObservationCount: durableReview?.surfaceObservationCount ?? 0,
+        walkedDistanceMetres: durableReview?.walkedDistanceMetres ?? null,
     });
     setLandownerShareError(null);
-    
-    if (sessionId) {
-        try {
-            await finishSessionRecord(sessionId, endTimeIso);
-        } catch (e: any) {
-            setError("Could not finish session: " + (e?.message ?? "Unknown error"));
-            setIsTracking(isTrackingActiveForSession(sessionId));
-            return;
-        }
-        try {
-            await prepareSessionSearchedAreas(sessionId);
-        } catch {
-            setError("Session finished, but ground coverage could not be prepared.");
-        }
-        setIsFinished(true);
+    setShowSummary(true);
+    void prepareSessionSearchedAreas(sessionId).catch(() => {
+      setError("Session finished, but ground coverage could not be prepared.");
+    });
+  }
+  async function requestFinishSession() {
+    const confirmed = await confirmAction({
+      title: 'Finish this visit?',
+      message: `${activeFindCount} recorded find${activeFindCount === 1 ? '' : 's'}\n${activePendingCount} pending find${activePendingCount === 1 ? '' : 's'}\n${activeOpenSignalCount} open signal${activeOpenSignalCount === 1 ? '' : 's'}${isAnyTracking ? '\n\nTrail recording will stop.' : ''}`,
+      confirmLabel: 'Finish visit',
+      cancelLabel: 'Keep detecting',
+      danger: true,
+    });
+    if (confirmed) await finishSession();
+  }
+  useEffect(() => {
+    if (!finishRequested || finishRequestHandledRef.current || loading || !session || isFinished) return;
+    finishRequestHandledRef.current = true;
+    nav(`/session/${sessionId}`, { replace: true });
+    void requestFinishSession();
+  }, [finishRequested, loading, session?.id, isFinished]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function openDurableReview() {
+    const review = await getSessionReview(sessionId);
+    if (!review) {
+      setError('This session review could not be reconstructed.');
+      return;
     }
-
+    const minutes = review.durationMinutes;
+    const totalTime = minutes === null
+      ? null
+      : minutes >= 60
+        ? `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+        : `${minutes}m`;
+    setSummaryData({
+      findsCount: review.findsCount,
+      durationMins: minutes,
+      totalTime,
+      openSignalCount: review.openSignalCount,
+      surfaceObservationCount: review.surfaceObservationCount,
+      walkedDistanceMetres: review.walkedDistanceMetres,
+    });
     setShowSummary(true);
   }
 
@@ -794,17 +687,7 @@ export default function SessionPage(props: {
       setTrimming(false);
     }
   }
-
-  const activeStartedAt = [
-    session?.createdAt,
-    session?.startTime,
-    session?.date,
-    startTime,
-  ].reduce<number | null>((resolved, candidate) => {
-    if (resolved !== null || !candidate) return resolved;
-    const parsed = Date.parse(candidate);
-    return Number.isFinite(parsed) ? parsed : null;
-  }, null) ?? nowTick;
+  const activeStartedAt = session ? sessionStartedAt(session) : nowTick;
   const activeDurationText = formatElapsed(nowTick - activeStartedAt);
   const activeFindCount = finds?.filter(f => !f.isPending).length ?? 0;
   const activeHudFindCount = finds?.length ?? 0;
@@ -822,75 +705,156 @@ export default function SessionPage(props: {
     ? { id: sessionId, projectId: props.projectId, permissionId: permission.id, fieldId }
     : null;
   const getLatestTrackLocation = React.useCallback(() => {
-    const latest = (tracks || [])
-      .flatMap(track => track.points || [])
-      .filter(point => Number.isFinite(point.lat) && Number.isFinite(point.lon))
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .at(-1);
-    if (!latest) return null;
-    return {
-      lat: latest.lat,
-      lon: latest.lon,
-      gpsAccuracyM: latest.accuracy ?? null,
-    };
-  }, [tracks]);
+    return liveLocation ? { lat: liveLocation.lat, lon: liveLocation.lon, gpsAccuracyM: liveLocation.accuracyM } : null;
+  }, [liveLocation]);
+  async function saveWorkspacePoint(label: string, pointNote: string) {
+    const preferred = getLatestTrackLocation();
+    const location = preferred ?? await captureGPS();
+    const pointLat = preferred?.lat ?? location.lat;
+    const pointLon = preferred?.lon ?? location.lon;
+    await createSavedPoint({
+      id: crypto.randomUUID(), projectId: props.projectId, label, lat: pointLat, lon: pointLon, zoom: 17,
+      note: `Session ${sessionId}${pointNote ? ` · ${pointNote}` : ''}`, createdAt: new Date().toISOString(),
+    });
+    setWorkspaceNotice(`${label} saved`);
+    window.setTimeout(() => setWorkspaceNotice(null), 3000);
+  }
+  function openWorkspaceMapMarker(marker: SessionMapMarker) {
+    if (marker.kind === 'find') nav(`/find?quickId=${marker.id}`);
+    else if (marker.kind === 'signal') nav(`/finds-box?tab=signals&signal=${encodeURIComponent(marker.id)}`);
+    else if (marker.kind === 'observation' && permission) nav(`/permission/${permission.id}`);
+    else {
+      const point = activeSavedPoints.find(candidate => candidate.id === marker.id);
+      if (point) nav(`/fieldguide?sessionId=${sessionId}&savedPoints=1&lat=${point.lat}&lng=${point.lon}`);
+    }
+  }
+
+  function openWorkspaceActivity(item: SessionActivityItem) {
+    if (item.kind === 'find') nav(`/find?quickId=${item.id}`);
+    else if (item.kind === 'signal') nav(`/finds-box?tab=signals&signal=${encodeURIComponent(item.id)}`);
+    else if (item.kind === 'observation' && permission) nav(`/permission/${permission.id}`);
+    else {
+      const point = activeSavedPoints.find(candidate => candidate.id === item.id);
+      if (point) nav(`/fieldguide?sessionId=${sessionId}&savedPoints=1&lat=${point.lat}&lng=${point.lon}`);
+    }
+  }
+
+  async function addWorkspaceNote(noteText: string) {
+    const updated = await appendSessionNote(sessionId, noteText);
+    setNotes(updated);
+    setWorkspaceNotice('Session note added');
+    window.setTimeout(() => setWorkspaceNotice(null), 3000);
+  }
+
+  function openActiveSessionGuide() {
+    const permissionTarget = permission ? getPermissionScanTarget(permission) : null;
+    const target = permissionTarget ?? (lat != null && lon != null ? { lat, lon } : null);
+    nav(buildActiveSessionGuideHref({ sessionId, permissionId: permission?.id, fieldId: selectedField?.boundary ? selectedField.id : undefined, boundary: selectedField?.boundary ?? permission?.boundary, target }));
+  }
 
   if (loading) return <div className="p-10 text-center opacity-50 font-medium">Loading session...</div>;
 
-  const sessionCoachEnabled = !hasStartedSessionBefore && !isEdit && isEditing;
-  const sessionCoachTips: CoachTip[] = [
-    {
-      title: "Session basics",
-      body: "The date is already set. Pick a field if you know it, or leave it as the whole permission.",
-      accent: "text-emerald-300",
-      border: "border-emerald-400/35",
-      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[136px] sm:bottom-auto sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
-    },
-    {
-      title: "Location and ground",
-      body: "GPS and ground condition help later reports, but they are optional when starting quickly.",
-      accent: "text-blue-300",
-      border: "border-blue-400/35",
-      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:top-[43%] sm:bottom-auto sm:left-6 sm:right-auto sm:max-w-[320px]",
-    },
-    {
-      title: "Start detecting",
-      body: "Start the session first. Trail tracking and find recording are available once it is saved.",
-      accent: "text-amber-300",
-      border: "border-amber-400/35",
-      position: "bottom-[calc(5.75rem+env(safe-area-inset-bottom))] left-4 right-4 sm:bottom-[92px] sm:left-1/2 sm:right-auto sm:w-[330px] sm:-translate-x-1/2",
-    },
-  ];
+  if (isActiveSessionMode) {
+    return (
+      <>
+        <ActiveSessionWorkspace
+          workspaceTab={workspaceTab}
+          onSelectTab={setWorkspaceTab}
+          mapDivRef={mapDivRef}
+          mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} />}
+          permissionName={permission?.name ?? 'Detecting session'}
+          fieldName={selectedField?.name}
+          durationText={activeDurationText}
+          startedAt={activeStartedAt}
+          findCount={activeFindCount}
+          pendingCount={activePendingCount}
+          observationCount={activeObservationCount ?? 0}
+          openSignalCount={activeOpenSignalCount ?? 0}
+          hasField={!!selectedField}
+          hasFieldNotes={!!selectedField?.notes}
+          landUse={landUse}
+          isStubble={isStubble}
+          hasBoundary={!!activeBoundary}
+          coveragePercent={activeCoveragePercent}
+          showCoverage={showCoverage}
+          coverageHasNoGaps={!!coverageResult && coverageResult.percentUndetected <= 1}
+          coverageError={coverageError}
+          distanceText={activeDistanceText}
+          isTracking={isTracking}
+          isCompanionTracking={isCompanionTracking}
+          hasRecordedTrail={!!tracks?.some(track => (track.points?.length ?? 0) > 0)}
+          isAndroid={isAndroid}
+          companionStateReady={companionStateReady}
+          isOtherCompanionTracking={isOtherCompanionTracking}
+          companionStartHref={companionStartHref}
+          companionStopHref={companionStopHref}
+          companionStopAndFinishHref={companionStopAndFinishHref}
+          trackingStatus={trackingStatus}
+          boundaryStatus={boundaryStatus}
+          startPointDistanceText={startPointDistanceText}
+          hasStartPoint={!!startPoint}
+          recentActivity={workspaceRecentActivity}
+          findActivity={workspaceFindActivity}
+          error={error}
+          notice={workspaceNotice}
+          recordSurfaceAction={<RecordSurfaceFindButton compact label="Surface observation" projectId={props.projectId} permissionId={permission?.id ?? null} sessionId={sessionId} getLocation={captureGPS} onRecorded={() => { setWorkspaceNotice('Surface observation saved'); navigator.vibrate?.(40); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} />}
+          onPermission={() => nav(permission ? `/permission/${permission.id}` : '/')}
+          onFinish={requestFinishSession}
+          onToggleTracking={toggleTracking}
+          onCompanionStart={() => setCompanionActiveSessionId(sessionId)}
+          onCompanionStop={() => setCompanionActiveSessionId('')}
+          onImportTrail={() => nav(`/companion-import?session=${sessionId}`)}
+          onLowDistraction={() => setShowTrackingOverlay(true)}
+          onQuickFind={() => setShowWorkspaceQuickFind(true)}
+          onSignal={() => setShowSignalSheet(true)}
+          onSavePoint={() => { setSavedPointDefaultLabel(undefined); setShowSavedPointSheet(true); }}
+          onMarkStartPoint={() => { setSavedPointDefaultLabel('Start point'); setShowSavedPointSheet(true); }}
+          onFieldNotes={() => setShowFieldNotes(true)}
+          onToggleStubble={() => void quickSetStubble(!isStubble)}
+          onToggleLandUse={condition => void quickSetLandUse(landUse === condition ? '' : condition)}
+          onToggleCoverage={() => {
+            setShowCoverage(current => !current);
+            if (!showCoverage) setWorkspaceTab('map');
+          }}
+          onActivity={openWorkspaceActivity}
+          onOpenObservations={() => permission && nav(`/permission/${permission.id}`)}
+          onOpenSignals={() => nav('/finds-box?tab=signals')}
+          onTrailDetails={() => setWorkspaceTab('record')}
+          onAddNote={addWorkspaceNote}
+          onSignificantFind={() => props.onSignificantFind?.({ permissionId: permission?.id ?? permissionId, sessionId, lat: liveLocation?.lat ?? lat, lon: liveLocation?.lon ?? lon, gpsAccuracyM: liveLocation?.accuracyM ?? acc })}
+          onPending={() => nav('/pending')}
+          onGuide={openActiveSessionGuide}
+        />
+        {showWorkspaceQuickFind && permission && <SessionQuickFindSheet projectId={props.projectId} permissionId={permission.id} sessionId={sessionId} fieldId={fieldId} permissionName={permission.name} getPreferredLocation={getLatestTrackLocation} onClose={() => setShowWorkspaceQuickFind(false)} onSaved={(_findId, pending) => { setShowWorkspaceQuickFind(false); setWorkspaceNotice(pending ? 'Find saved for later' : 'Find saved'); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onAddDetails={findId => nav(`/find?quickId=${findId}`)} />}
+        {showSavedPointSheet && <SessionSavedPointSheet defaultLabel={savedPointDefaultLabel} onClose={() => setShowSavedPointSheet(false)} onSave={saveWorkspacePoint} />}
+        {showSignalSheet && <UndugSignalSheet sessionId={sessionId} permissionId={permission?.id ?? permissionId} onSaved={(_signalId, openCount) => { setShowSignalSheet(false); setWorkspaceNotice(`Signal saved${openCount ? ` · ${openCount} open here` : ''}`); navigator.vibrate?.(40); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onClose={() => setShowSignalSheet(false)} />}
+        <TrackingOverlay
+          isVisible={showTrackingOverlay}
+          onClose={() => setShowTrackingOverlay(false)}
+          projectId={props.projectId}
+          sessionContext={fullscreenQuickFindSession}
+          stats={{ durationText: activeDurationText, findsCount: activeHudFindCount, distanceText: activeDistanceText, coveragePercent: null, hasBoundary: !!(selectedField?.boundary || permission?.boundary) }}
+          getPreferredLocation={getLatestTrackLocation}
+        />
+        {confirmDialog}
+      </>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-20 px-4">
-      <CoachTips
-        storageKey={SESSION_HELPERS_SEEN_KEY}
-        tips={sessionCoachTips}
-        enabled={sessionCoachEnabled}
-        forceShow={searchParams.get("tips") === "1"}
-        mobileInline
-        onDismiss={() => {
-          setSessionCoachActive(false);
-          setSessionCoachStep(0);
-        }}
-        onStepChange={(index) => {
-          setSessionCoachActive(true);
-          setSessionCoachStep(index);
-        }}
-      />
       {milestoneMsg && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-bold pointer-events-none whitespace-nowrap">
           {milestoneMsg}
         </div>
       )}
-      <div className={`grid ${isActiveSessionMode ? 'mt-2 gap-3' : 'mt-4 gap-8'}`}>
-        {!isActiveSessionMode && (
+      <div className="mt-4 grid gap-8">
+        {isEdit && (
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-wrap gap-3 items-center">
                   <>
                     <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
-                        {isEdit ? "Session Details" : "New Session"}
+                        Session Details
                     </h2>
                     {isEdit && !isEditing && (
                         <button
@@ -927,288 +891,11 @@ export default function SessionPage(props: {
           <SessionCoverageReview sessionId={sessionId} />
         )}
 
-        <div className={`grid grid-cols-1 lg:grid-cols-3 min-w-0 ${isActiveSessionMode ? 'gap-3' : 'gap-8'}`}>
-            <div className={`lg:col-span-2 min-w-0 overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm grid h-fit ${isActiveSessionMode ? 'gap-3 p-3' : 'gap-6 p-6'}`}>
+        <div className="grid min-w-0 grid-cols-1 gap-8 lg:grid-cols-3">
+            <div className={`${isEdit ? 'lg:col-span-2' : 'lg:col-span-3'} min-w-0 ${!isEdit ? '' : 'overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm'} grid h-fit ${isEdit ? 'gap-6 p-6' : ''}`}>
                 {!isEditing && (
-                  <div className={`flex flex-col ${isActiveSessionMode ? 'gap-3' : 'gap-6'}`}>
-                    {isActiveSessionMode ? (
-                      <>
-                        <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-white via-white to-emerald-50/70 shadow-md shadow-emerald-900/5 dark:border-emerald-900/70 dark:from-gray-900 dark:via-gray-900 dark:to-emerald-950/20">
-                          <div className="border-l-4 border-emerald-500 p-3 sm:p-4">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${isAnyTracking ? "animate-pulse bg-red-500 shadow-[0_0_0_4px_rgba(239,68,68,0.12)]" : "bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]"}`} />
-                                <span className="truncate text-2xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
-                                  {isAnyTracking ? "Tracking live" : "Session active"}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => nav(permission ? `/permission/${permission.id}` : "/")}
-                                className="shrink-0 rounded-lg px-2 py-1 text-2xs font-black text-gray-500 transition-colors hover:bg-white hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                              >
-                                ← Back
-                              </button>
-                            </div>
-
-                            <h3 className="mt-3 truncate text-xl font-black leading-none tracking-tight text-gray-950 dark:text-gray-50">
-                              {selectedField?.name || permission?.name || "Active Session"}
-                            </h3>
-                            {selectedField && (
-                              <p className="mt-1 truncate text-xs font-bold text-gray-500 dark:text-gray-400">{permission?.name}</p>
-                            )}
-
-                            <div className="mt-3 flex flex-wrap gap-1.5 text-2xs font-black text-gray-600 dark:text-gray-300">
-                              <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
-                                {activeDurationText} elapsed
-                              </span>
-                              <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
-                                {activeFindCount} {activeFindCount === 1 ? "find" : "finds"}
-                              </span>
-                              {activeDistanceText && (
-                                <span className="rounded-full border border-gray-200 bg-white/80 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900/70">
-                                  {activeDistanceText} walked
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={lat == null ? doGPS : undefined}
-                                className={`rounded-full border px-2.5 py-1 transition-colors ${lat != null && lon != null ? "border-emerald-200 bg-emerald-100/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" : "border-gray-200 bg-white/80 text-gray-500 hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900/70"}`}
-                              >
-                                {lat != null && lon != null ? "GPS saved" : "Set GPS"}
-                              </button>
-                            </div>
-
-                            <div className="mt-3 flex gap-2">
-                              {isTracking ? (
-                                <button
-                                  type="button"
-                                  onClick={toggleTracking}
-                                  className="flex-1 rounded-xl bg-red-600 px-3 py-2 text-xs font-black text-white shadow-md shadow-red-600/20 transition-all active:scale-[0.98]"
-                                >
-                                  Stop Tracking
-                                </button>
-                              ) : isAndroid && isCompanionTracking ? (
-                                <div className="flex flex-1 gap-2">
-                                  <a
-                                    href={companionStopHref}
-                                    onClick={() => setCompanionActiveSessionId('')}
-                                    className="flex-1 rounded-xl border border-red-300 bg-white/80 px-3 py-2 text-center text-xs font-black text-red-700 transition-all active:scale-[0.98] dark:border-red-800 dark:bg-gray-900/70 dark:text-red-300"
-                                  >
-                                    Stop Tracking
-                                  </a>
-                                  <a
-                                    href={companionStopAndFinishHref}
-                                    onClick={() => setCompanionActiveSessionId('')}
-                                    className="flex-1 rounded-xl bg-red-600 px-3 py-2 text-center text-xs font-black text-white shadow-md shadow-red-600/20 transition-all active:scale-[0.98]"
-                                  >
-                                    Stop &amp; Finish
-                                  </a>
-                                </div>
-                              ) : isAndroid ? (
-                                <a
-                                  href={!companionStateReady || isOtherCompanionTracking ? undefined : companionStartHref}
-                                  onClick={() => {
-                                    if (companionStateReady && !isOtherCompanionTracking) {
-                                      setCompanionActiveSessionId(sessionId);
-                                    }
-                                  }}
-                                  aria-disabled={!companionStateReady || isOtherCompanionTracking}
-                                  className={`flex-1 rounded-xl border px-3 py-2 text-center text-xs font-black transition-all active:scale-[0.98] ${!companionStateReady || isOtherCompanionTracking ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800' : 'border-emerald-200 bg-white/80 text-emerald-700 hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300'}`}
-                                >
-                                  {isOtherCompanionTracking ? 'Tracking another session' : 'Track Session'}
-                                </a>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={toggleTracking}
-                                  className="flex-1 rounded-xl border border-emerald-200 bg-white/80 px-3 py-2 text-center text-xs font-black text-emerald-700 transition-all hover:border-emerald-400 active:scale-[0.98] dark:border-emerald-800 dark:bg-gray-900/70 dark:text-emerald-300"
-                                >
-                                  Track Session
-                                </button>
-                              )}
-                              {!isAnyTracking && (
-                                <button
-                                  type="button"
-                                  onClick={() => nav(`/companion-import?session=${sessionId}`)}
-                                  className="rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-2xs font-black uppercase tracking-widest text-gray-600 dark:border-gray-700 dark:bg-gray-900/70 dark:text-gray-300"
-                                >
-                                  Import trail
-                                </button>
-                              )}
-                              {isTracking && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowTrackingOverlay(true)}
-                                  className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-2xs font-black uppercase tracking-widest text-white transition-all active:scale-[0.98]"
-                                >
-                                  Fullscreen
-                                </button>
-                              )}
-                            </div>
-
-                            {activePendingCount > 0 && (
-                              <button
-                                type="button"
-                                onClick={() => nav("/pending")}
-                                className="mt-2 w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-2xs font-black text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
-                              >
-                                {activePendingCount} pending find{activePendingCount === 1 ? "" : "s"} to finish
-                              </button>
-                            )}
-                            {isTracking && (
-                              <p className="mt-2 text-2xs font-bold text-amber-700 dark:text-amber-300">
-                                Keep the screen awake while browser tracking is active.
-                              </p>
-                            )}
-                            {isCompanionTracking && (
-                              <p className="mt-2 text-2xs font-bold text-emerald-700 dark:text-emerald-300">
-                                Companion keeps recording when FindSpot is hidden or the screen is locked. These controls remain here when you return.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => goSessionFind("quick")}
-                            aria-label="Add Find to Session"
-                            className="flex min-h-14 w-full items-center justify-center rounded-xl bg-emerald-600 px-3 py-3 text-center text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-500 active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-emerald-500/20"
-                          >
-                            <span className="text-sm font-black">Add Find</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowSignalSheet(true)}
-                            className="min-h-14 w-full rounded-xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs font-black text-sky-800 shadow-sm transition-all hover:border-sky-300 hover:bg-sky-100 active:scale-[0.98] dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-300"
-                          >
-                            Un-dug Signal
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => props.onSignificantFind?.({
-                              permissionId: permission?.id ?? permissionId,
-                              sessionId,
-                              lat,
-                              lon,
-                              gpsAccuracyM: acc,
-                            })}
-                            className="min-h-14 w-full rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-xs font-black text-red-700 shadow-sm transition-all hover:border-red-300 hover:bg-red-100 active:scale-[0.98] dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-300"
-                          >
-                            Significant Find
-                          </button>
-                          <button
-                            type="button"
-                            onClick={finishSession}
-                            className="min-h-14 w-full rounded-xl border border-gray-300 bg-gray-900 px-3 py-3 text-xs font-black text-white shadow-sm transition-all hover:bg-gray-800 active:scale-[0.98] dark:border-gray-600 dark:bg-gray-100 dark:text-gray-900"
-                          >
-                            Finish Session
-                          </button>
-                        </div>
-
-                        <div className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                          <RecordSurfaceFindButton
-                            compact
-                            projectId={props.projectId}
-                            permissionId={permission?.id ?? null}
-                            sessionId={sessionId}
-                            getLocation={captureGPS}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                            <div className="mb-3 flex items-center justify-between gap-3">
-                              <h4 className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Session Data</h4>
-                              {selectedField && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowFieldNotes(true)}
-                                  className={`text-2xs font-bold underline-offset-2 hover:underline transition-colors ${selectedField.notes ? "text-amber-700 dark:text-amber-300" : "text-gray-500 dark:text-gray-400 hover:text-amber-700 dark:hover:text-amber-300"}`}
-                                >
-                                  Notes
-                                </button>
-                              )}
-                            </div>
-                            <div className="divide-y divide-gray-100 text-xs dark:divide-gray-800">
-                              {selectedField && (
-                                <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
-                                  <span className="font-bold text-gray-400">Field</span>
-                                  <span className="truncate font-black text-gray-800 dark:text-gray-100">{selectedField.name}</span>
-                                </div>
-                              )}
-                              {activeAcres !== null && (
-                                <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
-                                  <span className="font-bold text-gray-400">Area</span>
-                                  <span className="font-black text-gray-800 dark:text-gray-100">{activeAcres.toFixed(1)} acres</span>
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
-                                <span className="font-bold text-gray-400">Rate</span>
-                                <span className="font-black text-gray-800 dark:text-gray-100">
-                                  {activeFindCount > 0 && (nowTick - activeStartedAt) > 60000
-                                    ? `${(activeFindCount / ((nowTick - activeStartedAt) / 3600000)).toFixed(1)}/hr`
-                                    : "--"}
-                                </span>
-                              </div>
-                              <div className="flex items-center justify-between gap-3 py-2 last:pb-0">
-                                <span className="font-bold text-gray-400">GPS</span>
-                                {lat != null && lon != null ? (
-                                  <span className="truncate font-mono text-2xs font-bold text-emerald-600">{lat.toFixed(5)}, {lon.toFixed(5)}</span>
-                                ) : (
-                                  <button type="button" onClick={doGPS} className="text-2xs font-black uppercase tracking-widest text-emerald-600 hover:underline">Get GPS</button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
-                              <div className="mb-2 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Ground</div>
-                              <div className="flex flex-wrap gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => quickSetStubble(!isStubble)}
-                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${isStubble ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-500 hover:border-amber-300 hover:text-amber-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-amber-700"}`}
-                              >
-                                Stubble
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => quickSetLandUse(landUse === "Ploughed" ? "" : "Ploughed")}
-                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${landUse === "Ploughed" ? "border-orange-300 bg-orange-100 text-orange-800" : "border-gray-200 bg-white text-gray-500 hover:border-orange-300 hover:text-orange-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-orange-700"}`}
-                              >
-                                Ploughed
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => quickSetLandUse(landUse === "Pasture" ? "" : "Pasture")}
-                                className={`rounded-lg border px-2 py-1 text-2xs font-bold transition-all ${landUse === "Pasture" ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-gray-200 bg-white text-gray-500 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:border-emerald-700"}`}
-                              >
-                                Pasture
-                              </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                            <h4 className="mb-3 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Tracking</h4>
-                            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-center dark:border-gray-800 dark:bg-gray-950/50">
-                              <div className="text-lg font-black text-gray-900 dark:text-gray-100">{activeCoveragePercent !== null ? `${Math.round(activeCoveragePercent)}%` : "--"}</div>
-                              <div className="text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Area covered</div>
-                            </div>
-                            {(selectedField?.boundary || permission?.boundary) && (
-                              <button
-                                type="button"
-                                onClick={() => setShowCoverage(!showCoverage)}
-                                className={`mt-3 w-full rounded-lg border px-3 py-2 text-2xs font-black uppercase tracking-widest transition-all ${showCoverage ? "border-orange-600 bg-orange-600 text-white" : "border-orange-200 bg-white text-orange-700 hover:border-orange-400 dark:border-orange-900 dark:bg-gray-950/50 dark:text-orange-400"}`}
-                              >
-                                {showCoverage ? (coverageResult && coverageResult.percentUndetected <= 1 ? "No Gaps" : "Gaps On") : "Show Gaps"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
+                  <div className="flex flex-col gap-6">
+                    <>
                         <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
                           <div className="min-w-0 flex-1">
                             <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">{permission?.name || "Unknown Location"}</p>
@@ -1227,6 +914,12 @@ export default function SessionPage(props: {
                               <span className="text-2xs font-black uppercase tracking-widest">Session Closed</span>
                                 </div>
                                 <div className="flex flex-col sm:flex-row gap-2">
+                                    <button
+                                        onClick={openDurableReview}
+                                        className="flex-1 bg-gray-900 hover:bg-gray-800 text-white px-3 py-2 rounded-lg text-2xs font-black uppercase tracking-widest transition-all dark:bg-gray-100 dark:text-gray-900"
+                                    >
+                                        View Review
+                                    </button>
                                     <button
                                         onClick={() => setShowFieldReport(true)}
                                         className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-2xs font-black uppercase tracking-widest transition-all"
@@ -1290,8 +983,7 @@ export default function SessionPage(props: {
                             </div>
                           </div>
                         </div>
-                      </>
-                    )}
+                    </>
 
                     {notes && (
                         <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
@@ -1302,9 +994,27 @@ export default function SessionPage(props: {
                   </div>
                 )}
 
-                {isEditing && (
+                {isEditing && !isEdit && (
+                  <NewSessionStartCard
+                    permissionName={permission?.name ?? 'Detecting permission'}
+                    fields={fields ?? []}
+                    fieldId={fieldId}
+                    landUse={landUse}
+                    isStubble={isStubble}
+                    notes={notes}
+                    saving={saving}
+                    onFieldChange={setFieldId}
+                    onLandUseChange={setLandUse}
+                    onStubbleChange={setIsStubble}
+                    onNotesChange={setNotes}
+                    onStart={() => void save()}
+                    onBack={() => nav(permission ? `/permission/${permission.id}` : '/')}
+                  />
+                )}
+
+                {isEditing && isEdit && (
                   <>
-                    <label className={`block rounded-2xl ${sessionCoachActive && sessionCoachStep === 0 ? "ring-4 ring-emerald-400/25" : ""}`}>
+                    <label className="block rounded-2xl">
                         <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Date & Time</div>
                         <input 
                             type="datetime-local" 
@@ -1314,7 +1024,7 @@ export default function SessionPage(props: {
                         />
                     </label>
 
-                    <label className={`block rounded-2xl ${sessionCoachActive && sessionCoachStep === 0 ? "ring-4 ring-emerald-400/25" : ""}`}>
+                    <label className="block rounded-2xl">
                       <div className="mb-2 text-sm font-bold text-gray-700 dark:text-gray-300">Field / Area</div>
                       <select 
                         value={fieldId ?? ""} 
@@ -1328,7 +1038,7 @@ export default function SessionPage(props: {
                       </select>
                     </label>
 
-                    <div className={`bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between ${sessionCoachActive && sessionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
+                    <div className="bg-emerald-50/50 dark:bg-emerald-900/20 p-5 rounded-2xl border-2 border-emerald-100/50 dark:border-emerald-800/30 flex flex-col sm:flex-row gap-4 items-center justify-between">
                         <div className="flex flex-col gap-1">
                             <div className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">GPS Location</div>
                             <div className="text-lg font-mono font-bold text-gray-800 dark:text-gray-100">
@@ -1347,7 +1057,7 @@ export default function SessionPage(props: {
                         </button>
                     </div>
 
-                    <div className={`flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 ${sessionCoachActive && sessionCoachStep === 1 ? "ring-4 ring-blue-400/25" : ""}`}>
+                    <div className="flex flex-wrap gap-4 items-center bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
                         <div className="flex flex-col gap-2">
                             <div className="text-xs font-black uppercase tracking-widest opacity-50">Ground Condition</div>
                             <div className="flex flex-wrap gap-2">
@@ -1459,8 +1169,8 @@ export default function SessionPage(props: {
                     </label>
 
                     <div className="flex gap-4">
-                        <button onClick={save} disabled={saving} className={`mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50 ${sessionCoachActive && sessionCoachStep === 2 ? "ring-4 ring-amber-300/40" : ""}`}>
-                            {saving ? "Saving..." : isEdit ? "Save Details" : "Start Session"}
+                        <button onClick={save} disabled={saving} className="mt-4 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-xl shadow-xl transition-all disabled:opacity-50">
+                            {saving ? "Saving..." : "Save Details"}
                         </button>
                         {isEdit && (
                             <button 
@@ -1585,7 +1295,7 @@ export default function SessionPage(props: {
                 )}
             </div>
 
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 h-fit">
+            {isEdit && <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 h-fit">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-sm font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 m-0">Session Finds</h3>
                     {(finds?.length ?? 0) > 0 && (
@@ -1593,14 +1303,7 @@ export default function SessionPage(props: {
                     )}
                 </div>
 
-                {!isEdit && (
-                    <div className="text-center py-8 text-sm text-gray-400 dark:text-gray-600 italic">
-                        Save this session first to record finds.
-                    </div>
-                )}
-
-                {isEdit && (
-                    <div className="grid gap-2">
+                <div className="grid gap-2">
                         {finds && finds.length > 0 ? (
                             <>
                                 {finds.map((s) => (
@@ -1611,25 +1314,13 @@ export default function SessionPage(props: {
                                         onOpen={() => setOpenFindId(s.id)}
                                     />
                                 ))}
-                                {!isActiveSessionMode && (
-                                    <button
-                                        onClick={() => goSessionFind("full")}
-                                        className={`mt-1 w-full ${isFinished ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all`}
-                                    >
-                                        Add Find {isFinished && <span className="opacity-60 font-normal normal-case tracking-normal">(closed session)</span>}
-                                    </button>
-                                )}
-                            </>
-                        ) : isActiveSessionMode ? (
-                            <div className="text-center py-8">
-                                <p className="text-sm text-gray-400 dark:text-gray-500 mb-3">No finds yet.</p>
                                 <button
                                     onClick={() => goSessionFind("full")}
-                                    className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                    className={`mt-1 w-full ${isFinished ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all`}
                                 >
-                                    + Add first find
+                                    Add Find {isFinished && <span className="opacity-60 font-normal normal-case tracking-normal">(closed session)</span>}
                                 </button>
-                            </div>
+                            </>
                         ) : (
                             <>
                                 <div className="text-center py-6 text-sm text-gray-400 dark:text-gray-600 italic">
@@ -1643,9 +1334,8 @@ export default function SessionPage(props: {
                                 </button>
                             </>
                         )}
-                    </div>
-                )}
-            </div>
+                </div>
+            </div>}
         </div>
       </div>
       {/* Off-screen landowner update card — always mounted so html2canvas can read it synchronously */}
@@ -1664,9 +1354,8 @@ export default function SessionPage(props: {
       )}
       {openFindId && <FindModal findId={openFindId} onClose={() => setOpenFindId(null)} />}
       {showSummary && (
-        <SessionSummary
+        <SessionReviewModal
           sessionId={sessionId}
-          coverage={summaryData.coverage}
           findsCount={summaryData.findsCount}
           pendingCount={finds?.filter(f => f.isPending).length ?? 0}
           durationMins={summaryData.durationMins}
@@ -1674,7 +1363,6 @@ export default function SessionPage(props: {
           permissionId={permission?.id ?? null}
           sharedPermissionId={permission?.sharedPermissionId}
           isClubDayMember={!!permission?.isClubDayMember}
-          outcomeResult={summaryData.outcomeResult}
           onClose={() => nav(permission ? `/permission/${permission.id}` : "/")}
           onFieldReport={() => { setShowSummary(false); setShowFieldReport(true); }}
           onLandownerReport={(forField) => {
@@ -1687,6 +1375,7 @@ export default function SessionPage(props: {
           landownerShareError={landownerShareError}
           onExportClubDay={() => { setShowSummary(false); setShowExportClubDay(true); }}
           openSignalCount={summaryData.openSignalCount}
+          walkedDistanceMetres={summaryData.walkedDistanceMetres}
         />
       )}
       {showFieldReport && (

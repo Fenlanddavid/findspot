@@ -55,10 +55,10 @@ function SessionsPanel({ isEdit, permissionId, sessions, nav }: {
     nav: ReturnType<typeof useNavigate>;
 }) {
     return (
-        <div className="bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-inner">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 m-0">Sessions / Visits</h3>
-                <div className="text-xs font-mono bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded font-bold">{sessions?.length ?? 0} total</div>
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 shadow-inner dark:border-gray-700 dark:bg-gray-900/30">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2"><h3 className="m-0 text-base font-bold text-gray-800 dark:text-gray-100">Sessions / Visits</h3><div className="rounded bg-gray-200 px-2 py-1 font-mono text-2xs font-bold dark:bg-gray-700">{sessions?.length ?? 0}</div></div>
+                {isEdit && <button onClick={() => nav(`/session/new?permissionId=${permissionId}`)} className="min-h-10 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition-colors hover:border-emerald-500 dark:border-emerald-800 dark:bg-gray-800 dark:text-emerald-300">+ Start visit</button>}
             </div>
 
             {!isEdit && (
@@ -69,13 +69,6 @@ function SessionsPanel({ isEdit, permissionId, sessions, nav }: {
 
             {isEdit && (
                 <div className="grid gap-3">
-                    <button
-                        onClick={() => nav(`/session/new?permissionId=${permissionId}`)}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold shadow-md transition-all flex items-center justify-center gap-2 mb-4"
-                    >
-                        + Start New Session (Visit)
-                    </button>
-
                     {sessions && sessions.length > 0 ? (
                         <div className={sessions.length > 4 ? 'max-h-[195px] overflow-y-auto' : ''}>
                             <div className="grid gap-3">

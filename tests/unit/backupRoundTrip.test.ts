@@ -46,6 +46,9 @@ describe('full backup IndexedDB boundary', () => {
     const source = new FindSpotDB(name);
     await source.open();
     await seedBackupFixture(source);
+    await source.settings.bulkPut([
+      { key: 'fs_v5_continuity_preview', value: false },
+    ]);
 
     const archive = await exportData({ includeMedia: true, database: source });
     source.close();
@@ -56,13 +59,13 @@ describe('full backup IndexedDB boundary', () => {
     const report = await importData(archive, { database: restored });
 
     for (const tableName of BACKED_UP_TABLE_NAMES) {
-      const expectedCount = tableName === 'settings' ? 2 : 1;
+      const expectedCount = tableName === 'settings' ? 3 : 1;
       expect(
         await restored.table(tableName).count(),
         `${tableName} restored count`,
       ).toBe(expectedCount);
       expect(report.tables[tableName]).toEqual({
-        imported: 1,
+        imported: tableName === 'settings' ? 2 : 1,
         skipped: 0,
         repaired: 0,
         damaged: 0,
@@ -70,7 +73,7 @@ describe('full backup IndexedDB boundary', () => {
     }
 
     expect(report.totals).toEqual({
-      imported: BACKED_UP_TABLE_NAMES.length,
+      imported: BACKED_UP_TABLE_NAMES.length + 1,
       skipped: 0,
       repaired: 0,
       damaged: 0,
@@ -84,6 +87,16 @@ describe('full backup IndexedDB boundary', () => {
       name: 'South Field',
       permissionGranted: true,
     }));
+    expect(await restored.sessions.get('session-1')).toEqual(expect.objectContaining({
+      sessionStartedAt: '2026-07-23T12:00:00.000Z',
+      activatedAt: '2026-07-23T12:00:00.000Z',
+    }));
+    expect(await restored.surfaceObservations.get('surface-1')).toEqual(expect.objectContaining({
+      captureFlowVersion: 1,
+    }));
+    expect(await restored.settings.get('fs_v5_continuity_preview')).toEqual({
+      key: 'fs_v5_continuity_preview', value: false,
+    });
 
     const restoredMedia = await restored.media.get('media-1');
     expect(restoredMedia?.blob).toBeInstanceOf(Blob);

@@ -281,6 +281,11 @@ export function validatePersistedBackupTables(
     if (!permissionIds.has(session.permissionId)) {
       throw new Error(`Invalid format: sessions[${index}] references an unknown permission`);
     }
+    for (const field of ['sessionStartedAt', 'activatedAt'] as const) {
+      if (session[field] !== undefined && !isIsoDateString(session[field])) {
+        throw new Error(`Invalid format: sessions[${index}] has an invalid ${field}`);
+      }
+    }
   });
   backup.finds.forEach((find, index) => {
     if (!permissionIds.has(find.permissionId)) {
@@ -344,6 +349,11 @@ export function validatePersistedBackupTables(
       'originSessionDate', 'originSessionStartTime', 'originSessionEndTime', 'captureCompletedAt',
     ] as const) {
       if (observation[field] !== undefined && !isIsoDateString(observation[field])) throw invalid(field);
+    }
+    if (observation.captureFlowVersion !== undefined
+        && (!Number.isInteger(observation.captureFlowVersion)
+          || (observation.captureFlowVersion as number) < 1)) {
+      throw invalid('captureFlowVersion');
     }
     if (!Array.isArray(observation.reassessments)) throw invalid('reassessments');
     observation.reassessments.forEach((value: unknown, reassessmentIndex: number) => {

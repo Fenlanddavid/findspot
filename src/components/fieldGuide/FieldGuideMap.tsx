@@ -19,7 +19,7 @@ import {
 import { useFieldGuideContext } from './FieldGuideContext';
 import {
     HOTSPOT_TITLES,
-    HISTORIC_LAYER_OPTIONS,
+    HISTORIC_LAYER_GROUPS,
     type OverlayOpacityKey,
 } from './FieldGuideContext';
 import { MobileBottomSheet } from './MobileBottomSheet';
@@ -205,6 +205,7 @@ export function FieldGuideMap() {
         setHelperActive,
         setHelperTipIndex,
         annotationMode,
+        embeddedSessionShell,
 
         // Bottom sheet condition
         isIntelOpen,
@@ -676,7 +677,7 @@ export function FieldGuideMap() {
             <CoachTips
                 storageKey={FIELDGUIDE_HELPERS_SEEN_KEY}
                 tips={helperTips}
-                enabled={!annotationMode}
+                enabled={!annotationMode && !embeddedSessionShell}
                 forceShow={searchParams.get('tips') === '1'}
                 onDismiss={() => { setHelperActive(false); setHelperTipIndex(0); }}
                 onStepChange={(index) => { setHelperActive(true); setHelperTipIndex(index); }}
@@ -1216,15 +1217,22 @@ export function FieldGuideMap() {
                                 </div>
 
                                 {intelLayersOpen && (
-                                    <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in duration-200">
-                                        {HISTORIC_LAYER_OPTIONS.map(({ key, label }) => (
-                                            <button key={key} onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
-                                                {key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'zoom-in'
-                                                    ? 'Roman Roads — zoom in to show'
-                                                    : key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'unavailable'
-                                                        ? 'Roman Roads — unavailable'
-                                                        : label}
-                                            </button>
+                                    <div className="mt-3 grid gap-3 animate-in fade-in duration-200">
+                                        {HISTORIC_LAYER_GROUPS.map(group => (
+                                            <div key={group.label}>
+                                                <p className="mb-1.5 text-[0.5625rem] font-black uppercase tracking-widest text-slate-500">{group.label}</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {group.options.map(({ key, label }) => (
+                                                        <button key={key} onClick={() => key === 'romanStandalone' ? handleRomanStandalonePress() : setHistoricLayerVisibility(p => ({ ...p, [key]: !p[key] }))} className={`px-3 py-1.5 rounded-xl border text-[0.625rem] font-black uppercase tracking-wider transition-all active:scale-95 ${historicLayerVisibility[key] ? 'bg-blue-500/20 border-blue-500/50 text-blue-300' : 'bg-white/5 border-white/10 text-slate-500'}`}>
+                                                            {key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'zoom-in'
+                                                                ? 'Roman Roads — zoom in to show'
+                                                                : key === 'romanStandalone' && historicLayerVisibility.romanStandalone && romanStandaloneStatus === 'unavailable'
+                                                                    ? 'Roman Roads — unavailable'
+                                                                    : label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 )}

@@ -769,9 +769,9 @@ export default function PermissionPage(props: {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
+                  {(!isEdit || isEditing || isRally) && <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {isEdit ? (isRally ? "Rally Details" : "Land/Permission Details") : (isRally ? "New Rally / Club Dig" : "New Permission")}
-                  </h2>
+                  </h2>}
                   {canManageClubDayPack && !showOrganiserHub && !isEditing && (
                     <button
                       onClick={() => setShowCreatePack(true)}
@@ -782,25 +782,18 @@ export default function PermissionPage(props: {
                   )}
                 </div>
                 {persona !== 'not_rally' && <RallyPersonaChip persona={persona} />}
-                {isEdit && !isEditing && !isClubDayMember && (
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors border-0 bg-transparent p-0 self-start"
-                  >
-                    Edit Details
-                  </button>
-                )}
             </div>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            <div className="flex w-full flex-wrap justify-end gap-2 sm:w-auto">
                 {isEdit && (
                     <>
-                        {/* Landowner report dropdown — individual permissions only */}
-                        <div className={`relative flex-1 sm:flex-none ${isRally ? 'hidden' : ''}`}>
+                        {/* Secondary permission tools stay out of the primary page hierarchy. */}
+                        {!isRally && !isClubDayMember && <div className="relative">
                             <button
                                 onClick={() => setReportDropdownOpen(v => !v)}
-                                className="w-full text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5"
+                                aria-expanded={reportDropdownOpen}
+                                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-xs font-black text-gray-600 shadow-sm transition-colors hover:border-emerald-400 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                             >
-                                Landowner Report
+                                Permission options
                                 <svg className={`w-3 h-3 shrink-0 transition-transform ${reportDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
                             </button>
                             {reportDropdownOpen && (
@@ -810,15 +803,17 @@ export default function PermissionPage(props: {
                                     className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden min-w-[220px]"
                                 >
                                     <div className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-700">
-                                        Landowner Report
+                                        Permission options
                                     </div>
+                                    <button onClick={() => { setIsEditing(true); setReportDropdownOpen(false); }} className="w-full px-4 py-3 text-left text-sm font-bold text-gray-700 transition-colors hover:bg-emerald-50 dark:text-gray-200 dark:hover:bg-emerald-900/20">Edit details</button>
+                                    <div className="border-t border-gray-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:border-gray-700 dark:text-gray-500">Report for the landowner</div>
                                     <button
                                         onClick={() => { setReportTarget(undefined); setReportDropdownOpen(false); }}
                                         className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors flex items-center gap-2"
                                     >
                                         <div>
-                                            <div>All Finds</div>
-                                            <div className="text-2xs font-normal text-gray-400">Entire permission</div>
+                                            <div>Whole permission report</div>
+                                            <div className="text-2xs font-normal text-gray-400">Promise it up front, then share it after visits</div>
                                         </div>
                                     </button>
                                     {fields && fields.length > 0 && (
@@ -837,10 +832,12 @@ export default function PermissionPage(props: {
                                             ))}
                                         </>
                                     )}
+                                    {isSharedPermission && <button onClick={() => { setReportDropdownOpen(false); void handleRevertToNormalPermission(); }} disabled={saving} className="w-full border-t border-gray-100 px-4 py-3 text-left text-sm font-semibold text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-900">Remove sharing</button>}
+                                    <button onClick={() => { setReportDropdownOpen(false); void handleDelete(); }} disabled={saving} className="w-full border-t border-gray-100 px-4 py-3 text-left text-sm font-bold text-red-500 hover:bg-red-50 dark:border-gray-700 dark:hover:bg-red-950/20">Delete permission</button>
                                 </div>
                                 </>
                             )}
-                        </div>
+                        </div>}
                         {/* Club Day buttons — shown for shared/club day permissions */}
                         {isClubDayMember && (
                           <button
@@ -867,16 +864,7 @@ export default function PermissionPage(props: {
                             Import Member Data
                           </button>
                         )}
-                        {isEdit && isSharedPermission && !isClubDayMember && !isRally && (
-                          <button
-                            onClick={handleRevertToNormalPermission}
-                            disabled={saving}
-                            className="text-xs sm:text-sm font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-3 py-1.5 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-600 transition-all disabled:opacity-50 flex-1 sm:flex-none"
-                          >
-                            Remove Sharing
-                          </button>
-                        )}
-                        {!isClubDayMember && (
+                        {!isClubDayMember && isRally && (
                         <button
                             onClick={handleDelete}
                             disabled={saving}
@@ -889,6 +877,18 @@ export default function PermissionPage(props: {
                 )}
             </div>
         </div>
+
+        {!isEdit && !isRally && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/25 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-emerald-900 dark:text-emerald-200">Still trying to get permission?</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-800/80 dark:text-emerald-300/80">Find the right person, make a respectful approach and take a copyable agreement template.</p>
+            </div>
+            <button type="button" onClick={() => nav('/land-access')} className="shrink-0 rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-xs font-black uppercase tracking-widest text-emerald-800 hover:border-emerald-500 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-200">
+              Land access guide
+            </button>
+          </div>
+        )}
 
         {error && (
             <div className="border-2 border-red-200 bg-red-50 text-red-800 p-4 rounded-xl shadow-sm animate-in fade-in slide-in-from-top-2 font-medium flex gap-3 items-center">
@@ -1212,7 +1212,7 @@ export default function PermissionPage(props: {
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                                     <polyline points="14 2 14 8 20 8" />
                                 </svg>
-                                Report
+                                Landowner report
                             </button>
                             <button
                                 type="button"
@@ -1372,9 +1372,16 @@ export default function PermissionPage(props: {
             {/* Offline Access card — regular permissions with a mapped boundary */}
             {isEdit && !isClubDayMember && !isEditing && !!boundary && (
                 <div className="lg:col-span-3">
-                    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 sm:p-6 shadow-sm">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Offline Access</div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Download terrain, historic data and scheduled monument layers so Field Guide works without a signal.</p>
+                    <details open={permPackStatus.kind === 'building' || permPackStatus.kind === 'error' ? true : undefined} className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                        <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3.5 [&::-webkit-details-marker]:hidden sm:px-6">
+                            <span><span className="block text-xs font-black text-gray-800 dark:text-gray-100">Offline access</span><span className="mt-0.5 block text-2xs text-gray-400">Field Guide data for use without signal</span></span>
+                            <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-gray-500 dark:text-gray-300">
+                                {permPackStatus.kind === 'checking' ? 'Checking…' : permPackStatus.kind === 'none' ? 'Not prepared' : permPackStatus.kind === 'building' ? `${permPackStatus.pct}%` : permPackStatus.kind === 'done' ? (permPackStatus.stale ? 'Needs updating' : `Ready · ${formatMB(permPackStatus.meta.sizeBytesApprox)}`) : 'Needs attention'}
+                                <span className="text-base text-gray-400 transition-transform group-open:rotate-180">⌄</span>
+                            </span>
+                        </summary>
+                        <div className="border-t border-gray-100 px-5 pb-5 pt-4 dark:border-gray-700 sm:px-6 sm:pb-6">
+                        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">Download terrain, historic data and scheduled monument layers so Field Guide works without a signal.</p>
 
                         {permPackStatus.kind === 'checking' && (
                             <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -1449,7 +1456,8 @@ export default function PermissionPage(props: {
                                 </button>
                             </div>
                         )}
-                    </div>
+                        </div>
+                    </details>
                 </div>
             )}
 

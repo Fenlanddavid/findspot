@@ -17,6 +17,7 @@ import {
 } from "./permission/basemaps";
 import { PermissionCoverageView } from "./coverage/PermissionCoverageView";
 import { StaticMapPreview } from "./StaticMapPreview";
+import { COVERAGE_PRESENTATION } from "../shared/coveragePresentation";
 
 const landTypes = [
   "arable", "pasture", "woodland", "scrub", "parkland", "beach", "foreshore", "other",
@@ -173,6 +174,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const [coverageError, setCoverageError] = useState(false); // dead but keep
     const [isMapExpanded, setIsMapExpanded] = useState(false);
     const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+    const [fieldActionsOpenId, setFieldActionsOpenId] = useState<string | null>(null);
     const [coverageFieldId, setCoverageFieldId] = useState<string | null>(null);
     const [coverageSetupOpen, setCoverageSetupOpen] = useState(false);
 
@@ -192,6 +194,27 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
     const fieldRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const fieldScrollRef = useRef<HTMLDivElement | null>(null);
     const agreementUploadRef = useRef<HTMLInputElement | null>(null);
+
+    function fitFieldOnMap(field: Field) {
+        setPermissionSelected(false);
+        const map = mapRef.current;
+        if (!map || !field.boundary?.coordinates?.[0]) return;
+        const bounds = new maplibregl.LngLatBounds();
+        (field.boundary.coordinates[0] as [number, number][]).forEach(point => {
+            if (Array.isArray(point) && point.length >= 2) bounds.extend(point);
+        });
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
+    }
+
+    function toggleFieldDetails(field: Field) {
+        if (selectedFieldId === field.id) {
+            setSelectedFieldId(null);
+            setCoverageFieldId(null);
+            return;
+        }
+        setSelectedFieldId(field.id);
+        fitFieldOnMap(field);
+    }
 
     // Derive field gaps synchronously from live page data. This keeps a coverage
     // edit and the adjacent Show Gaps action on the same render snapshot, rather
@@ -1344,29 +1367,32 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                 </section>
 
                 {notes && (
-                    <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-800">
-                        <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-2">Notes</h4>
-                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{notes}</p>
-                    </div>
+                    <details className="group overflow-hidden rounded-xl border border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/50">
+                        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left [&::-webkit-details-marker]:hidden">
+                            <span className="min-w-0"><span className="block text-[10px] font-black uppercase tracking-widest text-gray-500">Notes</span><span className="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{notes.split(/\r?\n/)[0]}</span></span>
+                            <span className="shrink-0 text-base text-gray-400 transition-transform group-open:rotate-180">⌄</span>
+                        </summary>
+                        <p className="whitespace-pre-wrap border-t border-gray-100 px-4 py-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">{notes}</p>
+                    </details>
                 )}
 
                 {(boundary || (fields && fields.length > 0)) && (
-                    <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
-                        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
-                            <div>
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                                  {isClubDayMember ? "Event Fields" : (isRally ? "Rally Boundary & Fields" : "Permission Boundary & Coverage")}
+                    <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-4 dark:border-gray-800 sm:px-5">
+                            <div className="min-w-0">
+                                <h4 className="text-xs font-black uppercase tracking-[0.16em] text-gray-800 dark:text-gray-100">
+                                  {isClubDayMember ? "Event fields" : (isRally ? "Rally fields" : "Fields & coverage")}
                                 </h4>
-                                <p className="text-[10px] opacity-60 italic mt-0.5 font-medium">
-                                  {isClubDayMember
-                                    ? "Use Locate for bearings, then record finds against the right field"
-                                    : `Tracking data from all ${sessions?.length} sessions`}
+                                <p className="mt-1 flex flex-wrap gap-x-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                  <span>{fields?.length ?? 0} {(fields?.length ?? 0) === 1 ? "field" : "fields"}</span>
+                                  {displayAcres !== null && <><span aria-hidden="true">·</span><span>{displayAcres.toFixed(1)} acres</span></>}
+                                  {!isClubDayMember && <><span aria-hidden="true">·</span><span>{sessions?.length ?? 0} {(sessions?.length ?? 0) === 1 ? "visit" : "visits"}</span></>}
                                 </p>
                             </div>
-                            {!isClubDayMember && !isRally && (
-                              <div className="text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 animate-pulse">
-                                💡 Tap 'Show Gaps' on sub-fields below
-                              </div>
+                            {!isClubDayMember && fields !== undefined && (
+                              <button type="button" onClick={() => onAddField()} className="shrink-0 rounded-xl bg-emerald-600 px-3.5 py-2.5 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-700">
+                                  + Add field
+                              </button>
                             )}
                         </div>
 
@@ -1375,7 +1401,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             className={
                                 isMapExpanded
                                     ? "fixed inset-0 z-[200] bg-gray-100 dark:bg-gray-900 overflow-hidden"
-                                    : "relative h-72 w-full rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900"
+                                    : "relative h-52 w-full overflow-hidden bg-gray-100 dark:bg-gray-950 sm:h-60"
                             }
                         >
                             <div ref={mapDivRef} className="absolute inset-0" />
@@ -1432,53 +1458,31 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                 type="button"
                                 onClick={() => setIsMapExpanded(v => !v)}
                                 aria-label={isMapExpanded ? "Exit full screen" : "Expand map to full screen"}
-                                className="absolute bottom-4 left-4 z-20 bg-white/90 dark:bg-gray-800/90 backdrop-blur px-3 py-2 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 text-[10px] font-black uppercase tracking-widest"
+                                className="absolute bottom-3 left-3 z-20 rounded-lg border border-gray-200 bg-white/90 px-2.5 py-2 text-[10px] font-black text-gray-700 shadow-md backdrop-blur dark:border-gray-700 dark:bg-gray-800/90 dark:text-gray-200"
                             >
-                                {isMapExpanded ? "✕ Exit full screen" : "⛶ Full screen"}
+                                {isMapExpanded ? "✕ Exit" : "⛶ Expand"}
                             </button>
                         </div>
 
-                        {/* Sub-Fields Carousel */}
+                        {/* Field summaries */}
                         {fields !== undefined && (
-                            <div className="mt-6 grid gap-3">
-                                <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                        <h4 className="text-xs font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-                                            {isRally ? "Fields" : "Sub-Fields"}
-                                            {fields.length > 0 && <span className="ml-2 font-black bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full text-[10px]">{fields.length}</span>}
-                                        </h4>
-                                        <p className="text-2xs text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
-                                            {fields.length > 0
-                                              ? (isClubDayMember ? "Use Locate for bearings, or Record Find to log a find in that field" : "Tap on a field on the map or scroll to select")
-                                              : (isRally ? "Add named field boundaries for the event" : "Divide your permission into named detecting areas")}
-                                        </p>
-                                    </div>
-                                    {!isClubDayMember && (
-                                      <button
-                                          type="button"
-                                          onClick={() => onAddField()}
-                                          className="text-xs font-black bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 transition-colors shrink-0 shadow-sm"
-                                      >
-                                          {isRally ? "+ Add Field" : "+ Add Sub-Field"}
-                                      </button>
-                                    )}
-                                </div>
+                            <div className="grid gap-3 p-4 sm:p-5">
                                 {fields.length === 0 && (
                                     <>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
                                           {isClubDayMember
                                             ? "No fields were shared. Use Record Find to save finds against the event."
-                                            : `${isRally ? "No fields added yet" : "No sub-fields added yet"} — tap the button above to get started.`}
+                                            : "No fields added yet. Add named areas to make visits, Guide context and coverage more precise."}
                                         </p>
                                         {!isClubDayMember && !isRally && (
-                                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 dark:border-emerald-800/60 dark:bg-emerald-950/10">
+                                            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-950/40">
                                                 <button
                                                     type="button"
                                                     onClick={() => setCoverageSetupOpen(open => !open)}
                                                     aria-expanded={coverageSetupOpen}
-                                                    className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-black text-emerald-700 transition-colors hover:border-emerald-400 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300"
+                                                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 transition-colors hover:border-emerald-400 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                                                 >
-                                                    Ground coverage
+                                                    About field coverage
                                                 </button>
                                                 {coverageSetupOpen && (
                                                     <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1505,177 +1509,94 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                 )}
                                 <div
                                     ref={fieldScrollRef}
-                                    className="grid gap-3 overflow-y-auto scroll-smooth"
-                                    style={{ maxHeight: "460px", scrollbarWidth: "none" }}
+                                    className="grid gap-3 scroll-smooth"
                                 >
                                     {fields.map(f => {
                                         const fieldCounts = fieldFindCounts.get(f.id);
                                         const recordedCount = fieldCounts?.recorded ?? 0;
                                         const pendingCount = fieldCounts?.pending ?? 0;
                                         const fieldCenter = getBoundaryCenter(f.boundary);
+                                        const isExpanded = selectedFieldId === f.id;
+                                        const gapsShown = shownFieldGapIds.has(f.id);
+                                        const hasCoverageEvidence = reportedCoverage.some(item => item.fieldId === f.id);
+                                        const hasDetails = !!f.boundary || !!f.notes || recordedCount > 0 || pendingCount > 0;
                                         return (
                                         <div
                                             key={f.id}
                                             ref={(el) => { if (el) fieldRefs.current.set(f.id, el); else fieldRefs.current.delete(f.id); }}
-                                            className={`bg-white dark:bg-gray-800 border rounded-xl shadow-sm flex flex-col transition-all duration-300 cursor-pointer ${selectedFieldId === f.id ? "border-emerald-400 dark:border-emerald-500 ring-2 ring-emerald-300/50 dark:ring-emerald-700/50" : "border-emerald-100 dark:border-emerald-800/60"}`}
-                                            onClick={(e) => {
-                                                if ((e.target as HTMLElement).closest("button")) return;
-                                                setSelectedFieldId(f.id);
-                                                const map = mapRef.current;
-                                                if (map && f.boundary?.coordinates?.[0]) {
-                                                    const bounds = new maplibregl.LngLatBounds();
-                                                    (f.boundary.coordinates[0] as [number, number][]).forEach((p) => {
-                                                        if (Array.isArray(p) && p.length >= 2) bounds.extend(p);
-                                                    });
-                                                    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
-                                                }
-                                            }}
+                                            className={`relative rounded-2xl border bg-white transition-colors dark:bg-gray-900 ${isExpanded ? "border-emerald-400 dark:border-emerald-700" : "border-gray-200 dark:border-gray-800"}`}
                                         >
-                                            <div className="p-3 flex-1">
-                                                <div className="flex justify-between items-start gap-2 mb-1.5">
-                                                    <div className="min-w-0">
-                                                        <div className="font-black text-sm text-gray-800 dark:text-gray-100 truncate">{f.name}</div>
-                                                        <div className="text-[10px] font-medium text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
-                                                            {f.boundary ? "Boundary mapped" : "No boundary"}
+                                            <div className="p-3.5 sm:p-4">
+                                                <button type="button" onClick={() => toggleFieldDetails(f)} aria-expanded={isExpanded} className="flex w-full items-start justify-between gap-3 text-left">
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                                                            <span className="truncate text-sm font-black text-gray-900 dark:text-gray-100">{f.name}</span>
+                                                            {f.boundary && <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500">{(turfArea(f.boundary) / 4046.86).toFixed(1)} acres</span>}
+                                                        </div>
+                                                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+                                                            {!f.boundary && <span className="font-black text-amber-600 dark:text-amber-400">Boundary missing</span>}
+                                                            {recordedCount > 0 && <span>{recordedCount} {recordedCount === 1 ? "find" : "finds"}</span>}
+                                                            {pendingCount > 0 && <span className="font-black text-amber-600 dark:text-amber-400">{pendingCount} pending</span>}
+                                                            {hasCoverageEvidence && <span>Coverage recorded</span>}
+                                                            {f.notes && <span>Note added</span>}
+                                                            {!hasDetails && <span>Ready for its first visit</span>}
                                                         </div>
                                                     </div>
-                                                    <div className="shrink-0 flex flex-col items-end gap-0.5">
-                                                        {f.boundary && (
-                                                            <div className="text-[10px] font-medium text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                                                                {(turfArea(f.boundary) / 4046.86).toFixed(1)} acres
-                                                            </div>
-                                                        )}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => onShowFieldNotes(f.id)}
-                                                            className={`text-[9px] font-black uppercase tracking-widest underline-offset-2 hover:underline transition-colors ${f.notes ? "text-amber-800 dark:text-amber-300" : "text-amber-700 dark:text-amber-400"}`}
-                                                        >
-                                                            Notes
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                {(recordedCount > 0 || pendingCount > 0) && (
-                                                    <div className="flex flex-wrap gap-1.5 mb-2">
-                                                        {recordedCount > 0 && (
-                                                            <span className="text-[9px] font-black uppercase tracking-widest bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-100 dark:border-emerald-800 rounded-lg px-2 py-1">
-                                                                {recordedCount} {recordedCount === 1 ? "find" : "finds"}
-                                                            </span>
-                                                        )}
-                                                        {pendingCount > 0 && (
-                                                            <span className="text-[9px] font-black uppercase tracking-widest bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-800 rounded-lg px-2 py-1">
-                                                                {pendingCount} pending
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {f.notes && <div className="text-[10px] text-gray-400 dark:text-gray-500 line-clamp-2 italic mb-2">{f.notes}</div>}
-                                                <div className="flex flex-wrap gap-1.5 mt-2">
-                                                    {f.boundary && (
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedFieldId(f.id);
-                                                                const map = mapRef.current;
-                                                                if (map && f.boundary?.coordinates?.[0]) {
-                                                                    const bounds = new maplibregl.LngLatBounds();
-                                                                    (f.boundary.coordinates[0] as [number, number][]).forEach((p) => {
-                                                                        if (Array.isArray(p) && p.length >= 2) bounds.extend(p);
-                                                                    });
-                                                                    if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 50, duration: 600 });
-                                                                }
-                                                            }}
-                                                            className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${selectedFieldId === f.id ? "bg-emerald-600 border-emerald-600 text-white" : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:border-emerald-400"}`}
-                                                        >
-                                                            Locate
-                                                        </button>
-                                                    )}
-                                                    {!isClubDayMember && !isRally && !!f.boundary && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setCoverageFieldId(current =>
-                                                            current === f.id ? null : f.id
-                                                        )}
-                                                        aria-expanded={coverageFieldId === f.id}
-                                                        className={`text-3xs font-black px-2 py-1 rounded-lg border transition-all ${coverageFieldId === f.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:border-emerald-400'}`}
-                                                    >
-                                                        Ground coverage
-                                                    </button>
-                                                    )}
-                                                    {!isClubDayMember && !isRally && (
-                                                    <button
-                                                        onClick={() => {
-                                                            const next = new Set(shownFieldGapIds);
-                                                            if (next.has(f.id)) next.delete(f.id);
-                                                            else next.add(f.id);
-                                                            setShownFieldGapIds(next);
-                                                        }}
-                                                        className={`text-[9px] font-black px-2 py-1 rounded-lg border transition-all ${shownFieldGapIds.has(f.id) ? 'bg-orange-600 border-orange-600 text-white shadow-sm' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900 text-orange-700 dark:text-orange-400 hover:border-orange-400'}`}
-                                                    >
-                                                        {shownFieldGapIds.has(f.id) ? 'Gaps On' : 'Show Gaps'}
-                                                        {shownFieldGapIds.has(f.id) && fieldGapResults.get(f.id) && (
-                                                            <span className="ml-1 opacity-80">
-                                                                {Math.round(100 - fieldGapResults.get(f.id)!.percentCovered)}% left
-                                                                {(fieldGapResults.get(f.id)!.reportedAreaM2 ?? 0) > 0
-                                                                    ? ' · reports included'
-                                                                    : ''}
-                                                            </span>
-                                                        )}
-                                                        {shownFieldGapIds.has(f.id) && fieldGapErrors.has(f.id) && (
-                                                            <span className="ml-1">Error</span>
-                                                        )}
-                                                    </button>
-                                                    )}
-                                                </div>
-                                                {!isRally && permissionId && coverageFieldId === f.id && (
-                                                    <PermissionCoverageView
-                                                        permissionId={permissionId}
-                                                        fieldId={f.id}
-                                                        embedded
-                                                        onRequestClose={() => setCoverageFieldId(null)}
-                                                    />
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 px-3 py-2">
-                                                <button
-                                                    onClick={() => isClubDayMember ? onRecordFind(f.id) : nav(`/session/new?permissionId=${permissionId}&fieldId=${f.id}`)}
-                                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black py-1.5 rounded-lg transition-colors shadow-sm"
-                                                >
-                                                    {isClubDayMember ? "Record Find" : "Start Session"}
+                                                    <span aria-hidden="true" className={`mt-1 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}>⌄</span>
                                                 </button>
-                                                {fieldCenter && (
-                                                  <button
-                                                      type="button"
-                                                      aria-label={`Open ${f.name || "field"} in FieldGuide`}
-                                                      onClick={() => nav(`/fieldguide?lat=${fieldCenter.lat}&lng=${fieldCenter.lon}&fieldId=${encodeURIComponent(f.id)}`)}
-                                                      className="px-2.5 py-1.5 text-[10px] font-bold text-sky-600 hover:text-sky-800 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-colors border border-sky-100 dark:border-sky-900"
-                                                  >
-                                                      FieldGuide
-                                                  </button>
-                                                )}
-                                                {!isClubDayMember && (
-                                                  <>
-                                                    <button
-                                                        onClick={() => onEditField(f.id)}
-                                                        className="px-2.5 py-1.5 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border border-emerald-100 dark:border-emerald-800"
-                                                    >
-                                                        Edit
+
+                                                <div className="mt-3 flex items-center gap-2">
+                                                    <button onClick={() => isClubDayMember ? onRecordFind(f.id) : nav(`/session/new?permissionId=${permissionId}&fieldId=${f.id}`)} className="min-h-10 flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white shadow-sm transition-colors hover:bg-emerald-700">
+                                                        {isClubDayMember ? "Record find" : "Start visit"}
                                                     </button>
-                                                    <button
-                                                        onClick={() => onDeleteField(f.id)}
-                                                        className="py-1.5 px-2 text-2xs font-bold text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
-                                                        title="Delete sub-field"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                  </>
-                                                )}
+                                                    {fieldCenter && <button type="button" aria-label={`Open ${f.name || "field"} in FieldGuide`} onClick={() => nav(`/fieldguide?lat=${fieldCenter.lat}&lng=${fieldCenter.lon}&fieldId=${encodeURIComponent(f.id)}`)} className="min-h-10 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-black text-sky-700 transition-colors hover:border-sky-400 dark:border-gray-700 dark:bg-gray-900 dark:text-sky-300">Guide</button>}
+                                                    {!isClubDayMember && (
+                                                      <div className="relative">
+                                                        <button type="button" aria-label={`Actions for ${f.name}`} aria-expanded={fieldActionsOpenId === f.id} onClick={() => setFieldActionsOpenId(current => current === f.id ? null : f.id)} className="grid min-h-10 min-w-10 place-items-center rounded-xl border border-gray-200 bg-white px-3 text-lg font-black leading-none text-gray-500 transition-colors hover:border-gray-400 hover:text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400 dark:hover:text-gray-100">⋯</button>
+                                                        {fieldActionsOpenId === f.id && (
+                                                          <div className="absolute right-0 top-12 z-30 grid min-w-44 overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                                                            {f.boundary && <button type="button" onClick={() => { setSelectedFieldId(f.id); fitFieldOnMap(f); setFieldActionsOpenId(null); }} className="rounded-lg px-3 py-2 text-left text-xs font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Locate on map</button>}
+                                                            <button type="button" onClick={() => { onShowFieldNotes(f.id); setFieldActionsOpenId(null); }} className="rounded-lg px-3 py-2 text-left text-xs font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">{f.notes ? "View notes" : "Add note"}</button>
+                                                            <button type="button" onClick={() => { onEditField(f.id); setFieldActionsOpenId(null); }} className="rounded-lg px-3 py-2 text-left text-xs font-bold text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800">Edit field &amp; boundary</button>
+                                                            <button type="button" onClick={() => { onDeleteField(f.id); setFieldActionsOpenId(null); }} className="rounded-lg px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30">Delete field</button>
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                </div>
                                             </div>
+
+                                            {isExpanded && (
+                                              <div className="border-t border-gray-100 bg-gray-50/70 p-3.5 dark:border-gray-800 dark:bg-gray-950/35 sm:p-4">
+                                                <div className="flex items-start justify-between gap-3">
+                                                  <div>
+                                                    <h5 className="text-xs font-black uppercase tracking-[0.14em] text-gray-700 dark:text-gray-200">{!isRally && !isClubDayMember ? "Coverage and details" : "Field details"}</h5>
+                                                    <p className="mt-1 text-xs font-medium leading-relaxed text-gray-500 dark:text-gray-400">{!f.boundary ? "Add a mapped boundary to use field coverage and Guide context." : hasCoverageEvidence ? COVERAGE_PRESENTATION.limited : COVERAGE_PRESENTATION.noneRecorded}</p>
+                                                  </div>
+                                                </div>
+
+                                                {!isClubDayMember && !isRally && f.boundary && (
+                                                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                                    <button type="button" onClick={() => { const next = new Set(shownFieldGapIds); if (next.has(f.id)) next.delete(f.id); else next.add(f.id); setShownFieldGapIds(next); }} aria-pressed={gapsShown} className={`flex min-h-11 items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left text-xs font-black transition-colors ${gapsShown ? "border-orange-500 bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-300" : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"}`}>
+                                                      <span>{gapsShown ? "Gaps shown on map" : "Show gaps on map"}</span>
+                                                      <span aria-hidden="true" className={`relative h-5 w-9 rounded-full transition-colors ${gapsShown ? "bg-orange-500" : "bg-gray-300 dark:bg-gray-700"}`}><span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${gapsShown ? "translate-x-[18px]" : "translate-x-0.5"}`} /></span>
+                                                    </button>
+                                                    <button type="button" onClick={() => setCoverageFieldId(current => current === f.id ? null : f.id)} aria-expanded={coverageFieldId === f.id} className="min-h-11 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left text-xs font-black text-emerald-700 transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-emerald-300">{coverageFieldId === f.id ? "Close searched areas" : "View or mark searched areas"}</button>
+                                                  </div>
+                                                )}
+
+                                                {gapsShown && <p className={`mt-2 text-[10px] font-bold ${fieldGapErrors.has(f.id) ? "text-amber-600 dark:text-amber-400" : "text-gray-500 dark:text-gray-400"}`}>{fieldGapErrors.has(f.id) ? COVERAGE_PRESENTATION.gapsUnavailable : `${COVERAGE_PRESENTATION.gapsShown}${(fieldGapResults.get(f.id)?.reportedAreaM2 ?? 0) > 0 ? ` ${COVERAGE_PRESENTATION.reportedIncluded}` : ''}`}</p>}
+
+                                                {!isRally && permissionId && coverageFieldId === f.id && <PermissionCoverageView permissionId={permissionId} fieldId={f.id} embedded onRequestClose={() => setCoverageFieldId(null)} />}
+                                              </div>
+                                            )}
                                         </div>
                                         );
                                     })}
                                 </div>
                             </div>
                         )}
-                    </div>
+                    </section>
                 )}
               </div>
             )}

@@ -113,6 +113,281 @@ test("home, settings and discover routes render without crashing", async ({ page
   await expect(page).toHaveURL(/\/discover$/);
 });
 
+test("permission details keep secondary systems collapsed until requested", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await createPermission(page, "Quiet Permission Farm");
+  const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
+  const permissions = await readIndexedDbStore(page, "permissions") as Array<Record<string, unknown> & { id: string }>;
+  const permission = permissions.find(row => row.id === permissionId);
+  if (!permission) throw new Error("Could not read permission fixture");
+  await putIndexedDbRow(page, "permissions", {
+    ...permission,
+    boundary: { type: "Polygon", coordinates: [[[-1.471, 53.38], [-1.468, 53.38], [-1.468, 53.383], [-1.471, 53.383], [-1.471, 53.38]]] },
+  });
+  await page.reload();
+
+  await expect(page.getByText("Land/Permission Details", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Permission options" })).toBeVisible();
+  await page.getByRole("button", { name: "Permission options" }).click();
+  await expect(page.getByRole("button", { name: "Edit details" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete permission" })).toBeVisible();
+  await page.locator("div.fixed.inset-0.z-40").click({ position: { x: 5, y: 5 } });
+
+  const investigations = page.getByRole("button", { name: /Landscape investigations/ });
+  await expect(investigations).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("Ready for its first review")).toHaveCount(0);
+  await investigations.click();
+  await expect(page.getByText("Ready for its first review")).toBeVisible();
+
+  const offline = page.getByText("Offline access", { exact: true }).locator("xpath=ancestor::summary");
+  await expect(offline).toBeVisible();
+  await expect(page.getByText(/Download terrain, historic data/)).toBeHidden();
+});
+
+test("V5 Home folds a recent open signal into one bounded return card", async ({ page }) => {
+  await page.setViewportSize({ width: 380, height: 844 });
+  await page.goto("./");
+  await expect(page.getByText('Local-first storage')).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "v5-home-permission", projectId, name: "North Meadow", type: "individual",
+    lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, collector: "", landType: "pasture",
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "v5-home-session", projectId, permissionId: "v5-home-permission", fieldId: null,
+    date: now, lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, landUse: "pasture",
+    cropType: "", isStubble: false, notes: "", isFinished: true,
+    sessionStartedAt: now, endTime: now, createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "undugSignals", {
+    id: "v5-home-signal", permissionId: "v5-home-permission", sessionId: "v5-home-session",
+    lat: 52.2054, lng: 0.1219, status: "open", createdAt: Date.now(),
+  });
+  await page.reload();
+
+  const returnCard = page.getByRole('button', { name: /Return to North Meadow/ });
+  await expect(returnCard).toContainText('You left a signal open here');
+  expect((await returnCard.boundingBox())?.height).toBeLessThanOrEqual(80);
+  await returnCard.click();
+  await expect(page).toHaveURL(/finds-box\?tab=signals&signal=v5-home-signal/);
+  await expect(page.getByText('Signal Detail')).toBeVisible();
+});
+
+test("active sessions use the demand-mounted four-destination workspace", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.getByText('Local-first storage')).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "v5-workspace-permission", projectId, name: "Workspace Field", type: "individual",
+    lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, collector: "", landType: "pasture",
+    boundary: { type: 'Polygon', coordinates: [[[0.1208, 52.2048], [0.1228, 52.2048], [0.1228, 52.2062], [0.1208, 52.2062], [0.1208, 52.2048]]] },
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "v5-workspace-session", projectId, permissionId: "v5-workspace-permission", fieldId: null,
+    date: now, lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, landUse: "pasture",
+    cropType: "", isStubble: false, notes: "", isFinished: false,
+    sessionStartedAt: now, activatedAt: now, createdAt: now, updatedAt: now,
+  });
+  await page.goto("./session/v5-workspace-session");
+
+  await expect(page.getByText('Session active')).toBeVisible();
+  await expect(page.getByText('Record on Workspace Field')).toBeVisible();
+  await page.getByRole('button', { name: 'Add Find to Session' }).click();
+  await expect(page.getByRole('heading', { name: 'Record a find' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Detecting workspace' })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish later' }).click();
+  await expect(page.getByText('Find saved for later')).toBeVisible();
+  await expect(page.getByText(/1 pending/)).toBeVisible();
+  await expect(page.locator('.maplibregl-map')).toHaveCount(0);
+  await page.getByRole('button', { name: /Map/ }).click();
+  await expect(page.locator('.maplibregl-map')).toHaveCount(1);
+  const layerButton = page.getByRole('button', { name: 'Map layers' });
+  await layerButton.click();
+  await expect(page.getByRole('button', { name: 'Satellite' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'LiDAR', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'OS 1895' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'OS 1900' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Roman Roads' })).toBeVisible();
+  await page.getByRole('button', { name: 'Satellite' }).click();
+  await expect(page.getByRole('button', { name: 'Satellite' })).toHaveAttribute('aria-pressed', 'true');
+  await layerButton.click();
+  const mapFindButton = page.getByRole('button', { name: 'Add Find from Map' });
+  const [findBounds, attributionBounds] = await Promise.all([
+    mapFindButton.boundingBox(),
+    page.locator('.maplibregl-ctrl-attrib').boundingBox(),
+  ]);
+  expect(findBounds && attributionBounds && findBounds.y + findBounds.height <= attributionBounds.y).toBe(true);
+  await expect(mapFindButton).toHaveCSS('z-index', '100');
+  await page.getByRole('button', { name: /Session/ }).last().click();
+  await expect(page.getByText('This visit')).toBeVisible();
+  await expect(page.locator('.maplibregl-map')).toHaveCount(0);
+  await page.getByRole('button', { name: /Guide/ }).click();
+  await expect(page).toHaveURL(/\/fieldguide/);
+  const guideWorkspaceNav = page.getByRole('navigation', { name: 'Detecting workspace' });
+  await expect(guideWorkspaceNav).toBeVisible();
+  await expect(guideWorkspaceNav.getByRole('button', { name: /Guide/ })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('button', { name: 'Finish', exact: true })).toBeVisible();
+  await expect(page.getByText('Toggle satellite, LiDAR, old OS maps and your finds.')).toHaveCount(0);
+  await expect(page.locator('.maplibregl-marker').filter({ hasText: 'Workspace Field' })).toBeVisible();
+  await expect(page.getByText(/Reading scan data|Tap panel/)).toBeVisible({ timeout: 10_000 });
+  await guideWorkspaceNav.getByRole('button', { name: /Session/ }).click();
+  await expect(page).toHaveURL(/\/session\/v5-workspace-session$/);
+  await expect(page.getByText('This visit')).toBeVisible();
+  await page.getByRole('button', { name: 'Session options' }).click();
+  await expect(page.getByRole('button', { name: 'Open permission' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open classic session' })).toHaveCount(0);
+});
+
+test("the session Guide shell keeps authoritative finish reachable", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.getByText('Local-first storage')).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "guide-finish-permission", projectId, name: "Guide Finish Field", type: "individual",
+    lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, collector: "", landType: "pasture",
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "guide-finish-session", projectId, permissionId: "guide-finish-permission", fieldId: null,
+    date: now, lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4, landUse: "pasture",
+    cropType: "", isStubble: false, notes: "", isFinished: false,
+    sessionStartedAt: now, activatedAt: now, createdAt: now, updatedAt: now,
+  });
+
+  await page.goto("./fieldguide?sessionId=guide-finish-session");
+  await expect(page.getByRole('navigation', { name: 'Detecting workspace' })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish', exact: true }).click();
+  await expect(page.getByText('Finish this visit?')).toBeVisible();
+  await page.getByRole('button', { name: 'Finish visit' }).click();
+  await expect(page).toHaveURL(/\/session\/guide-finish-session$/);
+  await expect(page.getByRole('heading', { name: 'Session Review' })).toBeVisible();
+  const sessions = await readIndexedDbStore(page, "sessions") as Array<{ id: string; isFinished?: boolean }>;
+  expect(sessions.find(session => session.id === "guide-finish-session")?.isFinished).toBe(true);
+});
+
+test("V5 browser tracking pauses, resumes, recovers after reload and keeps local actions offline", async ({ page, context }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./");
+  await expect(page.getByText("Local-first storage", { exact: false })).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "tracking-lifecycle-permission", projectId, name: "Tracking Lifecycle Field", type: "individual",
+    lat: 53.3811, lon: -1.4701, gpsAccuracyM: 4, collector: "", landType: "pasture",
+    boundary: { type: 'Polygon', coordinates: [[[-1.4718, 53.3805], [-1.4688, 53.3805], [-1.4688, 53.382], [-1.4718, 53.382], [-1.4718, 53.3805]]] },
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "fields", {
+    id: "tracking-lifecycle-field", permissionId: "tracking-lifecycle-permission", name: "North Strip",
+    boundary: { type: 'Polygon', coordinates: [[[-1.4718, 53.3805], [-1.4688, 53.3805], [-1.4688, 53.382], [-1.4718, 53.382], [-1.4718, 53.3805]]] },
+    notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "tracking-lifecycle-session", projectId, permissionId: "tracking-lifecycle-permission", fieldId: "tracking-lifecycle-field",
+    date: now, lat: 53.3811, lon: -1.4701, gpsAccuracyM: 4, landUse: "", cropType: "",
+    isStubble: false, notes: "", isFinished: false, sessionStartedAt: now, activatedAt: now,
+    createdAt: now, updatedAt: now,
+  });
+  await page.goto("./session/tracking-lifecycle-session");
+
+  await expect(page.getByText(/Trail not started/)).toBeVisible();
+  await page.getByRole("button", { name: "Start in FindSpot" }).click();
+  await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
+  await expect.poll(async () => {
+    const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string; points?: unknown[] }>;
+    return tracks.filter(track => track.sessionId === "tracking-lifecycle-session")
+      .reduce((count, track) => count + (track.points?.length ?? 0), 0);
+  }).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "Stop FindSpot trail" }).click();
+  await expect(page.getByText(/Trail paused/)).toBeVisible();
+  await expect.poll(async () => {
+    const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string; isActive?: boolean }>;
+    return tracks.some(track => track.sessionId === "tracking-lifecycle-session" && track.isActive);
+  }).toBe(false);
+
+  await page.getByRole("button", { name: "Start in FindSpot" }).click();
+  await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
+  await expect.poll(async () => {
+    const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string }>;
+    return tracks.filter(track => track.sessionId === "tracking-lifecycle-session").length;
+  }).toBe(2);
+
+  await page.reload();
+  await expect(page.getByText(/Trail paused/)).toBeVisible();
+  await expect.poll(async () => {
+    const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string; isActive?: boolean }>;
+    return tracks.some(track => track.sessionId === "tracking-lifecycle-session" && track.isActive);
+  }).toBe(false);
+  expect((await readIndexedDbStore(page, "sessions") as Array<{ id: string; isFinished?: boolean }>)
+    .find(session => session.id === "tracking-lifecycle-session")?.isFinished).toBe(false);
+
+  await context.setOffline(true);
+  await expect(page.getByText(/Offline/)).toBeVisible();
+  const workspaceNav = page.getByRole("navigation", { name: "Detecting workspace" });
+  await workspaceNav.getByRole("button", { name: /Session/ }).click();
+  await page.getByLabel("Quick session note").fill("Saved while offline");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Session note added")).toBeVisible();
+  await workspaceNav.getByRole("button", { name: /Record/ }).click();
+  const stubble = page.getByRole("button", { name: "Stubble", exact: true });
+  await stubble.click();
+  await expect(stubble).toHaveAttribute("aria-pressed", "true");
+  const storedSession = (await readIndexedDbStore(page, "sessions") as Array<{ id: string; notes?: string; isStubble?: boolean }>)
+    .find(session => session.id === "tracking-lifecycle-session");
+  expect(storedSession?.notes).toContain("Saved while offline");
+  expect(storedSession?.isStubble).toBe(true);
+
+  await context.setOffline(false);
+  await page.goto("./");
+  await expect(page.getByText("Detecting now")).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect(page).toHaveURL(/session\/tracking-lifecycle-session$/);
+  await expect(page.getByText(/Trail paused/)).toBeVisible();
+});
+
+test("V5 honours session-scoped Companion state and blocks premature finish", async ({ page }) => {
+  await page.goto("./");
+  await expect(page.getByText("Local-first storage", { exact: false })).toBeVisible();
+  const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
+  const projectId = projects[0].id;
+  const now = new Date().toISOString();
+  await putIndexedDbRow(page, "permissions", {
+    id: "companion-guard-permission", projectId, name: "Companion Guard Field", type: "individual",
+    lat: 53.3811, lon: -1.4701, gpsAccuracyM: 4, collector: "", landType: "pasture",
+    permissionGranted: true, notes: "", createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRow(page, "sessions", {
+    id: "companion-guard-session", projectId, permissionId: "companion-guard-permission", fieldId: null,
+    date: now, lat: 53.3811, lon: -1.4701, gpsAccuracyM: 4, landUse: "", cropType: "",
+    isStubble: false, notes: "", isFinished: false, sessionStartedAt: now, activatedAt: now,
+    createdAt: now, updatedAt: now,
+  });
+  await putIndexedDbRows(page, "settings", [
+    { key: "fs_companion_active_session", value: "companion-guard-session" },
+  ]);
+  await page.goto("./session/companion-guard-session");
+
+  await expect(page.getByText("Companion recording").first()).toBeVisible();
+  await expect(page.getByText("You can hide FindSpot or lock the phone.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Stop Companion" })).toHaveAttribute("href", /companion=missing&session=companion-guard-session/);
+  await page.getByRole("button", { name: "Finish", exact: true }).click();
+  await expect(page.getByText("Finish this visit?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish visit" }).click();
+  await expect(page.getByText("Stop Companion tracking before finishing this session.")).toBeVisible();
+  expect((await readIndexedDbStore(page, "sessions") as Array<{ id: string; isFinished?: boolean }>)
+    .find(session => session.id === "companion-guard-session")?.isFinished).toBe(false);
+});
+
 test("Field Guide starts with the preferred basemap without persisting visit-time toggles", async ({ page }) => {
   await page.goto("./settings?tab=app");
   const savedSatellite = page.getByRole("button", { name: "Satellite", exact: true });
@@ -294,24 +569,28 @@ test("settings clears regenerable Field Guide caches without deleting saved poin
 test("can create a permission, start a session and save a find", async ({ page }) => {
   await createPermission(page, "Smoke Test Farm");
 
-  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
+  await page.getByRole("button", { name: "+ Start visit" }).click();
   await expect(page).toHaveURL(/\/session\/new/);
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-  await page.getByRole("button", { name: "Start Session" }).click();
+  await expect(page.getByLabel("Date & Time")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Get Current GPS" })).toHaveCount(0);
+  await expect(page.getByText("Ground condition & note")).toBeVisible();
+  await page.getByRole("button", { name: "Start detecting" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
-  await expect(page.getByText("Session active", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Track Session" })).toBeVisible();
+  await expect(page.getByText(/Session active/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start in FindSpot" })).toBeVisible();
 
   await page.getByRole("button", { name: "Add Find to Session" }).click();
-  await expect(page).toHaveURL(/\/find\?/);
-  await page.getByLabel("Title / Description").fill("Smoke Test Buckle");
-  await page.getByRole("button", { name: "Save Find" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Record a find" })).toBeVisible();
+  await page.getByLabel("What did you find?").fill("Smoke Test Buckle");
+  await page.getByRole("button", { name: "Save find" }).click();
+  await expect(page.getByText("Find saved", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Back to Session" }).click();
-  await expect(page.getByRole("button").filter({ hasText: "Smoke Test Buckle" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Detecting workspace" }).getByRole("button", { name: /Session/ }).click();
+  await page.getByRole("button", { name: /Finds/ }).click();
+  await expect(page.getByLabel("Session finds").getByRole("button", { name: /Smoke Test Buckle/ })).toBeVisible();
 });
 
 test("Surface Scatter saves material, abundance and period together, then reopens full private detail", async ({ page }) => {
@@ -320,11 +599,11 @@ test("Surface Scatter saves material, abundance and period together, then reopen
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
   if (!permissionId) throw new Error("Could not read surface permission id from URL");
 
-  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
-  await page.getByRole("button", { name: "Start Session" }).click();
-  await expect(page.getByText("Session active", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "+ Start visit" }).click();
+  await page.getByRole("button", { name: "Start detecting" }).click();
+  await expect(page.getByText(/Session active/)).toBeVisible();
 
-  await page.getByRole("button", { name: "Record surface find", exact: true }).click();
+  await page.getByRole("button", { name: "Surface observation", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Pottery", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Frequent", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Roman", exact: true }).click();
@@ -333,7 +612,7 @@ test("Surface Scatter saves material, abundance and period together, then reopen
   await page.getByRole("button", { name: "Add more details", exact: true }).click();
   await page.getByLabel("Extent (approximate diameter / spread)").selectOption("approx_25m");
   await page.getByLabel("Surface visibility").selectOption("good");
-  await page.getByLabel("Ground condition").selectOption("cultivated");
+  await page.getByTestId("surface-capture-sheet").getByLabel("Ground condition").selectOption("cultivated");
   await page.getByLabel("Observation note").fill("Coarse grey fabric with occasional oxidised sherd.");
   await page.getByRole("button", { name: "Save details", exact: true }).click();
 
@@ -352,6 +631,7 @@ test("Surface Scatter saves material, abundance and period together, then reopen
   expect(observations[0]?.originSessionId).toBeTruthy();
 
   await page.goto(`./permission/${permissionId}`);
+  await page.getByRole("button", { name: /Landscape investigations/ }).click();
   await page.getByRole("button", { name: "View map", exact: true }).click();
   await expect(page.getByLabel("Surface observations map")).toBeVisible();
   await page.getByRole("button", { name: "Pottery — Roman — frequent", exact: true }).click();
@@ -368,6 +648,7 @@ test("Surface Scatter can be positioned on the permission map away from a live v
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
   if (!permissionId) throw new Error("Could not read manual surface permission id from URL");
 
+  await page.getByRole("button", { name: /Landscape investigations/ }).click();
   await page.getByRole("button", { name: "Record surface find", exact: true }).click();
   const capture = page.getByRole("dialog", { name: "Record surface find" });
   await capture.getByRole("button", { name: "Flint", exact: true }).click();
@@ -395,7 +676,7 @@ test("Surface Scatter can be positioned on the permission map away from a live v
   });
 });
 
-test("session coverage is saved in three taps and appears on the permission", async ({ page }) => {
+test("session coverage is saved through review and appears on the permission", async ({ page }) => {
   test.setTimeout(60_000);
 
   await createPermission(page, "Coverage Smoke Farm");
@@ -428,7 +709,7 @@ test("session coverage is saved in three taps and appears on the permission", as
     boundary: permissionBoundary,
   });
   await page.goto(`./permission/${permissionId}`);
-  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await page.getByRole("button", { name: "About field coverage" }).click();
   await expect(
     page.getByRole("heading", { name: "Add a field to use searched areas" }),
   ).toBeVisible();
@@ -487,7 +768,13 @@ test("session coverage is saved in three taps and appears on the permission", as
 
   await page.goto(`./permission/${permissionId}`);
   await expect(page.getByRole("button", { name: "Open Home field in FieldGuide" })).toBeVisible();
-  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await expect(page.getByText("Boundary mapped", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show gaps on map" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Actions for Home field" }).click();
+  await expect(page.getByRole("button", { name: "Edit field & boundary" })).toBeVisible();
+  await page.getByRole("button", { name: "Actions for Home field" }).click();
+  await page.getByRole("button", { name: /Home field/ }).first().click();
+  await page.getByRole("button", { name: "View or mark searched areas" }).click();
   await expect(page.getByRole("heading", { name: "Finish a session first" })).toBeVisible();
   await expect(page.getByRole("group", { name: "Searched area map" })).toHaveCount(0);
   await page.getByRole("button", { name: "Close ground coverage" }).click();
@@ -513,11 +800,14 @@ test("session coverage is saved in three taps and appears on the permission", as
   });
 
   await page.goto(`./session/${sessionId}`);
-  const reviewTapBudget = 4;
+  const reviewTapBudget = 5;
   let reviewTaps = 0;
 
-  await expect(page.getByText(/(?:59m|1h 0m) elapsed/)).toBeVisible();
-  await page.getByRole("button", { name: "Finish Session" }).click();
+  await expect(page.getByText(/(?:59m|1h 0m) · 0 finds/)).toBeVisible();
+  await page.getByRole("button", { name: "Finish", exact: true }).click();
+  reviewTaps += 1;
+  await expect(page.getByText("Finish this visit?")).toBeVisible();
+  await page.getByRole("button", { name: "Finish visit" }).click();
   reviewTaps += 1;
   await expect(page.getByText("Which parts of the field did you search today?")).toBeVisible();
   let reviewSections = page
@@ -566,7 +856,8 @@ test("session coverage is saved in three taps and appears on the permission", as
   await page.getByRole("button", { name: "Not now" }).click();
 
   await page.goto(`./permission/${permissionId}`);
-  await page.getByRole("button", { name: "Ground coverage" }).click();
+  await page.getByRole("button", { name: /Home field/ }).first().click();
+  await page.getByRole("button", { name: "View or mark searched areas" }).click();
   await expect(page.getByRole("button", { name: "Edit recent search" })).toHaveCount(0);
   await expect(page.getByText("Which parts of the field did you search today?")).toBeVisible();
   const restoredSelections = page
@@ -587,9 +878,9 @@ test("session coverage is saved in three taps and appears on the permission", as
   await expect(
     page.getByRole("group", { name: "Searched area map" }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Show Gaps" }).click();
-  await expect(page.getByRole("button", { name: /Gaps On/ })).toContainText("reports included");
-  await expect(page.getByRole("button", { name: /Gaps On/ })).not.toContainText("100% left");
+  await page.getByRole("button", { name: "Show gaps on map" }).click();
+  await expect(page.getByText("Marked searched areas are included.")).toBeVisible();
+  await expect(page.getByText(/% left/)).toHaveCount(0);
 });
 
 test("New Rally on the Rallies tab opens the rally workflow", async ({ page }) => {
@@ -645,8 +936,8 @@ test("New Rally on the Rallies tab opens the rally workflow", async ({ page }) =
   });
   await page.reload();
 
-  await expect(page.getByRole("button", { name: "Ground coverage" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Show Gaps" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "View or mark searched areas" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show gaps on map" })).toHaveCount(0);
   await page.getByRole("button", { name: "Open Newly Opened Field in FieldGuide" }).click();
   await expect(page).toHaveURL(/\/fieldguide/);
   await expect(page.getByRole("button", { name: "Scan Area", exact: true })).toBeVisible();
@@ -749,8 +1040,8 @@ test("active session mobile uses in-page actions without a redundant bottom bar"
   await page.setViewportSize({ width: 390, height: 844 });
   await createPermission(page, "Mobile Session Farm");
 
-  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
-  await page.getByRole("button", { name: "Start Session" }).click();
+  await page.getByRole("button", { name: "+ Start visit" }).click();
+  await page.getByRole("button", { name: "Start detecting" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
 
   await expect(page.getByRole("toolbar", { name: "Active session actions" })).toHaveCount(0);
@@ -758,7 +1049,7 @@ test("active session mobile uses in-page actions without a redundant bottom bar"
     page.getByRole("button", { name: "Add Find to Session" }),
     page.getByRole("button", { name: "Un-dug Signal" }),
     page.getByRole("button", { name: "Significant Find" }),
-    page.getByRole("button", { name: "Finish Session" }),
+    page.getByRole("button", { name: "Finish", exact: true }),
   ];
   for (const action of mainActions) {
     await expect(action).toBeVisible();
@@ -766,10 +1057,11 @@ test("active session mobile uses in-page actions without a redundant bottom bar"
     expect(bounds && bounds.y + bounds.height).toBeLessThanOrEqual(844);
   }
   await expect(page.getByText("Live time", { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/elapsed$/)).toBeVisible();
+  await expect(page.getByText(/\d+[mh ]* · \d+ finds?/)).toBeVisible();
   await page.getByRole("button", { name: "Add Find to Session" }).click();
-  await expect(page).toHaveURL(/\/find\?/);
-  await expect(page.getByRole("button", { name: "Significant Find" }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
+  await expect(page.getByRole("heading", { name: "Record a find" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Detecting workspace" })).toBeVisible();
 });
 
 test("significant find workflow saves a located notable record", async ({ page }) => {
@@ -782,8 +1074,8 @@ test("significant find workflow saves a located notable record", async ({ page }
   const realPermission = permissions.find((row) => row.name === "Significant Smoke Farm");
   expect(realPermission).toBeTruthy();
 
-  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
-  await page.getByRole("button", { name: "Start Session" }).click();
+  await page.getByRole("button", { name: "+ Start visit" }).click();
+  await page.getByRole("button", { name: "Start detecting" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
   await page.getByRole("button", { name: /Significant find/i }).click();
   await page.getByRole("button", { name: /Notable Find/i }).click();
@@ -946,12 +1238,12 @@ test("deleting a permission removes its sessions and finds", async ({ page }) =>
   const permissionId = page.url().match(/\/permission\/([^/?#]+)$/)?.[1];
   expect(permissionId).toBeTruthy();
 
-  await page.getByRole("button", { name: /\+ Start New Session/ }).click();
-  await page.getByRole("button", { name: "Start Session" }).click();
+  await page.getByRole("button", { name: "+ Start visit" }).click();
+  await page.getByRole("button", { name: "Start detecting" }).click();
   await page.getByRole("button", { name: "Add Find to Session" }).click();
-  await page.getByLabel("Title / Description").fill("Smoke Delete Find");
-  await page.getByRole("button", { name: "Save Find" }).click();
-  await expect(page.getByRole("button", { name: "Saved" })).toBeVisible();
+  await page.getByLabel("What did you find?").fill("Smoke Delete Find");
+  await page.getByRole("button", { name: "Save find" }).click();
+  await expect(page.getByText("Find saved", { exact: true })).toBeVisible();
 
   const [projectsBeforeDelete, sessionsBeforeDelete] = await Promise.all([
     readIndexedDbStore(page, "projects"),
@@ -1012,7 +1304,8 @@ test("deleting a permission removes its sessions and finds", async ({ page }) =>
   }), { projectId, permissionId, sessionId });
 
   await page.goto(`./permission/${permissionId}`);
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("button", { name: "Permission options" }).click();
+  await page.getByRole("button", { name: "Delete permission" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\/$/);
 
@@ -1239,7 +1532,7 @@ test("settings can export and restore a backup", async ({ page }) => {
     page.getByRole("button", { name: "Confirm Import" }).click(),
   ]);
   await dismissNonBlockingPrompts(page);
-  await expect(page.getByRole("button", { name: "Restored Meadow" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restored Meadow", exact: true })).toBeVisible();
   await page.goto("./settings");
   await expect(page.getByText("Last Restore Report")).toBeVisible();
   await expect(page.getByText(/Recovery report: 2 imported, 0 skipped, 0 repaired, 0 damaged/)).toBeVisible();
@@ -1252,14 +1545,26 @@ test("backup reminder respects user data, a recent backup and snooze state", asy
 
   await createPermission(page, "Reminder Characterization Farm");
   await page.goto("./");
-  await expect(page.getByText("Backup Recommended")).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Back up' })).toHaveCount(0);
+  const projects = await readIndexedDbStore(page, 'projects') as Array<{ id: string }>;
+  const permissions = await readIndexedDbStore(page, 'permissions') as Array<{ id: string; projectId: string }>;
+  const completedAt = new Date().toISOString();
+  await putIndexedDbRow(page, 'sessions', {
+    id: 'backup-reminder-completed-session', projectId: projects[0].id,
+    permissionId: permissions.find(permission => permission.id !== 'default')!.id,
+    fieldId: null, date: completedAt, lat: null, lon: null, gpsAccuracyM: null,
+    landUse: '', cropType: '', isStubble: false, notes: '', isFinished: true,
+    sessionStartedAt: completedAt, endTime: completedAt, createdAt: completedAt, updatedAt: completedAt,
+  });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Back up' })).toBeVisible();
 
   await putIndexedDbRow(page, "settings", {
     key: "lastBackupDate",
     value: new Date().toISOString(),
   });
   await page.reload();
-  await expect(page.getByText("Backup Recommended")).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back up' })).toHaveCount(0);
 
   const changedAt = new Date().toISOString();
   await putIndexedDbRows(page, "finds", Array.from({ length: 20 }, (_, index) => ({
@@ -1268,7 +1573,6 @@ test("backup reminder respects user data, a recent backup and snooze state", asy
     updatedAt: changedAt,
   })));
   await page.reload();
-  await expect(page.getByText("Backup Urgent").first()).toBeVisible();
   await expect(page.getByText("20 finds have changed since your last backup.").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Later" })).toHaveCount(0);
 
@@ -1372,7 +1676,7 @@ test("settings streams a full zip restore and preserves live data when staging f
     page.getByRole("button", { name: "Confirm Import" }).click(),
   ]);
   await dismissNonBlockingPrompts(page);
-  await expect(page.getByRole("button", { name: "Restored Full Archive" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restored Full Archive", exact: true })).toBeVisible();
   const restoredMedia = await page.evaluate(() => new Promise<{ size: number; checksum: number }>((resolve, reject) => {
     const request = indexedDB.open("findspot_uk");
     request.onerror = () => reject(request.error);

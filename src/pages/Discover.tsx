@@ -1497,6 +1497,25 @@ export default function Discover({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      <section className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900 dark:bg-emerald-950/20">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Reference</p>
+            <h3 className="mt-1 text-sm font-black text-gray-900 dark:text-gray-100">Getting land permission</h3>
+            <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+              Work out who can say yes, make a respectful approach, and offer a useful record of each visit.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => nav("/land-access")}
+            className="shrink-0 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-widest text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-emerald-950"
+          >
+            Open guide
+          </button>
+        </div>
+      </section>
+
       <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800">
         {[
           { key: "events", label: "Events", count: processedEvents.length },

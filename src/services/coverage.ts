@@ -1,6 +1,7 @@
 import * as turf from "@turf/turf";
 import type { FeatureCollection, MultiPolygon, Polygon } from "geojson";
 import type { GeoJSONArea } from "../shared/coverageTypes";
+import { splitTrackPointsAtGaps } from '../shared/trackSegments';
 
 export interface CoverageResult {
     undetectionsGeoJSON: any; // FeatureCollection of polygons representing gaps
@@ -141,9 +142,12 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
         if (totalAreaM2 === 0) return null;
 
         // 2. Prepare Tracks
-        const validTracks = tracks.filter(t => t.points && t.points.length >= 2);
+        const validTrackSegments = tracks.flatMap(track =>
+            splitTrackPointsAtGaps(track.points ?? [], track.gaps)
+                .filter(segment => segment.length >= 2)
+        );
 
-        if (validTracks.length === 0) {
+        if (validTrackSegments.length === 0) {
             return {
                 undetectionsGeoJSON: turf.featureCollection([fieldPolygon]),
                 detectedAreaM2: 0,
@@ -157,9 +161,9 @@ export function calculateCoverage(boundary: any, tracks: any[], coilWidthM: numb
         // Use a 0.75m radius for a 1.5m realistic swing width
         const bufferRadiusM = coilWidthM / 2;
         
-        const bufferedSegments = validTracks.map(t => {
+        const bufferedSegments = validTrackSegments.map(points => {
             // Apply smoothing and movement filtering
-            let processedPoints = filterMicroMovements(t.points, 2.0);
+            let processedPoints = filterMicroMovements(points, 2.0);
             processedPoints = smoothTrack(processedPoints, 5);
             
             if (processedPoints.length < 2) return null;

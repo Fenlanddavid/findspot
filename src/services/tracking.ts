@@ -13,6 +13,7 @@ let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: numbe
 // ── Liveness state (Step 1) ─────────────────────────────────────────
 let lastFixAt: number | null = null;
 let lastAcceptedFixAt: number | null = null;
+let lastAcceptedPoint: TrackingPoint | null = null;
 let droppedFixCount = 0;
 let wakeLockHeld = false;
 let watchError: string | null = null;
@@ -35,6 +36,7 @@ export const ACTIVE_BROWSER_TRACK_SETTING = 'fs_active_browser_track_id';
 function resetLivenessState() {
   lastFixAt = null;
   lastAcceptedFixAt = null;
+  lastAcceptedPoint = null;
   droppedFixCount = 0;
   watchError = null;
   gaps = [];
@@ -90,6 +92,7 @@ export type TrackingStatus = {
   active: boolean;
   lastFixAt: number | null;
   lastAcceptedFixAt: number | null;
+  lastAcceptedPoint: TrackingPoint | null;
   droppedFixCount: number;
   wakeLockHeld: boolean;
   wakeLockSupported: boolean;
@@ -97,11 +100,20 @@ export type TrackingStatus = {
   gapCount: number;
 };
 
+export type TrackingPoint = {
+  lat: number;
+  lon: number;
+  accuracyM: number | null;
+  headingDegrees: number | null;
+  timestamp: number;
+};
+
 export function getTrackingStatus(): TrackingStatus {
   return {
     active: watchId !== null,
     lastFixAt,
     lastAcceptedFixAt,
+    lastAcceptedPoint,
     droppedFixCount,
     wakeLockHeld,
     wakeLockSupported: isWakeLockSupported(),
@@ -163,6 +175,13 @@ async function handleFix(pos: GeolocationPosition) {
 
   pointsBuffer.push(newPoint);
   lastAcceptedFixAt = Date.now();
+  lastAcceptedPoint = {
+    lat: newPoint.lat,
+    lon: newPoint.lon,
+    accuracyM: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
+    headingDegrees: Number.isFinite(pos.coords.heading) ? pos.coords.heading : null,
+    timestamp: pos.timestamp,
+  };
 
   const updatedAt = new Date().toISOString();
   if (!trackCreated) {
@@ -215,7 +234,9 @@ const STALE_RESTART_MS = 15_000;
 
 function restartWatchIfStale() {
   if (watchId === null) return;
-  const last = lastFixAt ?? 0;
+  // Liveness is based on usable evidence. A stream of rejected low-accuracy
+  // fixes must not make a dead trail look continuous.
+  const last = lastAcceptedFixAt ?? lastFixAt ?? 0;
   if (Date.now() - last < STALE_RESTART_MS) return;
 
   // Record gap from last accepted fix to now (guard against duplicates)

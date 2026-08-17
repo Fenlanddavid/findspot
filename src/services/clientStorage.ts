@@ -23,10 +23,10 @@ export type DurableClientSettingKey =
     | 'fs_first_find'
     | 'fs_first_permission'
     | 'fs_first_session'
-    | 'fs_installed'
     | 'fs_nextmove_dismissed'
     | 'fs_onboarding_done'
     | 'fs_onboarding_v2_done'
+    | 'fs_v5_continuity_preview'
     | `coach:${string}`;
 
 export type EphemeralLocalKey =
@@ -46,9 +46,9 @@ const BOOLEAN_SETTINGS = new Set<DurableClientSettingKey>([
     'fs_first_find',
     'fs_first_permission',
     'fs_first_session',
-    'fs_installed',
     'fs_onboarding_done',
     'fs_onboarding_v2_done',
+    'fs_v5_continuity_preview',
 ]);
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -244,6 +244,10 @@ export async function setThemeSetting(theme: 'light' | 'dark'): Promise<void> {
 }
 
 export async function migrateLegacyClientStorage(): Promise<void> {
+    // The focused active-session workspace is now the sole unfinished-session
+    // surface. Remove the retired preview preference from upgraded installs.
+    await db.settings.delete('fs_v5_active_session_preview');
+    if (typeof localStorage !== 'undefined') localStorage.removeItem('fs_v5_active_session_preview');
     const defaults: Partial<Record<DurableClientSettingKey, unknown>> = {
         findRecordMode: 'quick',
         fs_club_rally_home_card_dismissed: false,
@@ -264,10 +268,10 @@ export async function migrateLegacyClientStorage(): Promise<void> {
         fs_first_find: false,
         fs_first_permission: false,
         fs_first_session: false,
-        fs_installed: false,
         fs_nextmove_dismissed: [],
         fs_onboarding_done: false,
         fs_onboarding_v2_done: false,
+        fs_v5_continuity_preview: true,
     };
     for (const [key, fallback] of Object.entries(defaults)) {
         await getDurableSetting(key as DurableClientSettingKey, fallback);

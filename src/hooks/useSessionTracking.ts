@@ -6,7 +6,7 @@ import {
     calculateCoverage,
     type CoverageResult,
 } from '../services/coverage';
-import { isTrackingActiveForSession } from '../services/tracking';
+import { getTrackingStatus, isTrackingActiveForSession, type TrackingStatus } from '../services/tracking';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const radiusKm = 6371;
@@ -29,8 +29,15 @@ export function useSessionTracking(
     const [showCoverage, setShowCoverage] = useState(false);
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
     const [coverageError, setCoverageError] = useState(false);
+    const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>(() => getTrackingStatus());
 
     useEffect(() => setIsTracking(isTrackingActiveForSession(sessionId)), [sessionId, tracks]);
+    useEffect(() => {
+        setTrackingStatus(getTrackingStatus());
+        if (!isTracking) return;
+        const timer = window.setInterval(() => setTrackingStatus(getTrackingStatus()), 2_000);
+        return () => window.clearInterval(timer);
+    }, [isTracking, sessionId]);
     useEffect(() => {
         if (!showCoverage || !boundary) {
             setCoverageResult(null);
@@ -66,5 +73,6 @@ export function useSessionTracking(
         showCoverage, setShowCoverage,
         coverageResult, coverageError,
         activeDistanceKm, activeCoverage,
+        trackingStatus,
     };
 }

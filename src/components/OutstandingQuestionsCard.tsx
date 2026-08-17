@@ -512,6 +512,7 @@ function QuestionRow({ q, permission, permissionFinds, tracks, successor, onDism
 // ─── Main card ──────────────────────────────────────────────────────────────
 
 export function OutstandingQuestionsCard({ permissionId }: { permissionId: string }) {
+  const [expanded, setExpanded] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
   const navigate = useNavigate();
@@ -596,7 +597,7 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
     <section className="relative overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-white via-white to-sky-50/80 shadow-[0_16px_45px_-28px_rgba(14,116,144,0.65)] dark:border-sky-800/60 dark:from-gray-900 dark:via-gray-900 dark:to-sky-950/35">
       <div className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full bg-sky-300/15 blur-2xl dark:bg-sky-400/10" />
 
-      <header className="relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-0.5 border-b border-sky-100/80 px-4 py-4 dark:border-sky-900/50 sm:px-5">
+      <button type="button" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} className="relative grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2.5 gap-y-0.5 px-4 py-4 text-left transition-colors hover:bg-sky-50/70 dark:hover:bg-sky-950/20 sm:px-5">
         <div className="grid h-8 w-8 place-items-center text-teal-600 dark:text-teal-400">
           <svg className="h-6 w-6" viewBox="0 0 28 28" fill="none" aria-hidden="true">
             <path d="M5 20.5c3.5-7 6.5 1 10-6.5s5.5-2 8-7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -609,13 +610,15 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
         <div className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-2xs font-black text-sky-700 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-300">
           {active.length} open
         </div>
-        <p className="col-start-2 col-end-4 text-2xs leading-relaxed text-gray-500 dark:text-gray-400">
+        <span aria-hidden="true" className={`text-lg text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}>⌄</span>
+        <p className="col-start-2 col-end-5 text-2xs leading-relaxed text-gray-500 dark:text-gray-400">
           Follow how scan evidence changes with recorded fieldwork.
         </p>
-      </header>
+      </button>
 
       {permission.boundary && <ProtectionBanner protection={permission.protectionStatus} />}
 
+      {expanded && <>
       <PermissionPulseCard permissionId={permissionId} embedded />
 
       <PermissionSurfaceObservations permission={permission} />
@@ -717,6 +720,7 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
           <p className="text-xs font-bold text-amber-600 dark:text-amber-400">Map a boundary to enable scanning</p>
         )}
       </footer>
+      </>}
     </section>
   );
 }

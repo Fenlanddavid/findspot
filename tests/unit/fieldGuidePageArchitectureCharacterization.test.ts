@@ -8,6 +8,14 @@ const FIELD_GUIDE_MODULES = {
     '../../src/components/fieldGuide/FieldGuideWorkspace.tsx',
     import.meta.url,
   ),
+  sessionGuide: new URL(
+    '../../src/components/session/ActiveSessionGuideWorkspace.tsx',
+    import.meta.url,
+  ),
+  sessionGuideContext: new URL(
+    '../../src/hooks/useActiveSessionGuideContext.ts',
+    import.meta.url,
+  ),
   state: new URL('../../src/hooks/useFieldGuidePageState.ts', import.meta.url),
   projectData: new URL('../../src/hooks/useFieldGuideProjectData.ts', import.meta.url),
   support: new URL(
@@ -60,9 +68,12 @@ describe('FieldGuide page architecture characterization', () => {
     const source = await readModules();
 
     expect(source.controller.trimEnd().split(/\r?\n/).length).toBeLessThan(500);
-    expect(source.controller).toContain('<FieldGuideWorkspace {...props} />');
+    expect(source.controller).toContain('<ActiveSessionGuideWorkspace {...props} />');
     expect(source.controller).not.toContain('useFieldGuidePageState()');
     expect(source.controller).not.toContain('runFieldGuideScan({');
+    expect(source.sessionGuide).toContain('<FieldGuideWorkspace key="field-guide-workspace"');
+    expect(source.sessionGuide).not.toContain('useLiveQuery');
+    expect(source.sessionGuideContext).toContain('useLiveQuery(');
     expect(source.workspace).toContain('useFieldGuidePageState()');
     expect(source.workspace).toContain('useFieldGuideProjectData({');
     expect(source.workspace).toContain('runFieldGuideScan({');

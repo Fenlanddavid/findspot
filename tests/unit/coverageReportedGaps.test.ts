@@ -28,6 +28,18 @@ const WEST_HALF: GeoJSONArea = {
 };
 
 describe('reported coverage in Show Gaps', () => {
+  it('does not draw apparent searched coverage across an explicit GPS gap', () => {
+    const points = [
+      { lat: 52.0005, lon: 0.0002, timestamp: 1_000 },
+      { lat: 52.0005, lon: 0.0018, timestamp: 61_000 },
+    ];
+    const connected = calculateCoverage(FIELD, [{ points }]);
+    const interrupted = calculateCoverage(FIELD, [{ points, gaps: [{ start: 1_000, end: 30_000 }] }]);
+
+    expect(connected?.percentCovered).toBeGreaterThan(0);
+    expect(interrupted?.percentCovered).toBe(0);
+  });
+
   it('removes reported sections from track-derived gaps without claiming GPS precision', () => {
     const trackOnly = calculateCoverage(FIELD, []);
     const combined = applyReportedCoverageToGaps(trackOnly, [WEST_HALF]);

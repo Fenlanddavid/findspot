@@ -36,7 +36,8 @@ export const BACKUP_FIXTURE_FACTORIES = {
     id: 'session-1', projectId: 'project-1', permissionId: 'permission-1',
     fieldId: 'field-1', date: ISO, lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4,
     landUse: 'arable', cropType: 'stubble', isStubble: true,
-    notes: 'Dry conditions.', isFinished: true, createdAt: ISO, updatedAt: ISO,
+    notes: 'Dry conditions.', isFinished: true, sessionStartedAt: ISO,
+    activatedAt: ISO, createdAt: ISO, updatedAt: ISO,
   }),
   finds: () => ({
     id: 'find-1', projectId: 'project-1', permissionId: 'permission-1',
@@ -165,6 +166,7 @@ export const BACKUP_FIXTURE_FACTORIES = {
     extent: 'approx_25m', surfaceVisibility: 'good', groundCondition: 'cultivated',
     note: 'Coarse grey fabric.', originSessionId: 'session-1', originSessionDate: ISO,
     captureCompletedAt: ISO,
+    captureFlowVersion: 1,
     lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4,
     observedAt: ISO, createdAt: ISO, updatedAt: ISO,
   }),

@@ -53,6 +53,8 @@ type RecordSurfaceFindButtonProps = {
     mapBoundary?: import('../../db').GeoJSONPolygon;
     previousMapLocation?: ScatterPoint | null;
     onMapLocationSelected?: (point: ScatterPoint) => void;
+    label?: string;
+    onRecorded?: (observationId: string) => void;
 };
 
 export function RecordSurfaceFindButton({
@@ -67,6 +69,8 @@ export function RecordSurfaceFindButton({
     mapBoundary,
     previousMapLocation = null,
     onMapLocationSelected,
+    label,
+    onRecorded,
 }: RecordSurfaceFindButtonProps) {
     const [open, setOpen] = useState(false);
     const [material, setMaterial] = useState<SurfaceMaterial | null>(null);
@@ -151,6 +155,7 @@ export function RecordSurfaceFindButton({
 
             // The required material, abundance and period are durable together.
             setSavedObservationId(observation.id);
+            onRecorded?.(observation.id);
         } catch (cause) {
             setMessage(cause instanceof Error ? cause.message : 'Could not record this surface find.');
         } finally {
@@ -207,7 +212,7 @@ export function RecordSurfaceFindButton({
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
                         <path d="M12 5v14M5 12h14" />
                     </svg>
-                ) : 'Record surface find'}
+                ) : (label ?? 'Record surface find')}
             </button>
             {message && !open && (
                 <p role="status" className="mt-1 text-2xs font-bold text-amber-500">{message}</p>

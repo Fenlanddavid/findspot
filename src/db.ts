@@ -158,6 +158,11 @@ export type Session = {
   startTime?: string; // ISO datetime when tracking started
   endTime?: string;   // ISO datetime when session was finished
 
+  /** Canonical visit start. Legacy startTime means trail-recording start. */
+  sessionStartedAt?: string;
+  /** Most recent time this unfinished session became the current visit. */
+  activatedAt?: string;
+
   keyNotes?: string[]; // Farmer-facing checklist items for field report
 
   // Club Day attribution
@@ -702,6 +707,8 @@ export type SurfaceObservation = SurfaceAssessmentSnapshot & {
   originSessionEndTime?: string;
   /** Ends the one-time original-capture enrichment path. */
   captureCompletedAt?: string;
+  /** Explicit provenance for deciding whether incomplete capture is knowable. */
+  captureFlowVersion?: number;
   reassessments: SurfaceReassessment[];
   retiredAt?: string;
   createdAt: string;

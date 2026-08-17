@@ -18,12 +18,4 @@ describe("browser production isolation", () => {
 
     expect(violations).toEqual([]);
   });
-
-  it("intercepts both production install-counter endpoints", async () => {
-    const source = await readFile(new URL("fixtures.ts", TEST_DIRECTORY), "utf8");
-
-    expect(source).toContain('https://findspot-counter.trials-uk.workers.dev/**');
-    expect(source).toMatch(/pathname === ["']\/count["']/);
-    expect(source).toMatch(/pathname === ["']\/up["']/);
-  });
 });

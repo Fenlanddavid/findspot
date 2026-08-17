@@ -4,9 +4,13 @@ import * as turf from '@turf/turf';
 import type { HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
 import { reportNonFatal } from '../services/diagLog';
-import { fetchRomanRoads } from '../services/romanRoadService';
-import { ROMAN_STANDALONE_MIN_ZOOM } from '../services/fieldguide/mapLayerRegistry';
 import type { RomanStandaloneLayerStatus } from './useFieldGuidePageState';
+import { ROMAN_STANDALONE_MIN_ZOOM } from '../services/fieldguide/mapLayerRegistry';
+import {
+    populateRomanStandaloneRoads,
+    romanBoundsContain,
+    type RomanStandaloneBounds,
+} from '../services/fieldguide/romanStandaloneLayer';
 import {
     routeLabel,
     type FieldGuideMapCallbacks,
@@ -22,23 +26,8 @@ type Options = {
     callbacksRef: MutableRefObject<FieldGuideMapCallbacks>;
 };
 
-export type RomanStandaloneBounds = {
-    west: number;
-    south: number;
-    east: number;
-    north: number;
-};
-
-type RomanRoadFetcher = (
-    west: number,
-    south: number,
-    east: number,
-    north: number,
-) => Promise<HistoricRoute[]>;
-
-function emptyFeatureCollection(): GeoJSON.FeatureCollection {
-    return { type: 'FeatureCollection', features: [] };
-}
+export { populateRomanStandaloneRoads, romanBoundsContain } from '../services/fieldguide/romanStandaloneLayer';
+export type { RomanStandaloneBounds } from '../services/fieldguide/romanStandaloneLayer';
 
 function viewportBounds(map: maplibregl.Map): RomanStandaloneBounds {
     const bounds = map.getBounds();
@@ -48,47 +37,6 @@ function viewportBounds(map: maplibregl.Map): RomanStandaloneBounds {
         east: bounds.getEast(),
         north: bounds.getNorth(),
     };
-}
-
-export function romanBoundsContain(
-    fetched: RomanStandaloneBounds,
-    viewport: RomanStandaloneBounds,
-): boolean {
-    return fetched.west <= viewport.west
-        && fetched.south <= viewport.south
-        && fetched.east >= viewport.east
-        && fetched.north >= viewport.north;
-}
-
-export async function populateRomanStandaloneRoads(
-    map: maplibregl.Map,
-    bounds: RomanStandaloneBounds,
-    fetchRoads: RomanRoadFetcher = fetchRomanRoads,
-): Promise<RomanStandaloneLayerStatus> {
-    if (map.getZoom() < ROMAN_STANDALONE_MIN_ZOOM) return 'zoom-in';
-    const source = map.getSource('roman-roads-standalone') as maplibregl.GeoJSONSource | undefined;
-    try {
-        const routes = await fetchRoads(bounds.west, bounds.south, bounds.east, bounds.north);
-        source?.setData({
-            type: 'FeatureCollection',
-            features: routes.map(route => ({
-                type: 'Feature' as const,
-                geometry: { type: 'LineString' as const, coordinates: route.geometry },
-                properties: {
-                    id: route.id,
-                    source: route.source,
-                    name: route.name,
-                    reference: route.reference,
-                    confidenceClass: route.confidenceClass,
-                },
-            })),
-        });
-        return 'available';
-    } catch (error) {
-        source?.setData(emptyFeatureCollection());
-        reportNonFatal('field-guide-map', 'Roman roads layer unavailable', error);
-        return 'unavailable';
-    }
 }
 
 export function useFieldGuideHistoricLayers({

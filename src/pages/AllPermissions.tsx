@@ -133,6 +133,9 @@ export default function AllPermissions(props: { projectId: string }) {
                   <button onClick={() => navigate("/permission")} className="bg-emerald-700 hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-colors">
                     New Permission
                   </button>
+                  <button onClick={() => navigate("/land-access")} className="bg-white dark:bg-gray-800 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-500 transition-colors">
+                    How to ask
+                  </button>
                   <button onClick={() => navigate("/fieldguide")} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest hover:border-emerald-400 transition-colors">
                     Open Field Guide
                   </button>
