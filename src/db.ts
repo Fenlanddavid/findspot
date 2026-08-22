@@ -727,7 +727,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 45;
+export const FINDSPOT_CURRENT_VERSION = 46;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -1122,6 +1122,12 @@ export class FindSpotDB extends Dexie {
     // index so observation photos can be restored and deleted atomically.
     declareFindSpotVersion(45).stores({
       media: 'id, projectId, findId, permissionId, surfaceObservationId, createdAt',
+    });
+
+    // v46: boundary is a GeoJSON object, not a valid IndexedDB key. Keep the
+    // property on each permission while removing the ineffective index.
+    declareFindSpotVersion(46).stores({
+      permissions: 'id, projectId, name, type, permissionGranted, validFrom, isPinned, createdAt',
     });
 
     // Production and migration fixtures both replay this exact registry.

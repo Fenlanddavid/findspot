@@ -1,4 +1,5 @@
 import type { GeoJSONPolygon } from '../../db';
+import { distanceMeters } from '../../utils/geo';
 
 export type FieldLocation = {
   lat: number;
@@ -19,8 +20,6 @@ export type BoundaryBounds = {
   east: number;
   north: number;
 };
-
-const EARTH_RADIUS_M = 6_371_000;
 
 export function getBoundaryBounds(boundary: GeoJSONPolygon | undefined): BoundaryBounds | null {
   if (!boundary?.coordinates?.length) return null;
@@ -44,12 +43,7 @@ export function getBoundaryBounds(boundary: GeoJSONPolygon | undefined): Boundar
 }
 
 export function distanceMetres(left: Pick<FieldLocation, 'lat' | 'lon'>, right: Pick<FieldLocation, 'lat' | 'lon'>): number {
-  const lat1 = left.lat * Math.PI / 180;
-  const lat2 = right.lat * Math.PI / 180;
-  const dLat = lat2 - lat1;
-  const dLon = (right.lon - left.lon) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return distanceMeters(left, right);
 }
 
 function pointInRing(point: FieldLocation, ring: number[][]): boolean {

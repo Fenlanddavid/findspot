@@ -10,6 +10,7 @@ import {
   useDurableSetting,
 } from '../services/clientStorage';
 import { CACHE_POLICIES } from '../shared/cachePolicy';
+import { distanceKilometers } from '../utils/geo';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,14 +124,7 @@ async function submitForReview({
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return distanceKilometers({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
 }
 
 function isThisWeekend(dateStr: string): boolean {

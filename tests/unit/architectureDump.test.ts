@@ -30,6 +30,12 @@ describe('architecture dump coverage', () => {
     const files = new Set(listDumpFiles());
 
     expect(files).toContain('scripts/dumpArchitecture.mjs');
+    expect(files).toContain('index.html');
+    expect(files).toContain('eslint.config.js');
+    expect(files).toContain('playwright.companion.config.ts');
+    expect(files).toContain('.gitignore');
+    expect(files).toContain('LICENSE');
+    expect(files).toContain('NOTICE');
     expect(files).toContain('docs/adr/0001-local-only-data-model.md');
     expect(files).toContain('docs/adr/0002-retire-classic-active-session.md');
     expect(files).toContain('.github/workflows/deploy.yml');

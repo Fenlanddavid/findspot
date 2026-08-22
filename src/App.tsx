@@ -14,13 +14,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // Eagerly loaded — core navigation paths
 import Home from "./pages/Home";
 import GlobalActions from "./components/GlobalActions";
-import OnboardingFlow from "./components/OnboardingFlow";
 import { ClubRallyChoiceModal } from "./components/ClubRallyChoiceModal";
 import { useConfirmDialog } from "./components/ConfirmModal";
 import { useViewportScrollLock } from "./hooks/useViewportScrollLock";
 import { Logo } from "./components/Logo";
 import { FINDSPOT_COPYRIGHT_NOTICE } from "./utils/legalCopy";
-import SignificantFindWorkflow from "./components/SignificantFindWorkflow";
 import { useSignificantFindWorkflow } from "./hooks/useSignificantFindWorkflow";
 import type { WorkflowState, WorkflowPath, WorkflowStep } from "./types/significantFind";
 import { detectJurisdiction } from "./utils/jurisdictionDetect";
@@ -60,6 +58,8 @@ const LandAccess = React.lazy(() => import("./pages/LandAccess"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const JoinClubDay = React.lazy(() => import("./pages/JoinClubDay"));
 const CompanionImport = React.lazy(() => import("./pages/CompanionImport"));
+const OnboardingFlow = React.lazy(() => import("./components/OnboardingFlow"));
+const SignificantFindWorkflow = React.lazy(() => import("./components/SignificantFindWorkflow"));
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -512,16 +512,20 @@ function Shell() {
       )}
 
       {!isActiveSessionGuide && <GlobalActions projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />}
-      <OnboardingFlow />
+      <Suspense fallback={null}>
+        <OnboardingFlow />
+      </Suspense>
       {confirmDialog}
-      <SignificantFindWorkflow
-        isOpen={sfWorkflow.isOpen}
-        workflowState={sfWorkflow.workflowState}
-        onClose={sfWorkflow.close}
-        updateState={sfWorkflow.updateState}
-        goToStep={sfWorkflow.goToStep}
-        setPath={sfWorkflow.setPath}
-      />
+      <Suspense fallback={null}>
+        <SignificantFindWorkflow
+          isOpen={sfWorkflow.isOpen}
+          workflowState={sfWorkflow.workflowState}
+          onClose={sfWorkflow.close}
+          updateState={sfWorkflow.updateState}
+          goToStep={sfWorkflow.goToStep}
+          setPath={sfWorkflow.setPath}
+        />
+      </Suspense>
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { distanceMeters } from '../../utils/geo';
+
 export type RallyReviewConfidence = "strong" | "developing" | "tentative";
 
 export type RallyReviewStatus = "empty" | "insufficient" | "ready";
@@ -127,13 +129,7 @@ function isValidGeoFind(f: RallyReviewPoint): f is GeoPoint {
 }
 
 function distanceM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
-  const R = 6371e3;
-  const phi1 = a.lat * Math.PI / 180;
-  const phi2 = b.lat * Math.PI / 180;
-  const dPhi = (b.lat - a.lat) * Math.PI / 180;
-  const dLambda = (b.lon - a.lon) * Math.PI / 180;
-  const h = Math.sin(dPhi / 2) ** 2 + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  return distanceMeters(a, b);
 }
 
 function centroid(points: GeoPoint[]): { lat: number; lon: number } {

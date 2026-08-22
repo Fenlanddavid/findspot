@@ -110,7 +110,7 @@ test('production share target imports, acknowledges stop, and finishes at Compan
     recordingInput.name = 'recording';
     recordingInput.id = 'production-companion-recording';
     const transfer = new DataTransfer();
-    transfer.items.add(new File([json], 'companion-recording.json', {
+    transfer.items.add(new File([json], 'Companion recording 🧲 測試.json', {
       type: 'application/vnd.findspot.companion+json',
     }));
     recordingInput.files = transfer.files;

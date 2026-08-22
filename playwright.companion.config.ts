@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'companionProductionHandoff.spec.ts',
+  testMatch: ['companionProductionHandoff.spec.ts', 'pwaProduction.spec.ts'],
   timeout: 45_000,
   workers: 1,
   reporter: 'list',

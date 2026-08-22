@@ -2,6 +2,7 @@
 //     disturbance suppression, asset enrichment, drift detection ──────────────
 
 import { Cluster, HistoricRoute, ModernWay, RouteAssessment, RouteRelationship } from '../pages/fieldGuideTypes';
+import { distanceKilometers, distanceMeters } from './geo';
 
 export const MONUMENT_BOUNDARY_BUFFER_M = 20;
 
@@ -21,11 +22,7 @@ export function isPointInPolygon(lat: number, lon: number, rings: number[][][]):
 // ─── Kilometre-scale distance (for historic scan proximity checks) ────────────
 
 export function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return distanceKilometers({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
 }
 
 // ─── Drift detection ─────────────────────────────────────────────────────────
@@ -155,13 +152,7 @@ export function applyAIMEnrichment(clusters: Cluster[], aimData: AIMLike): Clust
 // ─── Distance helpers ─────────────────────────────────────────────────────────
 
 export function getDistance(c1: [number, number], c2: [number, number]): number {
-    const R = 6371e3;
-    const φ1 = c1[1] * Math.PI/180;
-    const φ2 = c2[1] * Math.PI/180;
-    const Δφ = (c2[1]-c1[1]) * Math.PI/180;
-    const Δλ = (c2[0]-c1[0]) * Math.PI/180;
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return distanceMeters({ lat: c1[1], lon: c1[0] }, { lat: c2[1], lon: c2[0] });
 }
 
 // ─── Spatial grid ─────────────────────────────────────────────────────────────

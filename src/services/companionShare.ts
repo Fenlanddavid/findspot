@@ -9,8 +9,7 @@ export async function takePendingCompanionShare(): Promise<File | null> {
   if (!response) return null;
   await cache.delete(url);
   const blob = await response.blob();
-  const filename = response.headers.get('X-FindSpot-Filename') || 'companion-recording.json';
-  return new File([blob], filename, {
+  return new File([blob], 'companion-recording.json', {
     type: blob.type || 'application/vnd.findspot.companion+json',
   });
 }

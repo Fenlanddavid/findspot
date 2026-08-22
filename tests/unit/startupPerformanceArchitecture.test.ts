@@ -36,6 +36,14 @@ describe('startup performance architecture', () => {
     expect(source).not.toContain('runGeologyContext');
   });
 
+  it('lazy-loads optional onboarding and significant-find workflows', async () => {
+    const source = await readFile(new URL('../../src/App.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('React.lazy(() => import("./components/OnboardingFlow"))');
+    expect(source).toContain('React.lazy(() => import("./components/SignificantFindWorkflow"))');
+    expect(source).not.toContain('import OnboardingFlow from');
+    expect(source).not.toContain('import SignificantFindWorkflow from');
+  });
+
   it('renders Home before progressive continuity has resolved', async () => {
     const source = await readFile(new URL('../../src/pages/Home.tsx', import.meta.url), 'utf8');
     const readinessLine = source.split('\n').find(line => line.includes('homePresentationReady')) ?? '';

@@ -259,4 +259,25 @@ describe('FindSpot IndexedDB forward migrations', () => {
     expect(current.media.schema.indexes.map(index => index.name)).toContain('surfaceObservationId');
     current.close();
   });
+
+  it('drops the unusable permission boundary index without changing boundary data', async () => {
+    const name = 'findspot-migration-v45-permission-boundary-index';
+    const boundary = {
+      type: 'Polygon',
+      coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]],
+    };
+    await createFixtureDb(name, 45, {
+      projects: [{ id: 'project-1' }],
+      permissions: [{
+        id: 'permission-1', projectId: 'project-1', name: 'Permission',
+        type: 'individual', permissionGranted: true, boundary,
+        createdAt: '2026-08-01',
+      }],
+    });
+
+    const current = await openCurrent(name);
+    expect(current.permissions.schema.indexes.map(index => index.name)).not.toContain('boundary');
+    expect(await current.permissions.get('permission-1')).toMatchObject({ boundary });
+    current.close();
+  });
 });

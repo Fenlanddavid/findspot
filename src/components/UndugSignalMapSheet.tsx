@@ -9,6 +9,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import type { UndugSignal } from '../db';
 import { UndugSignalDetailSheet } from './UndugSignalLog';
 import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../utils/mapTileCache';
+import { distanceMeters } from '../utils/geo';
 
 type Props = {
   signal: UndugSignal;
@@ -24,14 +25,7 @@ const SIGNAL_MARKER_SVG = `<svg width="22" height="22" viewBox="0 0 20 20" fill=
 </svg>`;
 
 function haversineM(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return distanceMeters({ lat: lat1, lon: lng1 }, { lat: lat2, lon: lng2 });
 }
 
 function formatDist(m: number): string {

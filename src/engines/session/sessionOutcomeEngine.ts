@@ -2,6 +2,8 @@
 // Rule-based outcome analysis and next-move suggestions after a detecting session.
 // Uses only data already held in the app — no external calls, no AI.
 
+import { distanceMeters } from '../../utils/geo';
+
 export type FindSpread = 'clustered' | 'linear' | 'scattered' | null;
 
 export interface SessionOutcome {
@@ -27,13 +29,7 @@ interface PrevSessionData { findsCount: number; }
 // ─── Geometry helpers ─────────────────────────────────────────────────────────
 
 function haversineDist(a: FindPoint, b: FindPoint): number {
-  const R    = 6371000;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLon = (b.lon - a.lon) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const s    = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
+  return distanceMeters(a, b);
 }
 
 function centroid(pts: FindPoint[]): FindPoint {

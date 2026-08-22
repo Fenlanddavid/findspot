@@ -16,19 +16,39 @@ export async function captureGPS(options?: {
 
     let bestFix: GPSFix | null = null;
     let watchId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (options?.acceptRef) options.acceptRef.accept = null;
+    };
+
+    const finishWithFix = (fix: GPSFix) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(fix);
+    };
+
+    const finishWithError = (message: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(message));
+    };
 
     // Force high-accuracy lock
-    const timeoutId = setTimeout(() => {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      if (bestFix) resolve(bestFix);
-      else reject(new Error("GPS timeout: Could not get a stable lock."));
+    timeoutId = setTimeout(() => {
+      if (bestFix) finishWithFix(bestFix);
+      else finishWithError("GPS timeout: Could not get a stable lock.");
     }, 10000); // 10s max wait for precision
 
     if (options?.acceptRef) {
       options.acceptRef.accept = () => {
-        clearTimeout(timeoutId);
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        if (bestFix) resolve(bestFix);
+        if (bestFix) finishWithFix(bestFix);
+        else finishWithError("GPS capture cannot be accepted before a location fix is available.");
       };
     }
 
@@ -47,18 +67,23 @@ export async function captureGPS(options?: {
 
         // If we hit our target precision (under 10m), finish early
         if (fix.accuracyM !== null && fix.accuracyM <= 10) {
-          clearTimeout(timeoutId);
-          if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-          resolve(fix);
+          finishWithFix(fix);
         }
       },
       (err) => {
-        clearTimeout(timeoutId);
-        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-        reject(new Error(err.message || "GPS capture failed"));
+        // GeolocationPositionError.PERMISSION_DENIED is 1. Avoid relying on the
+        // constructor being exposed as a runtime global on every browser.
+        if (err.code !== 1 && bestFix) {
+          finishWithFix(bestFix);
+          return;
+        }
+        finishWithError(err.message || "GPS capture failed");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+
+    // A test double may invoke a callback synchronously before returning its id.
+    if (settled && watchId !== null) navigator.geolocation.clearWatch(watchId);
   });
 }
 

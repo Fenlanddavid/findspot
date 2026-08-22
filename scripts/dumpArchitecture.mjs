@@ -22,11 +22,14 @@ const INCLUDED_DIRECTORIES = [
 
 const INCLUDED_ROOT_FILES = new Set([
   '.gitignore',
+  'eslint.config.js',
+  'index.html',
   'LICENSE',
   'NOTICE',
   'README.md',
   'package-lock.json',
   'package.json',
+  'playwright.companion.config.ts',
   'playwright.config.ts',
   'postcss.config.js',
   'tailwind.config.js',
@@ -108,21 +111,22 @@ export function listDumpFiles() {
       INCLUDED_ROOT_FILES.has(path)
       || INCLUDED_DIRECTORIES.some(directory => path.startsWith(directory))
     ))
-    .filter(path => DUMP_EXTENSIONS.has(extensionOf(path)))
+    .filter(path => INCLUDED_ROOT_FILES.has(path) || DUMP_EXTENSIONS.has(extensionOf(path)))
     .sort();
 }
 
 export function requiredDumpFiles() {
   const candidates = candidateFiles();
   return candidates.filter(path => (
-    path === SELF
+    INCLUDED_ROOT_FILES.has(path)
+    || path === SELF
     || REQUIRED_PRODUCTION_ASSETS.has(path)
     || path.startsWith('companion/')
     || path.startsWith('docs/')
     || path.startsWith('.github/workflows/')
     || /(^|\/)wrangler\.(?:toml|json|jsonc)$/.test(path)
     || path.endsWith('.d.ts')
-  )).filter(path => DUMP_EXTENSIONS.has(extensionOf(path))).sort();
+  )).filter(path => INCLUDED_ROOT_FILES.has(path) || DUMP_EXTENSIONS.has(extensionOf(path))).sort();
 }
 
 export function verifyDumpCoverage(files = listDumpFiles()) {

@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { anchorOctant, HYPOTHESIS_BY_RULE } from './types';
 import { HISTORIC_CONTEXT_RADIUS_M } from './contextRadius';
+import { distanceMeters } from '../utils/geo';
 
 export interface ScanContext {
   scanId: string;
@@ -76,13 +77,7 @@ export function hasRequiredSources(
 }
 
 function distM(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return distanceMeters({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
 }
 
 function snap(label: string, scanId: string): EvidenceSnapshot {

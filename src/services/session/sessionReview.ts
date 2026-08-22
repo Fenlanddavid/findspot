@@ -1,22 +1,13 @@
 import { db, type FindSpotDB, type Track } from '../../db';
 import { sessionStartedAt } from './activeSessionContext';
 import { segmentCrossesRecordedGap } from '../../shared/trackSegments';
-
-const EARTH_RADIUS_M = 6_371_000;
-
-function radians(degrees: number): number {
-  return degrees * Math.PI / 180;
-}
+import { distanceMeters } from '../../utils/geo';
 
 function distanceMetres(
   left: { lat: number; lon: number },
   right: { lat: number; lon: number },
 ): number {
-  const dLat = radians(right.lat - left.lat);
-  const dLon = radians(right.lon - left.lon);
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos(radians(left.lat)) * Math.cos(radians(right.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return distanceMeters(left, right);
 }
 
 function crossesGap(

@@ -34,7 +34,6 @@ self.addEventListener('fetch', event => {
       await cache.put(cacheUrl, new Response(recording, {
         headers: {
           'Content-Type': recording.type || 'application/vnd.findspot.companion+json',
-          'X-FindSpot-Filename': recording.name,
           'Cache-Control': 'no-store',
         },
       }));

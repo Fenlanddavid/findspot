@@ -6,6 +6,9 @@ compatibility_date = "2026-07-23"
 binding    = "WALES_LIDAR_BUCKET"
 bucket_name = "findspot-wales-lidar"
 
+[observability]
+enabled = true
+
 # Deploy:
 #   cd workers/wales-lidar
 #   wrangler deploy

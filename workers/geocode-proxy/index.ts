@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { CACHE_POLICIES } from '../../src/shared/cachePolicy';
+import { originAllowed } from './originPolicy';
 
 const UPSTREAM_BASE_URL = 'https://nominatim.openstreetmap.org';
 const UPSTREAM_INTERVAL_MS = 1_100;
@@ -177,18 +178,6 @@ function boundedInteger(value: string | null, min: number, max: number, fallback
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
-}
-
-function configuredOrigins(value?: string): Set<string> {
-  return new Set((value ?? `${APP_URL},http://localhost:5173,http://127.0.0.1:5173`)
-    .split(',')
-    .map((entry) => entry.trim().replace(/\/$/, ''))
-    .filter(Boolean));
-}
-
-function originAllowed(origin: string | null, configured?: string): boolean {
-  if (origin === null) return true;
-  return configuredOrigins(configured).has(origin.replace(/\/$/, ''));
 }
 
 function corsHeaders(origin: string | null): Headers {

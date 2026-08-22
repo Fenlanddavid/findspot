@@ -1,7 +1,7 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "5.0.1",
+  "version": "5.0.2",
   "type": "module",
   "engines": {
     "node": ">=22.22.0"
@@ -10,6 +10,7 @@
     "dev": "vite",
     "check:casing": "node scripts/checkCasing.mjs",
     "check:any": "node scripts/checkAnyBaseline.mjs",
+    "check:hooks": "node scripts/checkHooksBaseline.mjs",
     "check:dump": "node scripts/dumpArchitecture.mjs --verify",
     "check:release": "node scripts/checkReleaseNotes.mjs",
     "release:prepare": "node scripts/prepareRelease.mjs",
@@ -17,7 +18,7 @@
     "typecheck": "tsc -b --pretty false",
     "typecheck:worker": "tsc -p workers/findspot-static/tsconfig.json --pretty false && tsc -p workers/geocode-proxy/tsconfig.json --pretty false",
     "check:worker-types": "wrangler types workers/findspot-static/worker-configuration.d.ts --check --config workers/findspot-static/wrangler.toml --include-runtime=false && wrangler types workers/geocode-proxy/worker-configuration.d.ts --check --config workers/geocode-proxy/wrangler.toml --include-runtime=false",
-    "test": "npm run typecheck && npm run typefloor && npm run check:casing && npm run check:any && npm run check:dump && npm run test:unit",
+    "test": "npm run typecheck && npm run typefloor && npm run check:casing && npm run check:any && npm run check:hooks && npm run check:dump && npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:worker": "npm run check:worker-types && npm run typecheck:worker && vitest run -c vitest.worker.config.ts",
@@ -60,9 +61,12 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/parser": "8.67.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.18",
+    "eslint": "10.9.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.9.0",
     "gh-pages": "^6.3.0",
