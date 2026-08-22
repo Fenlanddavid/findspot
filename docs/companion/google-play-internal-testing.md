@@ -2,6 +2,18 @@
 
 Prepared on 3 August 2026 for package `uk.findspot.companion`.
 
+## Next internal-test release
+
+The source is prepared as `1.0.0-beta.4` (`versionCode` 4). Do not replace the
+beta.3 artifact details below until a signed beta.4 bundle has been built and
+verified. Use these release notes for beta.4:
+
+```text
+Companion now confirms successful or cancelled recording starts back to
+FindSpot. Stop failures are reported explicitly, and FindSpot keeps a session
+marked active until the completed trail has been safely imported.
+```
+
 ## Upload artifact
 
 - file: `companion/android/app/build/outputs/bundle/release/app-release.aab`

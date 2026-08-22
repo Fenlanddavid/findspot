@@ -246,7 +246,7 @@ public final class MainActivity extends Activity {
                 .setTitle("Turn on location")
                 .setMessage("GPS must be enabled before Companion can record.")
                 .setPositiveButton("Open settings", (dialog, which) -> startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
-                .setNegativeButton("Cancel", (dialog, which) -> closeAfterControl())
+                .setNegativeButton("Cancel", (dialog, which) -> returnControlResult("start_cancelled"))
                 .show();
             return;
         }
@@ -255,14 +255,25 @@ public final class MainActivity extends Activity {
         if (active != null) {
             selectedRecordingUuid = active.uuid();
             if ("interrupted".equals(active.state()) || "paused".equals(active.state())) {
-                serviceAction(RecordingService.ACTION_RESUME, active.uuid());
+                try {
+                    serviceAction(RecordingService.ACTION_RESUME, active.uuid());
+                } catch (RuntimeException error) {
+                    returnControlResult("start_failed");
+                    return;
+                }
             }
             confirmBackgroundStart();
             return;
         }
         RecordingModels.Summary recording = store.startNew();
         selectedRecordingUuid = recording.uuid();
-        serviceAction(RecordingService.ACTION_START, recording.uuid());
+        try {
+            serviceAction(RecordingService.ACTION_START, recording.uuid());
+        } catch (RuntimeException error) {
+            store.interrupt(recording.uuid(), "process_killed");
+            returnControlResult("start_failed");
+            return;
+        }
         confirmBackgroundStart();
     }
 
@@ -289,12 +300,12 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Cancel", (dialog, which) -> {
                 permissionPromptOpen = false;
                 pendingControl = null;
-                closeAfterControl();
+                returnControlResult("start_cancelled");
             })
             .setOnCancelListener(dialog -> {
                 permissionPromptOpen = false;
                 pendingControl = null;
-                closeAfterControl();
+                returnControlResult("start_cancelled");
             })
             .show();
     }
@@ -314,11 +325,16 @@ public final class MainActivity extends Activity {
         RecordingModels.Summary active = store.activeRecording();
         if (active == null) {
             Toast.makeText(this, "No Companion recording is active.", Toast.LENGTH_LONG).show();
-            closeAfterControl();
+            returnControlResult("stop_failed");
             return;
         }
         selectedRecordingUuid = active.uuid();
-        serviceAction(RecordingService.ACTION_STOP, active.uuid());
+        try {
+            serviceAction(RecordingService.ACTION_STOP, active.uuid());
+        } catch (RuntimeException error) {
+            returnControlResult("stop_failed");
+            return;
+        }
         refreshHandler.postDelayed(() -> shareStoppedRecording(active.uuid(), 0), 150L);
     }
 
@@ -328,7 +344,7 @@ public final class MainActivity extends Activity {
             recording = store.get(uuid);
         } catch (RuntimeException missing) {
             Toast.makeText(this, "The recording could not be found.", Toast.LENGTH_LONG).show();
-            closeAfterControl();
+            returnControlResult("stop_failed");
             return;
         }
         if (!"stopped".equals(recording.state()) && attempt < 10) {
@@ -337,7 +353,7 @@ public final class MainActivity extends Activity {
         }
         if (!"stopped".equals(recording.state())) {
             Toast.makeText(this, "The recording could not be stopped.", Toast.LENGTH_LONG).show();
-            closeAfterControl();
+            returnControlResult("stop_failed");
             return;
         }
         shareJson(recording, true, findSpotImportContext());
@@ -345,7 +361,24 @@ public final class MainActivity extends Activity {
 
     private void confirmBackgroundStart() {
         Toast.makeText(this, "Companion is recording in the background.", Toast.LENGTH_SHORT).show();
-        closeAfterControl();
+        returnControlResult("started");
+    }
+
+    private void returnControlResult(String result) {
+        if (!launchedFromFindSpot || targetSessionId == null || targetSessionId.isBlank()) {
+            closeAfterControl();
+            return;
+        }
+        Uri destination = Uri.parse(FINDSPOT_URL).buildUpon()
+            .appendPath("session")
+            .appendPath(targetSessionId)
+            .appendQueryParameter("companionResult", result)
+            .build();
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, destination));
+        } finally {
+            closeAfterControl();
+        }
     }
 
     private void closeAfterControl() {
@@ -400,6 +433,7 @@ public final class MainActivity extends Activity {
             else render();
         } catch (IOException | RuntimeException error) {
             Toast.makeText(this, "Could not create JSON export: " + error.getMessage(), Toast.LENGTH_LONG).show();
+            if (closeAfterShare) returnControlResult("stop_failed");
         }
     }
 
@@ -482,7 +516,7 @@ public final class MainActivity extends Activity {
         else {
             pendingControl = null;
             Toast.makeText(this, "Precise location permission is required to record a trail.", Toast.LENGTH_LONG).show();
-            closeAfterControl();
+            returnControlResult("start_cancelled");
         }
     }
 

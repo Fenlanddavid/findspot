@@ -61,6 +61,10 @@ describe('Android Companion architecture', () => {
     expect(activity).toContain('addPrimary("Open FindSpot", this::openFindSpot)');
     expect(activity).toContain('shareStoppedRecording(active.uuid(), 0)');
     expect(activity).toContain('sendDirectlyToFindSpot(share, uri)');
+    expect(activity).toContain('returnControlResult("started")');
+    expect(activity).toContain('returnControlResult("start_cancelled")');
+    expect(activity).toContain('returnControlResult("stop_failed")');
+    expect(activity).toContain('.appendQueryParameter("companionResult", result)');
     expect(activity).toContain('packageName.startsWith("org.chromium.webapk")');
     expect(activity).toContain('org.chromium.webapk.shell_apk.startUrl');
     expect(notifications).toContain('https://fenlanddavid.github.io/findspot/');

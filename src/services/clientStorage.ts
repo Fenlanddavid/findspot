@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db';
+import { isPendingCompanionCommand } from './companionControlState';
 
 export const FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY = 'fs_fg_default_map_style' as const;
 
@@ -7,6 +8,7 @@ export type DurableClientSettingKey =
     | 'findRecordMode'
     | 'fs_club_rally_home_card_dismissed'
     | 'fs_companion_active_session'
+    | 'fs_companion_pending_command'
     | 'fs_dev_egg'
     | 'fs_going_events'
     | 'fs_club_submissions'
@@ -63,6 +65,8 @@ export function isDurableSettingValue(key: DurableClientSettingKey, value: unkno
             return value === 'quick' || value === 'full';
         case 'fs_companion_active_session':
             return typeof value === 'string';
+        case 'fs_companion_pending_command':
+            return value === null || isPendingCompanionCommand(value);
         case 'fs_fg_default_map_style':
             return value === 'streets' || value === 'satellite';
         case 'fs_discover_radius':
@@ -252,6 +256,7 @@ export async function migrateLegacyClientStorage(): Promise<void> {
         findRecordMode: 'quick',
         fs_club_rally_home_card_dismissed: false,
         fs_companion_active_session: '',
+        fs_companion_pending_command: null,
         fs_dev_egg: false,
         fs_going_events: [],
         fs_club_submissions: [],

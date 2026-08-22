@@ -1,7 +1,7 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "5.0.0",
+  "version": "5.0.1",
   "type": "module",
   "engines": {
     "node": ">=22.22.0"
@@ -25,6 +25,7 @@
     "smoke": "playwright test tests/smoke.spec.ts",
     "regression": "playwright test tests/regression.spec.ts",
     "test:e2e": "playwright test",
+    "test:companion-handoff": "npm run build && playwright test --config=playwright.companion.config.ts",
     "test:all": "npm test && npm run test:worker && npm run test:e2e",
     "test:e2e:nix": "nix shell nixpkgs#chromium -c bash -lc 'export PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=\"$(which chromium)\"; npm run test:e2e'",
     "test:all:nix": "npm test && npm run test:worker:nix && npm run test:e2e:nix",

@@ -22,7 +22,8 @@ import { getNotableFindScore } from "../components/ReportChrome";
 import type { WorkflowState } from "../types/significantFind";
 import { area as turfArea } from "@turf/turf";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
+import { ephemeralSession, setDurableSetting, useDurableSetting } from '../services/clientStorage';
+import type { CompanionControlResult, PendingCompanionCommand } from '../services/companionControlState';
 import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
@@ -118,8 +119,16 @@ export default function SessionPage(props: {
     'fs_companion_active_session',
     '',
   );
+  const [pendingCompanionCommand, setPendingCompanionCommand, companionCommandStateReady] = useDurableSetting<PendingCompanionCommand | null>(
+    'fs_companion_pending_command',
+    null,
+  );
   const isCompanionTracking = companionActiveSessionId === sessionId;
-  const isOtherCompanionTracking = companionActiveSessionId !== '' && !isCompanionTracking;
+  const sessionCompanionCommand = pendingCompanionCommand?.sessionId === sessionId
+    ? pendingCompanionCommand
+    : null;
+  const isOtherCompanionTracking = (companionActiveSessionId !== '' && !isCompanionTracking)
+    || (!!pendingCompanionCommand && pendingCompanionCommand.sessionId !== sessionId);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [workspaceTab, setWorkspaceTabState] = useState<ActiveWorkspaceTab>(() => {
     const saved = ephemeralSession.get(`fs_v5_workspace_tab:${sessionId}`);
@@ -131,6 +140,38 @@ export default function SessionPage(props: {
   const [savedPointDefaultLabel, setSavedPointDefaultLabel] = useState<string | undefined>();
   const [workspaceGpsLocation, setWorkspaceGpsLocation] = useState<FieldLocation | null>(null);
   const finishRequestHandledRef = useRef(false);
+
+  useEffect(() => {
+    const result = searchParams.get('companionResult') as CompanionControlResult | null;
+    if (!result || !companionStateReady || !companionCommandStateReady) return;
+    const pendingStart = pendingCompanionCommand?.action === 'start'
+      && pendingCompanionCommand.sessionId === sessionId;
+    const pendingStop = pendingCompanionCommand?.action === 'stop'
+      && pendingCompanionCommand.sessionId === sessionId;
+
+    async function acknowledgeResult() {
+      if (result === 'started' && pendingStart) {
+        await setDurableSetting('fs_companion_active_session', sessionId);
+        await setDurableSetting('fs_companion_pending_command', null);
+        setCompanionActiveSessionId(sessionId);
+        setPendingCompanionCommand(null);
+        setWorkspaceNotice('Companion confirmed recording');
+      } else if ((result === 'start_cancelled' || result === 'start_failed') && pendingStart) {
+        await setDurableSetting('fs_companion_pending_command', null);
+        setPendingCompanionCommand(null);
+        setError(result === 'start_cancelled'
+          ? 'Companion start was cancelled. No recording was marked active.'
+          : 'Companion could not start recording. Check its location permission and try again.');
+      } else if (result === 'stop_failed' && pendingStop) {
+        await setDurableSetting('fs_companion_pending_command', null);
+        setPendingCompanionCommand(null);
+        setError('Companion could not stop or return its trail. It is still marked active so you can retry safely.');
+      }
+      nav(`/session/${sessionId}`, { replace: true });
+    }
+
+    void acknowledgeResult();
+  }, [companionCommandStateReady, companionStateReady, nav, pendingCompanionCommand, searchParams, sessionId, setCompanionActiveSessionId, setPendingCompanionCommand]);
 
   const [trimStartMins, setTrimStartMins] = useState(0);
   const [trimEndMins, setTrimEndMins] = useState(0);
@@ -627,7 +668,62 @@ export default function SessionPage(props: {
       setError("Session finished, but ground coverage could not be prepared.");
     });
   }
+
+  async function persistPendingCompanionCommand(command: PendingCompanionCommand | null) {
+    await setDurableSetting('fs_companion_pending_command', command);
+    setPendingCompanionCommand(command);
+  }
+
+  async function launchCompanionStart() {
+    try {
+      setError(null);
+      await persistPendingCompanionCommand({
+        action: 'start',
+        sessionId,
+        requestedAt: Date.now(),
+      });
+      window.location.assign(companionStartHref);
+    } catch (cause) {
+      setError(`Could not prepare Companion start: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  }
+
+  async function launchCompanionStop(finishAfterImport: boolean) {
+    try {
+      setError(null);
+      await persistPendingCompanionCommand({
+        action: 'stop',
+        sessionId,
+        requestedAt: Date.now(),
+        finishAfterImport,
+      });
+      window.location.assign(finishAfterImport ? companionStopAndFinishHref : companionStopHref);
+    } catch (cause) {
+      setError(`Could not prepare Companion stop: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  }
+
+  async function confirmLegacyCompanionStart() {
+    await setDurableSetting('fs_companion_active_session', sessionId);
+    await setDurableSetting('fs_companion_pending_command', null);
+    setCompanionActiveSessionId(sessionId);
+    setPendingCompanionCommand(null);
+    setWorkspaceNotice('Companion marked as recording');
+  }
+
+  async function cancelPendingCompanionCommand() {
+    await persistPendingCompanionCommand(null);
+    setWorkspaceNotice(isCompanionTracking
+      ? 'Stop request cancelled; Companion remains marked active'
+      : 'Companion start cancelled');
+  }
+
   async function requestFinishSession() {
+    if (sessionCompanionCommand?.action === 'start') {
+      setWorkspaceTab('record');
+      setError("Confirm that Companion started, or choose 'It didn't start', before finishing this visit.");
+      return;
+    }
     const confirmed = await confirmAction({
       title: 'Finish this visit?',
       message: `${activeFindCount} recorded find${activeFindCount === 1 ? '' : 's'}\n${activePendingCount} pending find${activePendingCount === 1 ? '' : 's'}\n${activeOpenSignalCount} open signal${activeOpenSignalCount === 1 ? '' : 's'}${isAnyTracking ? '\n\nTrail recording will stop.' : ''}`,
@@ -635,7 +731,12 @@ export default function SessionPage(props: {
       cancelLabel: 'Keep detecting',
       danger: true,
     });
-    if (confirmed) await finishSession();
+    if (!confirmed) return;
+    if (isCompanionTracking) {
+      await launchCompanionStop(true);
+      return;
+    }
+    await finishSession();
   }
   useEffect(() => {
     if (!finishRequested || finishRequestHandledRef.current || loading || !session || isFinished) return;
@@ -784,11 +885,9 @@ export default function SessionPage(props: {
           isCompanionTracking={isCompanionTracking}
           hasRecordedTrail={!!tracks?.some(track => (track.points?.length ?? 0) > 0)}
           isAndroid={isAndroid}
-          companionStateReady={companionStateReady}
+          companionStateReady={companionStateReady && companionCommandStateReady}
           isOtherCompanionTracking={isOtherCompanionTracking}
-          companionStartHref={companionStartHref}
-          companionStopHref={companionStopHref}
-          companionStopAndFinishHref={companionStopAndFinishHref}
+          companionPendingAction={sessionCompanionCommand?.action ?? null}
           trackingStatus={trackingStatus}
           boundaryStatus={boundaryStatus}
           startPointDistanceText={startPointDistanceText}
@@ -801,8 +900,10 @@ export default function SessionPage(props: {
           onPermission={() => nav(permission ? `/permission/${permission.id}` : '/')}
           onFinish={requestFinishSession}
           onToggleTracking={toggleTracking}
-          onCompanionStart={() => setCompanionActiveSessionId(sessionId)}
-          onCompanionStop={() => setCompanionActiveSessionId('')}
+          onCompanionStart={() => void launchCompanionStart()}
+          onCompanionStop={() => void launchCompanionStop(false)}
+          onCompanionConfirmStart={() => void confirmLegacyCompanionStart()}
+          onCompanionCancel={() => void cancelPendingCompanionCommand()}
           onImportTrail={() => nav(`/companion-import?session=${sessionId}`)}
           onLowDistraction={() => setShowTrackingOverlay(true)}
           onQuickFind={() => setShowWorkspaceQuickFind(true)}
@@ -1100,34 +1201,34 @@ export default function SessionPage(props: {
                                           </button>
                                         ) : isAndroid && isCompanionTracking ? (
                                           <>
-                                            <a
-                                                href={companionStopHref}
-                                                onClick={() => setCompanionActiveSessionId('')}
+                                            <button
+                                                type="button"
+                                                onClick={() => void launchCompanionStop(false)}
                                                 className="flex items-center gap-2 rounded-lg border border-red-300 bg-white px-4 py-1.5 text-xs font-bold text-red-700 shadow-sm transition-all active:scale-95 dark:border-red-800 dark:bg-gray-800 dark:text-red-300"
                                             >
                                                 <span>Stop Tracking</span>
-                                            </a>
-                                            <a
-                                                href={companionStopAndFinishHref}
-                                                onClick={() => setCompanionActiveSessionId('')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => void requestFinishSession()}
                                                 className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
                                             >
                                                 <span>Stop Tracking &amp; Finish Session</span>
-                                            </a>
+                                            </button>
                                           </>
                                         ) : isAndroid ? (
-                                          <a
-                                              href={!companionStateReady || isOtherCompanionTracking ? undefined : companionStartHref}
+                                          <button
+                                              type="button"
                                               onClick={() => {
                                                 if (companionStateReady && !isOtherCompanionTracking) {
-                                                  setCompanionActiveSessionId(sessionId);
+                                                  void launchCompanionStart();
                                                 }
                                               }}
                                               aria-disabled={!companionStateReady || isOtherCompanionTracking}
                                               className={`flex items-center gap-2 rounded-lg border px-4 py-1.5 text-xs font-bold shadow-sm transition-all active:scale-95 ${!companionStateReady || isOtherCompanionTracking ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-700 dark:bg-gray-800' : 'border-emerald-200 bg-white text-emerald-600 dark:border-emerald-700 dark:bg-gray-800 dark:text-emerald-400'}`}
                                           >
                                               <span>{isOtherCompanionTracking ? 'Tracking another session' : 'Track Session'}</span>
-                                          </a>
+                                          </button>
                                         ) : (
                                           <button
                                               type="button"

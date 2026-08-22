@@ -21,7 +21,7 @@ describe('install tracking removal', () => {
       readFile(new URL('../../src/pages/Settings.tsx', import.meta.url), 'utf8'),
     ]);
 
-    expect(pkg.version).toBe('5.0.0');
+    expect(pkg.version).toBe('5.0.1');
     expect(settings).toContain("replace(/^([0-9]+\\.[0-9]+)\\.0$/, 'V$1')");
     expect(settings).toContain('Trusted by +10,000 Detectorists');
   });

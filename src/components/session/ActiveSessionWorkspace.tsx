@@ -137,9 +137,7 @@ export function ActiveSessionWorkspace(props: {
   isAndroid: boolean;
   companionStateReady: boolean;
   isOtherCompanionTracking: boolean;
-  companionStartHref: string;
-  companionStopHref: string;
-  companionStopAndFinishHref: string;
+  companionPendingAction: 'start' | 'stop' | null;
   trackingStatus: TrackingStatus;
   boundaryStatus: BoundaryPositionStatus | null;
   startPointDistanceText: string | null;
@@ -154,6 +152,8 @@ export function ActiveSessionWorkspace(props: {
   onToggleTracking: () => void;
   onCompanionStart: () => void;
   onCompanionStop: () => void;
+  onCompanionConfirmStart: () => void;
+  onCompanionCancel: () => void;
   onImportTrail: () => void;
   onLowDistraction: () => void;
   onQuickFind: () => void;
@@ -197,19 +197,19 @@ export function ActiveSessionWorkspace(props: {
               {props.isTracking ? (
                 <button type="button" onClick={props.onToggleTracking} className="min-h-11 rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">Stop FindSpot trail</button>
               ) : props.isCompanionTracking ? (
-                <a href={props.companionStopHref} onClick={props.onCompanionStop} className="flex min-h-11 items-center rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">Stop Companion</a>
+                <button type="button" onClick={props.onCompanionStop} className="flex min-h-11 items-center rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">{props.companionPendingAction === 'stop' ? 'Retry Companion stop' : 'Stop Companion'}</button>
               ) : (
                 <div className="flex gap-2">
                   <button type="button" onClick={props.onToggleTracking} className="min-h-11 rounded-xl bg-teal-500 px-3 py-2 text-xs font-black text-gray-950 shadow-lg">FindSpot trail</button>
                   {props.isAndroid && (
-                    <a
-                      href={props.companionStateReady && !props.isOtherCompanionTracking ? props.companionStartHref : undefined}
+                    <button
+                      type="button"
                       aria-disabled={!props.companionStateReady || props.isOtherCompanionTracking}
                       onClick={props.companionStateReady && !props.isOtherCompanionTracking ? props.onCompanionStart : undefined}
                       className={`flex min-h-11 items-center rounded-xl border px-3 py-2 text-xs font-black shadow-lg backdrop-blur ${props.companionStateReady && !props.isOtherCompanionTracking ? 'border-white/15 bg-gray-950/85 text-gray-100' : 'pointer-events-none border-white/10 bg-gray-950/70 text-gray-600'}`}
                     >
-                      Companion
-                    </a>
+                      {props.companionPendingAction === 'start' ? 'Retry Companion' : 'Companion'}
+                    </button>
                   )}
                 </div>
               )}
@@ -279,11 +279,24 @@ export function ActiveSessionWorkspace(props: {
                 </div>
               ) : props.isCompanionTracking ? (
                 <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3">
-                  <p className="text-xs font-black text-emerald-200">Companion recording</p>
-                  <p className="mt-1 text-2xs leading-relaxed text-emerald-100/70">You can hide FindSpot or lock the phone. Stop Companion before finishing this session.</p>
+                  <p className="text-xs font-black text-emerald-200">{props.companionPendingAction === 'stop' ? 'Waiting for Companion trail' : 'Companion recording'}</p>
+                  <p className="mt-1 text-2xs leading-relaxed text-emerald-100/70">{props.companionPendingAction === 'stop' ? 'Companion remains marked active until its recording is safely imported. If sharing was cancelled, retry or cancel this stop request.' : 'You can hide FindSpot or lock the phone. Finishing this visit will stop Companion and wait for its trail.'}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <a href={props.companionStopHref} onClick={props.onCompanionStop} className="flex min-h-11 items-center justify-center rounded-xl border border-red-400/35 px-3 text-center text-2xs font-black text-red-200">Stop Companion</a>
-                    <a href={props.companionStopAndFinishHref} onClick={props.onCompanionStop} className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-3 text-center text-2xs font-black text-white">Stop &amp; finish</a>
+                    <button type="button" onClick={props.onCompanionStop} className="flex min-h-11 items-center justify-center rounded-xl border border-red-400/35 px-3 text-center text-2xs font-black text-red-200">{props.companionPendingAction === 'stop' ? 'Retry stop' : 'Stop Companion'}</button>
+                    {props.companionPendingAction === 'stop' ? (
+                      <button type="button" onClick={props.onCompanionCancel} className="flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-3 text-center text-2xs font-black text-gray-200">Sharing was cancelled</button>
+                    ) : (
+                      <button type="button" onClick={props.onFinish} className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-3 text-center text-2xs font-black text-white">Stop &amp; finish</button>
+                    )}
+                  </div>
+                </div>
+              ) : props.companionPendingAction === 'start' ? (
+                <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
+                  <p className="text-xs font-black text-amber-200">Waiting for Companion confirmation</p>
+                  <p className="mt-1 text-2xs leading-relaxed text-amber-100/70">New Companion versions confirm automatically. With an older beta, confirm here only after Android says it is recording.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={props.onCompanionConfirmStart} className="min-h-11 rounded-xl bg-emerald-500 px-3 text-2xs font-black text-gray-950">Companion is recording</button>
+                    <button type="button" onClick={props.onCompanionCancel} className="min-h-11 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">It didn't start</button>
                   </div>
                 </div>
               ) : (
@@ -294,15 +307,15 @@ export function ActiveSessionWorkspace(props: {
                       <span className="mt-1 block text-3xs font-bold text-gray-800/70">Keeps the screen awake</span>
                     </button>
                     {props.isAndroid && (
-                      <a
-                        href={props.companionStateReady && !props.isOtherCompanionTracking ? props.companionStartHref : undefined}
+                      <button
+                        type="button"
                         aria-disabled={!props.companionStateReady || props.isOtherCompanionTracking}
                         onClick={props.companionStateReady && !props.isOtherCompanionTracking ? props.onCompanionStart : undefined}
                         className={`flex min-h-16 flex-col justify-center rounded-xl border px-3 py-2 text-left ${props.companionStateReady && !props.isOtherCompanionTracking ? 'border-emerald-400/35 bg-emerald-400/10 text-emerald-100' : 'pointer-events-none border-white/10 bg-white/5 text-gray-600'}`}
                       >
                         <span className="block text-xs font-black">Use Companion beta</span>
                         <span className="mt-1 block text-3xs font-bold opacity-70">{props.isOtherCompanionTracking ? 'Another session is active' : 'Works with screen locked'}</span>
-                      </a>
+                      </button>
                     )}
                   </div>
                   <button type="button" onClick={props.onImportTrail} className="mt-2 min-h-11 w-full rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-300">Import a Companion trail</button>

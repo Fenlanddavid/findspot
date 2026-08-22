@@ -53,6 +53,7 @@ export const companionRecordingSchema = z.object({
     'device_reboot',
     'permission_revoked',
     'location_disabled',
+    'maximum_duration',
   ]).nullable(),
   segments: z.array(segmentSchema).min(1).max(MAX_COMPANION_SEGMENTS),
 }).strict().superRefine((recording, context) => {

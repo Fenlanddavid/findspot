@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   testMatch: "**/*.spec.ts",
+  testIgnore: "**/companionProductionHandoff.spec.ts",
   timeout: 30_000,
   forbidOnly: !!process.env.CI,
   workers: process.env.CI ? 1 : undefined,

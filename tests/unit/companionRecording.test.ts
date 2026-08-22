@@ -121,6 +121,16 @@ describe('Companion recording contract', () => {
       .rejects.toThrow(/content hash/i);
   });
 
+  it('accepts the Android 12-hour safety-stop reason', async () => {
+    const recording = await recordingFixture();
+    recording.state = 'interrupted';
+    recording.interruptionReason = 'maximum_duration';
+    recording.contentHash = await companionPayloadHash(recording);
+    await expect(validateCompanionRecordingJson(JSON.stringify(recording))).resolves.toMatchObject({
+      recording: { interruptionReason: 'maximum_duration' },
+    });
+  });
+
   it('uses sequence as canonical order and rejects cross-segment regressions', async () => {
     const recording = await recordingFixture();
     recording.segments[1].observations[0].sequence = 1;

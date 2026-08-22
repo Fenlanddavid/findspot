@@ -13,6 +13,13 @@ describe('durable client setting validation', () => {
         expect(isDurableSettingValue('fs_fg_default_map_style', 'terrain')).toBe(false);
         expect(isDurableSettingValue('fs_companion_active_session', 'session-1')).toBe(true);
         expect(isDurableSettingValue('fs_companion_active_session', null)).toBe(false);
+        expect(isDurableSettingValue('fs_companion_pending_command', null)).toBe(true);
+        expect(isDurableSettingValue('fs_companion_pending_command', {
+            action: 'stop', sessionId: 'session-1', requestedAt: 1, finishAfterImport: true,
+        })).toBe(true);
+        expect(isDurableSettingValue('fs_companion_pending_command', {
+            action: 'stop', sessionId: 'session-1', requestedAt: 1,
+        })).toBe(false);
     });
 
     it('validates structured settings before they reach UI consumers', () => {

@@ -379,13 +379,15 @@ test("V5 honours session-scoped Companion state and blocks premature finish", as
 
   await expect(page.getByText("Companion recording").first()).toBeVisible();
   await expect(page.getByText("You can hide FindSpot or lock the phone.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Stop Companion" })).toHaveAttribute("href", /companion=missing&session=companion-guard-session/);
+  await expect(page.getByRole("button", { name: "Stop Companion" })).toBeVisible();
   await page.getByRole("button", { name: "Finish", exact: true }).click();
   await expect(page.getByText("Finish this visit?")).toBeVisible();
   await page.getByRole("button", { name: "Finish visit" }).click();
-  await expect(page.getByText("Stop Companion tracking before finishing this session.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "FindSpot Companion is not installed" })).toBeVisible();
   expect((await readIndexedDbStore(page, "sessions") as Array<{ id: string; isFinished?: boolean }>)
     .find(session => session.id === "companion-guard-session")?.isFinished).toBe(false);
+  expect((await readIndexedDbStore(page, "settings") as Array<{ key: string; value?: unknown }>)
+    .find(setting => setting.key === "fs_companion_active_session")?.value).toBe("companion-guard-session");
 });
 
 test("Field Guide starts with the preferred basemap without persisting visit-time toggles", async ({ page }) => {

@@ -16,7 +16,8 @@ import {
   isAndroidUserAgent,
 } from '../services/companionLaunch';
 import { pagePersistence } from '../services/pagePersistence';
-import { setDurableSetting } from '../services/clientStorage';
+import { getDurableSetting, setDurableSetting } from '../services/clientStorage';
+import { isAcknowledgedStopForSession, type PendingCompanionCommand } from '../services/companionControlState';
 import { finishSessionRecord } from '../services/sessionMutations';
 import { prepareSessionSearchedAreas } from '../services/sessionCoverageCommands';
 import { reportNonFatal } from '../services/diagLog';
@@ -76,9 +77,8 @@ export default function CompanionImport({ projectId }: Props) {
   const availableFields = fields.filter(field => field.permissionId === newPermissionId);
 
   useEffect(() => {
-    if (!companionMissing && !receivedCompanionShare) return;
-    void setDurableSetting('fs_companion_active_session', '');
-  }, [companionMissing, receivedCompanionShare]);
+    if (companionMissing) void setDurableSetting('fs_companion_pending_command', null);
+  }, [companionMissing]);
 
   useEffect(() => {
     if (selectedSessionId || sessions.length === 0) return;
@@ -121,11 +121,23 @@ export default function CompanionImport({ projectId }: Props) {
       if (automaticSessionId) {
         const target = await pagePersistence.sessions.get(automaticSessionId);
         if (!target) throw new Error('The FindSpot session for this recording could not be found.');
+        const [pendingCommand, activeSessionId] = await Promise.all([
+          getDurableSetting<PendingCompanionCommand | null>('fs_companion_pending_command', null),
+          getDurableSetting('fs_companion_active_session', ''),
+        ]);
+        const acknowledgedStop = activeSessionId === automaticSessionId
+          || isAcknowledgedStopForSession(pendingCommand, automaticSessionId, false);
+        const authorisedFinish = finishAfterImport && isAcknowledgedStopForSession(
+          pendingCommand,
+          automaticSessionId,
+          true,
+        );
         const imported = await completeImport(
           inspected,
           automaticSessionId,
           undefined,
-          finishAfterImport,
+          authorisedFinish,
+          acknowledgedStop,
         );
         nav(`/session/${imported.sessionId}`, { replace: true });
       }
@@ -142,8 +154,21 @@ export default function CompanionImport({ projectId }: Props) {
     sessionId: string,
     newSession?: Session,
     finishSession = false,
+    acknowledgeStop = false,
   ) {
     const imported = await importCompanionRecording(inspected, sessionId, newSession);
+    if (acknowledgeStop && imported.sessionId === sessionId) {
+      const [activeSessionId, pendingCommand] = await Promise.all([
+        getDurableSetting('fs_companion_active_session', ''),
+        getDurableSetting<PendingCompanionCommand | null>('fs_companion_pending_command', null),
+      ]);
+      if (activeSessionId === imported.sessionId) {
+        await setDurableSetting('fs_companion_active_session', '');
+      }
+      if (pendingCommand?.sessionId === imported.sessionId) {
+        await setDurableSetting('fs_companion_pending_command', null);
+      }
+    }
     if (finishSession) {
       const stoppedAt = inspected.recording.stoppedAtUtc ?? Date.now();
       await finishSessionRecord(imported.sessionId, new Date(stoppedAt).toISOString());
@@ -200,7 +225,18 @@ export default function CompanionImport({ projectId }: Props) {
       const newSession = creatingSession ? buildAssociatedSession() : undefined;
       const sessionId = newSession?.id ?? selectedSessionId;
       if (!sessionId) throw new Error('Choose the session that this recording belongs to.');
-      await completeImport(preview, sessionId, newSession);
+      const [pendingCommand, activeSessionId] = await Promise.all([
+        getDurableSetting<PendingCompanionCommand | null>('fs_companion_pending_command', null),
+        getDurableSetting('fs_companion_active_session', ''),
+      ]);
+      await completeImport(
+        preview,
+        sessionId,
+        newSession,
+        false,
+        activeSessionId === sessionId
+          || isAcknowledgedStopForSession(pendingCommand, sessionId, false),
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
