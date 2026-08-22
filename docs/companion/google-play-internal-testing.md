@@ -1,30 +1,22 @@
 # Google Play internal testing handoff
 
-Prepared on 3 August 2026 for package `uk.findspot.companion`.
-
-## Next internal-test release
-
-The source is prepared as `1.0.0-beta.4` (`versionCode` 4). Do not replace the
-beta.3 artifact details below until a signed beta.4 bundle has been built and
-verified. Use these release notes for beta.4:
-
-```text
-Companion now confirms successful or cancelled recording starts back to
-FindSpot. Stop failures are reported explicitly, and FindSpot keeps a session
-marked active until the completed trail has been safely imported.
-```
+Prepared on 22 August 2026 for package `uk.findspot.companion`.
 
 ## Upload artifact
 
 - file: `companion/android/app/build/outputs/bundle/release/app-release.aab`
-- version name: `1.0.0-beta.3`
-- version code: `3`
-- size: 167,762 bytes
-- SHA-256: `19f7eaa5087664fd4379df080c87bf5ea4f6ffe181429aaff5a4a26b759a42be`
+- version name: `1.0.0-beta.4`
+- version code: `4`
+- size: 168,219 bytes
+- SHA-256: `f079a74c95422110fe36b98f0702939fc6d8aafdaa4f5a10e23b7913d3bfd2c5`
 - upload certificate SHA-256: `8852a4c12f0921292416d2467df8de783c3ddf9b693744867cdaec3e5cdc3ce5`
 
 The release unit tests, release lint, R8, bundle signing, PWA unit suite and
 production PWA build passed before this artifact was prepared.
+
+No Android device was connected during the beta.4 build. Before rollout,
+upgrade a Play-installed beta.3 build and complete one start, stop, return and
+recording-import check on the test phone.
 
 ## Create the Play app
 
@@ -62,12 +54,12 @@ signatures differ.
    Google Account used on the test phone.
 3. Select **Create new release** and upload `app-release.aab` from the path
    above.
-4. Use release name `1.0.0-beta.3` and release notes:
+4. Use release name `1.0.0-beta.4` and release notes:
 
    ```text
-   Completed Companion trails now return directly to their FindSpot session.
-   The Android share chooser remains available only as a fallback when the
-   installed FindSpot app cannot be identified safely.
+   Companion now confirms successful or cancelled recording starts back to
+   FindSpot. Stop failures are reported explicitly, and FindSpot keeps a session
+   marked active until the completed trail has been safely imported.
    ```
 
 5. Save, review and start the internal-test rollout.
