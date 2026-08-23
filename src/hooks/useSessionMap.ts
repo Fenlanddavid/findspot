@@ -4,7 +4,7 @@ import type { GeoJSONPolygon, Track } from '../db';
 import type { CoverageResult } from '../services/coverage';
 import { splitTrackPointsAtGaps } from '../shared/trackSegments';
 import { locationAccuracyCircle, locationHeadingLine, type FieldLocation } from '../services/session/sessionFieldPosition';
-import { initialSessionMapCoordinates } from '../services/session/sessionMapViewport';
+import { initialSessionMapCenter, initialSessionMapCoordinates } from '../services/session/sessionMapViewport';
 import { useSessionMapLayers } from './useSessionMapLayers';
 
 const DEFAULT_CENTER: [number, number] = [-2, 54.5];
@@ -18,6 +18,7 @@ export type SessionMapMarker = {
 
 /** Owns the session map lifecycle and renders boundary, tracks, and coverage. */
 export function useSessionMap(params: {
+    viewportKey?: string;
     enabled?: boolean;
     center?: { lat: number; lon: number } | null;
     markers?: SessionMapMarker[];
@@ -35,11 +36,12 @@ export function useSessionMap(params: {
     coverageResult: CoverageResult | null;
     onMarkerSelect?: (marker: SessionMapMarker) => void;
 }) {
-    const { enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, onMarkerSelect } = params;
+    const { viewportKey, enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, onMarkerSelect } = params;
     const mapDivRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const initialFitCompleteRef = useRef(false);
     const viewportRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
+    const viewportKeyRef = useRef(viewportKey);
     const markerSelectRef = useRef(onMarkerSelect);
     markerSelectRef.current = onMarkerSelect;
     const markersRef = useRef(markers);
@@ -52,14 +54,24 @@ export function useSessionMap(params: {
 
     useEffect(() => () => {
         const map = mapRef.current;
-        if (map) viewportRef.current = { center: [map.getCenter().lng, map.getCenter().lat], zoom: map.getZoom() };
+        if (map && initialFitCompleteRef.current) viewportRef.current = { center: [map.getCenter().lng, map.getCenter().lat], zoom: map.getZoom() };
         mapRef.current?.remove();
         mapRef.current = null;
     }, []);
 
     useEffect(() => {
+        if (viewportKeyRef.current === viewportKey) return;
+        viewportKeyRef.current = viewportKey;
+        viewportRef.current = null;
+        initialFitCompleteRef.current = false;
+        mapRef.current?.remove();
+        mapRef.current = null;
+        setIsFollowing(true);
+    }, [viewportKey]);
+
+    useEffect(() => {
         if (!enabled) {
-            if (mapRef.current) viewportRef.current = { center: [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat], zoom: mapRef.current.getZoom() };
+            if (mapRef.current && initialFitCompleteRef.current) viewportRef.current = { center: [mapRef.current.getCenter().lng, mapRef.current.getCenter().lat], zoom: mapRef.current.getZoom() };
             mapRef.current?.remove();
             mapRef.current = null;
             initialFitCompleteRef.current = false;
@@ -145,12 +157,15 @@ export function useSessionMap(params: {
                 let map: maplibregl.Map;
                 try {
                     ensureFieldGuideMapProtocolsRegistered();
+                    const authoritativeCenter = initialSessionMapCenter({ boundary, tracks, center, liveLocation, markers });
+                    const preservedViewport = viewportRef.current;
                     map = new maplibregl.Map({
                         container: mapDivRef.current,
                         style: createFieldGuideMapStyle(mapLayers.control.isSatellite),
-                        center: viewportRef.current?.center ?? (center ? [center.lon, center.lat] : DEFAULT_CENTER),
-                        zoom: viewportRef.current?.zoom ?? 13,
+                        center: preservedViewport?.center ?? authoritativeCenter ?? DEFAULT_CENTER,
+                        zoom: preservedViewport?.zoom ?? 13,
                     });
+                    if (preservedViewport) initialFitCompleteRef.current = true;
                 } catch (error) {
                     console.error('Map init failed:', error);
                     return;
@@ -202,14 +217,17 @@ export function useSessionMap(params: {
                 });
                 map.on('dragstart', () => setIsFollowing(false));
                 map.on('zoomstart', event => { if ((event.originalEvent as Event | undefined)?.isTrusted) setIsFollowing(false); });
-                map.on('moveend', () => { viewportRef.current = { center: [map.getCenter().lng, map.getCenter().lat], zoom: map.getZoom() }; });
+                map.on('moveend', () => {
+                    if (!initialFitCompleteRef.current) return;
+                    viewportRef.current = { center: [map.getCenter().lng, map.getCenter().lat], zoom: map.getZoom() };
+                });
                 mapRef.current = map;
             }).catch(error => console.error('Map layers failed to load:', error));
             return () => { cancelled = true; };
         } else if (mapRef.current.isStyleLoaded()) {
             updateMapData(mapRef.current);
         }
-    }, [boundary, boundaryReady, center, enabled, fieldFindMarkers, fieldTracks, isFinished, isTracking, liveLocation, mapLayers.mapPreferenceReady, markers, tracks]);
+    }, [boundary, boundaryReady, center, enabled, fieldFindMarkers, fieldTracks, isFinished, isTracking, liveLocation, mapLayers.mapPreferenceReady, markers, tracks, viewportKey]);
 
     useEffect(() => {
         const map = mapRef.current;

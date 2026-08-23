@@ -38,6 +38,10 @@ describe('active session map controls', () => {
     expect(mapHook).toContain("'visibility', showFieldTrails ? 'visible' : 'none'");
     expect(mapHook).toContain('[coverageResult, enabled, mapReadyVersion, showCoverage, showFieldTrails, showPastFinds]');
     expect(mapHook).toContain('initialSessionMapCoordinates({ boundary, tracks, center, liveLocation, markers })');
+    expect(mapHook).toContain('initialSessionMapCenter({ boundary, tracks, center, liveLocation, markers })');
+    expect(mapHook).toContain('if (!initialFitCompleteRef.current) return;');
+    expect(session).toContain('viewportKey: sessionId');
+    expect(session).toContain('getPermissionScanTarget(permission)');
     expect(mapHook).toContain('if (!boundaryReady ||');
     expect(sessionData).toContain("db.sessions.where('permissionId').equals(resolvedPermissionId)");
     expect(sessionData).toContain('!fieldId || row.fieldId === fieldId || !row.fieldId');

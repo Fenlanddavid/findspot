@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GeoJSONPolygon } from '../../src/db';
-import { initialSessionMapCoordinates } from '../../src/services/session/sessionMapViewport';
+import { initialSessionMapCenter, initialSessionMapCoordinates } from '../../src/services/session/sessionMapViewport';
 
 describe('active session initial map viewport', () => {
   it('uses the marked field boundary even when session and GPS locations are elsewhere', () => {
@@ -28,5 +28,20 @@ describe('active session initial map viewport', () => {
       center: { lat: 52.2, lon: 0.12 },
       liveLocation: { lat: 52.21, lon: 0.13 },
     })).toEqual([[0.12, 52.2], [0.13, 52.21]]);
+  });
+
+  it('centres the map constructor on the field while the style loads', () => {
+    expect(initialSessionMapCenter({
+      boundary: {
+        type: 'Polygon',
+        coordinates: [[
+          [0.12, 52.2],
+          [0.14, 52.2],
+          [0.14, 52.22],
+          [0.12, 52.22],
+          [0.12, 52.2],
+        ]],
+      },
+    })).toEqual([0.13, 52.21]);
   });
 });

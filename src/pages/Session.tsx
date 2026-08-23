@@ -337,8 +337,12 @@ export default function SessionPage(props: {
     openSignalCount: activeOpenSignalCount, observationCount: activeObservationCount,
   } = activeFieldContext;
   const sessionMapCenter = useMemo(
-    () => lat != null && lon != null ? { lat, lon } : null,
-    [lat, lon],
+    () => lat != null && lon != null
+      ? { lat, lon }
+      : permission
+        ? getPermissionScanTarget(permission)
+        : null,
+    [lat, lon, permission],
   );
   const pastFieldFindMarkers = useMemo<SessionMapMarker[]>(
     () => (fieldFinds ?? []).flatMap(find =>
@@ -358,6 +362,7 @@ export default function SessionPage(props: {
     mapDivRef,
     layerControl: sessionMapLayerControl,
   } = useSessionMap({
+    viewportKey: sessionId,
     enabled: !isActiveSessionMode || workspaceTab === 'map',
     center: sessionMapCenter,
     markers: sessionMapMarkers,
