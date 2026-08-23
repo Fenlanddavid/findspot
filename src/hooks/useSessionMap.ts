@@ -247,7 +247,7 @@ export function useSessionMap(params: {
             map.once('idle', syncCoverage);
             return () => { map.off('idle', syncCoverage); };
         }
-    }, [coverageResult, enabled, showCoverage, showFieldTrails, showPastFinds]);
+    }, [coverageResult, enabled, mapReadyVersion, showCoverage, showFieldTrails, showPastFinds]);
 
     return { mapDivRef, layerControl: mapLayers.control };
 }

@@ -44,13 +44,15 @@ export function useSessionData(params: {
         [sessionId],
     );
     const fieldTracks = useLiveQuery(async () => {
-        if (!fieldId) return [];
-        const fieldSessionIds = (await db.sessions.where('fieldId').equals(fieldId).toArray())
+        const resolvedPermissionId = permissionId || await db.sessions.get(sessionId).then(row => row?.permissionId);
+        if (!resolvedPermissionId) return [];
+        const fieldSessionIds = (await db.sessions.where('permissionId').equals(resolvedPermissionId).toArray())
+            .filter(row => !fieldId || row.fieldId === fieldId || !row.fieldId)
             .map(row => row.id);
         return fieldSessionIds.length > 0
             ? db.tracks.where('sessionId').anyOf(fieldSessionIds).toArray()
             : [];
-    }, [fieldId]);
+    }, [fieldId, permissionId, sessionId]);
     const fieldFinds = useLiveQuery(
         () => fieldId
             ? db.finds.where('fieldId').equals(fieldId).toArray()

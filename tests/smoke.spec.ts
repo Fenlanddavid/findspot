@@ -177,6 +177,7 @@ test("V5 Home folds a recent open signal into one bounded return card", async ({
 });
 
 test("active sessions use the demand-mounted four-destination workspace", async ({ page }) => {
+  test.setTimeout(45_000);
   await page.goto("./");
   await expect(page.getByText('Local-first storage')).toBeVisible();
   const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
@@ -219,6 +220,9 @@ test("active sessions use the demand-mounted four-destination workspace", async 
   await expect(page.getByRole('button', { name: 'OS 1895' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'OS 1900' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Roman Roads' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Show gaps' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show gaps' }).click();
+  await expect(page.getByRole('button', { name: 'Show gaps' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: 'Satellite' }).click();
   await expect(page.getByRole('button', { name: 'Satellite' })).toHaveAttribute('aria-pressed', 'true');
   await layerButton.click();

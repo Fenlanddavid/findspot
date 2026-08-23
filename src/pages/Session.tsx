@@ -215,7 +215,6 @@ export default function SessionPage(props: {
   }, [fieldId, fields, isEdit]);
   const reportedCoverage = useReportedCoverageGeometries(
     permission?.id ?? permissionId ?? undefined,
-    sessionId,
   );
   const reportedAreas = useMemo(
     () => reportedCoverage
@@ -234,7 +233,7 @@ export default function SessionPage(props: {
     selectedField?.boundary || permission?.boundary,
     tracks,
     reportedAreas,
-    fieldId ? fieldTracks : tracks,
+    fieldTracks ?? tracks,
   );
   const isAnyTracking = isTracking || isCompanionTracking;
 
@@ -349,6 +348,12 @@ export default function SessionPage(props: {
     ),
     [fieldFinds, sessionId],
   );
+  const previousTrailsAvailable = useMemo(() => {
+    const currentTrackIds = new Set((tracks ?? []).map(track => track.id));
+    return !!fieldTracks?.some(track =>
+      !currentTrackIds.has(track.id) && (track.points?.length ?? 0) >= 2
+    );
+  }, [fieldTracks, tracks]);
   const {
     mapDivRef,
     layerControl: sessionMapLayerControl,
@@ -879,12 +884,16 @@ export default function SessionPage(props: {
           onSelectTab={setWorkspaceTab}
           mapDivRef={mapDivRef}
           mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} fieldHistory={{
-            trailsAvailable: !!fieldTracks?.some(track => (track.points?.length ?? 0) >= 2),
+            trailsAvailable: previousTrailsAvailable,
             trailsVisible: showFieldTrails,
             toggleTrails: () => setShowFieldTrails(current => !current),
             findsAvailable: pastFieldFindMarkers.length > 0,
             findsVisible: showPastFinds,
             toggleFinds: () => setShowPastFinds(current => !current),
+          }} gaps={{
+            available: !!activeBoundary,
+            visible: showCoverage,
+            toggle: () => setShowCoverage(current => !current),
           }} />}
           permissionName={permission?.name ?? 'Detecting session'}
           fieldName={selectedField?.name}
@@ -898,11 +907,6 @@ export default function SessionPage(props: {
           hasFieldNotes={!!selectedField?.notes}
           landUse={landUse}
           isStubble={isStubble}
-          hasBoundary={!!activeBoundary}
-          coveragePercent={activeCoveragePercent}
-          showCoverage={showCoverage}
-          coverageHasNoGaps={!!coverageResult && coverageResult.percentUndetected <= 1}
-          coverageError={coverageError}
           distanceText={activeDistanceText}
           isTracking={isTracking}
           isCompanionTracking={isCompanionTracking}
@@ -936,10 +940,6 @@ export default function SessionPage(props: {
           onFieldNotes={() => setShowFieldNotes(true)}
           onToggleStubble={() => void quickSetStubble(!isStubble)}
           onToggleLandUse={condition => void quickSetLandUse(landUse === condition ? '' : condition)}
-          onToggleCoverage={() => {
-            setShowCoverage(current => !current);
-            if (!showCoverage) setWorkspaceTab('map');
-          }}
           onActivity={openWorkspaceActivity}
           onOpenObservations={() => permission && nav(`/permission/${permission.id}`)}
           onOpenSignals={() => nav('/finds-box?tab=signals')}

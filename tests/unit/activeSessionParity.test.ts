@@ -7,12 +7,13 @@ async function source(path: string) {
 
 describe('active session Classic-to-V5 parity', () => {
   it('keeps every active Classic recording action represented in V5', async () => {
-    const [workspace, session] = await Promise.all([
+    const [workspace, session, layerPicker] = await Promise.all([
       source('../../src/components/session/ActiveSessionWorkspace.tsx'),
       source('../../src/pages/Session.tsx'),
+      source('../../src/components/session/SessionMapLayerPicker.tsx'),
     ]);
 
-    const activeShell = `${workspace}\n${session}`;
+    const activeShell = `${workspace}\n${session}\n${layerPicker}`;
     for (const label of [
       'Open permission',
       'Add Find to Session',
@@ -24,7 +25,7 @@ describe('active session Classic-to-V5 parity', () => {
       'Stubble',
       'Ploughed',
       'Pasture',
-      'Show coverage gaps on map',
+      'Show gaps',
       'Start in FindSpot',
       'Stop FindSpot trail',
       'Low distraction',
@@ -40,7 +41,8 @@ describe('active session Classic-to-V5 parity', () => {
     expect(session).toContain('recordSurfaceAction={<RecordSurfaceFindButton');
     expect(session).toContain('onToggleStubble={() => void quickSetStubble(!isStubble)}');
     expect(session).toContain("onToggleLandUse={condition => void quickSetLandUse(landUse === condition ? '' : condition)}");
-    expect(session).toContain("if (!showCoverage) setWorkspaceTab('map')");
+    expect(workspace).not.toContain('Show coverage gaps on map');
+    expect(session).toContain('toggle: () => setShowCoverage(current => !current)');
     expect(session).toContain('onFieldNotes={() => setShowFieldNotes(true)}');
     expect(session).toContain('findActivity={workspaceFindActivity}');
   });

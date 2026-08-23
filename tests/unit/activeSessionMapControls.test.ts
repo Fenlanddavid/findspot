@@ -18,6 +18,8 @@ describe('active session map controls', () => {
     expect(workspace).not.toContain('onRecenterMap');
     expect(workspace).not.toContain('onFitPermission');
     expect(layerPicker).toContain('Field history');
+    expect(layerPicker).toContain('Coverage');
+    expect(layerPicker).toContain('Show gaps');
     expect(layerPicker).toContain('Field trails');
     expect(layerPicker).toContain('Past finds');
     expect(layerPicker).toContain('type="range"');
@@ -34,11 +36,17 @@ describe('active session map controls', () => {
     expect(mapHook).toContain("map.addSource('field-finds'");
     expect(mapHook).toContain("filter(track => !currentTrackIds.has(track.id))");
     expect(mapHook).toContain("'visibility', showFieldTrails ? 'visible' : 'none'");
+    expect(mapHook).toContain('[coverageResult, enabled, mapReadyVersion, showCoverage, showFieldTrails, showPastFinds]');
     expect(mapHook).toContain('initialSessionMapCoordinates({ boundary, tracks, center, liveLocation, markers })');
     expect(mapHook).toContain('if (!boundaryReady ||');
-    expect(sessionData).toContain("db.sessions.where('fieldId').equals(fieldId)");
+    expect(sessionData).toContain("db.sessions.where('permissionId').equals(resolvedPermissionId)");
+    expect(sessionData).toContain('!fieldId || row.fieldId === fieldId || !row.fieldId');
+    expect(sessionData).not.toContain('if (!fieldId) return []');
     expect(sessionData).toContain("db.finds.where('fieldId').equals(fieldId)");
-    expect(session).toContain('fieldId ? fieldTracks : tracks');
+    expect(session).toContain('fieldTracks ?? tracks');
+    expect(session).toContain('const previousTrailsAvailable = useMemo(() => {');
+    expect(session).toContain('!currentTrackIds.has(track.id)');
+    expect(session).toContain('const reportedCoverage = useReportedCoverageGeometries(\n    permission?.id ?? permissionId ?? undefined,\n  );');
     expect(mapHook).toContain("map.addLayer({ id: 'session-location', type: 'circle'");
     expect(mapHook).toContain('!markers?.length && !liveLocation');
     expect(viewport).toContain('[input.liveLocation.lon, input.liveLocation.lat]');

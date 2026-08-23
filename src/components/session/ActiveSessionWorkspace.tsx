@@ -125,11 +125,6 @@ export function ActiveSessionWorkspace(props: {
   hasFieldNotes: boolean;
   landUse: string;
   isStubble: boolean;
-  hasBoundary: boolean;
-  coveragePercent: number | null;
-  showCoverage: boolean;
-  coverageHasNoGaps: boolean;
-  coverageError: boolean;
   distanceText: string | null;
   isTracking: boolean;
   isCompanionTracking: boolean;
@@ -163,7 +158,6 @@ export function ActiveSessionWorkspace(props: {
   onFieldNotes: () => void;
   onToggleStubble: () => void;
   onToggleLandUse: (landUse: 'Ploughed' | 'Pasture') => void;
-  onToggleCoverage: () => void;
   onActivity: (item: SessionActivityItem) => void;
   onOpenObservations: () => void;
   onOpenSignals: () => void;
@@ -315,12 +309,6 @@ export function ActiveSessionWorkspace(props: {
                   <button key={condition} type="button" aria-pressed={props.landUse === condition} onClick={() => props.onToggleLandUse(condition)} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.landUse === condition ? 'border-teal-400/50 bg-teal-400/15 text-teal-200' : 'border-white/15 text-gray-300'}`}>{condition}</button>
                 ))}
               </div>
-              {props.hasBoundary && (
-                <button type="button" aria-pressed={props.showCoverage} onClick={props.onToggleCoverage} className={`mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-2xs font-black ${props.showCoverage ? 'border-orange-400/50 bg-orange-400/15 text-orange-200' : 'border-white/15 text-gray-300'}`}>
-                  <span>{props.showCoverage ? (props.coverageHasNoGaps ? 'No coverage gaps' : 'Coverage gaps on map') : 'Show coverage gaps on map'}</span>
-                  <span>{props.coverageError ? 'Unavailable' : props.coveragePercent === null ? '—' : `${Math.round(props.coveragePercent)}% covered`}</span>
-                </button>
-              )}
             </div>
           </section>
         )}
