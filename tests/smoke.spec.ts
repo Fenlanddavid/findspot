@@ -228,7 +228,7 @@ test("active sessions use the demand-mounted four-destination workspace", async 
     page.locator('.maplibregl-ctrl-attrib').boundingBox(),
   ]);
   expect(findBounds && attributionBounds && findBounds.y + findBounds.height <= attributionBounds.y).toBe(true);
-  await expect(mapFindButton).toHaveCSS('z-index', '100');
+  await expect(mapFindButton.locator('..')).toHaveCSS('z-index', '100');
   await page.getByRole('button', { name: /Session/ }).last().click();
   await expect(page.getByText('This visit')).toBeVisible();
   await expect(page.locator('.maplibregl-map')).toHaveCount(0);
