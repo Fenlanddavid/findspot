@@ -198,6 +198,11 @@ test("active sessions use the demand-mounted four-destination workspace", async 
 
   await expect(page.getByText('Session active')).toBeVisible();
   await expect(page.getByText('Record on Workspace Field')).toBeVisible();
+  const [trailPanelBounds, conditionsPanelBounds] = await Promise.all([
+    page.getByText('Trail recording', { exact: true }).boundingBox(),
+    page.getByText('Visit conditions', { exact: true }).boundingBox(),
+  ]);
+  expect(trailPanelBounds && conditionsPanelBounds && trailPanelBounds.y < conditionsPanelBounds.y).toBe(true);
   await page.getByRole('button', { name: 'Add Find to Session' }).click();
   await expect(page.getByRole('heading', { name: 'Record a find' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Detecting workspace' })).toBeVisible();

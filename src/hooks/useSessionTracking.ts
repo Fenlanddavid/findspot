@@ -19,6 +19,7 @@ export function useSessionTracking(
     boundary: GeoJSONPolygon | undefined,
     tracks: Track[] | undefined,
     reportedAreas: GeoJSONArea[] = [],
+    coverageTracks: Track[] | undefined = tracks,
 ) {
     const [isTracking, setIsTracking] = useState(isTrackingActiveForSession(sessionId));
     const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
@@ -41,12 +42,12 @@ export function useSessionTracking(
             return;
         }
         const result = applyReportedCoverageToGaps(
-            calculateCoverage(boundary, tracks ?? []),
+            calculateCoverage(boundary, coverageTracks ?? []),
             reportedAreas,
         );
         setCoverageResult(result);
         setCoverageError(result === null);
-    }, [boundary, reportedAreas, showCoverage, tracks]);
+    }, [boundary, coverageTracks, reportedAreas, showCoverage]);
 
     const activeDistanceKm = useMemo(() => {
         let total = 0;

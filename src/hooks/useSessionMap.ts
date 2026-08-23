@@ -4,6 +4,7 @@ import type { GeoJSONPolygon, Track } from '../db';
 import type { CoverageResult } from '../services/coverage';
 import { splitTrackPointsAtGaps } from '../shared/trackSegments';
 import { locationAccuracyCircle, locationHeadingLine, type FieldLocation } from '../services/session/sessionFieldPosition';
+import { initialSessionMapCoordinates } from '../services/session/sessionMapViewport';
 import { useSessionMapLayers } from './useSessionMapLayers';
 
 const DEFAULT_CENTER: [number, number] = [-2, 54.5];
@@ -22,14 +23,19 @@ export function useSessionMap(params: {
     markers?: SessionMapMarker[];
     liveLocation?: FieldLocation | null;
     boundary: GeoJSONPolygon | undefined;
+    boundaryReady?: boolean;
     tracks: Track[] | undefined;
+    fieldTracks?: Track[];
+    fieldFindMarkers?: SessionMapMarker[];
     isTracking: boolean;
     isFinished: boolean;
+    showFieldTrails?: boolean;
+    showPastFinds?: boolean;
     showCoverage: boolean;
     coverageResult: CoverageResult | null;
     onMarkerSelect?: (marker: SessionMapMarker) => void;
 }) {
-    const { enabled = true, center, markers, liveLocation, boundary, tracks, isTracking, isFinished, showCoverage, coverageResult, onMarkerSelect } = params;
+    const { enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, onMarkerSelect } = params;
     const mapDivRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const initialFitCompleteRef = useRef(false);
@@ -38,6 +44,8 @@ export function useSessionMap(params: {
     markerSelectRef.current = onMarkerSelect;
     const markersRef = useRef(markers);
     markersRef.current = markers;
+    const fieldFindMarkersRef = useRef(fieldFindMarkers);
+    fieldFindMarkersRef.current = fieldFindMarkers;
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
     const mapLayers = useSessionMapLayers(mapRef, mapReadyVersion);
@@ -57,7 +65,7 @@ export function useSessionMap(params: {
             initialFitCompleteRef.current = false;
             return;
         }
-        if (!mapLayers.mapPreferenceReady || !mapDivRef.current || (!boundary && !tracks?.length && !isTracking && !center && !markers?.length && !liveLocation)) return;
+        if (!boundaryReady || !mapLayers.mapPreferenceReady || !mapDivRef.current || (!boundary && !tracks?.length && !isTracking && !center && !markers?.length && !liveLocation)) return;
 
         const updateMapData = (map: maplibregl.Map) => {
             const trackSource = map.getSource('tracks') as maplibregl.GeoJSONSource | undefined;
@@ -73,12 +81,35 @@ export function useSessionMap(params: {
                         }))
                 ),
             });
+            const currentTrackIds = new Set((tracks ?? []).map(track => track.id));
+            const fieldTrackSource = map.getSource('field-tracks') as maplibregl.GeoJSONSource | undefined;
+            fieldTrackSource?.setData({
+                type: 'FeatureCollection',
+                features: (fieldTracks ?? []).filter(track => !currentTrackIds.has(track.id)).flatMap(track =>
+                    splitTrackPointsAtGaps(track.points ?? [], track.gaps)
+                        .filter(segment => segment.length >= 2)
+                        .map(segment => ({
+                            type: 'Feature' as const,
+                            geometry: { type: 'LineString' as const, coordinates: segment.map(point => [point.lon, point.lat]) },
+                            properties: {},
+                        }))
+                ),
+            });
             const boundarySource = map.getSource('boundary') as maplibregl.GeoJSONSource | undefined;
             if (boundarySource && boundary) boundarySource.setData(boundary);
             const markerSource = map.getSource('session-markers') as maplibregl.GeoJSONSource | undefined;
             markerSource?.setData({
                 type: 'FeatureCollection',
                 features: (markers ?? []).map(marker => ({
+                    type: 'Feature' as const,
+                    geometry: { type: 'Point' as const, coordinates: [marker.lon, marker.lat] },
+                    properties: { id: marker.id, kind: marker.kind },
+                })),
+            });
+            const fieldFindSource = map.getSource('field-finds') as maplibregl.GeoJSONSource | undefined;
+            fieldFindSource?.setData({
+                type: 'FeatureCollection',
+                features: (fieldFindMarkers ?? []).map(marker => ({
                     type: 'Feature' as const,
                     geometry: { type: 'Point' as const, coordinates: [marker.lon, marker.lat] },
                     properties: { id: marker.id, kind: marker.kind },
@@ -98,20 +129,11 @@ export function useSessionMap(params: {
             const headingSource = map.getSource('session-location-heading') as maplibregl.GeoJSONSource | undefined;
             headingSource?.setData(locationHeadingLine(liveLocation ?? null));
 
-            const bounds = new maplibregl.LngLatBounds();
-            let hasBounds = false;
-            for (const point of boundary?.coordinates?.[0] ?? []) {
-                if (point.length >= 2) { bounds.extend(point as [number, number]); hasBounds = true; }
-            }
-            for (const point of (tracks ?? []).flatMap(track => track.points ?? [])) {
-                bounds.extend([point.lon, point.lat]);
-                hasBounds = true;
-            }
-            if (center) { bounds.extend([center.lon, center.lat]); hasBounds = true; }
-            if (liveLocation) { bounds.extend([liveLocation.lon, liveLocation.lat]); hasBounds = true; }
-            for (const marker of markers ?? []) { bounds.extend([marker.lon, marker.lat]); hasBounds = true; }
-            if (!initialFitCompleteRef.current && !viewportRef.current && hasBounds && !bounds.isEmpty()) {
-                map.fitBounds(bounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
+            const initialCoordinates = initialSessionMapCoordinates({ boundary, tracks, center, liveLocation, markers });
+            const initialBounds = new maplibregl.LngLatBounds();
+            for (const coordinate of initialCoordinates) initialBounds.extend(coordinate);
+            if (!initialFitCompleteRef.current && !viewportRef.current && initialCoordinates.length > 0 && !initialBounds.isEmpty()) {
+                map.fitBounds(initialBounds, { padding: 40, duration: isFinished ? 0 : 1000, animate: !isFinished, maxZoom: 18 });
                 initialFitCompleteRef.current = true;
             }
         };
@@ -137,7 +159,11 @@ export function useSessionMap(params: {
                     registerRomanStandaloneLayers(map);
                     map.addSource('boundary', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
                     map.addLayer({ id: 'boundary-outline', type: 'line', source: 'boundary', paint: { 'line-color': '#10b981', 'line-width': 2, 'line-dasharray': [2, 1] } });
+                    map.addSource('field-tracks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                    map.addLayer({ id: 'field-tracks-line', type: 'line', source: 'field-tracks', layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#67e8f9', 'line-width': 3, 'line-opacity': 0.55 } });
                     map.addSource('tracks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                    map.addSource('field-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                    map.addLayer({ id: 'field-finds', type: 'circle', source: 'field-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 5, 'circle-color': '#fbbf24', 'circle-opacity': 0.72, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#111827' } });
                     map.addSource('session-markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
                     map.addLayer({
                         id: 'session-markers', type: 'circle', source: 'session-markers',
@@ -159,9 +185,16 @@ export function useSessionMap(params: {
                     map.addLayer({ id: 'tracks-line', type: 'line', source: 'tracks', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'color'], 'line-width': 4, 'line-opacity': 0.8 } });
                     map.on('mouseenter', 'session-markers', () => { map.getCanvas().style.cursor = 'pointer'; });
                     map.on('mouseleave', 'session-markers', () => { map.getCanvas().style.cursor = ''; });
+                    map.on('mouseenter', 'field-finds', () => { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'field-finds', () => { map.getCanvas().style.cursor = ''; });
                     map.on('click', 'session-markers', event => {
                         const properties = event.features?.[0]?.properties as { id?: string; kind?: SessionMapMarker['kind'] } | undefined;
                         const marker = (markersRef.current ?? []).find(candidate => candidate.id === properties?.id && candidate.kind === properties?.kind);
+                        if (marker) markerSelectRef.current?.(marker);
+                    });
+                    map.on('click', 'field-finds', event => {
+                        const id = event.features?.[0]?.properties?.id as string | undefined;
+                        const marker = (fieldFindMarkersRef.current ?? []).find(candidate => candidate.id === id);
                         if (marker) markerSelectRef.current?.(marker);
                     });
                     updateMapData(map);
@@ -176,7 +209,7 @@ export function useSessionMap(params: {
         } else if (mapRef.current.isStyleLoaded()) {
             updateMapData(mapRef.current);
         }
-    }, [boundary, center, enabled, isFinished, isTracking, liveLocation, mapLayers.mapPreferenceReady, markers, tracks]);
+    }, [boundary, boundaryReady, center, enabled, fieldFindMarkers, fieldTracks, isFinished, isTracking, liveLocation, mapLayers.mapPreferenceReady, markers, tracks]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -200,15 +233,21 @@ export function useSessionMap(params: {
                     if (showCoverage) map.moveLayer(layer);
                 }
             }
-            if (map.getLayer('tracks-line')) map.setPaintProperty('tracks-line', 'line-opacity', showCoverage ? 0.35 : 0.8);
-            if (map.getLayer('boundary-outline') && showCoverage) map.moveLayer('boundary-outline');
+            if (map.getLayer('field-tracks-line')) map.setLayoutProperty('field-tracks-line', 'visibility', showFieldTrails ? 'visible' : 'none');
+            if (map.getLayer('field-finds')) map.setLayoutProperty('field-finds', 'visibility', showPastFinds ? 'visible' : 'none');
+            if (map.getLayer('tracks-line')) map.setPaintProperty('tracks-line', 'line-opacity', showCoverage ? 0.9 : 0.8);
+            if (showCoverage || showFieldTrails || showPastFinds) {
+                for (const layer of ['field-tracks-line', 'field-finds', 'tracks-line', 'session-markers', 'session-location-accuracy', 'session-location', 'session-location-heading', 'boundary-outline']) {
+                    if (map.getLayer(layer)) map.moveLayer(layer);
+                }
+            }
         };
         if (map.getSource('coverage')) syncCoverage();
         else {
             map.once('idle', syncCoverage);
             return () => { map.off('idle', syncCoverage); };
         }
-    }, [coverageResult, enabled, showCoverage]);
+    }, [coverageResult, enabled, showCoverage, showFieldTrails, showPastFinds]);
 
     return { mapDivRef, layerControl: mapLayers.control };
 }

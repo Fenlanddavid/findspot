@@ -1,7 +1,14 @@
 import { useEffect, useState, type RefObject } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useDurableSetting, useInitialFieldGuideMapStyle } from '../services/clientStorage';
-import type { RasterOverlayKey, RomanStandaloneLayerStatus } from './useFieldGuidePageState';
+import {
+    DEFAULT_RASTER_OVERLAY_OPACITY,
+    RASTER_OVERLAY_STORAGE_KEY,
+    type RasterOverlayKey,
+    type RasterOverlayOpacity,
+    type RomanStandaloneLayerStatus,
+} from '../services/fieldguide/rasterOverlaySettings';
+import { clampOpacity } from '../services/fieldguide/fieldGuidePageSupport';
 
 export type SessionRasterOverlay = RasterOverlayKey;
 export type SessionRasterOverlayState = Record<SessionRasterOverlay, boolean>;
@@ -11,17 +18,13 @@ export interface SessionMapLayerControl {
     toggleSatellite: () => void;
     overlays: SessionRasterOverlayState;
     toggleOverlay: (key: SessionRasterOverlay) => void;
+    overlayOpacity: RasterOverlayOpacity;
+    activeOpacityLayer: SessionRasterOverlay | null;
+    setOverlayOpacity: (key: SessionRasterOverlay, opacity: number) => void;
     romanRoads: boolean;
     romanRoadStatus: RomanStandaloneLayerStatus;
     toggleRomanRoads: () => void;
 }
-
-const DEFAULT_OVERLAY_OPACITY: Record<SessionRasterOverlay, number> = {
-    lidar: 0.8,
-    'lidar-wales': 0.8,
-    os1880: 0.85,
-    os1930: 0.85,
-};
 
 function viewportBounds(map: maplibregl.Map) {
     const bounds = map.getBounds();
@@ -34,7 +37,11 @@ export function useSessionMapLayers(
 ): { control: SessionMapLayerControl; mapPreferenceReady: boolean } {
     const [isSatellite, setIsSatellite, mapPreferenceReady] = useInitialFieldGuideMapStyle();
     const [overlays, setOverlays] = useState<SessionRasterOverlayState>({ lidar: false, 'lidar-wales': false, os1880: false, os1930: false });
-    const [overlayOpacity] = useDurableSetting<Record<SessionRasterOverlay, number>>('fs_fg_overlay_opacity', DEFAULT_OVERLAY_OPACITY);
+    const [overlayOpacity, setStoredOverlayOpacity] = useDurableSetting<RasterOverlayOpacity>(
+        RASTER_OVERLAY_STORAGE_KEY,
+        DEFAULT_RASTER_OVERLAY_OPACITY,
+    );
+    const [activeOpacityLayer, setActiveOpacityLayer] = useState<SessionRasterOverlay | null>(null);
     const [romanRoads, setRomanRoads] = useState(false);
     const [romanRoadStatus, setRomanRoadStatus] = useState<RomanStandaloneLayerStatus>('idle');
 
@@ -50,7 +57,7 @@ export function useSessionMapLayers(
             const layerId = layerIds[key];
             if (!map.getLayer(layerId)) continue;
             map.setLayoutProperty(layerId, 'visibility', overlays[key] ? 'visible' : 'none');
-            map.setPaintProperty(layerId, 'raster-opacity', overlayOpacity[key] ?? DEFAULT_OVERLAY_OPACITY[key]);
+            map.setPaintProperty(layerId, 'raster-opacity', overlayOpacity[key] ?? DEFAULT_RASTER_OVERLAY_OPACITY[key]);
         }
         for (const layerId of ['roman-standalone-casing', 'roman-standalone']) {
             if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', romanRoads ? 'visible' : 'none');
@@ -88,12 +95,24 @@ export function useSessionMapLayers(
     }, [mapReadyVersion, romanRoads]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const toggleOverlay = (key: SessionRasterOverlay) => {
+        const enabled = overlays[key];
+        const otherOldMapKey: SessionRasterOverlay | null = key === 'os1880' ? 'os1930' : key === 'os1930' ? 'os1880' : null;
         setOverlays(current => ({
             ...current,
-            [key]: !current[key],
-            ...(key === 'os1880' && !current[key] ? { os1930: false } : {}),
-            ...(key === 'os1930' && !current[key] ? { os1880: false } : {}),
+            [key]: !enabled,
+            ...(!enabled && otherOldMapKey ? { [otherOldMapKey]: false } : {}),
         }));
+        if (enabled) {
+            if (activeOpacityLayer === key) setActiveOpacityLayer(null);
+            return;
+        }
+        setStoredOverlayOpacity(current => ({ ...current, [key]: 1 }));
+        setActiveOpacityLayer(key);
+    };
+
+    const updateOverlayOpacity = (key: SessionRasterOverlay, opacity: number) => {
+        const next = clampOpacity(opacity, overlayOpacity[key] ?? DEFAULT_RASTER_OVERLAY_OPACITY[key]);
+        setStoredOverlayOpacity(current => ({ ...current, [key]: next }));
     };
 
     return {
@@ -103,6 +122,9 @@ export function useSessionMapLayers(
             toggleSatellite: () => setIsSatellite(value => !value),
             overlays,
             toggleOverlay,
+            overlayOpacity,
+            activeOpacityLayer,
+            setOverlayOpacity: updateOverlayOpacity,
             romanRoads,
             romanRoadStatus,
             toggleRomanRoads: () => setRomanRoads(value => !value),

@@ -26,21 +26,18 @@ import type {
 } from '../pages/fieldGuideTypes';
 import type { PASCellLookup } from '../services/pasDensityService';
 import { usePotentialScore } from './usePotentialScore';
+import {
+    DEFAULT_RASTER_OVERLAY_OPACITY,
+    RASTER_OVERLAY_STORAGE_KEY,
+    type OverlayOpacity,
+    type OverlayOpacityKey,
+    type RasterOverlayKey,
+    type RasterOverlayOpacity,
+    type RomanStandaloneLayerStatus,
+} from '../services/fieldguide/rasterOverlaySettings';
 
-export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
-export type RasterOverlayOpacity = Record<RasterOverlayKey, number>;
-export type OverlayOpacityKey = RasterOverlayKey | 'romanStandalone';
-export type OverlayOpacity = Record<OverlayOpacityKey, number>;
-export type RomanStandaloneLayerStatus = 'idle' | 'loading' | 'available' | 'unavailable' | 'zoom-in';
-
-export const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
-    lidar: 1,
-    'lidar-wales': 1,
-    os1880: 1,
-    os1930: 1,
-};
-
-export const RASTER_OVERLAY_STORAGE_KEY = 'fs_fg_overlay_opacity';
+export { DEFAULT_RASTER_OVERLAY_OPACITY, RASTER_OVERLAY_STORAGE_KEY };
+export type { OverlayOpacity, OverlayOpacityKey, RasterOverlayKey, RasterOverlayOpacity, RomanStandaloneLayerStatus };
 export type ScanPhase = 'idle' | 'terrain' | 'historic' | 'complete';
 export type HotspotVersion = 'terrain' | 'enhanced' | 'geology-enhanced' | null;
 

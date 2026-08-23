@@ -94,7 +94,7 @@ describe('FieldGuide architecture characterization', () => {
       'hooks/useFieldGuideMap.ts': 309,
       'hooks/useTerrainScan.ts': 77,
       'hooks/useHistoricScan.ts': 82,
-      'hooks/useFieldGuidePageState.ts': 293,
+      'hooks/useFieldGuidePageState.ts': 290,
       'hooks/useFieldGuideProjectData.ts': 297,
       'hooks/useFieldGuideRouteActions.ts': 94,
       'hooks/useActiveSessionGuideAutoScan.ts': 53,

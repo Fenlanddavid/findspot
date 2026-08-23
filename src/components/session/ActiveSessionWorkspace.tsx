@@ -213,15 +213,15 @@ export function ActiveSessionWorkspace(props: {
                   )}
                 </div>
               )}
-              <div className="flex gap-2">
-                {props.mapLayerControl}
-              </div>
             </div>
             <div className="absolute bottom-14 left-4 z-[100] grid max-w-[65%] gap-2">
               {props.startPointDistanceText && <div className="w-fit rounded-xl border border-violet-400/25 bg-gray-950/85 px-3 py-2 text-2xs font-black text-violet-200 shadow-lg backdrop-blur">Start point · {props.startPointDistanceText}</div>}
               {props.boundaryStatus && props.boundaryStatus.kind !== 'inside' && <div className={`rounded-xl border bg-gray-950/90 px-3 py-2 text-2xs font-black shadow-lg backdrop-blur ${props.boundaryStatus.kind === 'outside' ? 'border-red-400/40 text-red-200' : 'border-amber-400/30 text-amber-200'}`}>{props.boundaryStatus.label}</div>}
             </div>
-            <button type="button" aria-label="Add Find from Map" onClick={props.onQuickFind} className="absolute bottom-14 right-4 z-[100] grid h-16 w-16 place-items-center rounded-full bg-amber-400 text-center text-xs font-black text-gray-950 shadow-2xl shadow-black/50">+ Find</button>
+            <div className="absolute bottom-14 right-4 z-[100] grid justify-items-end gap-2">
+              {props.mapLayerControl}
+              <button type="button" aria-label="Add Find from Map" onClick={props.onQuickFind} className="grid h-16 w-16 place-items-center rounded-full bg-amber-400 text-center text-xs font-black text-gray-950 shadow-2xl shadow-black/50">+ Find</button>
+            </div>
           </section>
         )}
 
@@ -237,32 +237,6 @@ export function ActiveSessionWorkspace(props: {
               </div>
               <button type="button" aria-label="Significant Find" onClick={props.onSignificantFind} className="mt-3 min-h-12 w-full rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 text-sm font-black text-amber-200">Record significant find</button>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black">Visit conditions</p>
-                  <p className="mt-0.5 text-2xs text-gray-400">Keep the field and coverage context current while you detect.</p>
-                </div>
-                {props.hasField && (
-                  <button type="button" onClick={props.onFieldNotes} className="min-h-11 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">
-                    {props.hasFieldNotes ? 'Field notes ✓' : 'Field notes'}
-                  </button>
-                )}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2" aria-label="Ground condition">
-                <button type="button" aria-pressed={props.isStubble} onClick={props.onToggleStubble} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.isStubble ? 'border-amber-400/50 bg-amber-400/15 text-amber-200' : 'border-white/15 text-gray-300'}`}>Stubble</button>
-                {(['Ploughed', 'Pasture'] as const).map(condition => (
-                  <button key={condition} type="button" aria-pressed={props.landUse === condition} onClick={() => props.onToggleLandUse(condition)} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.landUse === condition ? 'border-teal-400/50 bg-teal-400/15 text-teal-200' : 'border-white/15 text-gray-300'}`}>{condition}</button>
-                ))}
-              </div>
-              {props.hasBoundary && (
-                <button type="button" aria-pressed={props.showCoverage} onClick={props.onToggleCoverage} className={`mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-2xs font-black ${props.showCoverage ? 'border-orange-400/50 bg-orange-400/15 text-orange-200' : 'border-white/15 text-gray-300'}`}>
-                  <span>{props.showCoverage ? (props.coverageHasNoGaps ? 'No coverage gaps' : 'Coverage gaps on map') : 'Show coverage gaps on map'}</span>
-                  <span>{props.coverageError ? 'Unavailable' : props.coveragePercent === null ? '—' : `${Math.round(props.coveragePercent)}% covered`}</span>
-                </button>
-              )}
-            </div>
-            {!props.hasStartPoint && <button type="button" onClick={props.onMarkStartPoint} className="min-h-12 rounded-xl border border-violet-400/30 bg-violet-400/10 px-4 text-left text-xs font-black text-violet-200">Mark your start point <span className="ml-1 font-bold text-violet-300/70">· useful for returning later</span></button>}
             <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
               <div>
                 <p className="text-xs font-black">Trail recording</p>
@@ -280,7 +254,7 @@ export function ActiveSessionWorkspace(props: {
               ) : props.isCompanionTracking ? (
                 <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3">
                   <p className="text-xs font-black text-emerald-200">{props.companionPendingAction === 'stop' ? 'Waiting for Companion trail' : 'Companion recording'}</p>
-                  <p className="mt-1 text-2xs leading-relaxed text-emerald-100/70">{props.companionPendingAction === 'stop' ? 'Companion remains marked active until its recording is safely imported. If sharing was cancelled, retry or cancel this stop request.' : 'You can hide FindSpot or lock the phone. Finishing this visit will stop Companion and wait for its trail.'}</p>
+                  <p className="mt-1 text-2xs leading-relaxed text-emerald-100/70">{props.companionPendingAction === 'stop' ? 'Companion remains marked active until its recording is safely imported. If sharing was cancelled, retry or cancel this stop request.' : 'You can hide FindSpot or lock the phone. Your Companion trail will appear in FindSpot after the session ends.'}</p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button type="button" onClick={props.onCompanionStop} className="flex min-h-11 items-center justify-center rounded-xl border border-red-400/35 px-3 text-center text-2xs font-black text-red-200">{props.companionPendingAction === 'stop' ? 'Retry stop' : 'Stop Companion'}</button>
                     {props.companionPendingAction === 'stop' ? (
@@ -320,6 +294,32 @@ export function ActiveSessionWorkspace(props: {
                   </div>
                   <button type="button" onClick={props.onImportTrail} className="mt-2 min-h-11 w-full rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-300">Import a Companion trail</button>
                 </div>
+              )}
+            </div>
+            {!props.hasStartPoint && <button type="button" onClick={props.onMarkStartPoint} className="min-h-12 rounded-xl border border-violet-400/30 bg-violet-400/10 px-4 text-left text-xs font-black text-violet-200">Mark your start point <span className="ml-1 font-bold text-violet-300/70">· useful for returning later</span></button>}
+            <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black">Visit conditions</p>
+                  <p className="mt-0.5 text-2xs text-gray-400">Keep the field and coverage context current while you detect.</p>
+                </div>
+                {props.hasField && (
+                  <button type="button" onClick={props.onFieldNotes} className="min-h-11 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">
+                    {props.hasFieldNotes ? 'Field notes ✓' : 'Field notes'}
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Ground condition">
+                <button type="button" aria-pressed={props.isStubble} onClick={props.onToggleStubble} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.isStubble ? 'border-amber-400/50 bg-amber-400/15 text-amber-200' : 'border-white/15 text-gray-300'}`}>Stubble</button>
+                {(['Ploughed', 'Pasture'] as const).map(condition => (
+                  <button key={condition} type="button" aria-pressed={props.landUse === condition} onClick={() => props.onToggleLandUse(condition)} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.landUse === condition ? 'border-teal-400/50 bg-teal-400/15 text-teal-200' : 'border-white/15 text-gray-300'}`}>{condition}</button>
+                ))}
+              </div>
+              {props.hasBoundary && (
+                <button type="button" aria-pressed={props.showCoverage} onClick={props.onToggleCoverage} className={`mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-2xs font-black ${props.showCoverage ? 'border-orange-400/50 bg-orange-400/15 text-orange-200' : 'border-white/15 text-gray-300'}`}>
+                  <span>{props.showCoverage ? (props.coverageHasNoGaps ? 'No coverage gaps' : 'Coverage gaps on map') : 'Show coverage gaps on map'}</span>
+                  <span>{props.coverageError ? 'Unavailable' : props.coveragePercent === null ? '—' : `${Math.round(props.coveragePercent)}% covered`}</span>
+                </button>
               )}
             </div>
           </section>

@@ -135,6 +135,8 @@ export default function SessionPage(props: {
     return saved === 'map' || saved === 'session' ? saved : 'record';
   });
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [showFieldTrails, setShowFieldTrails] = useState(false);
+  const [showPastFinds, setShowPastFinds] = useState(false);
   const [showWorkspaceQuickFind, setShowWorkspaceQuickFind] = useState(false);
   const [showSavedPointSheet, setShowSavedPointSheet] = useState(false);
   const [savedPointDefaultLabel, setSavedPointDefaultLabel] = useState<string | undefined>();
@@ -205,7 +207,7 @@ export default function SessionPage(props: {
     if (isActiveSessionMode) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [isActiveSessionMode, sessionId]);
 
-  const { permission, fields, selectedField, session, finds, allMedia, tracks } = useSessionData({
+  const { permission, fields, selectedField, session, finds, allMedia, tracks, fieldTracks, fieldFinds } = useSessionData({
     sessionId, permissionId, fieldId,
   });
   useEffect(() => {
@@ -232,6 +234,7 @@ export default function SessionPage(props: {
     selectedField?.boundary || permission?.boundary,
     tracks,
     reportedAreas,
+    fieldId ? fieldTracks : tracks,
   );
   const isAnyTracking = isTracking || isCompanionTracking;
 
@@ -338,6 +341,14 @@ export default function SessionPage(props: {
     () => lat != null && lon != null ? { lat, lon } : null,
     [lat, lon],
   );
+  const pastFieldFindMarkers = useMemo<SessionMapMarker[]>(
+    () => (fieldFinds ?? []).flatMap(find =>
+      find.sessionId !== sessionId && find.lat != null && find.lon != null
+        ? [{ id: find.id, kind: 'find', lat: find.lat, lon: find.lon }]
+        : [],
+    ),
+    [fieldFinds, sessionId],
+  );
   const {
     mapDivRef,
     layerControl: sessionMapLayerControl,
@@ -347,9 +358,14 @@ export default function SessionPage(props: {
     markers: sessionMapMarkers,
     liveLocation,
     boundary: selectedField?.boundary || permission?.boundary,
+    boundaryReady: !loading && (fieldId ? selectedField !== undefined : permission !== undefined),
     tracks,
+    fieldTracks,
+    fieldFindMarkers: pastFieldFindMarkers,
     isTracking,
     isFinished,
+    showFieldTrails,
+    showPastFinds,
     showCoverage,
     coverageResult,
     onMarkerSelect: openWorkspaceMapMarker,
@@ -862,7 +878,14 @@ export default function SessionPage(props: {
           workspaceTab={workspaceTab}
           onSelectTab={setWorkspaceTab}
           mapDivRef={mapDivRef}
-          mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} />}
+          mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} fieldHistory={{
+            trailsAvailable: !!fieldTracks?.some(track => (track.points?.length ?? 0) >= 2),
+            trailsVisible: showFieldTrails,
+            toggleTrails: () => setShowFieldTrails(current => !current),
+            findsAvailable: pastFieldFindMarkers.length > 0,
+            findsVisible: showPastFinds,
+            toggleFinds: () => setShowPastFinds(current => !current),
+          }} />}
           permissionName={permission?.name ?? 'Detecting session'}
           fieldName={selectedField?.name}
           durationText={activeDurationText}

@@ -12,10 +12,14 @@ describe('active session Companion controls', () => {
     expect(workspace).toContain('Keeps the screen awake');
     expect(workspace).toContain('Use Companion beta');
     expect(workspace).toContain('Works with screen locked');
+    expect(workspace).toContain('Your Companion trail will appear in FindSpot after the session ends.');
     expect(workspace).toContain('Stop Companion');
     expect(workspace).toContain('Stop &amp; finish');
     expect(workspace).toContain('Import a Companion trail');
     expect(workspace).toContain('Low distraction');
+    expect(workspace.indexOf('>Trail recording</p>')).toBeLessThan(
+      workspace.indexOf('>Visit conditions</p>'),
+    );
   });
 
   it('wires shell controls to the existing session-scoped Companion handoff', async () => {
