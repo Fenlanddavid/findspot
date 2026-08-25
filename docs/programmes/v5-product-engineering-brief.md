@@ -392,6 +392,22 @@ Decision rule:
 The field preview confirms real-world cost; it is not the first sustained map
 test.
 
+**Outcome, recorded 25 August 2026.** The instrumented comparison in this
+section was not run. The demand-mounted four-tab composition was selected as
+the conservative option without it, and shipped in V5.0.
+
+Field validation followed release rather than preceding it. A six-hour author
+session on a pre-5.0.5 build surfaced the defects fixed in 5.0.1–5.0.5. A
+four-hour author session on 5.0.5 showed no thermal rise, a device cold to
+the touch and negligible battery drain.
+
+The gate is closed on observed cost, not measured cost. The selected
+composition is the one this section's decision rule would have chosen for an
+ambiguous or absent result, so the outcome is consistent with the rule even
+though the comparison did not run. Persistent map-first was never evaluated
+and remains unqualified: it may not enter a field preview without the
+measurement this section describes.
+
 ## 13. Session finish and review
 
 The order is binding:
@@ -498,20 +514,30 @@ only. Switching it off removes the reason from the V5 return card and changes
 no domain state. The preview provides no copied task, persistent continuity
 dismissal or separate continuity history.
 
-Validate with roughly 15–20 genuinely active opt-in detectorists over at least
-two normal detecting weekends. Before the preview, replace “multiple users”
-with a numeric evidence threshold. The qualifying evidence remains behavioural:
-FindSpot caused users to return to something they might otherwise have forgotten
-or overlooked. General liking, design preference or prompted agreement does not
-qualify.
+**Product ruling, recorded 25 August 2026.** Continuity is accepted as shipped
+default-on for all users, with the durable Settings toggle retained. The public
+default is `true` in both storage initialisation and Home's fallback; those
+surfaces must remain aligned.
 
-GO also requires correct source state, an understandable reason, automatic
-disappearance after resolution and no Home regression. Ambiguous or
-insufficient evidence is HOLD and moves continuity to 5.1 or later.
+The planned validation with roughly 15–20 genuinely active opt-in detectorists
+over two normal detecting weekends was not run. Its numeric behavioural
+threshold and HOLD rule are retired as V5 launch and GO gates by product
+decision. The programme may still run later as optional product research, but
+its absence does not make the shipped default provisional and must not be
+represented as evidence that the cohort passed.
+
+The acceptance basis is the deliberately bounded behaviour: one reason at
+most, derived from an authoritative open signal on the already-selected
+permission; no copied task or domain mutation; automatic disappearance after
+resolution; and a backed-up user control that removes the presentation. Source
+correctness, understandable wording, automatic disappearance and absence of
+Home regression remain ordinary quality requirements rather than a separate
+cohort gate.
 
 Later sources—questions, explicitly retained saved points and provably
-incomplete surface observations—enter one at a time after GO. Surface
-observation continuity requires an explicit authoritative capture-flow
+incomplete surface observations—enter one at a time after a separate explicit
+product and evidence decision. Surface observation continuity requires an
+explicit authoritative capture-flow
 provenance field for future records; unknown historic provenance surfaces
 nothing.
 
@@ -578,14 +604,25 @@ policy. `hasExternalBackup === false` changes explanation, not level.
 Presentation suppresses a first backup prompt until at least one session has
 been completed. This does not change the canonical evaluated level.
 
-Run and record a real restore drill before release:
+The required restore-drill sequence was:
 
 > backup → clean database → restore → integrity audit → task-level inspection
 
-Verify permissions, fields, sessions, finds, significant finds, tracks, media,
-outstanding questions, question notes, undug signals, saved points, surface
-observations, stable permission sections, sessionCoverage, Companion source
-records and ledgers, settings and new V5 preferences.
+The gate closed on 25 August 2026. A localhost non-destructive drill validated
+and staged a format-v5 backup with 20 recoverable records and no skipped,
+repaired or damaged records, while leaving live table keys and counts
+unchanged. A subsequent import-and-overwrite on a Pixel 10 Pro exercised 32
+media blobs and 34 tracks from real V5 data and completed with no reported
+issues. Because `applyValidatedBackup` clears every backed-up table inside the
+atomic restore transaction, that overwrite was functionally a clean restore of
+the backed-up graph. The full evidence record is in
+`docs/programmes/v5-handoff-2026-08-15.md` under "Durability drill record".
+
+Excluded derived/cache tables — `fieldGuideCache`,
+`landscapeInterpretations`, `geologyContext` and `geocodeCache` — survive an
+overwrite on an existing device. They would start empty after genuine device
+loss and regenerate from R2 and BGS. That cold-start recovery path remains
+unexercised, but is a known residual rather than an open release gate.
 
 The existing backup registry remains canonical. The rule “derived items are
 recomputed” applies to new V5 Home, continuity and review presentation objects;
@@ -711,7 +748,7 @@ names.
 
 - primary active/return surface;
 - deterministic permission selection;
-- merged continuity-reason seam, disabled by default;
+- merged continuity-reason seam, enabled by default with a durable user toggle;
 - backup/trust-line treatment;
 - inventory relocations;
 - progressive loading;
@@ -738,8 +775,9 @@ names.
 
 ### V5-E — independent validation
 
-Validate the workspace and continuity independently. Workspace retirement uses
-the automated parity gate recorded in ADR 0002; contextual Home and the
+The workspace and continuity were ruled on independently. Workspace retirement
+uses the automated parity gate recorded in ADR 0002. Continuity's public
+default is governed by the product ruling in §15; contextual Home and the
 workspace do not wait two weekends for continuity evidence.
 
 ### V5-F — durability and release automation
@@ -752,8 +790,9 @@ workspace do not wait two weekends for continuity evidence.
 
 ### V5-G — integration and release gate
 
-Resolve the workspace composition, continuity outcome and public defaults from
-evidence. Select V5.0 or the 4.13 fallback without weakening a gate.
+The workspace composition, continuity outcome and public defaults were resolved
+from evidence or an explicit product ruling. V5.0 was selected without
+weakening a gate.
 
 ## 24. Release gates
 
@@ -761,17 +800,24 @@ V5.0 ships only when all required gates pass:
 
 - visible-improvement task proof;
 - active-workspace GO;
-- map composition selected through measured cost;
+- map composition selected through measured cost — CLOSED 25 Aug 2026 on
+  observed field cost, not measurement; see §12 outcome;
 - Home density and startup performance;
 - FieldGuide one-tap access;
 - durable finish before review;
 - coverage language and integrity ruling;
-- backup/clean-restore drill;
+- backup/clean-restore drill — CLOSED 25 Aug 2026; see the durability drill
+  record in `docs/programmes/v5-handoff-2026-08-15.md`;
 - accepted retirement decision and release rollback route;
 - automated active-session parity and lifecycle checks;
 - production build, full automated suite and release preparation.
 
-Continuity GO is optional. Coverage continuation is not part of V5.0.
+All required V5.0 gates are closed. Two were closed after release rather than
+before it, on the basis recorded above.
+
+Continuity is accepted default-on by the product ruling recorded on 25 August
+2026; its planned cohort is retired as a V5 gate. Coverage continuation is not
+part of V5.0.
 
 ## 25. Test matrices
 

@@ -298,7 +298,7 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await putIndexedDbRow(page, "fields", {
     id: "tracking-lifecycle-field", permissionId: "tracking-lifecycle-permission", name: "North Strip",
     boundary: { type: 'Polygon', coordinates: [[[-1.4718, 53.3805], [-1.4688, 53.3805], [-1.4688, 53.382], [-1.4718, 53.382], [-1.4718, 53.3805]]] },
-    notes: "", createdAt: now, updatedAt: now,
+    notes: "Access from west gate", createdAt: now, updatedAt: now,
   });
   await putIndexedDbRow(page, "sessions", {
     id: "tracking-lifecycle-session", projectId, permissionId: "tracking-lifecycle-permission", fieldId: "tracking-lifecycle-field",
@@ -309,6 +309,12 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await page.goto("./session/tracking-lifecycle-session");
 
   await expect(page.getByText(/Trail not started/)).toBeVisible();
+  const visitConditions = page.getByRole("group", { name: "Visit conditions" });
+  await expect(visitConditions.getByRole("button", { name: "Stubble", exact: true })).toBeVisible();
+  await expect(page.getByText("Mark your start point", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: "Mark location", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Mark location" }).getByRole("button", { name: "Start point", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close mark location" }).click();
   await page.getByRole("button", { name: "Start in FindSpot" }).click();
   await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
   await expect.poll(async () => {
@@ -351,10 +357,21 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   const stubble = page.getByRole("button", { name: "Stubble", exact: true });
   await stubble.click();
   await expect(stubble).toHaveAttribute("aria-pressed", "true");
-  const storedSession = (await readIndexedDbStore(page, "sessions") as Array<{ id: string; notes?: string; isStubble?: boolean }>)
+  await visitConditions.getByRole("button", { name: "Pasture", exact: true }).click();
+  await visitConditions.getByRole("button", { name: "Done", exact: true }).click();
+  await expect(visitConditions.getByText("Pasture · Stubble", { exact: true })).toBeVisible();
+  await expect(visitConditions.getByRole("button", { name: "Field notes ✓", exact: true })).toBeVisible();
+  await expect(visitConditions.getByRole("button", { name: "Stubble", exact: true })).toHaveCount(0);
+  await visitConditions.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(visitConditions.getByRole("button", { name: "Stubble", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(visitConditions.getByRole("button", { name: "Pasture", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await readIndexedDbStore(page, "sessions") as Array<{ id: string; landUse?: string }>)
+    .find(session => session.id === "tracking-lifecycle-session")?.landUse).toBe("Pasture");
+  const storedSession = (await readIndexedDbStore(page, "sessions") as Array<{ id: string; notes?: string; isStubble?: boolean; landUse?: string }>)
     .find(session => session.id === "tracking-lifecycle-session");
   expect(storedSession?.notes).toContain("Saved while offline");
   expect(storedSession?.isStubble).toBe(true);
+  expect(storedSession?.landUse).toBe("Pasture");
 
   await context.setOffline(false);
   await page.goto("./");
@@ -362,6 +379,8 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page).toHaveURL(/session\/tracking-lifecycle-session$/);
   await expect(page.getByText(/Trail paused/)).toBeVisible();
+  await expect(visitConditions.getByText("Pasture · Stubble", { exact: true })).toBeVisible();
+  await expect(visitConditions.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
 });
 
 test("V5 honours session-scoped Companion state and blocks premature finish", async ({ page }) => {

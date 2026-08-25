@@ -46,7 +46,19 @@ domain records and routes remain authoritative.
 ## Build validation posture
 
 Automated unit, architecture, restore, build and browser checks are release
-inputs. Detectorist cohorts, weekend observation, interviews, physical battery
-soaks and other manual feedback activities are intentionally not part of this
-implementation run. Their absence is not represented as evidence that those
-activities passed.
+inputs.
+
+At the time this inventory was recorded, detectorist cohorts, weekend
+observation, interviews and physical battery soaks were intentionally not
+part of the implementation run. That is no longer the whole position.
+Author-run field validation and a physical-device restore drill were
+completed and accepted on 25 August 2026; the record is in
+`docs/programmes/v5-handoff-2026-08-15.md` under "Manual validation —
+position at 25 August 2026" and "Durability drill record".
+
+Detectorist cohorts, continuity-comprehension work, interviews and instrumented
+battery and thermal measurement against a device matrix were not performed.
+The 25 August product ruling accepts Continuity default-on and retires its
+two-weekend cohort as a V5 launch gate; that cohort remains optional future
+research. The other evidence gaps remain outstanding. None is represented as
+an activity that passed.

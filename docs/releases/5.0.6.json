@@ -1,0 +1,5 @@
+{
+  "version": "5.0.6",
+  "preparedAt": "2026-08-25T21:11:30.910Z",
+  "notes": "Visit conditions now collapse once set, keeping active sessions quieter."
+}

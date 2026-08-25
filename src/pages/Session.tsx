@@ -884,7 +884,7 @@ export default function SessionPage(props: {
   if (isActiveSessionMode) {
     return (
       <>
-        <ActiveSessionWorkspace
+        <ActiveSessionWorkspace key={sessionId}
           workspaceTab={workspaceTab}
           onSelectTab={setWorkspaceTab}
           mapDivRef={mapDivRef}

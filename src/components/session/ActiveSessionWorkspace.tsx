@@ -170,6 +170,11 @@ export function ActiveSessionWorkspace(props: {
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [showSessionFinds, setShowSessionFinds] = useState(false);
+  const hasVisitConditions = !!props.landUse.trim() || props.isStubble;
+  const [visitConditionsExpanded, setVisitConditionsExpanded] = useState(() => !hasVisitConditions);
+  const visitConditionsSummary = [props.landUse.trim(), props.isStubble ? 'Stubble' : '']
+    .filter(Boolean)
+    .join(' · ');
   async function addNote() {
     if (!note.trim() || savingNote) return;
     setSavingNote(true);
@@ -290,20 +295,36 @@ export function ActiveSessionWorkspace(props: {
                 </div>
               )}
             </div>
-            {!props.hasStartPoint && <button type="button" onClick={props.onMarkStartPoint} className="min-h-12 rounded-xl border border-violet-400/30 bg-violet-400/10 px-4 text-left text-xs font-black text-violet-200">Mark your start point <span className="ml-1 font-bold text-violet-300/70">· useful for returning later</span></button>}
-            <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black">Visit conditions</p>
-                  <p className="mt-0.5 text-2xs text-gray-400">Keep the field and coverage context current while you detect.</p>
+            <div className="rounded-2xl border border-white/10 bg-gray-900 p-4" role="group" aria-label="Visit conditions">
+              {visitConditionsExpanded ? (
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <p className="pt-1 text-xs font-black">Visit conditions</p>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {props.hasField && (
+                      <button type="button" onClick={props.onFieldNotes} className="min-h-11 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">
+                        {props.hasFieldNotes ? 'Field notes ✓' : 'Field notes'}
+                      </button>
+                    )}
+                    {hasVisitConditions && (
+                      <button type="button" aria-expanded={true} aria-controls="visit-conditions-controls" onClick={() => setVisitConditionsExpanded(false)} className="min-h-11 rounded-xl px-3 text-2xs font-black text-teal-300">Done</button>
+                    )}
+                  </div>
                 </div>
-                {props.hasField && (
-                  <button type="button" onClick={props.onFieldNotes} className="min-h-11 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">
-                    {props.hasFieldNotes ? 'Field notes ✓' : 'Field notes'}
-                  </button>
-                )}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2" aria-label="Ground condition">
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black">Visit conditions</p>
+                    <p className="mt-1 text-sm font-bold text-gray-300">{visitConditionsSummary}</p>
+                    {props.hasField && (
+                      <button type="button" onClick={props.onFieldNotes} className="mt-1 min-h-11 text-left text-2xs font-black text-gray-300">
+                        {props.hasFieldNotes ? 'Field notes ✓' : 'Field notes'}
+                      </button>
+                    )}
+                  </div>
+                  <button type="button" aria-expanded={false} aria-controls="visit-conditions-controls" onClick={() => setVisitConditionsExpanded(true)} className="min-h-11 shrink-0 rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-200">Edit</button>
+                </div>
+              )}
+              <div id="visit-conditions-controls" hidden={!visitConditionsExpanded} className={`mt-3 flex-wrap gap-2 ${visitConditionsExpanded ? 'flex' : 'hidden'}`} aria-label="Ground condition">
                 <button type="button" aria-pressed={props.isStubble} onClick={props.onToggleStubble} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.isStubble ? 'border-amber-400/50 bg-amber-400/15 text-amber-200' : 'border-white/15 text-gray-300'}`}>Stubble</button>
                 {(['Ploughed', 'Pasture'] as const).map(condition => (
                   <button key={condition} type="button" aria-pressed={props.landUse === condition} onClick={() => props.onToggleLandUse(condition)} className={`min-h-11 rounded-xl border px-3 text-2xs font-black ${props.landUse === condition ? 'border-teal-400/50 bg-teal-400/15 text-teal-200' : 'border-white/15 text-gray-300'}`}>{condition}</button>
