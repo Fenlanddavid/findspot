@@ -1,0 +1,5 @@
+{
+  "version": "5.0.7",
+  "preparedAt": "2026-08-26T22:25:46.136Z",
+  "notes": "Map objects now open over your active session, keeping tracking uninterrupted."
+}
