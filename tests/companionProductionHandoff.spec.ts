@@ -12,14 +12,10 @@ test('production share target imports, acknowledges stop, and finishes at Compan
   await page.goto('./');
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
-    if (!navigator.serviceWorker.controller) {
-      await new Promise<void>(resolve => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
-        window.location.reload();
-      });
-    }
-  }).catch(() => undefined);
-  await page.waitForLoadState('domcontentloaded');
+  });
+  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+  }
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
 
   const projectId = await page.evaluate(async () => {
