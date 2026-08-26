@@ -6,6 +6,7 @@ import { splitTrackPointsAtGaps } from '../shared/trackSegments';
 import { locationAccuracyCircle, locationHeadingLine, type FieldLocation } from '../services/session/sessionFieldPosition';
 import { initialSessionMapCenter, initialSessionMapCoordinates } from '../services/session/sessionMapViewport';
 import { useSessionMapLayers } from './useSessionMapLayers';
+import { useSessionMapSelection } from './useSessionMapSelection';
 
 const DEFAULT_CENTER: [number, number] = [-2, 54.5];
 
@@ -34,16 +35,19 @@ export function useSessionMap(params: {
     showPastFinds?: boolean;
     showCoverage: boolean;
     coverageResult: CoverageResult | null;
+    mapObjectSheetsEnabled?: boolean;
     onMarkerSelect?: (marker: SessionMapMarker) => void;
 }) {
-    const { viewportKey, enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, onMarkerSelect } = params;
+    const { viewportKey, enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, mapObjectSheetsEnabled = false, onMarkerSelect } = params;
     const mapDivRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const initialFitCompleteRef = useRef(false);
     const viewportRef = useRef<{ center: [number, number]; zoom: number } | null>(null);
     const viewportKeyRef = useRef(viewportKey);
-    const markerSelectRef = useRef(onMarkerSelect);
-    markerSelectRef.current = onMarkerSelect;
+    const legacyMarkerSelectRef = useRef(onMarkerSelect);
+    legacyMarkerSelectRef.current = onMarkerSelect;
+    const mapObjectSheetsEnabledRef = useRef(mapObjectSheetsEnabled);
+    mapObjectSheetsEnabledRef.current = mapObjectSheetsEnabled;
     const markersRef = useRef(markers);
     markersRef.current = markers;
     const fieldFindMarkersRef = useRef(fieldFindMarkers);
@@ -51,6 +55,9 @@ export function useSessionMap(params: {
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
     const mapLayers = useSessionMapLayers(mapRef, mapReadyVersion);
+    const mapSelection = useSessionMapSelection({
+        mapRef, mapReadyVersion, enabled: enabled && mapObjectSheetsEnabled, markers, fieldFindMarkers, tracks, fieldTracks,
+    });
 
     useEffect(() => () => {
         const map = mapRef.current;
@@ -89,7 +96,7 @@ export function useSessionMap(params: {
                         .map(segment => ({
                             type: 'Feature' as const,
                             geometry: { type: 'LineString' as const, coordinates: segment.map(point => [point.lon, point.lat]) },
-                            properties: { color: track.color },
+                            properties: { id: track.id, kind: 'trail', sessionId: track.sessionId ?? '', color: track.color },
                         }))
                 ),
             });
@@ -103,7 +110,7 @@ export function useSessionMap(params: {
                         .map(segment => ({
                             type: 'Feature' as const,
                             geometry: { type: 'LineString' as const, coordinates: segment.map(point => [point.lon, point.lat]) },
-                            properties: {},
+                            properties: { id: track.id, kind: 'trail', sessionId: track.sessionId ?? '' },
                         }))
                 ),
             });
@@ -202,15 +209,21 @@ export function useSessionMap(params: {
                     map.on('mouseleave', 'session-markers', () => { map.getCanvas().style.cursor = ''; });
                     map.on('mouseenter', 'field-finds', () => { map.getCanvas().style.cursor = 'pointer'; });
                     map.on('mouseleave', 'field-finds', () => { map.getCanvas().style.cursor = ''; });
+                    map.on('mouseenter', 'tracks-line', () => { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'tracks-line', () => { map.getCanvas().style.cursor = ''; });
+                    map.on('mouseenter', 'field-tracks-line', () => { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', 'field-tracks-line', () => { map.getCanvas().style.cursor = ''; });
                     map.on('click', 'session-markers', event => {
+                        if (mapObjectSheetsEnabledRef.current) return;
                         const properties = event.features?.[0]?.properties as { id?: string; kind?: SessionMapMarker['kind'] } | undefined;
                         const marker = (markersRef.current ?? []).find(candidate => candidate.id === properties?.id && candidate.kind === properties?.kind);
-                        if (marker) markerSelectRef.current?.(marker);
+                        if (marker) legacyMarkerSelectRef.current?.(marker);
                     });
                     map.on('click', 'field-finds', event => {
+                        if (mapObjectSheetsEnabledRef.current) return;
                         const id = event.features?.[0]?.properties?.id as string | undefined;
                         const marker = (fieldFindMarkersRef.current ?? []).find(candidate => candidate.id === id);
-                        if (marker) markerSelectRef.current?.(marker);
+                        if (marker) legacyMarkerSelectRef.current?.(marker);
                     });
                     updateMapData(map);
                     setMapReadyVersion(version => version + 1);
@@ -267,5 +280,5 @@ export function useSessionMap(params: {
         }
     }, [coverageResult, enabled, mapReadyVersion, showCoverage, showFieldTrails, showPastFinds]);
 
-    return { mapDivRef, layerControl: mapLayers.control };
+    return { mapDivRef, layerControl: mapLayers.control, ...mapSelection };
 }

@@ -726,6 +726,13 @@ disagree. Existing architecture, type and release ratchets are not weakened.
 
 ## 23. Sequence
 
+On 26 August 2026, the active-session map-object interface was deliberately
+selected ahead of the remaining cold-start-after-recovery durability work. The
+clean restore drill was already closed, making the durability remainder
+narrower, while marker taps still ejected field users from a live session. This
+is an explicit sequencing decision: it does not close or de-scope the remaining
+durability work, and it does not alter Companion recording or handoff behaviour.
+
 ### V5-0 — task proof
 
 Prototype the ordinary detectorist tasks from section 2 using concrete

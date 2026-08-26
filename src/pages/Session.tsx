@@ -28,6 +28,7 @@ import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
 import { useSessionMap, type SessionMapMarker } from '../hooks/useSessionMap';
+import type { SessionMapObjectRef } from '../hooks/useSessionMapSelection';
 import { useReportedCoverageGeometries } from '../hooks/useReportedCoverageGeometries';
 import {
   appendSessionNote,
@@ -54,6 +55,7 @@ import { getPermissionScanTarget } from '../outstandingQuestions/permissionScanT
 import { SessionReviewModal } from '../components/session/SessionReviewModal';
 import { SessionQuickFindSheet } from '../components/session/SessionQuickFindSheet';
 import { SessionSavedPointSheet } from '../components/session/SessionSavedPointSheet';
+import { SessionMapObjectSheet } from '../components/session/SessionMapObjectSheet';
 import type { FieldLocation } from '../services/session/sessionFieldPosition';
 import type { SessionActivityItem } from '../services/session/sessionActivity';
 import { useActiveSessionFieldContext } from '../hooks/useActiveSessionFieldContext';
@@ -207,7 +209,7 @@ export default function SessionPage(props: {
     if (isActiveSessionMode) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [isActiveSessionMode, sessionId]);
 
-  const { permission, fields, selectedField, session, finds, allMedia, tracks, fieldTracks, fieldFinds } = useSessionData({
+  const { permission, fields, selectedField, session, finds, allMedia, tracks, fieldTracks, fieldSessions, fieldFinds } = useSessionData({
     sessionId, permissionId, fieldId,
   });
   useEffect(() => {
@@ -361,6 +363,9 @@ export default function SessionPage(props: {
   const {
     mapDivRef,
     layerControl: sessionMapLayerControl,
+    selection: sessionMapSelection,
+    clearSelection: clearSessionMapSelection,
+    chooseMapObject,
   } = useSessionMap({
     viewportKey: sessionId,
     enabled: !isActiveSessionMode || workspaceTab === 'map',
@@ -378,7 +383,8 @@ export default function SessionPage(props: {
     showPastFinds,
     showCoverage,
     coverageResult,
-    onMarkerSelect: openWorkspaceMapMarker,
+    mapObjectSheetsEnabled: isActiveSessionMode,
+    onMarkerSelect: openWorkspaceMapObject,
   });
 
   useEffect(() => {
@@ -846,12 +852,15 @@ export default function SessionPage(props: {
     setWorkspaceNotice(`${label} saved`);
     window.setTimeout(() => setWorkspaceNotice(null), 3000);
   }
-  function openWorkspaceMapMarker(marker: SessionMapMarker) {
-    if (marker.kind === 'find') nav(`/find?quickId=${marker.id}`);
-    else if (marker.kind === 'signal') nav(`/finds-box?tab=signals&signal=${encodeURIComponent(marker.id)}`);
-    else if (marker.kind === 'observation' && permission) nav(`/permission/${permission.id}`);
+  function openWorkspaceMapObject(object: SessionMapObjectRef) {
+    if (object.kind === 'find') nav(`/find?quickId=${object.id}`);
+    else if (object.kind === 'signal') nav(`/finds-box?tab=signals&signal=${encodeURIComponent(object.id)}`);
+    else if (object.kind === 'observation' && permission) nav(`/permission/${permission.id}`);
+    else if (object.kind === 'trail') {
+      if (object.sessionId && object.sessionId !== sessionId) nav(`/session/${object.sessionId}`);
+    }
     else {
-      const point = activeSavedPoints.find(candidate => candidate.id === marker.id);
+      const point = activeSavedPoints.find(candidate => candidate.id === object.id);
       if (point) nav(`/fieldguide?sessionId=${sessionId}&savedPoints=1&lat=${point.lat}&lng=${point.lon}`);
     }
   }
@@ -954,6 +963,7 @@ export default function SessionPage(props: {
           onPending={() => nav('/pending')}
           onGuide={openActiveSessionGuide}
         />
+        {sessionMapSelection && <SessionMapObjectSheet selection={sessionMapSelection} records={{ finds: [...(finds ?? []), ...(fieldFinds ?? [])], signals: activeSignals, observations: activeObservations, savedPoints: activeSavedPoints, tracks: [...(tracks ?? []), ...(fieldTracks ?? [])], sessions: [...(fieldSessions ?? []), ...(session ? [session] : [])] }} activeSessionId={sessionId} onChoose={chooseMapObject} onClose={clearSessionMapSelection} onOpenFullRecord={openWorkspaceMapObject} />}
         {showWorkspaceQuickFind && permission && <SessionQuickFindSheet projectId={props.projectId} permissionId={permission.id} sessionId={sessionId} fieldId={fieldId} permissionName={permission.name} getPreferredLocation={getLatestTrackLocation} onClose={() => setShowWorkspaceQuickFind(false)} onSaved={(_findId, pending) => { setShowWorkspaceQuickFind(false); setWorkspaceNotice(pending ? 'Find saved for later' : 'Find saved'); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onAddDetails={findId => nav(`/find?quickId=${findId}`)} />}
         {showSavedPointSheet && <SessionSavedPointSheet defaultLabel={savedPointDefaultLabel} onClose={() => setShowSavedPointSheet(false)} onSave={saveWorkspacePoint} />}
         {showSignalSheet && <UndugSignalSheet sessionId={sessionId} permissionId={permission?.id ?? permissionId} onSaved={(_signalId, openCount) => { setShowSignalSheet(false); setWorkspaceNotice(`Signal saved${openCount ? ` · ${openCount} open here` : ''}`); navigator.vibrate?.(40); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onClose={() => setShowSignalSheet(false)} />}

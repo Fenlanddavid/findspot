@@ -43,16 +43,19 @@ export function useSessionData(params: {
         () => db.tracks.where('sessionId').equals(sessionId).toArray(),
         [sessionId],
     );
-    const fieldTracks = useLiveQuery(async () => {
+    const fieldHistory = useLiveQuery(async () => {
         const resolvedPermissionId = permissionId || await db.sessions.get(sessionId).then(row => row?.permissionId);
-        if (!resolvedPermissionId) return [];
-        const fieldSessionIds = (await db.sessions.where('permissionId').equals(resolvedPermissionId).toArray())
-            .filter(row => !fieldId || row.fieldId === fieldId || !row.fieldId)
-            .map(row => row.id);
-        return fieldSessionIds.length > 0
-            ? db.tracks.where('sessionId').anyOf(fieldSessionIds).toArray()
+        if (!resolvedPermissionId) return { sessions: [], tracks: [] };
+        const sessions = (await db.sessions.where('permissionId').equals(resolvedPermissionId).toArray())
+            .filter(row => !fieldId || row.fieldId === fieldId || !row.fieldId);
+        const sessionIds = sessions.map(row => row.id);
+        const historyTracks = sessionIds.length > 0
+            ? await db.tracks.where('sessionId').anyOf(sessionIds).toArray()
             : [];
+        return { sessions, tracks: historyTracks };
     }, [fieldId, permissionId, sessionId]);
+    const fieldTracks = fieldHistory?.tracks;
+    const fieldSessions = fieldHistory?.sessions;
     const fieldFinds = useLiveQuery(
         () => fieldId
             ? db.finds.where('fieldId').equals(fieldId).toArray()
@@ -60,5 +63,5 @@ export function useSessionData(params: {
         [fieldId],
     );
 
-    return { session, permission, fields, selectedField, finds, allMedia, tracks, fieldTracks, fieldFinds };
+    return { session, permission, fields, selectedField, finds, allMedia, tracks, fieldTracks, fieldSessions, fieldFinds };
 }
