@@ -139,7 +139,6 @@ export async function resolveHotspotPredictionOutcomes(
                 'coverage-resolution',
                 `${decision.outcome} via ${decision.evidence}`,
                 JSON.stringify({
-                    predictionId: decision.predictionId,
                     reportedConfirmations: decision.reportedConfirmationCount,
                     searchedCoverage: decision.outcome === 'searched_no_find'
                         ? decision.searchedCoverage

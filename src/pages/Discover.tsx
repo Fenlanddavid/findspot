@@ -11,6 +11,7 @@ import {
 } from '../services/clientStorage';
 import { CACHE_POLICIES } from '../shared/cachePolicy';
 import { distanceKilometers } from '../utils/geo';
+import { safeExternalHttpUrl } from '../utils/safeExternalUrl';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -370,6 +371,8 @@ function EventCard({
   const location = [event.town, event.county].filter(Boolean).join(", ");
   const qualityTag = getQualityLabel(event);
   const isRally = event.type === "rally";
+  const sourceUrl = safeExternalHttpUrl(event.sourceUrl);
+  const facebookUrl = safeExternalHttpUrl(event.facebookUrl);
 
   return (
     <article
@@ -384,9 +387,9 @@ function EventCard({
           {event.title}
         </h3>
         <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-          {event.sourceUrl && (
+          {sourceUrl && (
             <a
-              href={event.sourceUrl}
+              href={sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 text-gray-400 transition-colors hover:border-emerald-300 hover:text-emerald-500 dark:border-gray-700"
@@ -400,9 +403,9 @@ function EventCard({
               </svg>
             </a>
           )}
-          {event.facebookUrl && (
+          {facebookUrl && (
             <a
-              href={event.facebookUrl}
+              href={facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-gray-200 text-gray-400 transition-colors hover:border-blue-300 hover:text-blue-500 dark:border-gray-700"
@@ -473,6 +476,8 @@ function ClubCard({
   distanceKm?: number;
   onSubmitUpdate: () => void;
 }) {
+  const facebookUrl = safeExternalHttpUrl(club.facebookUrl);
+  const websiteUrl = safeExternalHttpUrl(club.websiteUrl);
   const dist = distanceKm != null ? `${(distanceKm * 0.621371).toFixed(1)} mi` : null;
   const location = [club.town, club.county].filter(Boolean).join(", ");
   const meta = [location, dist].filter(Boolean).join(" • ");
@@ -505,9 +510,9 @@ function ClubCard({
       )}
       {hasPublicLink ? (
         <div className="mt-2 flex gap-2">
-          {club.facebookUrl && (
+          {facebookUrl && (
             <a
-              href={club.facebookUrl}
+              href={facebookUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open Facebook page for ${club.name}`}
@@ -516,9 +521,9 @@ function ClubCard({
               Facebook
             </a>
           )}
-          {club.websiteUrl && (
+          {websiteUrl && (
             <a
-              href={club.websiteUrl}
+              href={websiteUrl}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Open website for ${club.name}`}
@@ -567,6 +572,8 @@ function EventDetailModal({
   onToggleGoing: () => void;
   onSubmitUpdate: () => void;
 }) {
+  const sourceUrl = safeExternalHttpUrl(event.sourceUrl);
+  const facebookUrl = safeExternalHttpUrl(event.facebookUrl);
   const dist = distanceKm != null ? ` • ${(distanceKm * 0.621371).toFixed(1)} mi away` : "";
   const location = [event.town, event.county].filter(Boolean).join(", ");
   const scoreTag = getScoreLabel(score);
@@ -648,9 +655,9 @@ function EventDetailModal({
           )}
           {/* Primary actions row */}
           <div className="flex gap-2">
-            {event.sourceUrl && (
+            {sourceUrl && (
               <a
-                href={event.sourceUrl}
+                href={sourceUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"
@@ -658,9 +665,9 @@ function EventDetailModal({
                 Website
               </a>
             )}
-            {event.facebookUrl && (
+            {facebookUrl && (
               <a
-                href={event.facebookUrl}
+                href={facebookUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest py-3 rounded-xl text-center transition-colors"

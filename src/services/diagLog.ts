@@ -4,7 +4,7 @@
 //
 // Usage:
 //   import { diagLog } from './diagLog';
-//   diagLog.error('export', 'Export failed', String(e));
+//   reportNonFatal('export', 'Export failed', e);
 
 import { v4 as uuid } from 'uuid';
 import { db } from '../db';
@@ -63,7 +63,8 @@ export function reportNonFatal(scope: string, message: string, error: unknown): 
     if (oldestKey !== undefined) recentNonFatalReports.delete(oldestKey);
   }
 
-  void diagLog.warn(scope, message, String(error));
+  const detail = error instanceof Error ? error.name : typeof error;
+  void diagLog.warn(scope, message, detail);
 }
 
 export async function exportDiagLog(): Promise<string> {

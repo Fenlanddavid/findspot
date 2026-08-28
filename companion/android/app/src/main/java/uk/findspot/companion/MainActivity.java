@@ -526,14 +526,34 @@ public final class MainActivity extends Activity {
 
     private static String controlAction(Intent intent) {
         Uri data = intent == null ? null : intent.getData();
-        if (data == null || !"findspot-companion".equals(data.getScheme())
-            || !"record".equals(data.getHost())) return null;
-        if ("/start".equals(data.getPath())) return CONTROL_START;
-        if ("/stop".equals(data.getPath())) return CONTROL_STOP;
+        if (data == null) return null;
+        try {
+            if (!ExternalIntentPolicy.isValidControl(
+                intent.getAction(),
+                data.getScheme(),
+                data.getEncodedAuthority(),
+                data.getEncodedPath(),
+                data.getEncodedQuery(),
+                data.getEncodedFragment(),
+                data.getQueryParameterNames(),
+                data.getQueryParameters("session"),
+                data.getQueryParameters("finish"),
+                data.toString().length()
+            )) return null;
+            if ("/start".equals(data.getEncodedPath())) return CONTROL_START;
+            if ("/stop".equals(data.getEncodedPath())) return CONTROL_STOP;
+        } catch (RuntimeException malformedIntent) {
+            return null;
+        }
         return null;
     }
 
     private void captureControlContext(Intent intent) {
+        if (controlAction(intent) == null) {
+            targetSessionId = null;
+            finishSessionAfterImport = false;
+            return;
+        }
         Uri data = intent == null ? null : intent.getData();
         if (data == null) return;
         targetSessionId = data.getQueryParameter("session");

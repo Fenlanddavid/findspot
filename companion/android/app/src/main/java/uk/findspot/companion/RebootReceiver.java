@@ -7,7 +7,7 @@ import android.content.Intent;
 public final class RebootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) return;
+        if (intent == null || !ExternalIntentPolicy.isBootCompleted(intent.getAction())) return;
         RecordingStore store = ((CompanionApplication) context.getApplicationContext()).recordings();
         RecordingModels.Summary active = store.activeRecording();
         if (active == null) return;

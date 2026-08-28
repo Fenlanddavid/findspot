@@ -1791,7 +1791,8 @@ test("Club Day join links can import an embedded pack with a mapped field", asyn
   await expect(page.getByText("Stop and call the organiser.")).toBeVisible();
 
   const fields = await readIndexedDbStore(page, "fields");
-  const importedField = (fields as any[]).find((row) => row.id === "field-a");
+  const importedField = (fields as any[]).find((row) => row.sharedFieldId === "field-a");
   expect(importedField?.name).toBe("North Field");
+  expect(importedField?.id).not.toBe("field-a");
   expect(importedField?.boundary?.type).toBe("Polygon");
 });

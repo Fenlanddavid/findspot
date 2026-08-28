@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import Modal from "./Modal";
 import { reportNonFatal } from "../services/diagLog";
+import { CLUB_DAY_LIMITS } from "../services/clubDayValidation";
 
 type PermissionSummary = { id: string; name: string; type: string };
 
@@ -28,6 +29,11 @@ export function ClubRallyChoiceModal({
   function handleGoLink() {
     const trimmed = pastedUrl.trim();
     setUrlError(null);
+
+    if (trimmed.length > CLUB_DAY_LIMITS.encodedPayloadChars + 2_048) {
+      setUrlError("This Club Day link is too large to import.");
+      return;
+    }
 
     let searchString: string | null = null;
 

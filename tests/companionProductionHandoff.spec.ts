@@ -4,19 +4,39 @@ import {
   type CompanionRecording,
 } from '../src/shared/companionRecording';
 
+async function ensureServiceWorker(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('./');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+  }
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+}
+
+test('production share target rejects unsupported and oversized files before caching', async ({ page }) => {
+  await ensureServiceWorker(page);
+  const statuses = await page.evaluate(async () => {
+    async function send(file: File): Promise<number> {
+      const form = new FormData();
+      form.set('recording', file);
+      const response = await fetch('/findspot/companion-share', { method: 'POST', body: form, redirect: 'manual' });
+      return response.status;
+    }
+    return {
+      unsupported: await send(new File(['<html>bad</html>'], 'bad.html', { type: 'text/html' })),
+      oversized: await send(new File([new Uint8Array(25 * 1024 * 1024 + 1)], 'huge.json', { type: 'application/vnd.findspot.companion+json' })),
+    };
+  });
+  expect(statuses.unsupported).toBe(415);
+  expect(statuses.oversized).toBe(413);
+});
+
 test('production share target imports, acknowledges stop, and finishes at Companion stop time', async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('fs_onboarding_v2_done', '1');
     localStorage.setItem('fs_onboarding_done', '1');
   });
-  await page.goto('./');
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready;
-  });
-  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) {
-    await page.reload({ waitUntil: 'domcontentloaded' });
-  }
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await ensureServiceWorker(page);
 
   const projectId = await page.evaluate(async () => {
     const request = indexedDB.open('findspot_uk');

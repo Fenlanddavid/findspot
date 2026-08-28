@@ -973,7 +973,7 @@ export function buildTerrainHotspots(
         if (import.meta.env.DEV) {
             const nonGeologySources = [...sources].filter(s => (s as string) !== 'geology');
             if (nonGeologySources.length === 0) {
-                console.error('[GEOLOGY_RULE] Hotspot emitted with geology as sole source.', { sources: [...sources], center: c.center });
+                console.error('[GEOLOGY_RULE] Hotspot emitted with geology as sole source.', { sources: [...sources] });
             }
         }
 

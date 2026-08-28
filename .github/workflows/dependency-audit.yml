@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  outdated:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,5 +18,8 @@ jobs:
           node-version: 22.22.2
           cache: npm
       - run: npm ci
+      - name: Enforce high and critical production vulnerability threshold
+        run: npm audit --omit=dev --audit-level=high
       - name: Report outdated dependencies
         run: npm outdated
+        continue-on-error: true

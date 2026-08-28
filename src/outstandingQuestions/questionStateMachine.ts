@@ -195,12 +195,10 @@ export function applyQuestionTransition(
     'questions.lifecycle',
     'Rejected illegal question lifecycle transition',
     JSON.stringify({
-      questionId: question.id,
       status: question.status,
       resolvedReason: question.resolvedReason,
-      event,
+      event: event.type,
       code: result.code,
-      message: result.message,
     }),
   );
   return question;

@@ -146,7 +146,7 @@ describe('question state machine', () => {
     expect(warn).toHaveBeenCalledWith(
       'questions.lifecycle',
       'Rejected illegal question lifecycle transition',
-      expect.stringContaining('question-1'),
+      expect.not.stringContaining('question-1'),
     );
   });
 });

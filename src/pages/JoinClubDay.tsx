@@ -1,37 +1,39 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
-import { importClubDayPack, getSetting, setSetting, normalizeClubDayPack } from "../services/data";
-import type { ClubDayPack } from "../services/data";
+import { importClubDayPack, getSetting, setSetting } from "../services/data";
+import {
+  CLUB_DAY_LIMITS,
+  clubDayPackFromLegacyQuery,
+  decodeClubDayUrlPayload,
+  type ClubDayPack,
+} from "../services/clubDayValidation";
 import { Logo } from "../components/Logo";
-
-function decodePack(value: string): string {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
-  const binary = atob(padded);
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
-function parsePack(value: string | null): ClubDayPack | null {
-  if (!value) return null;
-  try {
-    return normalizeClubDayPack(JSON.parse(decodePack(value)));
-  } catch {
-    return null;
-  }
-}
 
 export default function JoinClubDay() {
   const [params] = useSearchParams();
   const nav = useNavigate();
-  const packFromUrl = parsePack(params.get("pack"));
+  const query = params.toString();
+  const parsed = useMemo<{ pack: ClubDayPack | null; invalid: boolean }>(() => {
+    try {
+      const validatedParams = new URLSearchParams(query);
+      if (validatedParams.getAll("pack").length > 1) return { pack: null, invalid: true };
+      const encoded = validatedParams.get("pack");
+      if (encoded) return { pack: decodeClubDayUrlPayload(encoded), invalid: false };
+      if (validatedParams.has("sid")) return { pack: clubDayPackFromLegacyQuery(validatedParams), invalid: false };
+      return { pack: null, invalid: true };
+    } catch {
+      return { pack: null, invalid: true };
+    }
+  }, [query]);
+  const packFromUrl = parsed.pack;
 
-  const sid = packFromUrl?.sharedPermissionId ?? params.get("sid") ?? "";
-  const name = packFromUrl?.eventName ?? params.get("n") ?? "Club Day Event";
-  const date = packFromUrl?.eventDate ?? params.get("d") ?? "";
-  const contact = packFromUrl?.organiserContactNumber ?? params.get("c") ?? "";
-  const email = packFromUrl?.organiserEmail ?? params.get("e") ?? "";
-  const instructions = packFromUrl?.significantFindInstructions ?? params.get("i") ?? "";
-  const publicNotes = packFromUrl?.publicNotes ?? params.get("p") ?? "";
+  const sid = packFromUrl?.sharedPermissionId ?? "";
+  const name = packFromUrl?.eventName ?? "Club Day Event";
+  const date = packFromUrl?.eventDate ?? "";
+  const contact = packFromUrl?.organiserContactNumber ?? "";
+  const email = packFromUrl?.organiserEmail ?? "";
+  const instructions = packFromUrl?.significantFindInstructions ?? "";
+  const publicNotes = packFromUrl?.publicNotes ?? "";
   const packFields = packFromUrl?.fields ?? [];
   const mappedFieldCount = packFields.filter(f => !!f.boundary).length;
 
@@ -49,20 +51,21 @@ export default function JoinClubDay() {
     });
   }, []);
 
-  if (!sid) {
+  if (parsed.invalid || !sid || !packFromUrl) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-950">
         <div className="text-center">
           <div className="text-4xl mb-4">⚠️</div>
           <h1 className="text-lg font-black text-gray-800 dark:text-gray-100">Invalid Club Day link</h1>
-          <p className="text-sm text-gray-500 mt-2">This link is missing event details. Ask your organiser to reshare it.</p>
+          <p className="text-sm text-gray-500 mt-2">This Club Day link is invalid or too large to import. Ask your organiser to reshare it.</p>
         </div>
       </div>
     );
   }
 
   async function handleJoin() {
-    if (!recorderName.trim()) {
+    const trustedRecorderName = recorderName.trim();
+    if (!trustedRecorderName || trustedRecorderName.length > CLUB_DAY_LIMITS.name) {
       setError("Please enter your name so the organiser knows who recorded what.");
       return;
     }
@@ -70,26 +73,8 @@ export default function JoinClubDay() {
     setError(null);
     try {
       // Save the name for future exports
-      await setSetting("recorderName", recorderName.trim());
-
-      // New QR links carry the complete stripped pack, including selected fields.
-      // Older links are still accepted by reconstructing the original lightweight pack.
-      const pack: ClubDayPack = packFromUrl ?? {
-        type: "findspot-club-day-pack",
-        version: 1,
-        sharedPermissionId: sid,
-        eventName: name,
-        eventDate: date || new Date().toISOString().slice(0, 10),
-        organiserContactNumber: contact || undefined,
-        organiserEmail: email || undefined,
-        significantFindInstructions: instructions || undefined,
-        publicNotes: publicNotes || undefined,
-        boundary: undefined,
-        fields: [],
-        createdAt: new Date().toISOString(),
-      };
-
-      const result = await importClubDayPack(JSON.stringify(pack));
+      await setSetting("recorderName", trustedRecorderName);
+      const result = await importClubDayPack(JSON.stringify(packFromUrl));
       setJoinedPermissionId(result.permissionId ?? null);
 
       if (result.alreadyImported) {
@@ -99,8 +84,8 @@ export default function JoinClubDay() {
       } else {
         setJoined(true);
       }
-    } catch (e: any) {
-      setError(e?.message ?? "Something went wrong. Try again.");
+    } catch {
+      setError("This Club Day could not be imported. Your existing data has not been changed.");
     } finally {
       setJoining(false);
     }

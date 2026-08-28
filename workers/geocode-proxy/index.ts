@@ -10,6 +10,7 @@ const ORIGIN_CACHE_TTL_MS = CACHE_POLICIES.geocodeOrigin.expiry.durationMs;
 const ORIGIN_CACHE_VERSION = 1;
 const APP_URL = 'https://fenlanddavid.github.io/findspot/';
 const USER_AGENT = `FindSpot/${ORIGIN_CACHE_VERSION} (${APP_URL})`;
+const MAX_UPSTREAM_RESPONSE_BYTES = 1024 * 1024;
 
 type GeocodeKind = 'search' | 'reverse';
 
@@ -77,7 +78,7 @@ export class GeocodeCoordinator extends DurableObject<Env> {
     });
 
     if (!upstream.ok) return jsonError('Upstream geocoder unavailable', 503);
-    const body = await upstream.text();
+    const body = await readBoundedText(upstream, MAX_UPSTREAM_RESPONSE_BYTES);
     const contentType = upstream.headers.get('content-type') ?? 'application/json';
     const result: StoredResult = { body, contentType, cachedAt: Date.now() };
     await this.ctx.storage.put(storageKey, result);
@@ -122,10 +123,13 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 function normaliseRequest(url: URL): CoordinatorRequest | { error: string } {
+  if (url.toString().length > 2_048) return { error: 'Request is too large' };
   if (url.pathname === '/search') {
+    if (!hasOnlyUniqueParams(url.searchParams, new Set(['q', 'limit']))) return { error: 'Invalid query parameters' };
     const query = (url.searchParams.get('q') ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (!query || query.length > 200) return { error: 'Invalid search query' };
     const limit = boundedInteger(url.searchParams.get('limit'), 1, 10, 10);
+    if (limit === null) return { error: 'Invalid limit' };
     const upstream = new URL('/search', UPSTREAM_BASE_URL);
     upstream.search = new URLSearchParams({
       format: 'jsonv2', addressdetails: '1', q: query, limit: String(limit),
@@ -138,6 +142,7 @@ function normaliseRequest(url: URL): CoordinatorRequest | { error: string } {
   }
 
   if (url.pathname === '/reverse') {
+    if (!hasOnlyUniqueParams(url.searchParams, new Set(['lat', 'lon', 'zoom']))) return { error: 'Invalid query parameters' };
     const lat = Number(url.searchParams.get('lat'));
     const lon = Number(url.searchParams.get('lon'));
     if (!Number.isFinite(lat) || lat < -90 || lat > 90
@@ -147,6 +152,7 @@ function normaliseRequest(url: URL): CoordinatorRequest | { error: string } {
     const roundedLat = lat.toFixed(4);
     const roundedLon = lon.toFixed(4);
     const zoom = boundedInteger(url.searchParams.get('zoom'), 3, 18, 18);
+    if (zoom === null) return { error: 'Invalid zoom' };
     const upstream = new URL('/reverse', UPSTREAM_BASE_URL);
     upstream.search = new URLSearchParams({
       format: 'jsonv2', addressdetails: '1', lat: roundedLat, lon: roundedLon, zoom: String(zoom),
@@ -168,16 +174,56 @@ function isCoordinatorRequest(value: unknown): value is CoordinatorRequest {
     || (input.kind !== 'search' && input.kind !== 'reverse')
     || typeof input.upstreamUrl !== 'string') return false;
   try {
-    return new URL(input.upstreamUrl).origin === UPSTREAM_BASE_URL;
+    const normalized = normaliseRequest(new URL(input.upstreamUrl));
+    return !('error' in normalized)
+      && normalized.kind === input.kind
+      && normalized.cacheKey === input.cacheKey
+      && normalized.upstreamUrl === input.upstreamUrl;
   } catch {
     return false;
   }
 }
 
-function boundedInteger(value: string | null, min: number, max: number, fallback: number): number {
+function boundedInteger(value: string | null, min: number, max: number, fallback: number): number | null {
+  if (value === null) return fallback;
+  if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed)) return fallback;
-  return Math.min(max, Math.max(min, parsed));
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) return null;
+  return parsed;
+}
+
+function hasOnlyUniqueParams(params: URLSearchParams, allowed: ReadonlySet<string>): boolean {
+  const seen = new Set<string>();
+  for (const [name] of params) {
+    if (!allowed.has(name) || seen.has(name)) return false;
+    seen.add(name);
+  }
+  return true;
+}
+
+async function readBoundedText(response: Response, maximumBytes: number): Promise<string> {
+  const declaredLength = response.headers.get('content-length');
+  if (declaredLength && Number(declaredLength) > maximumBytes) throw new Error('Upstream response too large');
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let result = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > maximumBytes) {
+        await reader.cancel();
+        throw new Error('Upstream response too large');
+      }
+      result += decoder.decode(chunk.value, { stream: true });
+    }
+    return result + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function corsHeaders(origin: string | null): Headers {

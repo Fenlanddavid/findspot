@@ -70,6 +70,14 @@ export default {
     if (!ALLOWED_SERVICES.has(service))  return jsonError("Invalid service", 400, origin);
     if (!ALLOWED_REQUESTS.has(reqType))  return jsonError("Invalid request type", 400, origin);
     if (!ALLOWED_VERSIONS.has(version))  return jsonError("Invalid version", 400, origin);
+    const baseParams = new Set(["service", "request", "version"]);
+    const featureInfoParams = new Set([
+      ...baseParams, "layers", "query_layers", "bbox", "crs",
+      "width", "height", "i", "j", "info_format",
+    ]);
+    if (!hasOnlyUniqueParams(p, reqType === "GetFeatureInfo" ? featureInfoParams : baseParams)) {
+      return jsonError("Invalid query parameters", 400, origin);
+    }
 
     // ── Build upstream URL ──
     const upstream = new URL(BGS_625K_URL);
@@ -92,10 +100,12 @@ export default {
       if (!ALLOWED_LAYERS.has(layer))           return jsonError("Layer not allowlisted", 400, origin);
       if (!bbox || !isValidBbox(bbox))          return jsonError("Invalid bbox", 400, origin);
       if (crs !== "EPSG:4326")                  return jsonError("Invalid CRS", 400, origin);
-      if (!isNonNegativeInt(width))             return jsonError("Invalid WIDTH", 400, origin);
-      if (!isNonNegativeInt(height))            return jsonError("Invalid HEIGHT", 400, origin);
+      if (!isPositiveInt(width))                return jsonError("Invalid WIDTH", 400, origin);
+      if (!isPositiveInt(height))               return jsonError("Invalid HEIGHT", 400, origin);
       if (!isNonNegativeInt(i))                 return jsonError("Invalid I", 400, origin);
       if (!isNonNegativeInt(j))                 return jsonError("Invalid J", 400, origin);
+      if (Number(i) >= Number(width))            return jsonError("I outside image", 400, origin);
+      if (Number(j) >= Number(height))           return jsonError("J outside image", 400, origin);
       if (!ALLOWED_INFO_FORMATS.has(infoFormat)) return jsonError("Invalid info format", 400, origin);
 
       upstream.searchParams.set("LAYERS",       layer);
@@ -194,6 +204,21 @@ function withCors(response, origin) {
 function isNonNegativeInt(value) {
   const n = Number(value);
   return /^\d+$/.test(String(value)) && Number.isInteger(n) && n >= 0 && n <= 4096;
+}
+
+function isPositiveInt(value) {
+  const n = Number(value);
+  return /^\d+$/.test(String(value)) && Number.isInteger(n) && n >= 1 && n <= 4096;
+}
+
+function hasOnlyUniqueParams(params, allowed) {
+  const seen = new Set();
+  for (const [rawName] of params) {
+    const name = rawName.toLowerCase();
+    if (!allowed.has(name) || seen.has(name)) return false;
+    seen.add(name);
+  }
+  return true;
 }
 
 /**

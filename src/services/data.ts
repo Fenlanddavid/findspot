@@ -12,6 +12,17 @@ import { v4 as uuid } from "uuid";
 import { blobToBase64, base64ToBlob } from "./backup/mediaEncoding";
 import { MAX_BACKUP_RECORDS } from "./backup/schema";
 import { validateBackupData } from "./backup/validation";
+import {
+  compactClubDayPack,
+  CLUB_DAY_LIMITS,
+  validateClubDayPack,
+  type ClubDayPack,
+  type ClubDayPackField,
+} from "./clubDayValidation";
+import { validateClubDayExport } from "./clubDayExportValidation";
+
+export { normalizeClubDayPack } from "./clubDayValidation";
+export type { ClubDayPack, ClubDayPackField } from "./clubDayValidation";
 
 export { MAX_BACKUP_RECORDS, validateBackupData };
 export { exportData } from "./backup/export";
@@ -125,45 +136,6 @@ export async function getOrCreateRecorderId(): Promise<string> {
   return id;
 }
 
-export type ClubDayPackField = Pick<Field, "id" | "name" | "boundary"> & Partial<Pick<Field, "notes" | "createdAt" | "updatedAt">>;
-
-export type ClubDayPack = {
-  type: "findspot-club-day-pack";
-  version: 1;
-  sharedPermissionId: string;
-  eventName: string;
-  eventDate: string;
-  organiserName?: string;
-  organiserContactNumber?: string;
-  organiserEmail?: string;
-  significantFindInstructions?: string;
-  publicNotes?: string;
-  boundary?: Field["boundary"];
-  fields: ClubDayPackField[];
-  createdAt: string;
-};
-
-type EncodedPolygon = number[][];
-type CompactClubDayField = [id: string, name: string, boundary: EncodedPolygon];
-
-type CompactClubDayPack = {
-  t: "cdp";
-  v: 1;
-  s: string;
-  n: string;
-  d: string;
-  o?: string;
-  c?: string;
-  e?: string;
-  i?: string;
-  p?: string;
-  b?: EncodedPolygon;
-  f: CompactClubDayField[];
-  a: string;
-};
-
-const COORD_SCALE = 1_000_000;
-
 function roundCoord(value: number): number {
   return Number(value.toFixed(6));
 }
@@ -200,153 +172,8 @@ function compactPolygon(boundary?: Field["boundary"]): Field["boundary"] | undef
   return { type: "Polygon", coordinates: rings };
 }
 
-function boundaryFromCoordinates(coordinates?: number[][][]): Field["boundary"] | undefined {
-  if (!coordinates?.length) return undefined;
-  return compactPolygon({ type: "Polygon", coordinates });
-}
-
-function encodePolygon(boundary?: Field["boundary"]): EncodedPolygon | undefined {
-  const compact = compactPolygon(boundary);
-  if (!compact) return undefined;
-
-  return compact.coordinates.map(ring => {
-    const encoded: number[] = [];
-    let prevLon = 0;
-    let prevLat = 0;
-
-    ring.forEach((point, index) => {
-      const lon = Math.round(point[0] * COORD_SCALE);
-      const lat = Math.round(point[1] * COORD_SCALE);
-      if (index === 0) {
-        encoded.push(lon, lat);
-      } else {
-        encoded.push(lon - prevLon, lat - prevLat);
-      }
-      prevLon = lon;
-      prevLat = lat;
-    });
-
-    return encoded;
-  });
-}
-
-function decodePolygon(encoded?: EncodedPolygon): Field["boundary"] | undefined {
-  if (!encoded?.length) return undefined;
-
-  const coordinates = encoded.map(ring => {
-    const decoded: number[][] = [];
-    let lon = 0;
-    let lat = 0;
-
-    for (let i = 0; i < ring.length - 1; i += 2) {
-      if (i === 0) {
-        lon = ring[i];
-        lat = ring[i + 1];
-      } else {
-        lon += ring[i];
-        lat += ring[i + 1];
-      }
-      decoded.push([roundCoord(lon / COORD_SCALE), roundCoord(lat / COORD_SCALE)]);
-    }
-
-    return decoded;
-  });
-
-  return boundaryFromCoordinates(coordinates);
-}
-
-function boundaryFromCompactValue(value?: EncodedPolygon | number[][][]): Field["boundary"] | undefined {
-  if (!value?.length) return undefined;
-  const firstRing = value[0] as unknown[];
-  return typeof firstRing?.[0] === "number"
-    ? decodePolygon(value as EncodedPolygon)
-    : boundaryFromCoordinates(value as number[][][]);
-}
-
-function isFullClubDayPack(value: any): value is ClubDayPack {
-  return value?.type === "findspot-club-day-pack" && value.version === 1 && typeof value.sharedPermissionId === "string";
-}
-
-function isCompactClubDayPack(value: any): value is CompactClubDayPack {
-  return value?.t === "cdp" && value.v === 1 && typeof value.s === "string";
-}
-
-export function normalizeClubDayPack(value: unknown): ClubDayPack | null {
-  if (isFullClubDayPack(value)) {
-    return {
-      ...value,
-      boundary: compactPolygon(value.boundary),
-      fields: (value.fields ?? [])
-        .map(f => {
-          const boundary = compactPolygon(f.boundary);
-          return boundary ? { ...f, boundary } : null;
-        })
-        .filter((f): f is ClubDayPackField => !!f),
-    };
-  }
-
-  if (!isCompactClubDayPack(value)) return null;
-
-  const createdAt = value.a || new Date().toISOString();
-  return {
-    type: "findspot-club-day-pack",
-    version: 1,
-    sharedPermissionId: value.s,
-    eventName: value.n || "Club Day Event",
-    eventDate: value.d || createdAt.slice(0, 10),
-    organiserName: value.o,
-    organiserContactNumber: value.c,
-    organiserEmail: value.e,
-    significantFindInstructions: value.i,
-    publicNotes: value.p,
-    boundary: boundaryFromCompactValue(value.b),
-    fields: (value.f ?? [])
-      .map((tuple): ClubDayPackField | null => {
-        if (!Array.isArray(tuple)) return null;
-        const [id, name, encodedBoundary] = tuple;
-        const boundary = boundaryFromCompactValue(encodedBoundary);
-        if (!id || !boundary) return null;
-        return {
-          id,
-          name: name || "Field",
-          boundary,
-          notes: "",
-          createdAt,
-          updatedAt: createdAt,
-        };
-      })
-      .filter((f): f is ClubDayPackField => !!f),
-    createdAt,
-  };
-}
-
 export function compactClubDayPackJson(json: string): string {
-  const pack = normalizeClubDayPack(JSON.parse(json));
-  if (!pack) throw new Error("Invalid Club Day Pack.");
-
-  const compact: CompactClubDayPack = {
-    t: "cdp",
-    v: 1,
-    s: pack.sharedPermissionId,
-    n: pack.eventName,
-    d: pack.eventDate,
-    f: pack.fields
-      .map(field => {
-        const boundary = encodePolygon(field.boundary);
-        return boundary ? [field.id, field.name, boundary] as CompactClubDayField : null;
-      })
-      .filter((field): field is CompactClubDayField => !!field),
-    a: pack.createdAt,
-  };
-
-  if (pack.organiserName) compact.o = pack.organiserName;
-  if (pack.organiserContactNumber) compact.c = pack.organiserContactNumber;
-  if (pack.organiserEmail) compact.e = pack.organiserEmail;
-  if (pack.significantFindInstructions) compact.i = pack.significantFindInstructions;
-  if (pack.publicNotes) compact.p = pack.publicNotes;
-  if (pack.boundary) compact.b = encodePolygon(pack.boundary);
-
-  return JSON.stringify(compact);
+  return JSON.stringify(compactClubDayPack(validateClubDayPack(JSON.parse(json) as unknown)));
 }
 
 /**
@@ -425,23 +252,31 @@ async function applyClubDayPackToLocalPermission(
   pack: ClubDayPack,
   now: string
 ) {
-  const fieldRecords: Field[] = pack.fields.map(f => ({
-    id: f.id,
-    projectId,
-    permissionId: localPermissionId,
-    name: f.name,
-    boundary: f.boundary,
-    notes: f.notes ?? "",
-    createdAt: f.createdAt ?? now,
-    updatedAt: f.updatedAt ?? now,
-  }));
-
-  const incomingFieldIds = new Set(fieldRecords.map(f => f.id));
   const [existingFields, existingSessions, existingFinds] = await Promise.all([
     db.fields.where("permissionId").equals(localPermissionId).toArray(),
     db.sessions.where("permissionId").equals(localPermissionId).toArray(),
     db.finds.where("permissionId").equals(localPermissionId).toArray(),
   ]);
+
+  const existingBySharedId = new Map(
+    existingFields.map(field => [field.sharedFieldId ?? field.id, field]),
+  );
+  const fieldRecords: Field[] = pack.fields.map(field => {
+    const existing = existingBySharedId.get(field.id);
+    return {
+      id: existing?.id ?? uuid(),
+      projectId,
+      permissionId: localPermissionId,
+      sharedFieldId: field.id,
+      name: field.name,
+      boundary: field.boundary,
+      notes: field.notes ?? "",
+      createdAt: existing?.createdAt ?? field.createdAt ?? now,
+      updatedAt: field.updatedAt ?? now,
+    };
+  });
+
+  const incomingFieldIds = new Set(fieldRecords.map(field => field.id));
 
   const referencedFieldIds = new Set<string>();
   existingSessions.forEach(s => { if (s.fieldId) referencedFieldIds.add(s.fieldId); });
@@ -481,6 +316,9 @@ async function applyClubDayPackToLocalPermission(
  * sessions/finds recorded against it can be merged back by the organiser.
  */
 export async function importClubDayPack(json: string): Promise<ClubDayImportResult> {
+  if (new TextEncoder().encode(json).byteLength > CLUB_DAY_LIMITS.decodedJsonBytes) {
+    throw new Error("This Club Day Pack is too large to import.");
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -488,8 +326,10 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
     throw new Error("Invalid Club Day Pack: could not parse file.");
   }
 
-  const pack = normalizeClubDayPack(parsed);
-  if (!pack) {
+  let pack: ClubDayPack;
+  try {
+    pack = validateClubDayPack(parsed);
+  } catch {
     throw new Error("This file is not a Club Day Pack.");
   }
 
@@ -534,7 +374,7 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
   // not the local record ID. This avoids conflating local identity with event identity.
   const localPermissionId = uuid();
 
-  await db.transaction("rw", [db.permissions, db.fields, db.sessions, db.finds], async () => {
+  await db.transaction("rw", [db.permissions, db.fields, db.sessions, db.finds, db.importedPackages], async () => {
     // Create synthetic read-only permission from pack data
     await db.permissions.put({
       id: localPermissionId,
@@ -562,15 +402,13 @@ export async function importClubDayPack(json: string): Promise<ClubDayImportResu
 
     // Import the selected fields, re-keyed to the synthetic permission
     await applyClubDayPackToLocalPermission(localPermissionId, project.id, pack, now);
+    await db.importedPackages.put({
+      id: uuid(),
+      packageHash: hash,
+      importedAt: now,
+      sharedPermissionId: pack.sharedPermissionId,
+    } as ImportedPackage);
   });
-
-  // Record the import to prevent duplicates
-  await db.importedPackages.put({
-    id: uuid(),
-    packageHash: hash,
-    importedAt: now,
-    sharedPermissionId: pack.sharedPermissionId,
-  } as ImportedPackage);
 
   return { eventName: pack.eventName, eventDate: pack.eventDate, alreadyImported: false, permissionId: localPermissionId };
 }
@@ -613,6 +451,21 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
     .where("permissionId").equals(localPermission.id)
     .toArray();
 
+  const memberFields = await db.fields
+    .where("permissionId").equals(localPermission.id)
+    .toArray();
+  const sharedFieldIds = new Map(
+    memberFields.map(field => [field.id, field.sharedFieldId ?? field.id]),
+  );
+  const sessionsForExport = sessions.map(session => ({
+    ...session,
+    fieldId: session.fieldId ? sharedFieldIds.get(session.fieldId) ?? null : null,
+  }));
+  const findsForExport = finds.map(find => ({
+    ...find,
+    fieldId: find.fieldId ? sharedFieldIds.get(find.fieldId) ?? null : null,
+  }));
+
   // Prefer recorder name already stamped on sessions (recorded at detection time),
   // then the modal override, then current settings — avoids mid-event name change drift.
   const sessionRecorderName = (sessions as any[]).find(s => s.recorderName)?.recorderName as string | undefined;
@@ -634,8 +487,8 @@ export async function exportClubDayData(sharedPermissionId: string, nameOverride
     recorderId,
     recorderName,
     exportedAt: new Date().toISOString(),
-    sessions,
-    finds,
+    sessions: sessionsForExport,
+    finds: findsForExport,
     significantFinds,
     media: mediaExport,
   };
@@ -653,81 +506,6 @@ export type ClubDayMergeResult = {
   alreadyPresent: number;
 };
 
-// ─── Import validation ────────────────────────────────────────────────────
-
-const MAX_IMPORT_JSON_BYTES = 50 * 1024 * 1024; // 50 MB
-const MAX_IMPORT_RECORDS = 5_000;
-const MAX_MEDIA_BLOB_BYTES = 10 * 1024 * 1024; // 10 MB per blob
-const ID_MAX_LEN = 128;
-
-function validateClubDayExport(raw: string): ClubDayExport {
-  if (raw.length > MAX_IMPORT_JSON_BYTES) {
-    throw new Error("Import file is too large.");
-  }
-
-  let data: any;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    throw new Error("Invalid Club Day export: could not parse file.");
-  }
-
-  if (!data || typeof data !== "object") throw new Error("Invalid export: not an object.");
-  if (data.type !== "findspot-club-day-export") throw new Error("This file is not a Club Day export.");
-  if (typeof data.sharedPermissionId !== "string" || !data.sharedPermissionId) throw new Error("Missing sharedPermissionId.");
-  if (typeof data.recorderId !== "string" || !data.recorderId) throw new Error("Missing recorderId.");
-  if (typeof data.recorderName !== "string") throw new Error("Missing recorderName.");
-
-  if (!Array.isArray(data.sessions)) throw new Error("Invalid export: sessions is not an array.");
-  if (!Array.isArray(data.finds)) throw new Error("Invalid export: finds is not an array.");
-  if (!Array.isArray(data.media)) throw new Error("Invalid export: media is not an array.");
-  if (data.significantFinds !== undefined && !Array.isArray(data.significantFinds)) throw new Error("Invalid export: significantFinds is not an array.");
-
-  const totalRecords = data.sessions.length + data.finds.length + (data.significantFinds?.length ?? 0) + data.media.length;
-  if (totalRecords > MAX_IMPORT_RECORDS) throw new Error(`Import contains ${totalRecords} records — maximum is ${MAX_IMPORT_RECORDS}.`);
-
-  // Validate IDs and basic structure
-  const allIds = new Set<string>();
-  function checkId(id: unknown, label: string) {
-    if (typeof id !== "string" || id.length === 0 || id.length > ID_MAX_LEN) throw new Error(`Invalid ${label} ID: ${String(id)}`);
-    if (allIds.has(id)) throw new Error(`Duplicate ID in import: ${id}`);
-    allIds.add(id);
-  }
-
-  for (const s of data.sessions) {
-    if (!s || typeof s !== "object") throw new Error("Invalid session record.");
-    checkId(s.id, "session");
-  }
-  for (const f of data.finds) {
-    if (!f || typeof f !== "object") throw new Error("Invalid find record.");
-    checkId(f.id, "find");
-    if (f.lat != null && (typeof f.lat !== "number" || f.lat < -90 || f.lat > 90)) throw new Error("Invalid find latitude.");
-    if (f.lon != null && (typeof f.lon !== "number" || f.lon < -180 || f.lon > 180)) throw new Error("Invalid find longitude.");
-  }
-  for (const sf of (data.significantFinds ?? [])) {
-    if (!sf || typeof sf !== "object") throw new Error("Invalid significant find record.");
-    checkId(sf.id, "significantFind");
-  }
-  const mediaOwnerIds = new Set<string>([
-    ...data.finds.map((f: any) => f.id),
-    ...(data.significantFinds ?? []).map((sf: any) => sf.id),
-  ]);
-  for (const m of data.media) {
-    if (!m || typeof m !== "object") throw new Error("Invalid media record.");
-    checkId(m.id, "media");
-    if (typeof m.findId !== "string" || m.findId.length === 0 || m.findId.length > ID_MAX_LEN) {
-      throw new Error("Invalid media find reference.");
-    }
-    if (!mediaOwnerIds.has(m.findId)) throw new Error("Media references a missing find.");
-    if (typeof m.blob !== "string") throw new Error("Invalid media blob.");
-    if (m.blob.length > MAX_MEDIA_BLOB_BYTES * 1.37) {
-      throw new Error("Media blob exceeds size limit.");
-    }
-  }
-
-  return data as ClubDayExport;
-}
-
 /**
  * Organiser: merges a member's Club Day export into the local database.
  * Matches by sharedPermissionId. Uses upsert — existing records are kept.
@@ -744,7 +522,7 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
 
   // Verify the organiser has this shared permission
   const permission = await db.permissions
-    .filter(p => p.sharedPermissionId === data.sharedPermissionId)
+    .filter(p => !!p.isSharedPermission && !p.isClubDayMember && p.sharedPermissionId === data.sharedPermissionId)
     .first();
   if (!permission) {
     throw new Error("No matching shared permission found on this device. Make sure you're importing into the organiser's device.");
@@ -762,13 +540,30 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
     .where("permissionId").equals(permission.id)
     .toArray();
 
+  const organiserFields = await db.fields.where("permissionId").equals(permission.id).toArray();
+  const organiserFieldsBySharedId = new Map(
+    organiserFields.map(field => [field.sharedFieldId ?? field.id, field.id]),
+  );
+  const resolveFieldId = (externalFieldId: string | null): string | null => {
+    if (!externalFieldId) return null;
+    const localFieldId = organiserFieldsBySharedId.get(externalFieldId);
+    if (!localFieldId) throw new Error("Club Day export references a field outside this permission.");
+    return localFieldId;
+  };
+
   const existingSessionIds = new Set(existingSessions.map(s => s.id));
   const existingFindIds = new Set(existingFinds.map(f => f.id));
   const existingSignificantFindIds = new Set(existingSignificantFinds.map(f => f.id));
 
-  const incomingSessions = data.sessions as any[];
-  const incomingFinds = data.finds as any[];
-  const incomingSignificantFinds = (data.significantFinds ?? []) as any[];
+  const incomingSessions: Session[] = data.sessions.map(session => ({
+    ...session,
+    fieldId: resolveFieldId(session.fieldId),
+  }));
+  const incomingFinds: Find[] = data.finds.map(find => ({
+    ...find,
+    fieldId: resolveFieldId(find.fieldId),
+  }));
+  const incomingSignificantFinds: SignificantFind[] = data.significantFinds.map(find => ({ ...find }));
 
   const newSessions = incomingSessions.filter(s => !existingSessionIds.has(s.id));
   const newFinds = incomingFinds.filter(f => !existingFindIds.has(f.id));
@@ -803,31 +598,55 @@ export async function mergeClubDayData(json: string): Promise<ClubDayMergeResult
   for (const sf of newSignificantFinds) {
     sf.id = await remapIfCollides(sf.id, db.significantFinds);
     if (sf.sessionId && idMap.has(sf.sessionId)) sf.sessionId = idMap.get(sf.sessionId)!;
-    if (sf.findId && idMap.has(sf.findId)) sf.findId = idMap.get(sf.findId)!;
+    if (sf.linkedFindId && idMap.has(sf.linkedFindId)) sf.linkedFindId = idMap.get(sf.linkedFindId)!;
+    sf.scatterFindIds = sf.scatterFindIds.map(findId => idMap.get(findId) ?? findId);
   }
 
   // Normalise to organiser's permission so merged records appear in their session list,
   // the session page resolves the permission correctly, and a single query covers all data.
-  const fixedSessions = newSessions.map((s: any) => ({ ...s, projectId: permission.projectId, permissionId: permission.id }));
-  const fixedFinds = newFinds.map((f: any) => ({ ...f, projectId: permission.projectId, permissionId: permission.id }));
-  const fixedSignificantFinds = newSignificantFinds.map((f: any) => ({ ...f, projectId: permission.projectId, permissionId: permission.id }));
+  const fixedSessions: Session[] = newSessions.map(session => ({
+    ...session,
+    projectId: permission.projectId,
+    permissionId: permission.id,
+  }));
+  const fixedFinds: Find[] = newFinds.map(find => ({
+    ...find,
+    projectId: permission.projectId,
+    permissionId: permission.id,
+  }));
+  const fixedSignificantFinds: SignificantFind[] = newSignificantFinds.map(find => ({
+    ...find,
+    projectId: permission.projectId,
+    permissionId: permission.id,
+  }));
 
   // Convert base64 blobs BEFORE opening the transaction — fetch() is not an
   // IndexedDB operation and awaiting it inside a transaction causes IDB to
   // auto-commit, silently dropping everything written afterwards.
   // Media rows often lack permissionId, so use find-level ownership instead:
   // only remap when the existing media points to a different find.
-  const mediaItems: Media[] = data.media?.length
-    ? await Promise.all((data.media as any[]).map(async m => {
+  const mediaItems: Media[] = data.media.length
+    ? await Promise.all(data.media.map(async media => {
         // Resolve the final findId first so we can compare ownership
-        const fixedFindId = m.findId && idMap.has(m.findId) ? idMap.get(m.findId)! : m.findId;
-        const existing = await db.media.get(m.id);
-        const remappedId = existing && existing.findId !== fixedFindId ? uuid() : m.id;
-        if (remappedId !== m.id) idMap.set(m.id, remappedId);
-        const fixedM = { ...m, id: remappedId, findId: fixedFindId };
-        if (fixedM.sessionId && idMap.has(fixedM.sessionId)) fixedM.sessionId = idMap.get(fixedM.sessionId)!;
-        if (fixedM.significantFindId && idMap.has(fixedM.significantFindId)) fixedM.significantFindId = idMap.get(fixedM.significantFindId)!;
-        return { ...fixedM, blob: await base64ToBlob(fixedM.blob) };
+        const fixedFindId = idMap.get(media.findId) ?? media.findId;
+        const existing = await db.media.get(media.id);
+        const remappedId = existing && existing.findId !== fixedFindId ? uuid() : media.id;
+        if (remappedId !== media.id) idMap.set(media.id, remappedId);
+        return {
+          id: remappedId,
+          projectId: permission.projectId,
+          findId: fixedFindId,
+          permissionId: permission.id,
+          type: media.type,
+          photoType: media.photoType,
+          filename: media.filename,
+          mime: media.mime,
+          blob: await base64ToBlob(media.blob),
+          caption: media.caption,
+          scalePresent: media.scalePresent,
+          pxPerMm: media.pxPerMm,
+          createdAt: media.createdAt,
+        };
       }))
     : [];
 

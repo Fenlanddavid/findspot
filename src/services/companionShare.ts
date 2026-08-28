@@ -1,5 +1,7 @@
-export const COMPANION_SHARE_CACHE = 'findspot-companion-share-v1';
-export const COMPANION_SHARE_CACHE_PATH = '/findspot/__companion_share__/pending';
+import {
+  COMPANION_SHARE_CACHE,
+  COMPANION_SHARE_CACHE_PATH,
+} from '../shared/companionLimits';
 
 export async function takePendingCompanionShare(): Promise<File | null> {
   if (!('caches' in window)) return null;

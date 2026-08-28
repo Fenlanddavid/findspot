@@ -6,6 +6,7 @@ import { v4 as uuid } from "uuid";
 import { db, Find, Media, SignificantFind } from "../../db";
 import { fileToBlob } from "../../services/photos";
 import { ScaledImage } from "../ScaledImage";
+import { safeExternalHttpUrl } from "../../utils/safeExternalUrl";
 import {
   formatSignificantDate,
   formatSignificantLocation,
@@ -106,6 +107,7 @@ function PasRecordUrlField({ sfId, value, onSave, projectId }: {
   const [local, setLocal] = useState(value);
   const [pdfSaved, setPdfSaved] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const safeRecordUrl = safeExternalHttpUrl(local);
 
   useEffect(() => { setLocal(value); }, [value]);
 
@@ -148,9 +150,9 @@ function PasRecordUrlField({ sfId, value, onSave, projectId }: {
           placeholder="https://finds.org.uk/database/artefacts/record/id/…"
           className="flex-1 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 placeholder:text-gray-400"
         />
-        {local && (
+        {safeRecordUrl && (
           <a
-            href={local}
+            href={safeRecordUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="shrink-0 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 text-xs font-black text-emerald-700 dark:text-emerald-400"

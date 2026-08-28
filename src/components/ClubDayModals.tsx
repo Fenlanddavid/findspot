@@ -7,6 +7,7 @@ import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeRes
 import { loadRallyDayReview } from "../services/rallyDayReview";
 import { RallyDayReviewPanel } from "./RallyDayReviewPanel";
 import { reportNonFatal } from "../services/diagLog";
+import { CLUB_DAY_EXPORT_LIMITS } from "../services/clubDayExportValidation";
 
 // ─── Build join URL from event details ───────────────────────────────────────
 
@@ -570,6 +571,9 @@ export function ImportClubDayDataModal({
     setResult(null);
     setError(null);
     try {
+      if (file.size > CLUB_DAY_EXPORT_LIMITS.jsonBytes) {
+        throw new Error("This Club Day export is too large to import.");
+      }
       const text = await file.text();
       const r = await mergeClubDayData(text);
       setResult(r);

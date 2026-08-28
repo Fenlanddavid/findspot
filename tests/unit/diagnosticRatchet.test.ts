@@ -87,7 +87,7 @@ describe("silent diagnostic handler ratchet", () => {
     expect(warn).toHaveBeenCalledWith(
       "cache",
       "Cache read failed; using network",
-      "Error: offline",
+      "Error",
     );
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();

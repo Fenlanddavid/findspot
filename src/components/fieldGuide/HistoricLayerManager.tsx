@@ -827,7 +827,7 @@ function AlieSection({
             ) {
                 setLandscapeInterpretation(cachedInterpretation);
             }
-        }).catch((e: unknown) => diagLog.warn('alie', 'Cache read failed', String(e)));
+        }).catch((e: unknown) => diagLog.warn('alie', 'Cache read failed', e instanceof Error ? e.name : typeof e));
 
         alieAbortRef.current?.abort();
         alieAbortRef.current = null;
@@ -940,13 +940,13 @@ function AlieSection({
                 geologyTileKey,
                 inputSignature,
                 interpretation: result,
-            }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', String(e)));
+            }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', e instanceof Error ? e.name : typeof e));
         }).catch((error: unknown) => {
             if (alieRequestSeqRef.current !== requestSeq) return;
             if (error instanceof WorkerClientError && error.code === 'cancelled') return;
             const code = error instanceof WorkerClientError ? error.code : 'worker_error';
-            const message = error instanceof Error ? error.message : String(error);
-            diagLog.error('alie', `Worker ${code}`, message);
+            const detail = error instanceof Error ? error.name : typeof error;
+            diagLog.error('alie', `Worker ${code}`, detail);
         }).finally(() => {
             if (alieAbortRef.current === controller) alieAbortRef.current = null;
             if (alieRequestSeqRef.current === requestSeq) setAlieLoading(false);

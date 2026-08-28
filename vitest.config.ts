@@ -5,6 +5,6 @@ export default defineConfig({
     // Pure logic only — no DOM, no IndexedDB.
     // Any test needing browser APIs must override environment per-file.
     environment: 'node',
-    include: ['tests/unit/**/*.test.ts', 'src/**/*.test.ts'],
+    include: ['tests/unit/**/*.test.{ts,tsx}', 'tests/security/unit/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
   },
 });

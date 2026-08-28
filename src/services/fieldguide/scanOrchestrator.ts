@@ -49,8 +49,8 @@ const DEFAULT_DEPENDENCIES: FieldGuideScanOrchestratorDependencies = {
     updatePermissionIntelligence: updatePermissionIntelligenceQuestions,
     questionRuleScope: historicQuestionRuleScope,
     markPermissionEvaluated: markPermissionQuestionsEvaluated,
-    recordError: (message, detail) => {
-        void diagLog.error('outstanding_questions', message, detail);
+    recordError: (message) => {
+        void diagLog.error('outstanding_questions', message, 'Error');
     },
     now: () => new Date().toISOString(),
 };

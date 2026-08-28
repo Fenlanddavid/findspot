@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 export const COMPANION_RECORDING_SCHEMA_VERSION = 1 as const;
-export const MAX_COMPANION_FILE_BYTES = 25 * 1024 * 1024;
+export { MAX_COMPANION_FILE_BYTES } from './companionLimits';
+import { MAX_COMPANION_FILE_BYTES } from './companionLimits';
 export const MAX_COMPANION_SEGMENTS = 1_000;
 export const MAX_COMPANION_POINTS = 100_000;
 

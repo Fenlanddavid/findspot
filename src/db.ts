@@ -130,6 +130,8 @@ export type Field = {
   id: string;
   projectId: string;
   permissionId: string;
+  /** External Club Day field identifier. Never used as the local primary key. */
+  sharedFieldId?: string;
   name: string;
   boundary: GeoJSONPolygon;
   notes: string;

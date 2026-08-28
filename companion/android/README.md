@@ -8,6 +8,10 @@ Open `companion/android` in Android Studio, use JDK 17, install Android SDK 35,
 and build the `app` configuration. The project deliberately has no `INTERNET`
 permission. AndroidX Core is used only for secure `FileProvider` export.
 
+Run `./gradlew testDebugUnitTest --no-daemon` for the JVM regression suite.
+The deployment workflow runs this with a configured Android SDK before a web
+release can proceed.
+
 The app supports:
 
 - location foreground-service recording while locked;

@@ -14,6 +14,7 @@ import {
 import { prepareSessionCoverageEvidence } from './coverageMutations';
 import { reportNonFatal } from './diagLog';
 import { refreshHotspotPredictionOutcomes } from './hotspotPredictionService';
+import { MAX_COMPANION_FILE_BYTES } from '../shared/companionLimits';
 
 export type CompanionImportPreview = ValidatedCompanionRecording & {
   startedAt: Date;
@@ -92,6 +93,9 @@ function materializeTracks(
 export async function inspectCompanionRecording(
   input: File | string,
 ): Promise<CompanionImportPreview> {
+  if (input instanceof File && input.size > MAX_COMPANION_FILE_BYTES) {
+    throw new Error(`Companion recording exceeds the ${MAX_COMPANION_FILE_BYTES / (1024 * 1024)} MB limit.`);
+  }
   const originalJson = typeof input === 'string' ? input : await input.text();
   const validated = await validateCompanionRecordingJson(originalJson);
   const stoppedAt = validated.recording.stoppedAtUtc === null

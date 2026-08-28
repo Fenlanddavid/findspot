@@ -64,7 +64,7 @@ export async function persistPostScanOutcomes({
     void diagLog.error(
       'outstanding_questions',
       'Post-scan question update failed',
-      error instanceof Error ? error.message : String(error),
+      error instanceof Error ? error.name : typeof error,
     );
     return false;
   }

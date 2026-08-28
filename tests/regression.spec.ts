@@ -898,10 +898,14 @@ test("Club Day re-scan updates one local rally without losing referenced old fie
   const rally = permissions.find((row) => row.sharedPermissionId === "regression-shared-rally");
   expect(rally).toBeTruthy();
   expect(permissions.filter((row) => row.sharedPermissionId === "regression-shared-rally")).toHaveLength(1);
+  const joinedFields = (await readIndexedDbStore(page, "fields") as any[]).filter((row) => row.permissionId === rally.id);
+  const oldField = joinedFields.find((row) => row.sharedFieldId === "field-a");
+  expect(oldField?.id).toBeTruthy();
+  expect(oldField.id).not.toBe("field-a");
 
   const now = "2026-05-15T12:00:00.000Z";
-  await putIndexedDbRows(page, "sessions", [regressionSession("referencing-session", rally.projectId, rally.id, "field-a", now)]);
-  await putIndexedDbRows(page, "finds", [regressionFind("referencing-find", rally.projectId, rally.id, "field-a", "referencing-session", now)]);
+  await putIndexedDbRows(page, "sessions", [regressionSession("referencing-session", rally.projectId, rally.id, oldField.id, now)]);
+  await putIndexedDbRows(page, "finds", [regressionFind("referencing-find", rally.projectId, rally.id, oldField.id, "referencing-session", now)]);
 
   const updatedPack = {
     ...basePack,
@@ -931,9 +935,9 @@ test("Club Day re-scan updates one local rally without losing referenced old fie
   });
 
   const fields = (await readIndexedDbStore(page, "fields") as any[]).filter((row) => row.permissionId === rally.id);
-  expect(fields.map((row) => row.id).sort()).toEqual(["field-a", "field-b"]);
-  expect(fields.find((row) => row.id === "field-a")?.name).toBe("Old Field");
-  expect(fields.find((row) => row.id === "field-b")?.name).toBe("New Field");
+  expect(fields.map((row) => row.sharedFieldId).sort()).toEqual(["field-a", "field-b"]);
+  expect(fields.find((row) => row.sharedFieldId === "field-a")?.name).toBe("Old Field");
+  expect(fields.find((row) => row.sharedFieldId === "field-b")?.name).toBe("New Field");
 });
 
 test("Club Day organiser merge normalises member data and deduplicates a later re-export", async ({ page }) => {
