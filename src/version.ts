@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'Scheduled monuments now appear automatically on session maps with clear coverage details.';
+export const UPDATE_NOTES = 'Scheduled monuments now show on session maps with coverage info.';
