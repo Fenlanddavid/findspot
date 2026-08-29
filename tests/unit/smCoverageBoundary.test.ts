@@ -270,4 +270,16 @@ describe('SM live fallback guard', () => {
         expect(result.unavailableReason).toBe('coverage_scotland');
         expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('services-eu1.arcgis.com'))).toBe(false);
     });
+
+    it('cacheOnly never enters the live path when the R2 feature flag is disabled', async () => {
+        const fetchSpy = vi.fn(() => Promise.resolve(jsonResponse({ type: 'FeatureCollection', features: [] })));
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const { fetchScheduledMonuments } = await importService(false);
+        const result = await fetchScheduledMonuments(...LONDON, undefined, { cacheOnly: true });
+
+        expect(result.available).toBe(false);
+        expect(result.cacheComplete).toBe(false);
+        expect(fetchSpy).not.toHaveBeenCalled();
+    });
 });

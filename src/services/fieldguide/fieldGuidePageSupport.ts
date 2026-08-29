@@ -2,6 +2,18 @@ import * as turf from '@turf/turf';
 import type { Cluster } from '../../pages/fieldGuideTypes';
 import { MONUMENT_BOUNDARY_BUFFER_M } from '../../utils/fieldGuideAnalysis';
 
+export const MONUMENT_BUFFER_FILL_PAINT = {
+    'fill-color': '#f97316',
+    'fill-opacity': 0.16,
+};
+
+export const MONUMENT_BUFFER_OUTLINE_PAINT = {
+    'line-color': '#f97316',
+    'line-width': 2,
+    'line-opacity': 0.85,
+    'line-dasharray': [3, 2],
+};
+
 export function clampOpacity(value: unknown, fallback: number): number {
     return typeof value === 'number' && Number.isFinite(value)
         ? Math.max(0, Math.min(1, value))

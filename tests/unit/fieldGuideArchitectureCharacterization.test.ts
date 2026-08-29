@@ -104,7 +104,7 @@ describe('FieldGuide architecture characterization', () => {
       'services/fieldguide/historicScanCoordinator.ts': 405,
       'services/fieldguide/historicScanRecords.ts': 241,
       'services/fieldguide/historicScanSupport.ts': 118,
-      'services/fieldguide/fieldGuidePageSupport.ts': 83,
+      'services/fieldguide/fieldGuidePageSupport.ts': 95,
       'services/fieldguide/scanOrchestrator.ts': 160,
       'services/fieldguide/postScanOrchestrator.ts': 71,
     });

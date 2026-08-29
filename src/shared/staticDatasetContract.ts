@@ -22,6 +22,8 @@ export type CurrentSmIndexMeta = {
   schemaVersion: typeof SM_INDEX_SCHEMA_VERSION;
   geometryMode: 'full-geojson';
   coverage?: string[];
+  builtAt?: string;
+  sources?: Array<{ name: string; licence?: string; attribution?: string }>;
 };
 
 export type CurrentAimIndexMeta = {
@@ -39,7 +41,14 @@ export function isCurrentSmIndexMeta(value: unknown): value is CurrentSmIndexMet
     && value.schemaVersion === SM_INDEX_SCHEMA_VERSION
     && value.geometryMode === 'full-geojson'
     && (value.coverage === undefined
-      || (Array.isArray(value.coverage) && value.coverage.every(item => typeof item === 'string')));
+      || (Array.isArray(value.coverage) && value.coverage.every(item => typeof item === 'string')))
+    && (value.builtAt === undefined || typeof value.builtAt === 'string')
+    && (value.sources === undefined || (Array.isArray(value.sources) && value.sources.every(source =>
+      isRecord(source)
+      && typeof source.name === 'string'
+      && (source.licence === undefined || typeof source.licence === 'string')
+      && (source.attribution === undefined || typeof source.attribution === 'string')
+    )));
 }
 
 export function isCurrentAimIndexMeta(value: unknown): value is CurrentAimIndexMeta {

@@ -11,7 +11,7 @@
 //   - cachedFetch() (src/utils/cachedFetch.ts) is the read path: scan code
 //     calls cachedFetch(url, CACHE_NAME) and gets the cached tile if present.
 
-import { db, Permission, SavedPoint } from '../db';
+import { db, Permission, SavedPoint, type GeoJSONPolygon } from '../db';
 import { resolveWaybackIds, waybackTileUrl, WaybackIds } from '../utils/waybackService';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
@@ -51,6 +51,8 @@ const BASEMAP_ZOOMS = [14, 15, 16] as const;
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
 const DESIGNATION_BBOX_PAD_M = 50;
 const PERMISSION_SCAN_TILE_MARGIN = 1;
+const AUTO_SM_CACHE_ROOT = 'findspot-sm-auto:';
+const AUTO_SM_CACHE_PREFIX = `${AUTO_SM_CACHE_ROOT}${STATIC_DATA_GENERATION}:`;
 const NHLE_FEATURE_SERVER =
     'https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/' +
     'National_Heritage_List_for_England_NHLE_v02_VIEW/FeatureServer/6/query';
@@ -279,6 +281,87 @@ async function cacheSMIndexFromR2(cache: Cache, cells: string[]): Promise<boolea
     return ok === cells.length;
 }
 
+const autoScheduledMonumentJobs = new Map<string, Promise<boolean>>();
+
+function autoScheduledMonumentCacheName(owner: PackOwner): string {
+    return `${AUTO_SM_CACHE_PREFIX}${owner.ownerType}:${owner.ownerId}`;
+}
+
+/**
+ * Quietly prepares only the scheduled-monument index needed by a permission.
+ * This is intentionally separate from buildPack(): session setup can make the
+ * always-on base-map layer useful without asking the user to download the much
+ * larger terrain/offline pack. The map itself continues to read cache-only.
+ */
+export async function ensureScheduledMonumentMapCache(
+    owner: PackOwner,
+    boundary?: GeoJSONPolygon,
+): Promise<boolean> {
+    if (typeof caches === 'undefined') return false;
+    const resolved = boundary
+        ? (() => {
+            const coords = boundary.coordinates[0];
+            const lons = coords.map(coordinate => coordinate[0]);
+            const lats = coords.map(coordinate => coordinate[1]);
+            const boundaryBbox: [number, number, number, number] = [
+                Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats),
+            ];
+            return expandBboxByTileMargin(boundaryBbox, ZOOM, PERMISSION_SCAN_TILE_MARGIN);
+        })()
+        : (await resolveBbox(owner)).bbox;
+    const bbox = resolved;
+    const designationBbox = padBboxByMetres(bbox, DESIGNATION_BBOX_PAD_M);
+    const cells = bboxToGeohash6Cells(...designationBbox);
+    const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta);
+    const shardUrls = cells.map(cell => staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, smShardKey(cell)));
+    const jobKey = `${autoScheduledMonumentCacheName(owner)}:${bboxKey(designationBbox)}`;
+    const existingJob = autoScheduledMonumentJobs.get(jobKey);
+    if (existingJob) return existingJob;
+
+    const job = (async () => {
+        const [cachedMeta, ...cachedShards] = await Promise.all([
+            caches.match(metaUrl),
+            ...shardUrls.map(url => caches.match(url)),
+        ]);
+        const meta = cachedMeta ? await cachedMeta.clone().json().catch(() => null) : null;
+        if (isCurrentSmIndexMeta(meta) && cachedShards.every(Boolean)) return true;
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
+
+        const cache = await caches.open(autoScheduledMonumentCacheName(owner));
+        const metaReady = isCurrentSmIndexMeta(meta)
+            ? true
+            : await (async () => {
+                const response = await fetch(metaUrl);
+                if (!response.ok) return false;
+                const fetchedMeta = await response.clone().json().catch(() => null);
+                if (!isCurrentSmIndexMeta(fetchedMeta)) return false;
+                await cache.put(metaUrl, response);
+                return true;
+            })();
+        if (!metaReady) return false;
+
+        const results = await Promise.all(shardUrls.map(async (url, index) => {
+            if (cachedShards[index]) return true;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) return false;
+                const entries = await response.clone().json().catch(() => null);
+                if (!Array.isArray(entries) || !entries.every(isValidSMShardEntry)) return false;
+                await cache.put(url, response);
+                return true;
+            } catch (error) {
+                reportNonFatal('offline-pack', 'Automatic scheduled monument cache failed', error);
+                return false;
+            }
+        }));
+        return results.every(Boolean);
+    })().finally(() => {
+        autoScheduledMonumentJobs.delete(jobKey);
+    });
+    autoScheduledMonumentJobs.set(jobKey, job);
+    return job;
+}
+
 async function fetchLiveScheduledMonumentsForBbox(
     bbox: [number, number, number, number],
 ): Promise<NHLEFeature[]> {
@@ -497,10 +580,17 @@ export async function findPackCoveringBbox(
 export async function deletePack(owner: PackOwner): Promise<void> {
     if (typeof caches === 'undefined') return;
     const metas = await listPacks();
+    const cacheKeys = await caches.keys();
     await Promise.all(
-        metas
+        [
+            ...metas
             .filter(meta => meta.ownerType === owner.ownerType && meta.ownerId === owner.ownerId)
-            .map(meta => caches.delete(meta.cacheName)),
+            .map(meta => meta.cacheName),
+            ...cacheKeys.filter(key =>
+                key.startsWith(AUTO_SM_CACHE_ROOT)
+                && key.endsWith(`:${owner.ownerType}:${owner.ownerId}`)
+            ),
+        ].map(cacheName => caches.delete(cacheName)),
     );
 }
 

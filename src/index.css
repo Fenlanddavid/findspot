@@ -8,6 +8,32 @@ a { color: inherit; }
 button { cursor: pointer; }
 h2 { margin: 0 0 6px 0; }
 
+.scheduled-monument-map-key {
+  background: repeating-linear-gradient(135deg, #f87171 0 3px, #be123c 3px 6px);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 55%);
+}
+
+.scheduled-monument-coverage-short {
+  color: rgb(255 255 255 / 72%);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 95%), 0 0 4px rgb(0 0 0 / 70%);
+}
+
+.scheduled-monument-popup .maplibregl-popup-content {
+  border: 1px solid rgb(248 113 113 / 65%);
+  border-radius: 9999px;
+  background: rgb(17 24 39 / 94%);
+  color: white;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1rem;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 30%);
+}
+
+.scheduled-monument-popup .maplibregl-popup-tip {
+  display: none;
+}
+
 @media print {
   body {
     background: white !important;

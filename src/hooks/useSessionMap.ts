@@ -5,10 +5,35 @@ import type { CoverageResult } from '../services/coverage';
 import { splitTrackPointsAtGaps } from '../shared/trackSegments';
 import { locationAccuracyCircle, locationHeadingLine, type FieldLocation } from '../services/session/sessionFieldPosition';
 import { initialSessionMapCenter, initialSessionMapCoordinates } from '../services/session/sessionMapViewport';
+import {
+    INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
+    resolveScheduledMonumentMapCoverage,
+    scheduledMonumentPopupText,
+    type ScheduledMonumentMapCoverage,
+} from '../services/session/sessionScheduledMonuments';
 import { useSessionMapLayers } from './useSessionMapLayers';
 import { useSessionMapSelection } from './useSessionMapSelection';
 
 const DEFAULT_CENTER: [number, number] = [-2, 54.5];
+const EMPTY_FEATURE_COLLECTION = { type: 'FeatureCollection' as const, features: [] };
+
+function scheduledMonumentHatchImage() {
+    const size = 16;
+    const data = new Uint8Array(size * size * 4);
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const stripe = (x + y) % 10;
+            if (stripe > 3) continue;
+            const offset = (y * size + x) * 4;
+            const lightStripe = stripe > 1;
+            data[offset] = lightStripe ? 255 : 190;
+            data[offset + 1] = lightStripe ? 128 : 24;
+            data[offset + 2] = lightStripe ? 112 : 45;
+            data[offset + 3] = lightStripe ? 225 : 250;
+        }
+    }
+    return { width: size, height: size, data };
+}
 
 export type SessionMapMarker = {
     id: string;
@@ -20,6 +45,8 @@ export type SessionMapMarker = {
 /** Owns the session map lifecycle and renders boundary, tracks, and coverage. */
 export function useSessionMap(params: {
     viewportKey?: string;
+    scheduledMonumentCacheVersion?: number;
+    scheduledMonumentCachePreparing?: boolean;
     enabled?: boolean;
     center?: { lat: number; lon: number } | null;
     markers?: SessionMapMarker[];
@@ -38,7 +65,7 @@ export function useSessionMap(params: {
     mapObjectSheetsEnabled?: boolean;
     onMarkerSelect?: (marker: SessionMapMarker) => void;
 }) {
-    const { viewportKey, enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, mapObjectSheetsEnabled = false, onMarkerSelect } = params;
+    const { viewportKey, scheduledMonumentCacheVersion = 0, scheduledMonumentCachePreparing = false, enabled = true, center, markers, liveLocation, boundary, boundaryReady = true, tracks, fieldTracks, fieldFindMarkers, isTracking, isFinished, showFieldTrails = false, showPastFinds = false, showCoverage, coverageResult, mapObjectSheetsEnabled = false, onMarkerSelect } = params;
     const mapDivRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
     const initialFitCompleteRef = useRef(false);
@@ -54,6 +81,9 @@ export function useSessionMap(params: {
     fieldFindMarkersRef.current = fieldFindMarkers;
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
+    const [scheduledMonumentCoverage, setScheduledMonumentCoverage] = useState<ScheduledMonumentMapCoverage>(
+        INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
+    );
     const mapLayers = useSessionMapLayers(mapRef, mapReadyVersion);
     const mapSelection = useSessionMapSelection({
         mapRef, mapReadyVersion, enabled: enabled && mapObjectSheetsEnabled, markers, fieldFindMarkers, tracks, fieldTracks,
@@ -74,6 +104,7 @@ export function useSessionMap(params: {
         mapRef.current?.remove();
         mapRef.current = null;
         setIsFollowing(true);
+        setScheduledMonumentCoverage(INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE);
     }, [viewportKey]);
 
     useEffect(() => {
@@ -175,10 +206,34 @@ export function useSessionMap(params: {
                     if (preservedViewport) initialFitCompleteRef.current = true;
                 } catch (error) {
                     console.error('Map init failed:', error);
+                    setScheduledMonumentCoverage({
+                        ...INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
+                        status: 'error',
+                    });
                     return;
                 }
                 map.on('load', () => {
                     registerRomanStandaloneLayers(map);
+                    map.addSource('scheduled-monuments', { type: 'geojson', data: EMPTY_FEATURE_COLLECTION });
+                    if (!map.hasImage('scheduled-monument-hatch')) {
+                        map.addImage('scheduled-monument-hatch', scheduledMonumentHatchImage(), { pixelRatio: 2 });
+                    }
+                    map.addLayer({
+                        id: 'scheduled-monuments-fill', type: 'fill', source: 'scheduled-monuments',
+                        filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+                        paint: { 'fill-pattern': 'scheduled-monument-hatch', 'fill-opacity': 0.56 },
+                    });
+                    map.addLayer({
+                        id: 'scheduled-monuments-soft-edge', type: 'line', source: 'scheduled-monuments',
+                        filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: {
+                            'line-color': '#dc2626',
+                            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 10, 16, 18, 20, 30],
+                            'line-blur': ['interpolate', ['linear'], ['zoom'], 10, 4, 16, 7, 20, 12],
+                            'line-opacity': 0.46,
+                        },
+                    });
                     map.addSource('boundary', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
                     map.addLayer({ id: 'boundary-outline', type: 'line', source: 'boundary', paint: { 'line-color': '#10b981', 'line-width': 2, 'line-dasharray': [2, 1] } });
                     map.addSource('field-tracks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -280,5 +335,117 @@ export function useSessionMap(params: {
         }
     }, [coverageResult, enabled, mapReadyVersion, showCoverage, showFieldTrails, showPastFinds]);
 
-    return { mapDivRef, layerControl: mapLayers.control, ...mapSelection };
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!enabled || !map || !mapReadyVersion || !map.getLayer('scheduled-monuments-fill')) return;
+        let popup: maplibregl.Popup | null = null;
+        const showMonument = (event: maplibregl.MapMouseEvent) => {
+            const feature = map.queryRenderedFeatures(event.point, { layers: ['scheduled-monuments-fill'] })[0];
+            if (!feature) return;
+            popup?.remove();
+            popup = new maplibregl.Popup({
+                className: 'scheduled-monument-popup',
+                closeButton: false,
+                closeOnClick: true,
+                offset: 12,
+            })
+                .setLngLat(event.lngLat)
+                .setText(scheduledMonumentPopupText(feature.properties))
+                .addTo(map);
+        };
+        const showPointer = () => { map.getCanvas().style.cursor = 'pointer'; };
+        const clearPointer = () => { map.getCanvas().style.cursor = ''; };
+        map.on('click', showMonument);
+        map.on('mouseenter', 'scheduled-monuments-fill', showPointer);
+        map.on('mouseleave', 'scheduled-monuments-fill', clearPointer);
+        return () => {
+            popup?.remove();
+            map.off('click', showMonument);
+            map.off('mouseenter', 'scheduled-monuments-fill', showPointer);
+            map.off('mouseleave', 'scheduled-monuments-fill', clearPointer);
+        };
+    }, [enabled, mapReadyVersion]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        if (!enabled || !map || !mapReadyVersion) return;
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let requestVersion = 0;
+        let controller: AbortController | null = null;
+
+        const refresh = async () => {
+            const version = ++requestVersion;
+            controller?.abort();
+            controller = new AbortController();
+            setScheduledMonumentCoverage(INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE);
+            const bounds = map.getBounds();
+            const bbox: [number, number, number, number] = [
+                bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(),
+            ];
+            try {
+                const { fetchScheduledMonuments } = await import('../services/historicScanService');
+                const result = await fetchScheduledMonuments(...bbox, controller.signal, {
+                    cacheOnly: true,
+                    allowPartialCoverage: true,
+                });
+                if (cancelled || version !== requestVersion) return;
+                const source = map.getSource('scheduled-monuments') as maplibregl.GeoJSONSource | undefined;
+                if (!source) throw new Error('Scheduled monument map source is unavailable');
+                source.setData({ type: 'FeatureCollection', features: result.features });
+                for (const layer of [
+                    'scheduled-monuments-fill',
+                    'scheduled-monuments-soft-edge',
+                ]) {
+                    if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'visible');
+                }
+                const coverage = resolveScheduledMonumentMapCoverage(bbox, result);
+                setScheduledMonumentCoverage(
+                    scheduledMonumentCachePreparing && coverage.status === 'not_cached'
+                        ? INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE
+                        : coverage
+                );
+            } catch (error) {
+                if (controller.signal.aborted || cancelled || version !== requestVersion) return;
+                console.error('Scheduled monument cache render failed:', error);
+                const source = map.getSource('scheduled-monuments') as maplibregl.GeoJSONSource | undefined;
+                try {
+                    source?.setData(EMPTY_FEATURE_COLLECTION);
+                } catch (clearError) {
+                    console.error('Scheduled monument source clear failed:', clearError);
+                }
+                for (const layer of [
+                    'scheduled-monuments-fill',
+                    'scheduled-monuments-soft-edge',
+                ]) {
+                    if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', 'none');
+                }
+                setScheduledMonumentCoverage({
+                    ...INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
+                    status: 'error',
+                });
+            }
+        };
+        const schedule = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => { void refresh(); }, 250);
+        };
+        const onMoveEnd = (event: maplibregl.MapLibreEvent & { originalEvent?: Event }) => {
+            if (event.originalEvent?.isTrusted) schedule();
+        };
+        const initialRefresh = () => { void refresh(); };
+        map.on('moveend', onMoveEnd);
+        if (map.isMoving()) map.once('idle', initialRefresh);
+        else initialRefresh();
+        return () => {
+            cancelled = true;
+            requestVersion++;
+            controller?.abort();
+            if (timer) clearTimeout(timer);
+            map.off('moveend', onMoveEnd);
+            map.off('idle', initialRefresh);
+        };
+    }, [enabled, mapReadyVersion, scheduledMonumentCachePreparing, scheduledMonumentCacheVersion]);
+
+    return { mapDivRef, layerControl: mapLayers.control, scheduledMonumentCoverage, ...mapSelection };
 }

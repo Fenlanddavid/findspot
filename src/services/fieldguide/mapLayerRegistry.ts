@@ -2,6 +2,10 @@ import maplibregl, { addProtocol } from 'maplibre-gl';
 import { cogProtocol } from '@geomatico/maplibre-cog-protocol';
 import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../../utils/mapTileCache';
 import { ROMAN_STANDALONE_MIN_ZOOM } from './romanRoadLayerConfig';
+import {
+    MONUMENT_BUFFER_FILL_PAINT,
+    MONUMENT_BUFFER_OUTLINE_PAINT,
+} from './fieldGuidePageSupport';
 export { ROMAN_STANDALONE_MIN_ZOOM } from './romanRoadLayerConfig';
 
 function emptyGeoJSON(): GeoJSON.FeatureCollection {
@@ -72,8 +76,8 @@ export function registerFieldGuideMapLayers(map: maplibregl.Map): boolean {
     if (map.getSource('targets')) return false;
 
     map.addSource('monument-buffers', { type: 'geojson', data: emptyGeoJSON() });
-    map.addLayer({ id: 'monument-buffer-fill', type: 'fill', source: 'monument-buffers', paint: { 'fill-color': '#f97316', 'fill-opacity': 0.16 } });
-    map.addLayer({ id: 'monument-buffer-outline', type: 'line', source: 'monument-buffers', paint: { 'line-color': '#f97316', 'line-width': 2, 'line-opacity': 0.85, 'line-dasharray': [3, 2] } });
+    map.addLayer({ id: 'monument-buffer-fill', type: 'fill', source: 'monument-buffers', paint: MONUMENT_BUFFER_FILL_PAINT });
+    map.addLayer({ id: 'monument-buffer-outline', type: 'line', source: 'monument-buffers', paint: MONUMENT_BUFFER_OUTLINE_PAINT });
 
     map.addSource('monuments', { type: 'geojson', data: emptyGeoJSON() });
     map.addLayer({ id: 'monuments-fill', type: 'fill', source: 'monuments', paint: { 'fill-color': '#ef4444', 'fill-opacity': 0.25 } });

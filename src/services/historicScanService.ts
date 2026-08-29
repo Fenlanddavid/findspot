@@ -12,7 +12,7 @@ import {
 } from '../shared/staticDatasetContract';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
 import { cachedFetchAny } from '../utils/cachedFetch';
-import { bboxIntersectsWales, bboxRequiredSMJurisdictions, type SMJurisdiction } from '../utils/jurisdictionDetect';
+import { bboxIntersectsWales, bboxRequiredSMJurisdictions } from '../utils/jurisdictionDetect';
 import { reverseGeocode } from './geocode';
 
 // ─── Typed API response shapes ────────────────────────────────────────────────
@@ -56,10 +56,10 @@ export interface ModernWaysFetchResult {
     available: boolean;
 }
 
-export interface NHLEGeometry {
-    type: 'Point' | 'Polygon' | 'MultiPolygon';
-    coordinates: number[] | number[][][] | number[][][][];
-}
+export type NHLEGeometry =
+    | { type: 'Point'; coordinates: number[] }
+    | { type: 'Polygon'; coordinates: number[][][] }
+    | { type: 'MultiPolygon'; coordinates: number[][][][] };
 
 export interface NHLEFeature {
     type: 'Feature';
@@ -75,6 +75,14 @@ export interface NHLEResponse {
     available?: boolean;
     error?: string;
     unavailableReason?: SMUnavailableReason;
+    cacheComplete?: boolean;
+    dataset?: SMDatasetMetadata;
+}
+
+export interface SMDatasetMetadata {
+    builtAt?: string;
+    coverage: string[];
+    sources: string[];
 }
 
 export type SMUnavailableReason =
@@ -83,6 +91,13 @@ export type SMUnavailableReason =
     | 'coverage_border'
     | 'coverage_incomplete'
     | 'coverage_outside_uk';
+
+export type SMCoverageResolution = {
+    classification: 'covered' | 'partial' | 'uncovered';
+    unavailableReason: SMUnavailableReason | null;
+    coveredNations: string[];
+    missingNations: string[];
+};
 
 export interface AIMFeature {
     type: 'Feature';
@@ -166,6 +181,7 @@ export type OverpassFetchOptions = {
 
 export type DesignationFetchOptions = {
     cacheOnly?: boolean;
+    allowPartialCoverage?: boolean;
 };
 
 function isAbortError(e: unknown): boolean {
@@ -342,28 +358,30 @@ type SMShardEntry = {
     geometry?: NHLEGeometry;
 };
 
-function smCoverageFailure(
-    required: Set<SMJurisdiction> | 'outside_uk',
+export function resolveSMCoverage(
+    bbox: [number, number, number, number],
     coverage: string[],
-): Pick<NHLEResponse, 'available' | 'error' | 'unavailableReason'> | null {
+): SMCoverageResolution {
+    const required = bboxRequiredSMJurisdictions(bbox);
     if (required === 'outside_uk') {
         return {
-            available: false,
-            error: 'Scheduled monument data does not cover this area',
+            classification: 'uncovered',
             unavailableReason: 'coverage_outside_uk',
+            coveredNations: [],
+            missingNations: [],
         };
     }
 
     const covered = new Set(coverage);
-    const missing = [...required].filter(jurisdiction => {
-        if (jurisdiction === 'england_wales') {
-            return !(covered.has('england') && covered.has('wales'));
-        }
-        if (jurisdiction === 'scotland') return !covered.has('scotland');
-        return !covered.has('northern_ireland');
-    });
+    const requiredNations = [...required].flatMap(jurisdiction =>
+        jurisdiction === 'england_wales' ? ['england', 'wales'] : [jurisdiction]
+    );
+    const coveredNations = requiredNations.filter(nation => covered.has(nation));
+    const missingNations = requiredNations.filter(nation => !covered.has(nation));
 
-    if (missing.length === 0) return null;
+    if (missingNations.length === 0) {
+        return { classification: 'covered', unavailableReason: null, coveredNations, missingNations };
+    }
 
     const reason: SMUnavailableReason =
         required.size === 1 && required.has('scotland')
@@ -375,9 +393,21 @@ function smCoverageFailure(
                     : 'coverage_border';
 
     return {
+        classification: coveredNations.length > 0 ? 'partial' : 'uncovered',
+        unavailableReason: reason,
+        coveredNations,
+        missingNations,
+    };
+}
+
+function smCoverageFailure(
+    resolution: SMCoverageResolution,
+): Pick<NHLEResponse, 'available' | 'error' | 'unavailableReason'> | null {
+    if (resolution.classification === 'covered') return null;
+    return {
         available: false,
         error: 'Scheduled monument data does not cover this area',
-        unavailableReason: reason,
+        unavailableReason: resolution.unavailableReason ?? undefined,
     };
 }
 
@@ -514,6 +544,8 @@ async function _fetchSMFromR2(
 ): Promise<NHLEResponse> {
     // ── 1. Coverage sentinel ──────────────────────────────────────────────────
     const metaUrl = staticDatasetUrl(FINDSPOT_STATIC_BASE_URL, STATIC_DATASET_KEYS.smMeta);
+    let dataset: SMDatasetMetadata | undefined;
+    let coverageResolution: SMCoverageResolution | undefined;
     try {
         const metaTimed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
         try {
@@ -521,16 +553,31 @@ async function _fetchSMFromR2(
                 ? await cachedFetchAny(metaUrl, { signal: metaTimed.signal }, { cacheOnly: true })
                 : await fetch(metaUrl, { signal: metaTimed.signal });
             if (!metaRes.ok) {
-                return { features: [], available: false, error: `SM index not built (${metaRes.status})` };
+                return {
+                    features: [],
+                    available: false,
+                    cacheComplete: options.cacheOnly ? false : undefined,
+                    error: `SM index not built (${metaRes.status})`,
+                };
             }
             const meta = await metaRes.json().catch(() => null);
             if (!isCurrentSmIndexMeta(meta)) {
                 return { features: [], available: false, error: 'SM index requires full-geometry schema v2' };
             }
             const coverage: string[] = Array.isArray(meta.coverage) ? meta.coverage : ['england', 'wales'];
-            const required = bboxRequiredSMJurisdictions([west, south, east, north]);
-            const coverageFailure = smCoverageFailure(required, coverage);
-            if (coverageFailure) return { features: [], ...coverageFailure };
+            dataset = {
+                builtAt: meta.builtAt,
+                coverage,
+                sources: meta.sources?.map(source => source.name) ?? [],
+            };
+            coverageResolution = resolveSMCoverage([west, south, east, north], coverage);
+            const coverageFailure = smCoverageFailure(coverageResolution);
+            if (coverageFailure && (
+                coverageResolution.classification === 'uncovered'
+                || !options.allowPartialCoverage
+            )) {
+                return { features: [], cacheComplete: true, dataset, ...coverageFailure };
+            }
         } finally {
             metaTimed.clear();
         }
@@ -545,6 +592,7 @@ async function _fetchSMFromR2(
     const seen = new Set<string>();
     const features: NHLEFeature[] = [];
     let missingCacheShards = 0;
+    let failedShardReads = 0;
 
     try {
         await Promise.all(cells.map(async (cell) => {
@@ -574,7 +622,7 @@ async function _fetchSMFromR2(
                 }
             } catch (e) {
                 if (!(signal && isAbortError(e) && signal.aborted)) {
-                    missingCacheShards++;
+                    failedShardReads++;
                     return;
                 }
                 throw e;
@@ -582,18 +630,40 @@ async function _fetchSMFromR2(
                 timed.clear();
             }
         }));
+        if (failedShardReads > 0) {
+            return {
+                features,
+                available: false,
+                dataset,
+                error: `SM cache read failed for ${failedShardReads}/${cells.length} shard${failedShardReads !== 1 ? 's' : ''}`,
+                unavailableReason: coverageResolution?.unavailableReason ?? undefined,
+            };
+        }
         if (missingCacheShards > 0) {
             return {
                 features,
                 available: false,
+                cacheComplete: false,
+                dataset,
                 error: `SM offline pack missing ${missingCacheShards}/${cells.length} shard${missingCacheShards !== 1 ? 's' : ''}`,
+                unavailableReason: coverageResolution?.unavailableReason ?? undefined,
             };
         }
-        return { features, available: true };
+        if (coverageResolution?.classification === 'partial') {
+            return {
+                features,
+                available: false,
+                cacheComplete: true,
+                dataset,
+                error: 'Scheduled monument data does not cover this entire area',
+                unavailableReason: coverageResolution.unavailableReason ?? undefined,
+            };
+        }
+        return { features, available: true, cacheComplete: true, dataset };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
         const msg = e instanceof Error ? e.message : 'SM R2 fetch failed';
-        return { features: [], available: false, error: msg };
+        return { features: [], available: false, cacheComplete: options.cacheOnly ? false : undefined, dataset, error: msg };
     }
 }
 
@@ -745,7 +815,7 @@ export async function fetchScheduledMonuments(
     signal?: AbortSignal,
     options: DesignationFetchOptions = {},
 ): Promise<NHLEResponse> {
-    if (USE_R2_DESIGNATIONS) {
+    if (options.cacheOnly || USE_R2_DESIGNATIONS) {
         const r2Result = await _fetchSMFromR2(west, south, east, north, signal, options);
         if (r2Result.available !== false) return r2Result;
         if (options.cacheOnly) return r2Result;

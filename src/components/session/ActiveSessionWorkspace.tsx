@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import type { TrackingStatus } from '../../services/tracking';
 import type { BoundaryPositionStatus } from '../../services/session/sessionFieldPosition';
 import type { SessionActivityItem } from '../../services/session/sessionActivity';
+import type { ScheduledMonumentMapCoverage } from '../../services/session/sessionScheduledMonuments';
+import { ScheduledMonumentCoverageLine } from './ScheduledMonumentCoverageLine';
 
 export type ActiveWorkspaceTab = 'map' | 'record' | 'session';
 export type ActiveWorkspaceDestination = ActiveWorkspaceTab | 'guide';
@@ -112,6 +114,7 @@ export function ActiveSessionWorkspace(props: {
   workspaceTab: ActiveWorkspaceTab;
   onSelectTab: (tab: ActiveWorkspaceTab) => void;
   mapDivRef: RefObject<HTMLDivElement | null>;
+  scheduledMonumentCoverage: ScheduledMonumentMapCoverage;
   mapLayerControl: ReactNode;
   permissionName: string;
   fieldName?: string;
@@ -192,6 +195,7 @@ export function ActiveSessionWorkspace(props: {
           <section className="relative h-full min-h-[460px] bg-gray-900" aria-label="Session map">
             <div className="absolute inset-0 grid place-items-center text-center text-sm text-gray-500"><div><div className="text-2xl">⌖</div><p className="mt-2">The map appears when a boundary, trail or live track is available.</p></div></div>
             <div ref={props.mapDivRef} className="absolute inset-0" />
+            <ScheduledMonumentCoverageLine state={props.scheduledMonumentCoverage} />
             <div className="absolute right-4 top-4 z-[100] grid justify-items-end gap-2">
               {props.isTracking ? (
                 <button type="button" onClick={props.onToggleTracking} className="min-h-11 rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">Stop FindSpot trail</button>

@@ -51,6 +51,7 @@ import { sessionStartedAt } from '../services/session/activeSessionContext';
 import { getSessionReview } from '../services/session/sessionReview';
 import { ActiveSessionWorkspace, type ActiveWorkspaceTab } from '../components/session/ActiveSessionWorkspace';
 import { SessionMapLayerPicker } from '../components/session/SessionMapLayerPicker';
+import { ScheduledMonumentCoverageLine } from '../components/session/ScheduledMonumentCoverageLine';
 import { getPermissionScanTarget } from '../outstandingQuestions/permissionScanTarget';
 import { SessionReviewModal } from '../components/session/SessionReviewModal';
 import { SessionQuickFindSheet } from '../components/session/SessionQuickFindSheet';
@@ -139,6 +140,8 @@ export default function SessionPage(props: {
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [showFieldTrails, setShowFieldTrails] = useState(false);
   const [showPastFinds, setShowPastFinds] = useState(false);
+  const [scheduledMonumentCacheVersion, setScheduledMonumentCacheVersion] = useState(0);
+  const [scheduledMonumentCachePreparing, setScheduledMonumentCachePreparing] = useState(false);
   const [showWorkspaceQuickFind, setShowWorkspaceQuickFind] = useState(false);
   const [showSavedPointSheet, setShowSavedPointSheet] = useState(false);
   const [savedPointDefaultLabel, setSavedPointDefaultLabel] = useState<string | undefined>();
@@ -212,6 +215,35 @@ export default function SessionPage(props: {
   const { permission, fields, selectedField, session, finds, allMedia, tracks, fieldTracks, fieldSessions, fieldFinds } = useSessionData({
     sessionId, permissionId, fieldId,
   });
+  const scheduledMonumentBoundary = selectedField?.boundary || permission?.boundary;
+  const scheduledMonumentCacheKey = permission && scheduledMonumentBoundary
+    ? `${permission.id}:${selectedField?.updatedAt ?? permission.updatedAt}`
+    : null;
+  useEffect(() => {
+    if (!scheduledMonumentCacheKey || !scheduledMonumentBoundary || !permission || !navigator.onLine) return;
+    let cancelled = false;
+    setScheduledMonumentCachePreparing(true);
+    void import('../services/offlinePack')
+      .then(({ ensureScheduledMonumentMapCache }) =>
+        ensureScheduledMonumentMapCache(
+          { ownerType: 'permission', ownerId: permission.id },
+          scheduledMonumentBoundary,
+        )
+      )
+      .then(ready => {
+        if (cancelled) return;
+        setScheduledMonumentCachePreparing(false);
+        setScheduledMonumentCacheVersion(version => version + 1);
+        if (!ready) console.warn('Scheduled monument background preparation was incomplete.');
+      })
+      .catch(cacheError => {
+        if (cancelled) return;
+        setScheduledMonumentCachePreparing(false);
+        setScheduledMonumentCacheVersion(version => version + 1);
+        console.warn('Scheduled monument background preparation failed:', cacheError);
+      });
+    return () => { cancelled = true; };
+  }, [permission, scheduledMonumentBoundary, scheduledMonumentCacheKey]);
   useEffect(() => {
     if (!isEdit && !fieldId && fields?.length === 1) setFieldId(fields[0].id);
   }, [fieldId, fields, isEdit]);
@@ -363,11 +395,14 @@ export default function SessionPage(props: {
   const {
     mapDivRef,
     layerControl: sessionMapLayerControl,
+    scheduledMonumentCoverage,
     selection: sessionMapSelection,
     clearSelection: clearSessionMapSelection,
     chooseMapObject,
   } = useSessionMap({
     viewportKey: sessionId,
+    scheduledMonumentCacheVersion,
+    scheduledMonumentCachePreparing,
     enabled: !isActiveSessionMode || workspaceTab === 'map',
     center: sessionMapCenter,
     markers: sessionMapMarkers,
@@ -897,6 +932,7 @@ export default function SessionPage(props: {
           workspaceTab={workspaceTab}
           onSelectTab={setWorkspaceTab}
           mapDivRef={mapDivRef}
+          scheduledMonumentCoverage={scheduledMonumentCoverage}
           mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} fieldHistory={{
             trailsAvailable: previousTrailsAvailable,
             trailsVisible: showFieldTrails,
@@ -1369,6 +1405,7 @@ export default function SessionPage(props: {
                         {/* Map Preview */}
                         <div className="relative h-64 w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shadow-inner bg-gray-100 dark:bg-gray-900">
                             <div ref={mapDivRef} className="absolute inset-0" />
+                            <ScheduledMonumentCoverageLine state={scheduledMonumentCoverage} />
                             {isTracking && (
                                 <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-3xs font-black px-2 py-1 rounded-full animate-pulse shadow-lg">
                                     RECORDING LIVE TRAIL...

@@ -100,6 +100,13 @@ export const CACHE_POLICIES = {
     backupClassification: 'not-applicable',
     invalidationOwner: 'offline pack service',
   },
+  scheduledMonumentMap: {
+    owner: 'src/services/offlinePack.ts',
+    storageLayer: 'cache-storage',
+    expiry: { strategy: 'versioned', versionSource: 'STATIC_DATA_GENERATION + geohash shard URL' },
+    backupClassification: 'not-applicable',
+    invalidationOwner: 'offline pack deletePack()',
+  },
   cacheStorageLookup: {
     owner: 'src/utils/cachedFetch.ts',
     storageLayer: 'cache-storage',
