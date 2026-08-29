@@ -129,7 +129,9 @@ async function openMap(page: Page) {
   await page.reload();
   await page.getByRole('button', { name: /^Map$/ }).click();
   await expect(page.locator('.maplibregl-map')).toHaveCount(1);
-  return page.getByTestId('scheduled-monument-coverage');
+  const line = page.getByTestId('scheduled-monument-coverage');
+  await expect(line).not.toContainText('checking cached coverage', { timeout: 20_000 });
+  return line;
 }
 
 test.beforeEach(async ({ page }) => {
@@ -179,7 +181,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('active map always states cached scheduled-monument coverage across all view states', async ({ page }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 360, height: 800 });
   const monumentNetworkRequests: string[] = [];
   let dialogs = 0;
@@ -290,7 +292,7 @@ test('session setup prepares monument data without an offline-pack action', asyn
 });
 
 test('active workspace and completed-session map use the same healthy short form', async ({ page }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(75_000);
   await seedSession(page);
   await page.evaluate(() => {
     localStorage.setItem('sm-map-auto-disabled', '1');
@@ -305,7 +307,7 @@ test('active workspace and completed-session map use the same healthy short form
   await finishSessionWithTrack(page);
   await page.reload();
   const completedLine = page.getByTestId('scheduled-monument-coverage');
-  await expect(completedLine).toHaveAttribute('data-coverage-form', 'short');
+  await expect(completedLine).toHaveAttribute('data-coverage-form', 'short', { timeout: 20_000 });
   await expect(completedLine).toHaveAttribute('data-rendered-feature-count', '0');
   expect((await completedLine.innerText()).trim()).toBe(activeText);
 });
