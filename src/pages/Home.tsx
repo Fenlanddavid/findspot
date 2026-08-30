@@ -301,7 +301,7 @@ export default function Home(props: {
   }
 
   return (
-    <div className="grid gap-5 max-w-5xl mx-auto overflow-hidden px-4 pb-20 mt-4">
+    <div className="mx-auto mt-4 grid w-full min-w-0 max-w-5xl grid-cols-[minmax(0,1fr)] gap-5 overflow-hidden px-4 pb-20">
       {showHomeSignalSheet && activeSession && (
         <UndugSignalSheet
           sessionId={activeSession.id}
@@ -400,7 +400,7 @@ export default function Home(props: {
           </div>
         </section>
       ) : activeSession ? (
-        <div className="relative overflow-hidden rounded-2xl border border-teal-600/50 bg-gradient-to-br from-teal-950 to-gray-950 p-4 text-white shadow-lg shadow-teal-950/20">
+        <div className="relative w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-teal-600/50 bg-gradient-to-br from-teal-950 to-gray-950 p-4 text-white shadow-lg shadow-teal-950/20">
           <div className="absolute inset-y-0 left-0 w-1 bg-teal-400" />
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -444,7 +444,7 @@ export default function Home(props: {
         <button
           type="button"
           onClick={() => nav(continuityItem?.action.href ?? `/permission/${returnContext.permission.id}`)}
-          className="group flex min-h-[76px] w-full items-center gap-3 rounded-2xl border border-teal-800/50 bg-gradient-to-r from-gray-950 to-teal-950 px-3 py-2 text-left text-white shadow-md transition-transform active:scale-[0.99]"
+          className="group flex min-h-[76px] w-full min-w-0 max-w-full items-center gap-3 rounded-2xl border border-teal-800/50 bg-gradient-to-r from-gray-950 to-teal-950 px-3 py-2 text-left text-white shadow-md transition-transform active:scale-[0.99]"
         >
           <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-teal-400/25 bg-teal-400/10 text-xl text-teal-300" aria-hidden="true">↩</span>
           <span className="min-w-0 flex-1">
@@ -461,7 +461,7 @@ export default function Home(props: {
           <span className="shrink-0 text-lg text-teal-300 transition-transform group-hover:translate-x-0.5" aria-hidden="true">→</span>
         </button>
       ) : (
-        <div className="rounded-2xl p-4 flex items-center gap-3 overflow-hidden bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
+        <div className="flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/60">
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
             {adaptiveActions.slice(0, showMoreActions ? adaptiveActions.length : 2).map((item) => (
               <button
@@ -582,7 +582,7 @@ export default function Home(props: {
 
       {!isFirstRun && (
         <div
-          className="flex items-center gap-4 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-md hover:shadow-lg hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
+          className="group flex w-full min-w-0 max-w-full cursor-pointer items-center gap-4 rounded-2xl border border-gray-200 bg-white p-3 shadow-md transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 sm:hover:scale-[1.008]"
           onClick={props.goFieldGuide}
         >
           <svg width="40" height="40" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
@@ -616,7 +616,7 @@ export default function Home(props: {
 
       {!isFirstRun && !clubRallyCardDismissed && (
         <div
-          className="relative flex items-center gap-4 p-3 pr-10 bg-white dark:bg-gray-800 border border-teal-100 dark:border-teal-900/60 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.008] hover:-translate-y-px transition-all duration-200 ease-out cursor-pointer group"
+          className="group relative flex w-full min-w-0 max-w-full cursor-pointer items-center gap-4 rounded-2xl border border-teal-100 bg-white p-3 pr-10 shadow-sm transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-md dark:border-teal-900/60 dark:bg-gray-800 sm:hover:scale-[1.008]"
           onClick={() => setShowClubRallyModal(true)}
         >
           <button
@@ -698,7 +698,7 @@ export default function Home(props: {
         )}
         
         {filteredPermissions && filteredPermissions.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredPermissions.map((permission) => (
               <PermissionCard
                 key={permission.id}
@@ -733,7 +733,7 @@ export default function Home(props: {
         )}
         
         {recentFinds && recentFinds.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {recentFinds.slice(0, 3).map((s) => {
               const media = firstMediaMap?.get(s.id);
               if (!media) {

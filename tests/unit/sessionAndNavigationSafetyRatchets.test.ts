@@ -25,6 +25,18 @@ describe('session and navigation safety ratchets', () => {
     expect(home).toContain("showMoreActions ? 'Less' : `More (${adaptiveActions.length - 2})`");
   });
 
+  it('keeps Home cards inside a shrinkable mobile grid track', async () => {
+    const [home, permissionCard] = await Promise.all([
+      source('../../src/pages/Home.tsx'),
+      source('../../src/components/PermissionCard.tsx'),
+    ]);
+    expect(home).toContain('grid-cols-[minmax(0,1fr)]');
+    expect(home).toContain('w-full min-w-0 max-w-full');
+    expect(home).toContain('sm:hover:scale-[1.008]');
+    expect(home).not.toContain('shadow-md hover:shadow-lg hover:scale-[1.008]');
+    expect(permissionCard).toContain('h-full w-full min-w-0 max-w-full');
+  });
+
   it('distinguishes a paused trail from one that has never started', async () => {
     const [workspace, guideContext, session] = await Promise.all([
       source('../../src/components/session/ActiveSessionWorkspace.tsx'),

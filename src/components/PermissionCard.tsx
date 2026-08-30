@@ -24,7 +24,7 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
 
   return (
     <article
-      className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:border-gray-300 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
+      className="group relative flex h-full w-full min-w-0 max-w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-200 ease-out hover:-translate-y-[1px] hover:border-gray-300 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
       onClick={onOpen}
     >
       {isRally && !permission.submittedAt && persona !== "not_rally" && (
