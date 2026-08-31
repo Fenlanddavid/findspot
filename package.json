@@ -1,7 +1,7 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "5.0.10",
+  "version": "5.0.11",
   "type": "module",
   "engines": {
     "node": ">=22.22.0"
