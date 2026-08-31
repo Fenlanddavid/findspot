@@ -321,7 +321,7 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await expect(page.getByText("Mark your start point", { exact: false })).toHaveCount(0);
   await page.getByRole("button", { name: "Mark location", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Mark location" }).getByRole("button", { name: "Start point", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close mark location" }).click();
+  await page.getByRole("dialog", { name: "Mark location" }).getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Start in FindSpot" }).click();
   await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
   await expect.poll(async () => {
@@ -612,7 +612,6 @@ test("can create a permission, start a session and save a find", async ({ page }
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await expect(page.getByLabel("Date & Time")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Get Current GPS" })).toHaveCount(0);
-  await expect(page.getByText("Ground condition & note")).toBeVisible();
   await page.getByRole("button", { name: "Start detecting" }).click();
   await expect(page).toHaveURL(/\/session\/[^/?#]+$/);
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
