@@ -4,6 +4,14 @@
 
 FindSpot has no accounts and no central private-record database. Private records are local-first in IndexedDB, are not automatically cloud-backed up, and are not used for behavioural/location analytics. Security effort therefore concentrates on the limited boundaries where external input can enter local state or initiate work.
 
+## Non-goals and trust invariants
+
+- FindSpot does not determine that detecting is clear, safe, permitted or otherwise lawful. Heritage and coverage data can describe recorded constraints and explicit limits; absence, partial coverage, stale data, an unavailable source or silence from an alert can never produce a positive legality state. Green must not encode one. This invariant applies to the map, session start, Field Guide and every other user-facing surface.
+- FindSpot does not continuously monitor the user's live position against heritage geometry. The Companion has no geometry channel, continuous checking has not passed the recording battery posture, and silence would create reassurance that the available datasets cannot support.
+- FindSpot does not replace landowner permission, statutory reporting duties, official registers or current legal guidance. It can help the user inspect and act on recorded information without claiming that the record is complete.
+
+The detailed active-map ruling is recorded in [`features/scheduled-monuments-active-map.md`](features/scheduled-monuments-active-map.md).
+
 ## Primary assets
 
 - exact find coordinates, GPS trails and Companion recordings;

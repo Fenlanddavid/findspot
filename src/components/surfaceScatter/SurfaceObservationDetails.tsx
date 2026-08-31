@@ -190,6 +190,7 @@ export function SurfaceObservationDetailModal({
     [observation.sectionId],
   );
   const original = observation.reassessments[0]?.previous ?? assessment;
+  const isIronPatch = observation.observationKind === 'iron_patch';
 
   useEffect(() => {
     setContext(contextDraftFrom(observation));
@@ -236,16 +237,18 @@ export function SurfaceObservationDetailModal({
     ['Extent', observation.extent ? SURFACE_EXTENT_LABELS[observation.extent] : 'Not recorded'],
     ['Surface visibility', observation.surfaceVisibility ? SURFACE_VISIBILITY_LABELS[observation.surfaceVisibility] : 'Not recorded'],
     ['Ground', observation.groundCondition ? (observation.groundCondition === 'other' ? observation.groundConditionOther || 'Other' : SURFACE_GROUND_LABELS[observation.groundCondition]) : 'Not recorded'],
-    ['Period impression', observation.periodImpression === 'unknown' ? 'Not recorded' : `${observation.datingConfidence === 'confident' ? '' : 'Possible '}${SURFACE_PERIOD_LABELS[observation.periodImpression]} — your impression`],
-    ['Identification confidence', confidenceLabel(observation.materialConfidence)],
+    ...(!isIronPatch ? [
+      ['Period impression', observation.periodImpression === 'unknown' ? 'Not recorded' : `${observation.datingConfidence === 'confident' ? '' : 'Possible '}${SURFACE_PERIOD_LABELS[observation.periodImpression]} — your impression`],
+      ['Identification confidence', confidenceLabel(observation.materialConfidence)],
+    ] as const : []),
     ['Recorded', new Date(observation.observedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })],
     ['Visit', observation.originSessionId ? (observation.originSessionDate ? new Date(observation.originSessionDate).toLocaleDateString('en-GB') : 'Saved visit') : 'Outside a saved visit'],
     ['Field context', field?.name ?? (observation.fieldId ? 'Linked field' : 'Not assigned')],
     ['Section context', section?.label ?? (observation.sectionId ? 'Linked section' : 'Not assigned')],
-  ] as const, [field?.name, observation, section?.label]);
+  ] as const, [field?.name, isIronPatch, observation, section?.label]);
 
   return (
-    <Modal title={SURFACE_MATERIAL_LABELS[observation.material]} onClose={onClose}>
+    <Modal title={isIronPatch ? 'Iron / junk patch' : SURFACE_MATERIAL_LABELS[observation.material]} onClose={onClose}>
       <div className="space-y-4">
         {mode === 'edit' ? (
           <>
@@ -265,18 +268,18 @@ export function SurfaceObservationDetailModal({
           </div>
         ) : (
           <>
-            <div><p className="text-lg font-black">{SURFACE_ABUNDANCE_LABELS[observation.abundance]}</p><p className="text-xs font-bold text-sky-600">Observed by you{observation.retiredAt ? ' · Retired' : ''}</p></div>
+            <div><p className="text-lg font-black">{isIronPatch ? (observation.extent ? SURFACE_EXTENT_LABELS[observation.extent] : 'Approximate patch') : SURFACE_ABUNDANCE_LABELS[observation.abundance]}</p><p className="text-xs font-bold text-sky-600">Observed by you{observation.retiredAt ? ' · Retired' : ''}</p></div>
             <dl className="grid gap-2 sm:grid-cols-2">{detailRows.map(([label, value]) => <div key={label} className="rounded-xl bg-gray-50 p-3 dark:bg-gray-900/60"><dt className="text-3xs font-black uppercase tracking-widest text-gray-400">{label}</dt><dd className="mt-1 text-sm font-bold">{value}</dd></div>)}</dl>
             {observation.note && <div className="rounded-xl border border-gray-200 p-3 dark:border-gray-700"><p className="text-3xs font-black uppercase tracking-widest text-gray-400">Note</p><p className="mt-1 whitespace-pre-wrap text-sm">{observation.note}</p></div>}
-            <div className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+            {!isIronPatch && <div className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
               <p className="text-3xs font-black uppercase tracking-widest text-gray-400">Assessment history</p>
               <p className="mt-2 text-xs font-black">Original assessment</p><p className="text-xs text-gray-600 dark:text-gray-300">{assessmentLine(original)}</p>
               {observation.reassessments.map((item, index) => <div key={`${item.reassessedAt}-${index}`} className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700"><p className="text-xs font-black">Reassessed {new Date(item.reassessedAt).toLocaleDateString('en-GB')}</p><p className="text-xs text-gray-600 dark:text-gray-300">{assessmentLine(item.current)}</p></div>)}
               {observation.reassessments.length === 0 && <p className="mt-2 text-xs text-gray-400">No later reassessments.</p>}
-            </div>
+            </div>}
             <PhotoGallery observationId={observation.id} media={photos} />
             <label className="block min-h-12 cursor-pointer rounded-xl border border-gray-300 px-3 py-3 text-center text-xs font-black dark:border-gray-600">Add photo<input type="file" accept="image/*" capture="environment" className="hidden" onChange={event => { const file = event.target.files?.[0]; if (file) void addSurfaceObservationPhoto(observation.id, file).catch(cause => setError(cause instanceof Error ? cause.message : 'Could not add photo.')); event.currentTarget.value = ''; }} /></label>
-            {!observation.retiredAt && <div className="grid grid-cols-2 gap-2"><button onClick={() => setMode('edit')} className="min-h-12 rounded-xl border font-black">Edit context</button><button onClick={() => setMode('reassess')} className="min-h-12 rounded-xl border font-black">Reassess</button></div>}
+            {!observation.retiredAt && <div className={`grid gap-2 ${isIronPatch ? 'grid-cols-1' : 'grid-cols-2'}`}><button onClick={() => setMode('edit')} className="min-h-12 rounded-xl border font-black">Edit context</button>{!isIronPatch && <button onClick={() => setMode('reassess')} className="min-h-12 rounded-xl border font-black">Reassess</button>}</div>}
             {confirmAction ? <div className="rounded-xl border border-red-300 bg-red-50 p-3 dark:bg-red-950/20"><p className="text-xs font-bold">{confirmAction === 'delete' ? 'Permanently delete this observation and all its photos?' : 'Retire this observation from current maps, counts and summaries?'}</p><div className="mt-2 flex gap-2"><button disabled={busy} onClick={() => void performConfirmedAction()} className="min-h-10 rounded-lg bg-red-600 px-4 text-xs font-black text-white">Confirm {confirmAction}</button><button onClick={() => setConfirmAction(null)} className="min-h-10 rounded-lg border px-4 text-xs font-black">Cancel</button></div></div> : <div className="flex justify-between gap-2">{!observation.retiredAt && <button onClick={() => setConfirmAction('retire')} className="text-xs font-black text-amber-700">Retire</button>}<button onClick={() => setConfirmAction('delete')} className="ml-auto text-xs font-black text-red-600">Delete permanently</button></div>}
           </>
         )}

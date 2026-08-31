@@ -96,7 +96,8 @@ export type Permission = {
   // Protection banner — fail-safe scheduled monument status (Phase A).
   // absent = unknown (G2: absence never reads as clear).
   protectionStatus?: {
-    state: 'present' | 'clear' | 'unknown';
+    /** `clear` is accepted only for restored legacy rows; new writes use `none_recorded`. */
+    state: 'present' | 'none_recorded' | 'unknown' | 'clear';
     evaluatedAt: string;        // ISO — updated on every evaluation
     monumentCount?: number;     // populated when state is 'present'
   };
@@ -659,6 +660,7 @@ export type SurfaceMaterial =
   | 'shell'
   | 'modern_material'
   | 'other';
+export type SurfaceObservationKind = 'surface_material' | 'iron_patch';
 export type SurfaceAbundance = 'single' | 'few' | 'frequent' | 'dense';
 export type SurfaceConfidence = 'unsure' | 'fairly_sure' | 'confident';
 export type SurfaceExtent = 'point' | 'small_patch' | 'approx_10m' | 'approx_25m' | 'widespread';
@@ -687,6 +689,8 @@ export type SurfaceReassessment = {
 
 export type SurfaceObservation = SurfaceAssessmentSnapshot & {
   id: string;
+  /** Missing on legacy rows means `surface_material`. */
+  observationKind?: SurfaceObservationKind;
   projectId: string;
   permissionId: string;
   fieldId: string | null;

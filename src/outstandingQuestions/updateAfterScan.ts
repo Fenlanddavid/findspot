@@ -153,7 +153,7 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
     // Protection banner state machine (fail-safe, order matters):
     const prevProtection = perm.protectionStatus;
     const now_iso = new Date().toISOString();
-    let protectionState: 'present' | 'clear' | 'unknown' = prevProtection?.state ?? 'unknown';
+    let protectionState: NonNullable<Permission['protectionStatus']>['state'] = prevProtection?.state ?? 'unknown';
     let monumentCount = prevProtection?.monumentCount;
 
     if (!smCoverageAvailable) {
@@ -184,7 +184,7 @@ export async function updateQuestionsAfterScan(input: ScanCompleteInput): Promis
         }
       }
       if (fullyContained) {
-        protectionState = 'clear';
+        protectionState = 'none_recorded';
         monumentCount = undefined;
       }
       // B4: else preserve previous state (already set above).

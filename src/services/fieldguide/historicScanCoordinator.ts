@@ -11,7 +11,7 @@ import { Hotspot, HistoricRoute } from '../../pages/fieldGuideTypes';
 import { db } from '../../db';
 import {
     fetchLocationLabel, fetchHistoricContextFeatures,
-    fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes,
+    fetchScheduledMonuments, fetchAIMData, fetchHistoricRoutes, describeAIMCoverage,
     parseOverpassContextRoutes,
 } from '../historicScanService';
 import { getDriftMetres, getHotspotInput } from '../../utils/fieldGuideAnalysis';
@@ -266,8 +266,8 @@ export async function runHistoricScanPipeline(
 
             // 5. AIM (fresh fetch or pass-through from terrain scan)
             const aimData = opts.aimData ?? aimRaw ?? { features: [] };
-            if (aimRaw && aimRaw.features?.length > 0) {
-                onLog(`> AIM: ${aimRaw.features.length} aerial monument${aimRaw.features.length !== 1 ? 's' : ''} mapped.`, 'historic');
+            if (aimRaw) {
+                onLog(`> ${describeAIMCoverage(aimRaw)}`, 'historic', aimRaw.projectCoverage?.state === 'mapped' ? undefined : 'warn');
             }
 
             onStatusChange('Comparing route context...');

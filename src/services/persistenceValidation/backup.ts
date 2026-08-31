@@ -57,7 +57,7 @@ function assertPermissionIntelligence(permission: UnvalidatedRow, index: number)
   if (permission.protectionStatus !== undefined) {
     const status = permission.protectionStatus as UnvalidatedRow;
     if (!status || typeof status !== 'object' || Array.isArray(status)) throw invalid('protectionStatus');
-    if (!new Set(['present', 'clear', 'unknown']).has(status.state as string)) {
+    if (!new Set(['present', 'none_recorded', 'clear', 'unknown']).has(status.state as string)) {
       throw invalid('protectionStatus.state');
     }
     if (!isIsoDateString(status.evaluatedAt)) throw invalid('protectionStatus.evaluatedAt');
@@ -317,6 +317,10 @@ export function validatePersistedBackupTables(
     if (observation.gpsAccuracyM !== null &&
         (!Number.isFinite(observation.gpsAccuracyM) || (observation.gpsAccuracyM as number) < 0)) {
       throw invalid('gpsAccuracyM');
+    }
+    if (observation.observationKind !== undefined
+        && !new Set(['surface_material', 'iron_patch']).has(observation.observationKind as string)) {
+      throw invalid('observationKind');
     }
     assertSurfaceAssessment(observation, invalid);
     if (observation.extent !== undefined && !SURFACE_EXTENTS.has(observation.extent as string)) {

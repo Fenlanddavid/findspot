@@ -152,8 +152,8 @@ export interface FieldGuideContextValue {
     historicMode: boolean;
     setHistoricMode: React.Dispatch<React.SetStateAction<boolean>>;
     historicScanCompleted: boolean;
-    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
-    setHistoricLayerToggles: React.Dispatch<React.SetStateAction<{ lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean }>>;
+    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; relief: boolean; os1930: boolean; os1880: boolean };
+    setHistoricLayerToggles: React.Dispatch<React.SetStateAction<{ lidar: boolean; 'lidar-wales': boolean; relief: boolean; os1930: boolean; os1880: boolean }>>;
     historicLayerOpacity: Record<OverlayOpacityKey, number>;
     activeOpacityLayer: OverlayOpacityKey | null;
     setActiveOpacityLayer: React.Dispatch<React.SetStateAction<OverlayOpacityKey | null>>;

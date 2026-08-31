@@ -1,4 +1,5 @@
 // ─── External API fetch helpers for the Field Guide terrain/heritage scanner ──
+import * as turf from '@turf/turf';
 import { USE_R2_DESIGNATIONS, FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import {
     AIM_INDEX_SCHEMA_VERSION,
@@ -115,6 +116,15 @@ export interface AIMFeature {
 export interface AIMResponse {
     features: AIMFeature[];
     available?: boolean;
+    error?: string;
+    projectCoverage?: AIMProjectCoverage;
+}
+
+export type AIMProjectCoverageState = 'mapped' | 'partial' | 'not_mapped' | 'unknown';
+
+export interface AIMProjectCoverage {
+    state: AIMProjectCoverageState;
+    projectNames: string[];
     error?: string;
 }
 
@@ -767,6 +777,98 @@ async function _fetchAIMFromR2(
     }
 }
 
+type AIMProjectAreaFeature = {
+    type: 'Feature';
+    geometry?: {
+        type: 'Polygon' | 'MultiPolygon';
+        coordinates: number[][][] | number[][][][];
+    };
+    properties?: {
+        PROJECT_NA?: string;
+        Status?: string;
+    };
+};
+
+export function resolveAIMProjectCoverage(
+    bbox: [number, number, number, number],
+    features: AIMProjectAreaFeature[],
+): AIMProjectCoverage {
+    if (features.length === 0) return { state: 'not_mapped', projectNames: [] };
+    const queryArea = turf.bboxPolygon(bbox);
+    // A full-coverage assertion is deliberately conservative: one returned
+    // project geometry must contain the whole query rectangle, including its
+    // interior. Adjacent projects that might form a union remain `partial`
+    // rather than risking false mapped coverage at seams or holes.
+    const fullyMapped = features.some(feature => {
+        if (!feature.geometry) return false;
+        try {
+            return turf.booleanContains(
+                turf.feature(feature.geometry as GeoJSON.Polygon | GeoJSON.MultiPolygon),
+                queryArea,
+            );
+        } catch {
+            return false;
+        }
+    });
+    const projectNames = [...new Set(features
+        .map(feature => feature.properties?.PROJECT_NA?.trim())
+        .filter((name): name is string => !!name))]
+        .sort((a, b) => a.localeCompare(b));
+    return { state: fullyMapped ? 'mapped' : 'partial', projectNames };
+}
+
+async function _fetchAIMProjectCoverageLive(
+    west: number,
+    south: number,
+    east: number,
+    north: number,
+    signal?: AbortSignal,
+): Promise<AIMProjectCoverage> {
+    const timed = withTimeoutSignal(signal, GENERAL_FETCH_TIMEOUT_MS);
+    try {
+        const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/2/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=PROJECT_NA,Status`;
+        const res = await fetch(url, { signal: timed.signal });
+        if (!res.ok) {
+            return { state: 'unknown', projectNames: [], error: `AIM project coverage HTTP ${res.status}` };
+        }
+        const data = await res.json() as { features?: AIMProjectAreaFeature[] };
+        return resolveAIMProjectCoverage(
+            [west, south, east, north],
+            Array.isArray(data.features) ? data.features : [],
+        );
+    } catch (e) {
+        if (signal && isAbortError(e) && signal.aborted) throw e;
+        return {
+            state: 'unknown',
+            projectNames: [],
+            error: e instanceof Error ? e.message : 'AIM project coverage unavailable',
+        };
+    } finally {
+        timed.clear();
+    }
+}
+
+export function describeAIMCoverage(response: AIMResponse): string {
+    const count = response.features.length;
+    const coverage = response.projectCoverage;
+    if (!coverage || coverage.state === 'unknown') {
+        return count > 0
+            ? `AIM: ${count} aerial monument${count === 1 ? '' : 's'} mapped; project coverage could not be established.`
+            : 'AIM: project mapping coverage could not be established.';
+    }
+    if (coverage.state === 'not_mapped') {
+        return 'AIM: this area is outside recorded AIM project mapping; absence of features is not evidence that nothing is present.';
+    }
+    if (coverage.state === 'partial') {
+        return count > 0
+            ? `AIM: project mapping covers only part of this area; ${count} aerial monument${count === 1 ? '' : 's'} recorded.`
+            : 'AIM: project mapping covers only part of this area; unmapped ground must not be read as an empty result.';
+    }
+    return count > 0
+        ? `AIM: ${count} aerial monument${count === 1 ? '' : 's'} recorded within AIM project coverage.`
+        : 'AIM: this area is within recorded AIM project coverage; no AIM monument features were returned.';
+}
+
 async function _fetchScheduledMonumentsLive(
     west: number,
     south: number,
@@ -845,8 +947,20 @@ export async function fetchAIMData(
     signal?: AbortSignal,
     options: DesignationFetchOptions = {},
 ): Promise<AIMResponse> {
+    const coveragePromise = options.cacheOnly
+        ? Promise.resolve<AIMProjectCoverage>({
+            state: 'unknown',
+            projectNames: [],
+            error: 'AIM project coverage is not stored in this offline pack',
+        })
+        : _fetchAIMProjectCoverageLive(west, south, east, north, signal);
+
     if (USE_R2_DESIGNATIONS) {
-        return _fetchAIMFromR2(west, south, east, north, signal, options);
+        const [result, projectCoverage] = await Promise.all([
+            _fetchAIMFromR2(west, south, east, north, signal, options),
+            coveragePromise,
+        ]);
+        return { ...result, projectCoverage };
     }
 
     // Legacy live ArcGIS path — REMOVE_AFTER_RELEASE: v4.3.0
@@ -854,12 +968,17 @@ export async function fetchAIMData(
     try {
         const url = `https://services-eu1.arcgis.com/ZOdPfBS3aqqDYPUQ/arcgis/rest/services/HE_AIM_data/FeatureServer/0/query?where=1%3D1&geometry=${west},${south},${east},${north}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&inSR=4326&outSR=4326&f=geojson&outFields=MONUMENT_TYPE,PERIOD,EVIDENCE_1`;
         const res = await fetch(url, { signal: timed.signal });
-        if (!res.ok) return { features: [], available: false };
+        if (!res.ok) return { features: [], available: false, projectCoverage: await coveragePromise };
         const data = await res.json() as Partial<AIMResponse>;
-        return { ...data, features: Array.isArray(data.features) ? data.features : [], available: true };
+        return {
+            ...data,
+            features: Array.isArray(data.features) ? data.features : [],
+            available: true,
+            projectCoverage: await coveragePromise,
+        };
     } catch (e) {
         if (signal && isAbortError(e) && signal.aborted) throw e;
-        return { features: [], available: false };
+        return { features: [], available: false, projectCoverage: await coveragePromise };
     } finally {
         timed.clear();
     }

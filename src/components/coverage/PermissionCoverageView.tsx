@@ -10,6 +10,10 @@ import {
 import { CoverageSetupError } from './CoverageSetupError';
 import { SessionCoverageReview } from './SessionCoverageReview';
 import { useSessionCoverageNow } from './useSessionCoverageNow';
+import {
+  COVERAGE_PRESENTATION,
+  recordedCoverageEstimate,
+} from '../../shared/coveragePresentation';
 
 const EMPTY_SESSIONS: never[] = [];
 
@@ -102,6 +106,10 @@ export function PermissionCoverageView(props: {
       .filter(observation => observation.evidence === 'find-visited')
       .map(observation => observation.sectionId),
   );
+  const coverageEstimate = useMemo(
+    () => recordedCoverageEstimate(sections, observations),
+    [observations, sections],
+  );
 
   if (sections.length === 0 && !setupError) return null;
 
@@ -170,10 +178,10 @@ export function PermissionCoverageView(props: {
             Ground coverage
           </p>
           <h3 id="permission-coverage-title" className="mt-1 text-lg font-black text-gray-900 dark:text-gray-100">
-            What has been searched
+            Recorded field coverage
           </h3>
           <p className="mt-1 max-w-2xl text-xs text-gray-500 dark:text-gray-400">
-            Areas you marked and ground recorded by tracking are shown as searched. A find location alone does not mark the surrounding area.
+            Areas you marked and accepted GPS trail samples are recorded evidence. A find location alone does not add surrounding coverage.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-center">
@@ -187,7 +195,7 @@ export function PermissionCoverageView(props: {
               {recordedCoverageSections.size}
             </div>
             <div className="text-[9px] font-black uppercase tracking-widest text-emerald-600/70">
-              Searched
+              Recorded sections
             </div>
           </div>
           <div className="rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-950/30">
@@ -202,9 +210,11 @@ export function PermissionCoverageView(props: {
       </div>
 
       {recordedCoverageSections.size > 0 && (
-        <p className="-mt-1 mb-3 text-2xs font-semibold text-gray-400 dark:text-gray-500">
-          Past coverage is shown here. A finished session can be adjusted for 48 hours.
-        </p>
+        <div className="-mt-1 mb-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-700 dark:bg-gray-900/50">
+          {coverageEstimate && <p className="text-sm font-black text-gray-900 dark:text-gray-100">{coverageEstimate.percent}% recorded coverage · estimate</p>}
+          <p className="mt-1 text-3xs font-semibold leading-relaxed text-gray-500 dark:text-gray-400">{COVERAGE_PRESENTATION.percentageCaveat}</p>
+          <p className="mt-1 text-3xs font-semibold text-gray-400 dark:text-gray-500">A finished session can be adjusted for 48 hours.</p>
+        </div>
       )}
 
       {setupError ? (

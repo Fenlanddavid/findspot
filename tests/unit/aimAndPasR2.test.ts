@@ -185,14 +185,14 @@ describe('AIM gate — _meta.json sentinel', () => {
     });
 });
 
-// ─── AIM R2 — no live ArcGIS calls when USE_R2_DESIGNATIONS=true ──────────────
+// ─── AIM R2 — monument data remains static; coverage provenance is live ───────
 
-describe('AIM R2 path — no live API calls', () => {
+describe('AIM R2 path — project coverage provenance', () => {
     beforeEach(() => {
         vi.resetModules();
     });
 
-    it('makes no live AIM API calls when flag is on and meta is present', async () => {
+    it('keeps monument features on R2 and queries only the project-area layer', async () => {
         const fetchSpy = vi.fn().mockImplementation((url: string) => {
             if (url.includes('aim-index/_meta.json')) return okMeta();
             return emptyShard();
@@ -205,7 +205,55 @@ describe('AIM R2 path — no live API calls', () => {
         const liveCalls = fetchSpy.mock.calls.filter(
             ([url]: [string]) => typeof url === 'string' && url.includes('services-eu1.arcgis.com'),
         );
-        expect(liveCalls).toHaveLength(0);
+        expect(liveCalls).toHaveLength(1);
+        expect(String(liveCalls[0][0])).toContain('/FeatureServer/2/query');
+    });
+
+    it('does not query project coverage from an offline-only read', async () => {
+        const fetchSpy = vi.fn().mockImplementation((url: string) => {
+            if (url.includes('aim-index/_meta.json')) return okMeta();
+            return emptyShard();
+        });
+        vi.stubGlobal('fetch', fetchSpy);
+
+        const { fetchAIMData } = await import('../../src/services/historicScanService');
+        const result = await fetchAIMData(
+            BBOX.west, BBOX.south, BBOX.east, BBOX.north, undefined, { cacheOnly: true },
+        );
+
+        expect(fetchSpy.mock.calls.some(([url]) => String(url).includes('services-eu1.arcgis.com'))).toBe(false);
+        expect(result.projectCoverage?.state).toBe('unknown');
+    });
+});
+
+describe('AIM project coverage interpretation', () => {
+    it('distinguishes mapped, partial and not-mapped query areas', async () => {
+        const { resolveAIMProjectCoverage } = await import('../../src/services/historicScanService');
+        const project = [{
+            type: 'Feature' as const,
+            geometry: {
+                type: 'Polygon' as const,
+                coordinates: [[[-2, 51], [-1, 51], [-1, 52], [-2, 52], [-2, 51]]],
+            },
+            properties: { PROJECT_NA: 'Example project' },
+        }];
+
+        expect(resolveAIMProjectCoverage([-1.9, 51.1, -1.1, 51.9], project)).toEqual({
+            state: 'mapped', projectNames: ['Example project'],
+        });
+        expect(resolveAIMProjectCoverage([-1.5, 51.5, -0.5, 52.5], project).state).toBe('partial');
+        expect(resolveAIMProjectCoverage([-1.5, 51.5, -0.5, 52.5], []).state).toBe('not_mapped');
+    });
+
+    it('never describes an unmapped empty result as no archaeology present', async () => {
+        const { describeAIMCoverage } = await import('../../src/services/historicScanService');
+        const text = describeAIMCoverage({
+            features: [],
+            available: true,
+            projectCoverage: { state: 'not_mapped', projectNames: [] },
+        });
+        expect(text).toContain('outside recorded AIM project mapping');
+        expect(text).toContain('not evidence');
     });
 });
 

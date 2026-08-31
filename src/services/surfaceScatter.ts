@@ -216,6 +216,16 @@ export type RecordSurfaceObservationInput = {
   gpsAccuracyM?: number | null;
 };
 
+export type RecordIronPatchInput = {
+  projectId: string;
+  permissionId: string;
+  sessionId: string | null;
+  point: ScatterPoint;
+  gpsAccuracyM?: number | null;
+  extent: SurfaceExtent;
+  note?: string;
+};
+
 export type SurfaceContextInput = {
   extent?: SurfaceExtent;
   surfaceVisibility?: SurfaceVisibility;
@@ -302,6 +312,63 @@ export async function recordSurfaceObservation(
   await database.surfaceObservations.add(observation);
   activeCaptureIds.add(observation.id);
   return observation;
+}
+
+export async function recordIronPatch(
+  input: RecordIronPatchInput,
+  database: FindSpotDB = db,
+): Promise<SurfaceObservation> {
+  const context = normalizedContext({ extent: input.extent, note: input.note });
+  const permission = await database.permissions.get(input.permissionId);
+  if (!permission || permission.projectId !== input.projectId) {
+    throw new Error('Move into a mapped permission before recording an iron or junk patch.');
+  }
+  const sections = await database.permissionSections.where('permissionId').equals(permission.id).toArray();
+  const section = sections.find(row => !row.retiredAt && sectionContains(row, input.point));
+  const session = input.sessionId ? await database.sessions.get(input.sessionId) : undefined;
+  if (input.sessionId && (!session || session.permissionId !== permission.id)) {
+    throw new Error('The active visit no longer belongs to this permission.');
+  }
+  const now = new Date().toISOString();
+  const observation: SurfaceObservation = {
+    id: uuid(),
+    observationKind: 'iron_patch',
+    projectId: input.projectId,
+    permissionId: permission.id,
+    fieldId: section?.fieldId ?? null,
+    sectionId: section?.id ?? null,
+    sessionId: input.sessionId,
+    // Assessment fields remain populated for backward-compatible storage,
+    // but iron patches are excluded from archaeological scatter analysis.
+    material: 'modern_material',
+    abundance: 'frequent',
+    materialConfidence: 'confident',
+    periodImpression: 'unknown',
+    datingConfidence: 'unsure',
+    lat: input.point.lat,
+    lon: input.point.lon,
+    gpsAccuracyM: input.gpsAccuracyM ?? null,
+    observedAt: now,
+    ...context,
+    originSessionId: session?.id,
+    originSessionDate: session?.date,
+    originSessionStartTime: session?.startTime,
+    originSessionEndTime: session?.endTime,
+    captureCompletedAt: now,
+    captureFlowVersion: SURFACE_CAPTURE_FLOW_VERSION,
+    reassessments: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await database.surfaceObservations.add(observation);
+  return observation;
+}
+
+export function surfaceExtentRadiusM(extent: SurfaceExtent | undefined): number | null {
+  if (extent === 'small_patch') return 3;
+  if (extent === 'approx_10m') return 5;
+  if (extent === 'approx_25m') return 12.5;
+  return null;
 }
 
 /**
@@ -525,7 +592,9 @@ function clusterMaterialAssociations(observations: readonly SurfaceObservation[]
 export function clusterSurfaceObservations(
   observations: readonly SurfaceObservation[],
 ): SurfaceCluster[] {
-  const active = observations.filter(row => !row.retiredAt).sort((a, b) => a.id.localeCompare(b.id));
+  const active = observations
+    .filter(row => !row.retiredAt && row.observationKind !== 'iron_patch')
+    .sort((a, b) => a.id.localeCompare(b.id));
   const visited = new Set<string>();
   const clusters: SurfaceCluster[] = [];
   for (const seed of active) {

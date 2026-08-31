@@ -28,7 +28,7 @@ describe('FieldGuide map-data architecture characterization', () => {
       readFile(ROMAN_STANDALONE_SERVICE, 'utf8'),
     ]);
 
-    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(309);
+    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(313);
     expect(scanLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(historicLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(325);
     expect(occurrences(mapHook, /useEffect\(/g)).toBe(6);

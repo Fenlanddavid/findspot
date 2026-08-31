@@ -40,6 +40,8 @@ export type SessionMapMarker = {
     kind: 'find' | 'signal' | 'point' | 'observation';
     lat: number;
     lon: number;
+    observationKind?: 'surface_material' | 'iron_patch';
+    extentRadiusM?: number | null;
 };
 
 /** Owns the session map lifecycle and renders boundary, tracks, and coverage. */
@@ -153,8 +155,20 @@ export function useSessionMap(params: {
                 features: (markers ?? []).map(marker => ({
                     type: 'Feature' as const,
                     geometry: { type: 'Point' as const, coordinates: [marker.lon, marker.lat] },
-                    properties: { id: marker.id, kind: marker.kind },
+                    properties: { id: marker.id, kind: marker.kind, observationKind: marker.observationKind ?? '' },
                 })),
+            });
+            const observationExtentSource = map.getSource('session-observation-extents') as maplibregl.GeoJSONSource | undefined;
+            observationExtentSource?.setData({
+                type: 'FeatureCollection',
+                features: (markers ?? []).flatMap(marker => {
+                    if (marker.observationKind !== 'iron_patch' || !marker.extentRadiusM) return [];
+                    return locationAccuracyCircle({
+                        lat: marker.lat,
+                        lon: marker.lon,
+                        accuracyM: marker.extentRadiusM,
+                    }).features.map(feature => ({ ...feature, properties: { id: marker.id } }));
+                }),
             });
             const fieldFindSource = map.getSource('field-finds') as maplibregl.GeoJSONSource | undefined;
             fieldFindSource?.setData({
@@ -242,11 +256,14 @@ export function useSessionMap(params: {
                     map.addSource('field-finds', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
                     map.addLayer({ id: 'field-finds', type: 'circle', source: 'field-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 5, 'circle-color': '#fbbf24', 'circle-opacity': 0.72, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#111827' } });
                     map.addSource('session-markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                    map.addSource('session-observation-extents', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+                    map.addLayer({ id: 'session-observation-extents-fill', type: 'fill', source: 'session-observation-extents', paint: { 'fill-color': '#f97316', 'fill-opacity': 0.16 } });
+                    map.addLayer({ id: 'session-observation-extents-outline', type: 'line', source: 'session-observation-extents', paint: { 'line-color': '#fb923c', 'line-width': 1.5, 'line-opacity': 0.8, 'line-dasharray': [3, 2] } });
                     map.addLayer({
                         id: 'session-markers', type: 'circle', source: 'session-markers',
                         paint: {
                             'circle-radius': 7,
-                            'circle-color': ['match', ['get', 'kind'], 'signal', '#38bdf8', 'point', '#a78bfa', 'observation', '#34d399', '#fbbf24'],
+                            'circle-color': ['case', ['==', ['get', 'observationKind'], 'iron_patch'], '#f97316', ['match', ['get', 'kind'], 'signal', '#38bdf8', 'point', '#a78bfa', 'observation', '#34d399', '#fbbf24']],
                             'circle-stroke-width': 2, 'circle-stroke-color': '#111827',
                         },
                     });
@@ -323,7 +340,7 @@ export function useSessionMap(params: {
             if (map.getLayer('field-finds')) map.setLayoutProperty('field-finds', 'visibility', showPastFinds ? 'visible' : 'none');
             if (map.getLayer('tracks-line')) map.setPaintProperty('tracks-line', 'line-opacity', showCoverage ? 0.9 : 0.8);
             if (showCoverage || showFieldTrails || showPastFinds) {
-                for (const layer of ['field-tracks-line', 'field-finds', 'tracks-line', 'session-markers', 'session-location-accuracy', 'session-location', 'session-location-heading', 'boundary-outline']) {
+                for (const layer of ['field-tracks-line', 'field-finds', 'session-observation-extents-fill', 'session-observation-extents-outline', 'tracks-line', 'session-markers', 'session-location-accuracy', 'session-location', 'session-location-heading', 'boundary-outline']) {
                     if (map.getLayer(layer)) map.moveLayer(layer);
                 }
             }

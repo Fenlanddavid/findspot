@@ -30,6 +30,9 @@ function latestReassessmentText(observation: EffectiveSurfaceObservation): strin
 }
 
 export function surfaceObservationText(observation: EffectiveSurfaceObservation): string {
+  if (observation.source.observationKind === 'iron_patch') {
+    return `Iron / junk patch${observation.source.extent ? ` · ${observation.source.extent.replaceAll('_', ' ')}` : ''}`;
+  }
   return `${SURFACE_LIST_MATERIAL_LABELS[observation.source.material]} · ${SURFACE_ABUNDANCE_LABELS[observation.source.abundance].toLowerCase()}`;
 }
 
@@ -37,6 +40,9 @@ export function surfaceObservationDetailText(
   observation: EffectiveSurfaceObservation,
 ): string | null {
   const details: string[] = [];
+  if (observation.source.observationKind === 'iron_patch') {
+    return observation.source.note?.trim() || null;
+  }
   if (observation.source.periodImpression !== 'unknown'
       && observation.source.datingConfidence !== 'unsure') {
     const period = SURFACE_PERIOD_LABELS[observation.source.periodImpression];

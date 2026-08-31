@@ -7,7 +7,7 @@ import { db } from '../../db';
 import {
     OverpassElement,
     parseOverpassContextRoutes, fetchScanRoutes, fetchModernWaysForBoundsResult,
-    fetchScheduledMonuments, fetchAIMData,
+    fetchScheduledMonuments, fetchAIMData, describeAIMCoverage,
 } from '../historicScanService';
 import { scanDataSource } from '../../engines/landscape/terrainEngine';
 import {
@@ -327,7 +327,7 @@ export async function runTerrainScanPipeline(
             const aerialHitCount = springHits.length + summerHits.length;
             if (aerialHitCount > 0) onLog(`> Aerial: ${aerialHitCount} spectral signal${aerialHitCount !== 1 ? 's' : ''} detected.`, 'terrain');
             else onLog('> Aerial: no spectral signals detected (Wayback tiles may not cover this area).', 'terrain', 'warn');
-            if (aimData.features?.length > 0) onLog(`> AIM: ${aimData.features.length} aerial monument${aimData.features.length !== 1 ? 's' : ''} mapped.`, 'terrain');
+            onLog(`> ${describeAIMCoverage(aimData)}`, 'terrain', aimData.projectCoverage?.state === 'mapped' ? undefined : 'warn');
 
             // Routes — started in parallel, should already be done
             onStatusChange('Reading route context...');

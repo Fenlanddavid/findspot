@@ -17,6 +17,10 @@ import {
 import { CoverageSetupError } from './CoverageSetupError';
 import { useSessionCoverageNow } from './useSessionCoverageNow';
 import type { SessionCoverageObservation } from '../../shared/coverageTypes';
+import {
+  COVERAGE_PRESENTATION,
+  recordedCoverageEstimate,
+} from '../../shared/coveragePresentation';
 
 const EMPTY_OBSERVATIONS: SessionCoverageObservation[] = [];
 const EMPTY_SESSIONS: never[] = [];
@@ -152,6 +156,10 @@ export function SessionCoverageReview(props: {
   const trackedVisibleCount = [...trackedIds]
     .filter(sectionId => visibleSectionIds.has(sectionId))
     .length;
+  const coverageEstimate = useMemo(
+    () => recordedCoverageEstimate(sections ?? [], observations),
+    [observations, sections],
+  );
 
   function openReview() {
     setSelected(new Set(savedReportedIds));
@@ -209,6 +217,11 @@ export function SessionCoverageReview(props: {
                   ? `${coveredCount} ${coveredCount === 1 ? 'area was' : 'areas were'} recorded by tracking.`
                   : 'Mark the parts of the field you searched.'}
             </p>
+            {coverageEstimate && (
+              <p className="mt-1 text-2xs font-black text-gray-500 dark:text-gray-400">
+                {coverageEstimate.percent}% recorded coverage · estimate
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -237,6 +250,12 @@ export function SessionCoverageReview(props: {
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Tap an area to add or remove it. Blue areas were recorded by tracking.
           </p>
+          {coverageEstimate && (
+            <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-950/40">
+              <p className="text-sm font-black text-gray-900 dark:text-gray-100">{coverageEstimate.percent}% recorded coverage</p>
+              <p className="mt-0.5 text-3xs font-semibold leading-relaxed text-gray-500 dark:text-gray-400">{COVERAGE_PRESENTATION.percentageCaveat}</p>
+            </div>
+          )}
         </div>
         <button
           type="button"

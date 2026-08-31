@@ -293,7 +293,7 @@ describe('updateQuestionsAfterScan', () => {
     await updateQuestionsAfterScan(input());
     expect(mocks.updatePermission).toHaveBeenNthCalledWith(1, 'permission-1',
       expect.objectContaining({
-        protectionStatus: expect.objectContaining({ state: 'clear', evaluatedAt: expect.any(String) }),
+        protectionStatus: expect.objectContaining({ state: 'none_recorded', evaluatedAt: expect.any(String) }),
       }),
     );
   });

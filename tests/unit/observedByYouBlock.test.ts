@@ -22,11 +22,13 @@ import {
   recentSurfacePeriods,
   readSurfaceCalibration,
   reassessSurfaceObservation,
+  recordIronPatch,
   recordSurfaceObservation,
   retireSurfaceObservation,
   resolveEffectiveScatter,
   setSurfaceCapturePeriod,
   summarizeSurfaceObservations,
+  surfaceExtentRadiusM,
   type EffectiveScatter,
   type SurfaceScope,
 } from '../../src/services/surfaceScatter';
@@ -112,6 +114,22 @@ async function capture(database: FindSpotDB): Promise<SurfaceObservation> {
 }
 
 describe('Scatter capture UX', () => {
+  it('records an iron patch without adding it to archaeological scatter clustering', async () => {
+    const database = await captureDatabase();
+    const saved = await recordIronPatch({
+      projectId: 'project-1', permissionId: 'permission-1', sessionId: null,
+      point: scope.point, gpsAccuracyM: 4, extent: 'approx_10m', note: 'Repeated iron signals.',
+    }, database);
+
+    expect(await database.surfaceObservations.get(saved.id)).toMatchObject({
+      observationKind: 'iron_patch', material: 'modern_material', extent: 'approx_10m',
+      note: 'Repeated iron signals.', captureCompletedAt: expect.any(String),
+    });
+    expect(clusterSurfaceObservations([saved])).toEqual([]);
+    expect(surfaceExtentRadiusM(saved.extent)).toBe(5);
+    database.close();
+  });
+
   it('T1 persists material, abundance and the selected period in the explicit save', async () => {
     const database = await captureDatabase();
     const saved = await recordSurfaceObservation({

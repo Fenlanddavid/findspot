@@ -75,7 +75,7 @@ export type UseFieldGuideMapOptions = {
     showFields: false | 'all' | string;
     historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
     userFinds: Find[];
-    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; os1930: boolean; os1880: boolean };
+    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; relief: boolean; os1930: boolean; os1880: boolean };
     historicLayerOpacity: OverlayOpacity;
     onRomanStandaloneStatusChange: (status: RomanStandaloneLayerStatus) => void;
     savedPoints: SavedPoint[];
@@ -231,6 +231,10 @@ export function useFieldGuideMap({
         if (map.getLayer('overlay-lidar-wales')) {
             map.setLayoutProperty('overlay-lidar-wales', 'visibility', historicLayerToggles['lidar-wales'] ? 'visible' : 'none');
             map.setPaintProperty('overlay-lidar-wales', 'raster-opacity', historicLayerOpacity['lidar-wales']);
+        }
+        if (map.getLayer('overlay-relief')) {
+            map.setLayoutProperty('overlay-relief', 'visibility', historicLayerToggles.relief ? 'visible' : 'none');
+            map.setPaintProperty('overlay-relief', 'raster-opacity', historicLayerOpacity.relief);
         }
         if (map.getLayer('overlay-os1930')) {
             map.setLayoutProperty('overlay-os1930', 'visibility', historicLayerToggles.os1930 ? 'visible' : 'none');

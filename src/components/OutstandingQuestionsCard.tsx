@@ -40,7 +40,7 @@ function ProtectionBanner({ protection }: { protection: Permission['protectionSt
       <div className="mx-4 mt-3 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 dark:border-red-800/60 dark:bg-red-950/30 sm:mx-5">
         <p className="text-xs font-bold text-red-800 dark:text-red-300">Scheduled monument intersects this permission</p>
         <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">
-          Protected archaeology — do not detect within the monument or its buffer.
+          Check the current official record and do not detect within the recorded monument boundary.
         </p>
       </div>
     );
@@ -56,13 +56,14 @@ function ProtectionBanner({ protection }: { protection: Permission['protectionSt
     );
   }
 
-  // state === 'clear'
+  // `clear` is a legacy persisted token. It is deliberately rendered with the
+  // same non-asserting copy as current `none_recorded` rows.
   const evaluatedLabel = new Date(protection!.evaluatedAt).toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
   });
   return (
     <p className="mx-4 mt-3 text-2xs text-gray-400 dark:text-gray-500 sm:mx-5">
-      No scheduled monuments detected — last checked {evaluatedLabel}.
+      Cached scheduled-monument records were checked on {evaluatedLabel}; none were recorded in the scanned area. This is not a detecting permission check.
     </p>
   );
 }

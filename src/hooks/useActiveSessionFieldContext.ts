@@ -6,6 +6,7 @@ import type { TrackingPoint } from '../services/tracking';
 import type { SessionMapMarker } from './useSessionMap';
 import { distanceMetres, evaluateBoundaryPosition, type FieldLocation } from '../services/session/sessionFieldPosition';
 import { recentSessionActivity } from '../services/session/sessionActivity';
+import { surfaceExtentRadiusM } from '../services/surfaceScatter';
 
 export function useActiveSessionFieldContext(params: {
   projectId: string;
@@ -42,7 +43,14 @@ export function useActiveSessionFieldContext(params: {
   const markers = useMemo(() => [
     ...(params.finds ?? []).flatMap<SessionMapMarker>(find => find.lat != null && find.lon != null ? [{ id: find.id, kind: 'find', lat: find.lat, lon: find.lon }] : []),
     ...signals.flatMap<SessionMapMarker>(signal => Number.isFinite(signal.lat) && Number.isFinite(signal.lng) ? [{ id: signal.id, kind: 'signal', lat: signal.lat, lon: signal.lng }] : []),
-    ...observations.filter(item => !item.retiredAt).map<SessionMapMarker>(item => ({ id: item.id, kind: 'observation', lat: item.lat, lon: item.lon })),
+    ...observations.filter(item => !item.retiredAt).map<SessionMapMarker>(item => ({
+      id: item.id,
+      kind: 'observation',
+      lat: item.lat,
+      lon: item.lon,
+      observationKind: item.observationKind ?? 'surface_material',
+      extentRadiusM: item.observationKind === 'iron_patch' ? surfaceExtentRadiusM(item.extent) : null,
+    })),
     ...savedPoints.map<SessionMapMarker>(point => ({ id: point.id, kind: 'point', lat: point.lat, lon: point.lon })),
   ], [observations, params.finds, savedPoints, signals]);
   const startPoint = savedPoints.find(point => point.label === 'Start point') ?? null;

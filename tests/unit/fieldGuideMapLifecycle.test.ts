@@ -105,7 +105,7 @@ describe('FieldGuide map layer registry', () => {
     expect(moves).toEqual(['trace-targets-circle', 'trace-targets-selected']);
   });
 
-  it('keeps the six basemap and raster overlay layers in their original order', () => {
+  it('keeps the seven basemap and raster overlay layers in their declared order', () => {
     const style = createFieldGuideMapStyle();
 
     expect(Object.keys(style.sources)).toEqual([
@@ -113,6 +113,7 @@ describe('FieldGuide map layer registry', () => {
       'satellite',
       'overlay-lidar',
       'overlay-lidar-wales',
+      'overlay-relief',
       'overlay-os1930',
       'overlay-os1880',
     ]);
@@ -121,9 +122,17 @@ describe('FieldGuide map layer registry', () => {
       'satellite',
       'overlay-lidar',
       'overlay-lidar-wales',
+      'overlay-relief',
       'overlay-os1880',
       'overlay-os1930',
     ]);
+    expect(style.sources['overlay-relief']).toMatchObject({
+      type: 'raster',
+      tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}'],
+      minzoom: 0,
+      maxzoom: 16,
+      attribution: 'Esri World Hillshade · multi-directional relief',
+    });
   });
 
   it('can initialise directly into the saved satellite basemap', () => {

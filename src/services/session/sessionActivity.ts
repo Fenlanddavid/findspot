@@ -40,8 +40,10 @@ export function recentSessionActivity(input: {
     ...input.observations.filter(item => !item.retiredAt).map(observation => ({
       id: observation.id,
       kind: 'observation' as const,
-      title: 'Surface observation',
-      detail: observation.material.replaceAll('_', ' '),
+      title: observation.observationKind === 'iron_patch' ? 'Iron / junk patch' : 'Surface observation',
+      detail: observation.observationKind === 'iron_patch'
+        ? (observation.extent?.replaceAll('_', ' ') ?? 'Approximate patch')
+        : observation.material.replaceAll('_', ' '),
       timestamp: parsed(observation.observedAt ?? observation.createdAt),
     })),
     ...input.savedPoints.map(point => ({

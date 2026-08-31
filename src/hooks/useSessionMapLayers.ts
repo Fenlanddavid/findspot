@@ -36,7 +36,7 @@ export function useSessionMapLayers(
     mapReadyVersion: number,
 ): { control: SessionMapLayerControl; mapPreferenceReady: boolean } {
     const [isSatellite, setIsSatellite, mapPreferenceReady] = useInitialFieldGuideMapStyle();
-    const [overlays, setOverlays] = useState<SessionRasterOverlayState>({ lidar: false, 'lidar-wales': false, os1880: false, os1930: false });
+    const [overlays, setOverlays] = useState<SessionRasterOverlayState>({ lidar: false, 'lidar-wales': false, relief: false, os1880: false, os1930: false });
     const [overlayOpacity, setStoredOverlayOpacity] = useDurableSetting<RasterOverlayOpacity>(
         RASTER_OVERLAY_STORAGE_KEY,
         DEFAULT_RASTER_OVERLAY_OPACITY,
@@ -51,7 +51,7 @@ export function useSessionMapLayers(
         if (map.getLayer('osm')) map.setLayoutProperty('osm', 'visibility', isSatellite ? 'none' : 'visible');
         if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', isSatellite ? 'visible' : 'none');
         const layerIds: Record<SessionRasterOverlay, string> = {
-            lidar: 'overlay-lidar', 'lidar-wales': 'overlay-lidar-wales', os1880: 'overlay-os1880', os1930: 'overlay-os1930',
+            lidar: 'overlay-lidar', 'lidar-wales': 'overlay-lidar-wales', relief: 'overlay-relief', os1880: 'overlay-os1880', os1930: 'overlay-os1930',
         };
         for (const key of Object.keys(layerIds) as SessionRasterOverlay[]) {
             const layerId = layerIds[key];

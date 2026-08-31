@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { Permission, Session, Find, Media } from "../db";
+import type { Permission, Session, Find, Media, SurfaceExtent } from "../db";
 import { pagePersistence } from "../services/pagePersistence";
 import { v4 as uuid } from "uuid";
 import { captureGPS } from "../services/gps";
@@ -62,6 +62,14 @@ import type { SessionActivityItem } from '../services/session/sessionActivity';
 import { useActiveSessionFieldContext } from '../hooks/useActiveSessionFieldContext';
 import { buildActiveSessionGuideHref } from '../services/session/activeSessionGuideRoute';
 import { NewSessionStartCard } from '../components/session/NewSessionStartCard';
+import { recordIronPatch } from '../services/surfaceScatter';
+import {
+  daylightSummary,
+  INITIAL_SESSION_START_PROTECTION,
+  readSessionStartProtection,
+  sessionStartReferencePoint,
+  type SessionStartProtection,
+} from '../services/session/sessionStartProtection';
 const FIRST_SESSION_KEY = "fs_first_session";
 function formatDeleteCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
@@ -142,6 +150,7 @@ export default function SessionPage(props: {
   const [showPastFinds, setShowPastFinds] = useState(false);
   const [scheduledMonumentCacheVersion, setScheduledMonumentCacheVersion] = useState(0);
   const [scheduledMonumentCachePreparing, setScheduledMonumentCachePreparing] = useState(false);
+  const [sessionStartProtection, setSessionStartProtection] = useState<SessionStartProtection>(INITIAL_SESSION_START_PROTECTION);
   const [showWorkspaceQuickFind, setShowWorkspaceQuickFind] = useState(false);
   const [showSavedPointSheet, setShowSavedPointSheet] = useState(false);
   const [savedPointDefaultLabel, setSavedPointDefaultLabel] = useState<string | undefined>();
@@ -220,7 +229,7 @@ export default function SessionPage(props: {
     ? `${permission.id}:${selectedField?.updatedAt ?? permission.updatedAt}`
     : null;
   useEffect(() => {
-    if (!scheduledMonumentCacheKey || !scheduledMonumentBoundary || !permission || !navigator.onLine) return;
+    if (!isEdit || !scheduledMonumentCacheKey || !scheduledMonumentBoundary || !permission || !navigator.onLine) return;
     let cancelled = false;
     setScheduledMonumentCachePreparing(true);
     void import('../services/offlinePack')
@@ -243,10 +252,26 @@ export default function SessionPage(props: {
         console.warn('Scheduled monument background preparation failed:', cacheError);
       });
     return () => { cancelled = true; };
-  }, [permission, scheduledMonumentBoundary, scheduledMonumentCacheKey]);
+  }, [isEdit, permission, scheduledMonumentBoundary, scheduledMonumentCacheKey]);
   useEffect(() => {
     if (!isEdit && !fieldId && fields?.length === 1) setFieldId(fields[0].id);
   }, [fieldId, fields, isEdit]);
+  useEffect(() => {
+    if (isEdit) return;
+    const controller = new AbortController();
+    setSessionStartProtection(INITIAL_SESSION_START_PROTECTION);
+    void readSessionStartProtection(scheduledMonumentBoundary, controller.signal)
+      .then(setSessionStartProtection)
+      .catch(errorValue => {
+        if (errorValue instanceof DOMException && errorValue.name === 'AbortError') return;
+        setSessionStartProtection({ state: 'not_checked', monumentCount: 0, reason: 'unavailable' });
+      });
+    return () => controller.abort();
+  }, [isEdit, scheduledMonumentBoundary]);
+  const sessionStartDaylight = daylightSummary(
+    new Date(nowTick),
+    sessionStartReferencePoint(permission, selectedField),
+  );
   const reportedCoverage = useReportedCoverageGeometries(
     permission?.id ?? permissionId ?? undefined,
   );
@@ -272,11 +297,11 @@ export default function SessionPage(props: {
   const isAnyTracking = isTracking || isCompanionTracking;
 
   useEffect(() => {
-    if (!isActiveSessionMode) return;
+    if (isEdit && !isActiveSessionMode) return;
     setNowTick(Date.now());
     const timer = window.setInterval(() => setNowTick(Date.now()), 30000);
     return () => window.clearInterval(timer);
-  }, [isActiveSessionMode]);
+  }, [isActiveSessionMode, isEdit]);
 
   // Load the landowner-facing detectorist name for the update card.
   useEffect(() => {
@@ -887,6 +912,22 @@ export default function SessionPage(props: {
     setWorkspaceNotice(`${label} saved`);
     window.setTimeout(() => setWorkspaceNotice(null), 3000);
   }
+  async function saveWorkspaceIronPatch(extent: SurfaceExtent, pointNote: string) {
+    if (!permission) throw new Error('Move into a mapped permission before recording an iron or junk area.');
+    const preferred = getLatestTrackLocation();
+    const location = preferred ?? await captureGPS();
+    await recordIronPatch({
+      projectId: props.projectId,
+      permissionId: permission.id,
+      sessionId,
+      point: { lat: location.lat, lon: location.lon },
+      gpsAccuracyM: preferred?.gpsAccuracyM ?? ('accuracyM' in location ? location.accuracyM : null),
+      extent,
+      note: pointNote,
+    });
+    setWorkspaceNotice('Iron / junk area saved');
+    window.setTimeout(() => setWorkspaceNotice(null), 3000);
+  }
   function openWorkspaceMapObject(object: SessionMapObjectRef) {
     if (object.kind === 'find') nav(`/find?quickId=${object.id}`);
     else if (object.kind === 'signal') nav(`/finds-box?tab=signals&signal=${encodeURIComponent(object.id)}`);
@@ -1001,7 +1042,7 @@ export default function SessionPage(props: {
         />
         {sessionMapSelection && <SessionMapObjectSheet selection={sessionMapSelection} records={{ finds: [...(finds ?? []), ...(fieldFinds ?? [])], signals: activeSignals, observations: activeObservations, savedPoints: activeSavedPoints, tracks: [...(tracks ?? []), ...(fieldTracks ?? [])], sessions: [...(fieldSessions ?? []), ...(session ? [session] : [])] }} activeSessionId={sessionId} onChoose={chooseMapObject} onClose={clearSessionMapSelection} onOpenFullRecord={openWorkspaceMapObject} />}
         {showWorkspaceQuickFind && permission && <SessionQuickFindSheet projectId={props.projectId} permissionId={permission.id} sessionId={sessionId} fieldId={fieldId} permissionName={permission.name} getPreferredLocation={getLatestTrackLocation} onClose={() => setShowWorkspaceQuickFind(false)} onSaved={(_findId, pending) => { setShowWorkspaceQuickFind(false); setWorkspaceNotice(pending ? 'Find saved for later' : 'Find saved'); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onAddDetails={findId => nav(`/find?quickId=${findId}`)} />}
-        {showSavedPointSheet && <SessionSavedPointSheet defaultLabel={savedPointDefaultLabel} onClose={() => setShowSavedPointSheet(false)} onSave={saveWorkspacePoint} />}
+        {showSavedPointSheet && <SessionSavedPointSheet defaultLabel={savedPointDefaultLabel} onClose={() => setShowSavedPointSheet(false)} onSave={saveWorkspacePoint} onSaveIronPatch={saveWorkspaceIronPatch} />}
         {showSignalSheet && <UndugSignalSheet sessionId={sessionId} permissionId={permission?.id ?? permissionId} onSaved={(_signalId, openCount) => { setShowSignalSheet(false); setWorkspaceNotice(`Signal saved${openCount ? ` · ${openCount} open here` : ''}`); navigator.vibrate?.(40); window.setTimeout(() => setWorkspaceNotice(null), 3000); }} onClose={() => setShowSignalSheet(false)} />}
         <TrackingOverlay
           isVisible={showTrackingOverlay}
@@ -1174,14 +1215,10 @@ export default function SessionPage(props: {
                     permissionName={permission?.name ?? 'Detecting permission'}
                     fields={fields ?? []}
                     fieldId={fieldId}
-                    landUse={landUse}
-                    isStubble={isStubble}
-                    notes={notes}
                     saving={saving}
+                    protection={sessionStartProtection}
+                    daylight={sessionStartDaylight}
                     onFieldChange={setFieldId}
-                    onLandUseChange={setLandUse}
-                    onStubbleChange={setIsStubble}
-                    onNotesChange={setNotes}
                     onStart={() => void save()}
                     onBack={() => nav(permission ? `/permission/${permission.id}` : '/')}
                   />

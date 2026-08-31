@@ -179,6 +179,6 @@ describe('standalone Roman roads map layer', () => {
 
     expect(source.match(/export type RasterOverlayKey\s*=/g)).toHaveLength(1);
     expect(source.match(/export type OverlayOpacityKey\s*=/g)).toHaveLength(1);
-    expect(source.match(/'lidar' \| 'lidar-wales' \| 'os1880' \| 'os1930'/g)).toHaveLength(1);
+    expect(source.match(/'lidar' \| 'lidar-wales' \| 'relief' \| 'os1880' \| 'os1930'/g)).toHaveLength(1);
   });
 });

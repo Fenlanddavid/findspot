@@ -138,7 +138,7 @@ export function useFieldGuidePageState() {
     const [historicScanCompleted, setHistoricScanCompleted] = useState(false);
     const [historicLayerToggles, setHistoricLayerToggles] = useState({
         lidar: false,
-        'lidar-wales': false,
+        'lidar-wales': false, relief: false,
         os1930: false,
         os1880: false,
     });

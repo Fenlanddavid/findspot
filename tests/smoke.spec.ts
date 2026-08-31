@@ -199,6 +199,13 @@ test("active sessions use the demand-mounted four-destination workspace", async 
 
   await expect(page.getByText('Session active')).toBeVisible();
   await expect(page.getByText('Record on Workspace Field')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Iron / junk area', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Mark location', exact: true }).click();
+  const markLocationDialog = page.getByRole('dialog', { name: 'Mark location' });
+  await markLocationDialog.getByRole('button', { name: 'Iron / junk area', exact: true }).click();
+  await expect(markLocationDialog.getByText('Approximate spread')).toBeVisible();
+  await expect(markLocationDialog.getByRole('button', { name: 'Around 10 m', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await markLocationDialog.getByRole('button', { name: 'Close', exact: true }).click();
   const [trailPanelBounds, conditionsPanelBounds] = await Promise.all([
     page.getByText('Trail recording', { exact: true }).boundingBox(),
     page.getByText('Visit conditions', { exact: true }).boundingBox(),

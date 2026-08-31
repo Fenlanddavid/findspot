@@ -1,39 +1,94 @@
 import React from 'react';
 import type { Field } from '../../db';
+import type {
+  DaylightSummary,
+  SessionStartProtection,
+} from '../../services/session/sessionStartProtection';
 
 type SessionStartField = Pick<Field, 'id' | 'name'>;
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours}h ${remainder}m` : `${hours}h`;
+}
+
+type PromptLine =
+  | { kind: 'prominent'; title: string; detail: string; tone: string }
+  | { kind: 'quiet'; label: string; text: string; emphasis?: boolean };
+
+function protectionLine(protection: SessionStartProtection): PromptLine {
+  if (protection.state === 'recorded_monument') {
+    return {
+      kind: 'prominent',
+      title: `${protection.monumentCount} recorded scheduled monument${protection.monumentCount === 1 ? '' : 's'} intersect this area`,
+      detail: 'Check the current official record before detecting.',
+      tone: 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200',
+    };
+  }
+  if (protection.state === 'none_recorded') {
+    return { kind: 'quiet', label: 'Monuments', text: 'Cached records checked \u2014 none recorded here. Not a legal clearance.' };
+  }
+  if (protection.state === 'loading') {
+    return { kind: 'quiet', label: 'Monuments', text: 'Reading cached records\u2026' };
+  }
+  const reason = protection.reason === 'no_boundary'
+    ? 'boundary needed for this check'
+    : protection.reason === 'not_cached'
+      ? 'monument data not downloaded for this area'
+      : protection.reason === 'partial_coverage'
+        ? 'cached data does not cover this whole area'
+        : 'could not be checked';
+  return {
+    kind: 'prominent',
+    title: 'Scheduled-monument check not available',
+    detail: reason.charAt(0).toUpperCase() + reason.slice(1) + '.',
+    tone: 'border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/25 dark:text-amber-200',
+  };
+}
+
+const DAYLIGHT_QUIET_THRESHOLD = 60;
+
+function daylightLine(daylight: DaylightSummary): PromptLine | null {
+  if (daylight.state === 'daylight' && daylight.minutes !== null) {
+    if (daylight.minutes > DAYLIGHT_QUIET_THRESHOLD) return null;
+    return { kind: 'quiet', label: 'Daylight', text: `${formatMinutes(daylight.minutes)} remaining` };
+  }
+  if (daylight.state === 'before_sunrise' && daylight.minutes !== null) {
+    return { kind: 'quiet', label: 'Daylight', text: `Sunrise in about ${formatMinutes(daylight.minutes)}` };
+  }
+  if (daylight.state === 'after_sunset') {
+    return { kind: 'quiet', label: 'Daylight', text: 'No daylight remaining', emphasis: true };
+  }
+  return null;
+}
 
 export function NewSessionStartCard({
   permissionName,
   fields,
   fieldId,
-  landUse,
-  isStubble,
-  notes,
   saving,
+  protection,
+  daylight,
   onFieldChange,
-  onLandUseChange,
-  onStubbleChange,
-  onNotesChange,
   onStart,
   onBack,
 }: {
   permissionName: string;
   fields: SessionStartField[];
   fieldId: string | null;
-  landUse: string;
-  isStubble: boolean;
-  notes: string;
   saving: boolean;
+  protection: SessionStartProtection;
+  daylight: DaylightSummary;
   onFieldChange: (fieldId: string | null) => void;
-  onLandUseChange: (landUse: string) => void;
-  onStubbleChange: (isStubble: boolean) => void;
-  onNotesChange: (notes: string) => void;
   onStart: () => void;
   onBack: () => void;
 }) {
   const selectedField = fields.find(field => field.id === fieldId);
-  const hasOptionalDetails = isStubble || !!landUse || !!notes.trim();
+  const items = [protectionLine(protection), daylightLine(daylight)].filter((item): item is PromptLine => item !== null);
+  const prominentItems = items.filter((item): item is PromptLine & { kind: 'prominent' } => item.kind === 'prominent');
+  const quietItems = items.filter((item): item is PromptLine & { kind: 'quiet' } => item.kind === 'quiet');
 
   return (
     <section
@@ -75,6 +130,30 @@ export function NewSessionStartCard({
       </div>
 
       <div className="grid gap-4 p-4 sm:p-6">
+        <section aria-labelledby="before-you-start-title" className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+          <p id="before-you-start-title" className="m-0 text-2xs font-black uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">Before you start</p>
+          {prominentItems.length > 0 && (
+            <div className="mt-3 grid gap-2">
+              {prominentItems.map((item, i) => (
+                <div key={i} className={`rounded-xl border px-3.5 py-3 ${item.tone}`}>
+                  <p className="m-0 text-xs font-black leading-snug">{item.title}</p>
+                  <p className="mt-1 text-2xs font-semibold leading-relaxed opacity-80">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {quietItems.length > 0 && (
+            <div className={`grid gap-1.5 ${prominentItems.length > 0 ? 'mt-2' : 'mt-3'}`}>
+              {quietItems.map((item, i) => (
+                <div key={i} className="flex gap-2 text-3xs leading-relaxed">
+                  <span className="shrink-0 font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">{item.label}</span>
+                  <span className={item.emphasis ? 'font-bold text-gray-800 dark:text-gray-100' : 'font-medium text-gray-500 dark:text-gray-400'}>{item.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-950/45">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -110,43 +189,6 @@ export function NewSessionStartCard({
             </label>
           )}
         </div>
-
-        <details className="group rounded-2xl border border-gray-200 bg-white open:bg-gray-50/70 dark:border-gray-800 dark:bg-gray-900 dark:open:bg-gray-950/35">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 marker:hidden">
-            <div>
-              <span className="block text-sm font-black text-gray-800 dark:text-gray-100">Ground condition &amp; note</span>
-              <span className="mt-0.5 block text-xs font-medium text-gray-500 dark:text-gray-400">Optional — you can add these during the visit</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {hasOptionalDetails && <span className="h-2 w-2 rounded-full bg-emerald-500" aria-label="Optional details added" />}
-              <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180">
-                <path d="m5 7.5 5 5 5-5" />
-              </svg>
-            </div>
-          </summary>
-
-          <div className="grid gap-4 border-t border-gray-200 px-4 pb-4 pt-4 dark:border-gray-800">
-            <div>
-              <p className="mb-2 text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Ground today</p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => onStubbleChange(!isStubble)} className={`rounded-xl border px-3 py-2 text-xs font-black transition-colors ${isStubble ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-gray-200 bg-white text-gray-500 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'}`}>Stubble</button>
-                <button type="button" onClick={() => onLandUseChange(landUse === 'Ploughed' ? '' : 'Ploughed')} className={`rounded-xl border px-3 py-2 text-xs font-black transition-colors ${landUse === 'Ploughed' ? 'border-orange-300 bg-orange-100 text-orange-900' : 'border-gray-200 bg-white text-gray-500 hover:border-orange-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'}`}>Ploughed</button>
-                <button type="button" onClick={() => onLandUseChange(landUse === 'Pasture' ? '' : 'Pasture')} className={`rounded-xl border px-3 py-2 text-xs font-black transition-colors ${landUse === 'Pasture' ? 'border-emerald-300 bg-emerald-100 text-emerald-900' : 'border-gray-200 bg-white text-gray-500 hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400'}`}>Pasture</button>
-              </div>
-            </div>
-
-            <label>
-              <span className="mb-2 block text-2xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">Visit note</span>
-              <textarea
-                value={notes}
-                onChange={event => onNotesChange(event.target.value)}
-                rows={2}
-                placeholder="Anything useful to remember…"
-                className="w-full resize-y rounded-xl border border-gray-300 bg-white p-3 text-sm font-medium text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-              />
-            </label>
-          </div>
-        </details>
 
         <button
           type="button"

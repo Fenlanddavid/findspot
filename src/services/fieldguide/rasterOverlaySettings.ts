@@ -1,4 +1,4 @@
-export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'os1880' | 'os1930';
+export type RasterOverlayKey = 'lidar' | 'lidar-wales' | 'relief' | 'os1880' | 'os1930';
 export type RasterOverlayOpacity = Record<RasterOverlayKey, number>;
 export type OverlayOpacityKey = RasterOverlayKey | 'romanStandalone';
 export type OverlayOpacity = Record<OverlayOpacityKey, number>;
@@ -7,6 +7,7 @@ export type RomanStandaloneLayerStatus = 'idle' | 'loading' | 'available' | 'una
 export const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
   lidar: 1,
   'lidar-wales': 1,
+  relief: 1,
   os1880: 1,
   os1930: 1,
 };

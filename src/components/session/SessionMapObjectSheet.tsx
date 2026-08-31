@@ -76,7 +76,9 @@ function choiceText(object: SessionMapObjectRef, records: SessionMapObjectRecord
   }
   if (object.kind === 'observation') {
     const observation = record as SurfaceObservation | null;
-    return { title: tokenLabel(observation?.material), detail: 'Surface observation' };
+    return observation?.observationKind === 'iron_patch'
+      ? { title: 'Iron / junk patch', detail: 'Field observation' }
+      : { title: tokenLabel(observation?.material), detail: 'Surface observation' };
   }
   if (object.kind === 'point') {
     const point = record as SavedPoint | null;
@@ -125,6 +127,15 @@ function ObjectDetails({ object, records }: { object: SessionMapObjectRef; recor
 
   if (object.kind === 'observation') {
     const observation = record as SurfaceObservation;
+    if (observation.observationKind === 'iron_patch') {
+      return <dl className="grid grid-cols-2 gap-2">
+        <Detail label="Observed" value={dateLabel(observation.observedAt ?? observation.createdAt, true)} />
+        <Detail label="Approximate spread" value={tokenLabel(observation.extent)} />
+        <Detail label="GPS accuracy" value={accuracyLabel(observation.gpsAccuracyM)} />
+        <Detail label="Record type" value="Iron / junk patch" />
+        {observation.note?.trim() && <div className="col-span-2"><Detail label="Notes" value={observation.note.trim()} /></div>}
+      </dl>;
+    }
     return <dl className="grid grid-cols-2 gap-2">
       <Detail label="Observed" value={dateLabel(observation.observedAt ?? observation.createdAt, true)} />
       <Detail label="Abundance" value={tokenLabel(observation.abundance)} />
