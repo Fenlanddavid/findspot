@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import { useDurableSetting, useInitialFieldGuideMapStyle } from '../services/clientStorage';
 import {
     DEFAULT_RASTER_OVERLAY_OPACITY,

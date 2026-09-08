@@ -1,5 +1,5 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import type { Find } from '../db';
 import type { DevAnnotation } from '../utils/devAnnotation';
@@ -125,7 +125,7 @@ export function useFieldGuideUserLayers({
         if (map.getSource('permission-fields')) doUpdate();
         else map.once('style.load', doUpdate);
         return () => { canceled = true; };
-    }, [fieldBoundaries, showFields]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [fieldBoundaries, showFields, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const map = mapRef.current;

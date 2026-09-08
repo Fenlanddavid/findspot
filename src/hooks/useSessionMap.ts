@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONPolygon, Track } from '../db';
 import type { CoverageResult } from '../services/coverage';
 import { splitTrackPointsAtGaps } from '../shared/trackSegments';

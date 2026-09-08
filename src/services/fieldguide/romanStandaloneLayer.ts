@@ -1,4 +1,4 @@
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { HistoricRoute } from '../../pages/fieldGuideTypes';
 import type { RomanStandaloneLayerStatus } from '../../hooks/useFieldGuidePageState';
 import { fetchRomanRoads } from '../romanRoadService';

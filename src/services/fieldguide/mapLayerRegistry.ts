@@ -1,4 +1,5 @@
-import maplibregl, { addProtocol } from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+import { addProtocol } from 'maplibre-gl';
 import { cogProtocol } from '@geomatico/maplibre-cog-protocol';
 import { cacheBackedTileUrl, ensureTileCacheProtocolRegistered } from '../../utils/mapTileCache';
 import { ROMAN_STANDALONE_MIN_ZOOM } from './romanRoadLayerConfig';

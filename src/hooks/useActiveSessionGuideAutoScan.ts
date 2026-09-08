@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { Permission } from '../db';
 import type { FieldGuideRouteContext } from './useFieldGuideRouteActions';
 
@@ -25,7 +25,8 @@ export function useActiveSessionGuideAutoScan({ route, mapRef, permissions, isBu
       const map = mapRef.current;
       const permissionReady = !route.permissionId || permissions.some(permission => permission.id === route.permissionId);
       const hasTarget = Number.isFinite(route.lat) && Number.isFinite(route.lng);
-      if (map && map.isStyleLoaded() && permissionReady && hasTarget && !isBusy) {
+      const mapLayersReady = Boolean(map?.getSource('permission-fields'));
+      if (map && mapLayersReady && permissionReady && hasTarget && !isBusy) {
         startedRef.current = true;
         map.stop();
         if (route.boundaryBounds) {

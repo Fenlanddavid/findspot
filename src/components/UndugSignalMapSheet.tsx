@@ -4,7 +4,7 @@
 // Tapping the (static) signal marker opens the detail sheet on top.
 
 import React from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { UndugSignal } from '../db';
 import { UndugSignalDetailSheet } from './UndugSignalLog';

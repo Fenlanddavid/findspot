@@ -1,5 +1,5 @@
 import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { Permission } from '../db';
 import type { BoundaryBounds } from '../services/session/sessionFieldPosition';
 import { useActiveSessionGuideAutoScan } from './useActiveSessionGuideAutoScan';

@@ -4,7 +4,7 @@
 // when the user hits Scan they're already available for the workers.
 
 import { useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { resolveWaybackIds, waybackTileUrl, waybackVersionA, waybackVersionB } from '../utils/waybackService';
 import { findPackCoveringBbox } from '../services/offlinePack';

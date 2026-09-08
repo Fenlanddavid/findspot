@@ -1,5 +1,5 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import * as turf from '@turf/turf';
 import type { HistoricFind, HistoricRoute } from '../pages/fieldGuideTypes';
 import { getPASDensityGeoJSON } from '../services/pasDensityService';
