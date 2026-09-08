@@ -1,6 +1,7 @@
 import { db } from '../db';
 import type { FindSpotDB, Session, Track } from '../db';
 import { applyCompanionTrackTrim, regenerateCompanionTracks } from './companionImport';
+import { resolveHotspotPredictionOutcomes } from './hotspotPredictionService';
 
 export async function setSessionGroundConditions(
   sessionId: string,
@@ -19,6 +20,7 @@ export async function setSessionLocation(
 }
 
 export async function deleteSessionCascade(sessionId: string, database: FindSpotDB = db): Promise<void> {
+  const session = await database.sessions.get(sessionId);
   const finds = await database.finds.where('sessionId').equals(sessionId).toArray();
   const significantFinds = await database.significantFinds.where('sessionId').equals(sessionId).toArray();
   const findIds = finds.map(find => find.id);
@@ -46,6 +48,22 @@ export async function deleteSessionCascade(sessionId: string, database: FindSpot
     });
     await database.sessions.delete(sessionId);
   });
+
+  // Session deletion removes finds, coverage and tracks that may have supported
+  // a prediction. Re-derive the summary so associations cannot remain stale.
+  if (session?.permissionId) {
+    const [remainingFinds, remainingSessions] = await Promise.all([
+      database.finds.where('permissionId').equals(session.permissionId).toArray(),
+      database.sessions.where('permissionId').equals(session.permissionId).toArray(),
+    ]);
+    const remainingSessionIds = remainingSessions.map(item => item.id);
+    const remainingTracks = remainingSessionIds.length
+      ? await database.tracks.where('sessionId').anyOf(remainingSessionIds).toArray()
+      : [];
+    await resolveHotspotPredictionOutcomes(
+      remainingFinds, remainingTracks, remainingSessions, session.permissionId, database,
+    );
+  }
 }
 
 export async function createSessionRecord(session: Session): Promise<void> {

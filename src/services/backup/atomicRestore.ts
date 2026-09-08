@@ -61,6 +61,9 @@ export async function applyValidatedBackup(
     if (backup.hotspotPredictionAggregates.length) {
       await database.hotspotPredictionAggregates.bulkPut(backup.hotspotPredictionAggregates);
     }
+    if (backup.hotspotPredictionEvidence.length) {
+      await database.hotspotPredictionEvidence.bulkPut(backup.hotspotPredictionEvidence);
+    }
     const activeQuestions = backup.outstandingQuestions.filter(
       question => !RETIRED_QUESTION_RULE_IDS.has(question.ruleId),
     );

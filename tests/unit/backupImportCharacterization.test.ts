@@ -240,7 +240,7 @@ describe('backup import characterization', () => {
       backupVersion: 6,
       totals: expect.objectContaining({ imported: 1, damaged: 0 }),
     }));
-    expect(Object.keys(report.tables)).toHaveLength(22);
+    expect(Object.keys(report.tables)).toHaveLength(23);
     expect((await db.projects.toArray()).map(row => row.id)).toEqual(['live-project']);
     expect(await getSetting('lastRestoreReport', null)).toBeNull();
     expect(await stagingDatabaseNames()).toEqual([]);

@@ -76,7 +76,7 @@ export async function exportToCSV(): Promise<string> {
     "Weight (g)", "Width (mm)", "Decoration",
     "Target ID", "Depth (cm)", "Date Range",
     "Permission Name", "Permission Type", "Landowner Name", "Landowner Phone", "Landowner Email", "Landowner Address",
-    "Latitude", "Longitude", "GPS Accuracy (m)", "OS Grid Ref", "What3Words",
+    "Latitude", "Longitude", "GPS Accuracy (m)", "Location Fix At", "Location Method", "Location Frozen At", "OS Grid Ref", "What3Words",
     "Land Type", "Land Use", "Crop Type", "Is Stubble",
     "Date Observed", "Detectorist", "Insurance Provider", "Membership No", "Insurance Expiry", "Find Notes", "Permission Notes"
   ];
@@ -94,11 +94,12 @@ export async function exportToCSV(): Promise<string> {
     const lNotes = (l?.notes || "").replace(/\r?\n|\r/g, " ");
 
     return [
-      s.findCode, s.objectType, s.coinType ?? "", s.coinDenomination ?? "", s.period, s.material, s.completeness,
+      s.findCode, s.objectType, s.coinType ?? "", s.coinDenomination ?? "", s.period, s.material, s.completeness === 'Unassessed' ? 'Not assessed' : s.completeness,
       s.weightG ?? "", s.widthMm ?? "", s.decoration ?? "",
       s.targetId ?? "", s.depthCm ?? "", s.dateRange ?? "",
       l?.name ?? "", l?.type ?? "individual", l?.landownerName ?? "", l?.landownerPhone ?? "", l?.landownerEmail ?? "", l?.landownerAddress ?? "",
-      s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "", s.osGridRef ?? "", s.w3w ?? "",
+      s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
+      s.locationFixAt ?? "", s.locationMethod ?? "unknown", s.locationFrozenAt ?? "", s.osGridRef ?? "", s.w3w ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
       sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
       l?.collector ?? "", insuranceProvider, ncmdNumber, ncmdExpiry, sNotes, lNotes

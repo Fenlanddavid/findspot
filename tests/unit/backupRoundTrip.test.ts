@@ -81,6 +81,10 @@ describe('full backup IndexedDB boundary', () => {
     expect(await restored.finds.get('find-1')).toEqual(expect.objectContaining({
       objectType: 'Coin',
       period: 'Roman',
+      completeness: 'Unassessed',
+      locationFixAt: '2026-07-23T12:00:00.000Z',
+      locationFrozenAt: '2026-07-23T12:00:00.000Z',
+      locationMethod: 'live_gps',
       notes: 'Representative fidelity marker.',
     }));
     expect(await restored.permissions.get('permission-1')).toEqual(expect.objectContaining({

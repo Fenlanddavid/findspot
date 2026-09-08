@@ -6,6 +6,10 @@ import {
     predictionTrackCoverage,
     resolveHotspotPredictionOutcomes,
 } from '../../src/services/hotspotPredictionService';
+import {
+    deleteQuestionInvestigationNote,
+    saveQuestionInvestigationNote,
+} from '../../src/services/investigationMutations';
 
 const NOW = 1_800_000_000_000;
 
@@ -54,15 +58,21 @@ beforeEach(async () => {
     await db.open();
     await db.hotspotPredictions.clear();
     await db.hotspotPredictionAggregates.clear();
+    await db.hotspotPredictionEvidence.clear();
     await db.permissionSections.clear();
     await db.sessionCoverage.clear();
+    await db.outstandingQuestions.clear();
+    await db.questionNotes.clear();
 });
 
 afterEach(async () => {
     await db.hotspotPredictions.clear();
     await db.hotspotPredictionAggregates.clear();
+    await db.hotspotPredictionEvidence.clear();
     await db.permissionSections.clear();
     await db.sessionCoverage.clear();
+    await db.outstandingQuestions.clear();
+    await db.questionNotes.clear();
 });
 
 describe('hotspot prediction outcomes', () => {
@@ -72,13 +82,32 @@ describe('hotspot prediction outcomes', () => {
         expect((await db.hotspotPredictions.get('prediction-1'))?.outcome).toBe('unvisited');
     });
 
-    it('uses measured track coverage as searched-no-find evidence', async () => {
+    it('records measured track exposure as visited, not a negative result', async () => {
         const row = prediction();
         expect(predictionTrackCoverage(row, [crossingTrack()], [session])).toBeGreaterThan(0);
         await db.hotspotPredictions.put(row);
         const result = await resolveHotspotPredictionOutcomes([], [crossingTrack()], [session]);
-        expect(result.searchedNoFind).toBe(1);
-        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('searched_no_find');
+        expect(result.searchedNoFind).toBe(0);
+        expect(result.visitedTracked).toBe(1);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('visited_tracked');
+    });
+
+    it('does not interpolate prediction exposure across a recorded GPS gap', () => {
+        const track: Track = {
+            ...crossingTrack(),
+            points: [
+                { lat: 52, lon: -1.002, timestamp: NOW },
+                { lat: 52, lon: -0.998, timestamp: NOW + 2_000 },
+            ],
+            gaps: [{ start: NOW + 500, end: NOW + 1_500 }],
+        };
+        expect(predictionTrackCoverage(prediction(), [track], [session])).toBe(0);
+    });
+
+    it('allows a permission-scoped prediction to gain track evidence on a later session', () => {
+        const surfacedEarlier = prediction({ sessionId: 'session-original' });
+        expect(predictionTrackCoverage(surfacedEarlier, [crossingTrack()], [session]))
+            .toBeGreaterThan(0);
     });
 
     it('can scope review feedback resolution to the current permission', async () => {
@@ -106,9 +135,9 @@ describe('hotspot prediction outcomes', () => {
             'permission-1',
         );
 
-        expect(result.searchedNoFind).toBe(1);
+        expect(result.visitedTracked).toBe(1);
         expect((await db.hotspotPredictions.get('prediction-1'))?.outcome)
-            .toBe('searched_no_find');
+            .toBe('visited_tracked');
         expect((await db.hotspotPredictions.get('prediction-2'))?.outcome)
             .toBe('unvisited');
     });
@@ -145,7 +174,7 @@ describe('hotspot prediction outcomes', () => {
         }], [], [session]);
         expect(result.hits).toBe(1);
         expect(await db.hotspotPredictions.get(row.id)).toMatchObject({
-            outcome: 'hit',
+            outcome: 'find_recorded',
             matchedFindId: 'find-1',
             resolutionEvidence: 'find',
         });
@@ -155,11 +184,11 @@ describe('hotspot prediction outcomes', () => {
         await db.hotspotPredictions.bulkPut([
             prediction({ id: 'unvisited', surfacedAt: 1, outcome: 'unvisited' }),
             prediction({
-                id: 'searched', surfacedAt: 1, outcome: 'searched_no_find',
+                id: 'searched', surfacedAt: 1, outcome: 'search_reported',
                 resolutionEvidence: 'reported',
             }),
             prediction({
-                id: 'hit', surfacedAt: 1, outcome: 'hit',
+                id: 'hit', surfacedAt: 1, outcome: 'find_recorded',
                 resolutionEvidence: 'tracked',
             }),
         ]);
@@ -168,12 +197,142 @@ describe('hotspot prediction outcomes', () => {
         expect(await db.hotspotPredictions.count()).toBe(0);
         expect(await db.hotspotPredictionAggregates.get('engine-v1:Strong Signal')).toMatchObject({
             surfacedCount: 3,
-            searchedCount: 2,
-            hitCount: 1,
-            trackedSearchedCount: 1,
-            trackedHitCount: 1,
+            searchedCount: 1,
+            hitCount: 0,
+            trackedSearchedCount: 0,
+            trackedHitCount: 0,
             reportedSearchedCount: 1,
             reportedHitCount: 0,
         });
+    });
+
+    it('sweeps but excludes legacy inferred outcomes from calibration aggregates', async () => {
+        await db.hotspotPredictions.bulkPut([
+            prediction({ id: 'current', surfacedAt: 1, outcome: 'search_reported', resolutionEvidence: 'reported' }),
+            prediction({ id: 'legacy', surfacedAt: 1, outcome: 'visited_tracked', legacyOutcome: 'searched_no_find', resolutionEvidence: 'tracked' }),
+        ]);
+        expect(await aggregateAndSweepHotspotPredictions(NOW, 1_000)).toBe(2);
+        expect(await db.hotspotPredictionAggregates.get('engine-v1:Strong Signal')).toMatchObject({
+            surfacedCount: 1,
+            searchedCount: 1,
+            hitCount: 0,
+        });
+    });
+
+    it('re-evaluates a tracked visit when a later find is recorded and remains idempotent', async () => {
+        const row = prediction();
+        const find = {
+            id: 'later-find', permissionId: 'permission-1', sessionId: 'session-1',
+            lat: 52, lon: -1, createdAt: new Date(NOW + 10_000).toISOString(),
+        } as Parameters<typeof resolveHotspotPredictionOutcomes>[0][number];
+        await db.hotspotPredictions.put(row);
+        await resolveHotspotPredictionOutcomes([], [crossingTrack()], [session]);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('visited_tracked');
+
+        await resolveHotspotPredictionOutcomes([find], [crossingTrack()], [session]);
+        expect(await db.hotspotPredictions.get(row.id)).toMatchObject({
+            outcome: 'find_recorded', associatedFindIds: ['later-find'],
+        });
+        const evidenceUpdatedAt = (await db.hotspotPredictions.get(row.id))?.evidenceUpdatedAt;
+        const firstCount = await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).count();
+        await resolveHotspotPredictionOutcomes([find], [crossingTrack()], [session]);
+        expect(await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).count()).toBe(firstCount);
+        expect((await db.hotspotPredictions.get(row.id))?.evidenceUpdatedAt).toBe(evidenceUpdatedAt);
+    });
+
+    it('lets a reported search acquire a later find association without changing its interpretation label', async () => {
+        const row = prediction({
+            outcome: 'search_reported', resolutionEvidence: 'reported',
+            classification: 'Settlement Edge Candidate',
+        });
+        const find = {
+            id: 'post-report-find', permissionId: 'permission-1', sessionId: 'session-later',
+            lat: 52, lon: -1, createdAt: new Date(NOW + 10_000).toISOString(),
+        } as Parameters<typeof resolveHotspotPredictionOutcomes>[0][number];
+        await db.hotspotPredictions.put(row);
+
+        await resolveHotspotPredictionOutcomes([find], [], [session]);
+
+        expect(await db.hotspotPredictions.get(row.id)).toMatchObject({
+            outcome: 'find_recorded', associatedFindIds: ['post-report-find'],
+            classification: 'Settlement Edge Candidate',
+        });
+    });
+
+    it('preserves an explicit negative report when a later find changes the summary outcome', async () => {
+        const row = prediction();
+        await db.hotspotPredictions.put(row);
+        await db.outstandingQuestions.put({
+            id: 'question-1', permissionId: 'permission-1', ruleId: 'SETTLEMENT_QUIET',
+            anchor: { lat: 52, lon: -1 }, title: 'Test target', description: 'Test it',
+            category: 'CONTRADICTION', status: 'NEEDS_EVIDENCE', confidence: 0.5,
+            createdAt: NOW, updatedAt: NOW, generatedByScanId: 'scan',
+            supportingEvidence: [], contradictingEvidence: [],
+        });
+        await db.questionNotes.put({
+            id: 'negative-note', questionId: 'question-1', author: 'user',
+            type: 'searched_nothing', sessionId: 'session-1', createdAt: NOW + 2_000,
+        });
+        await resolveHotspotPredictionOutcomes([], [], [session]);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('no_relevant_find_reported');
+
+        const find = {
+            id: 'later-find', permissionId: 'permission-1', sessionId: 'session-1',
+            lat: 52, lon: -1, createdAt: new Date(NOW + 10_000).toISOString(),
+        } as Parameters<typeof resolveHotspotPredictionOutcomes>[0][number];
+        await resolveHotspotPredictionOutcomes([find], [], [session]);
+        const evidence = await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).toArray();
+        expect(evidence.map(item => item.kind).sort()).toEqual(['explicit_negative', 'find_association']);
+        expect(await db.hotspotPredictions.get(row.id)).toMatchObject({
+            outcome: 'find_recorded',
+            outcomeHistory: [
+                { outcome: 'no_relevant_find_reported', at: expect.any(Number) },
+                { outcome: 'find_recorded', at: expect.any(Number) },
+            ],
+        });
+    });
+
+    it('retracts a stale find association when the find is deleted or relocated', async () => {
+        const row = prediction();
+        const find = {
+            id: 'movable-find', permissionId: 'permission-1', lat: 52, lon: -1,
+            createdAt: new Date(NOW + 10_000).toISOString(),
+        } as Parameters<typeof resolveHotspotPredictionOutcomes>[0][number];
+        await db.hotspotPredictions.put(row);
+        await resolveHotspotPredictionOutcomes([find], [], [session]);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('find_recorded');
+        await resolveHotspotPredictionOutcomes([{ ...find, lon: 1 }], [], [session]);
+        expect(await db.hotspotPredictions.get(row.id)).toMatchObject({ outcome: 'unvisited', associatedFindIds: [] });
+        expect(await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).toArray())
+            .toEqual([expect.objectContaining({ kind: 'find_association', retractedAt: expect.any(Number) })]);
+    });
+
+    it('retracts an explicit negative when its user report is edited or deleted', async () => {
+        const row = prediction();
+        await db.hotspotPredictions.put(row);
+        await db.outstandingQuestions.put({
+            id: 'question-1', permissionId: 'permission-1', ruleId: 'SETTLEMENT_QUIET',
+            anchor: { lat: 52, lon: -1 }, title: 'Test target', description: 'Test it',
+            category: 'CONTRADICTION', status: 'NEEDS_EVIDENCE', confidence: 0.5,
+            createdAt: NOW, updatedAt: NOW, generatedByScanId: 'scan',
+            supportingEvidence: [], contradictingEvidence: [],
+        });
+        const report = {
+            id: 'negative-note', questionId: 'question-1', author: 'user' as const,
+            type: 'searched_nothing' as const, createdAt: NOW + 2_000,
+        };
+        await saveQuestionInvestigationNote(report);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('no_relevant_find_reported');
+
+        await saveQuestionInvestigationNote({ ...report, type: 'poor_conditions' });
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('unvisited');
+        expect(await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).toArray())
+            .toEqual([expect.objectContaining({ kind: 'explicit_negative', retractedAt: expect.any(Number) })]);
+
+        await saveQuestionInvestigationNote(report);
+        await deleteQuestionInvestigationNote(report.id);
+        expect((await db.hotspotPredictions.get(row.id))?.outcome).toBe('unvisited');
+        expect(await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).toArray())
+            .toEqual([expect.objectContaining({ kind: 'explicit_negative', retractedAt: expect.any(Number) })]);
     });
 });

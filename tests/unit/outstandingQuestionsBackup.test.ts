@@ -35,6 +35,7 @@ const { tables, db } = vi.hoisted(() => {
     settings: table(), importedPackages: table(), savedPoints: table(),
     undugSignals: table(), findHotspotSignals: table(),
     hotspotPredictions: table(), hotspotPredictionAggregates: table(),
+    hotspotPredictionEvidence: table(),
     outstandingQuestions: table(), questionNotes: table(),
     permissionSections: table(), sessionCoverage: table(),
     companionRecordings: table(), companionImports: table(),

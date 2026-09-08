@@ -29,6 +29,7 @@ describe('current FindSpot persistence schema', () => {
         "geocodeCache",
         "geologyContext",
         "hotspotPredictionAggregates",
+        "hotspotPredictionEvidence",
         "hotspotPredictions",
         "importedPackages",
         "landscapeInterpretations",

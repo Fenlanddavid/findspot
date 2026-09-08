@@ -243,7 +243,7 @@ describe('coverage prediction resolution', () => {
         trackedCoverageByPrediction: new Map(),
       });
       expect(decisions).toEqual([expect.objectContaining({
-        outcome: 'hit',
+        outcome: 'find_recorded',
         matchedFindId: find.id,
       })]);
     }
@@ -269,7 +269,7 @@ describe('coverage prediction resolution', () => {
       trackedCoverageByPrediction: new Map(),
     });
     expect(decisions).toEqual([expect.objectContaining({
-      outcome: 'searched_no_find',
+      outcome: 'search_reported',
       evidence: 'reported',
       reportedConfirmationCount: 1,
     })]);
@@ -311,7 +311,7 @@ describe('coverage prediction resolution', () => {
       observations: [...duplicateSession, observation('reported', 'session-3')],
       trackedCoverageByPrediction: new Map(),
     })).toEqual([expect.objectContaining({
-      outcome: 'searched_no_find',
+      outcome: 'search_reported',
       reportedConfirmationCount: REPORTED_LARGE_SECTION_CONFIRMATIONS,
     })]);
   });
@@ -353,10 +353,12 @@ describe('coverage prediction resolution', () => {
           .map(value => value.session));
         const required = largeSection ? REPORTED_LARGE_SECTION_CONFIRMATIONS : 1;
         const expectedOutcome = matchedFind
-          ? 'hit'
-          : tracked || reportedSessions.size >= required
-            ? 'searched_no_find'
-            : null;
+          ? 'find_recorded'
+          : tracked
+            ? reportedSessions.size > 0 ? 'search_reported' : 'visited_tracked'
+            : reportedSessions.size >= required
+              ? 'search_reported'
+              : null;
         const finds = matchedFind ? [{
           id: 'find-1',
           permissionId: 'permission-1',

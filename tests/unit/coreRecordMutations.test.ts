@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   db,
   type Find,
+  type HotspotPrediction,
   type Media,
   type Permission,
   type Session,
@@ -13,6 +14,7 @@ import {
 import {
   deleteFindAndReopenSignal,
   saveCompletedFind,
+  saveQuickFind,
 } from "../../src/services/findMutations";
 import { keepClubDayAsPersonalRecord } from "../../src/services/permissionMutations";
 import { deleteSessionCascade } from "../../src/services/sessionMutations";
@@ -108,6 +110,8 @@ async function clearCoreTables(): Promise<void> {
     db.tracks.clear(),
     db.undugSignals.clear(),
     db.importedPackages.clear(),
+    db.hotspotPredictions.clear(),
+    db.hotspotPredictionEvidence.clear(),
   ]);
 }
 
@@ -117,6 +121,43 @@ beforeEach(async () => {
 });
 
 afterEach(clearCoreTables);
+
+describe('quick-find atomicity', () => {
+  it('rolls back the find when attachment storage fails', async () => {
+    await db.media.add(media('duplicate-media', 'other-find'));
+
+    await expect(saveQuickFind(
+      find('atomic-find', 'session-1', { completeness: 'Unassessed' }),
+      media('duplicate-media', 'atomic-find'),
+    )).rejects.toBeDefined();
+
+    expect(await db.finds.get('atomic-find')).toBeUndefined();
+    expect(await db.media.where('findId').equals('atomic-find').count()).toBe(0);
+  });
+
+  it('stores unassessed completeness and location provenance with its photo', async () => {
+    await saveQuickFind(
+      find('atomic-find', 'session-1', {
+        completeness: 'Unassessed',
+        lat: 52.2053,
+        lon: 0.1218,
+        gpsAccuracyM: 7,
+        locationFixAt: NOW,
+        locationMethod: 'live_gps',
+        locationFrozenAt: NOW,
+      }),
+      media('atomic-photo', 'atomic-find'),
+    );
+
+    expect(await db.finds.get('atomic-find')).toMatchObject({
+      completeness: 'Unassessed',
+      locationMethod: 'live_gps',
+      locationFixAt: NOW,
+      locationFrozenAt: NOW,
+    });
+    expect(await db.media.where('findId').equals('atomic-find').count()).toBe(1);
+  });
+});
 
 describe("core record mutation services", () => {
   it("deletes one session aggregate without touching another session", async () => {
@@ -176,6 +217,36 @@ describe("core record mutation services", () => {
     expect(await db.tracks.toCollection().primaryKeys()).toEqual(["track-kept"]);
     expect(await db.sessions.get("session-kept")).toBeDefined();
     expect(await db.finds.get("find-kept")).toBeDefined();
+  });
+
+  it('retracts prediction evidence when its source session is deleted', async () => {
+    const row = {
+      id: 'prediction-session', engineVersion: 'engine-v1', confidence: 'Strong Signal',
+      surfacedAt: Date.parse(NOW) - 1_000, permissionId: 'permission-1', sessionId: null,
+      center: [-1, 52] as [number, number],
+      bounds: [[-1.0005, 51.9995], [-0.9995, 52.0005]] as [[number, number], [number, number]],
+      geohash6: 'gcpuuz', outcome: 'find_recorded', matchedFindId: 'find-target',
+      associatedFindIds: ['find-target'], resolutionEvidence: 'find',
+    } satisfies HotspotPrediction;
+    await db.sessions.put(session('session-target'));
+    await db.finds.put(find('find-target', 'session-target', {
+      lat: 52, lon: -1, foundAt: NOW,
+    }));
+    await db.hotspotPredictions.put(row);
+    await db.hotspotPredictionEvidence.put({
+      id: `${row.id}:find_association:find-target`, predictionId: row.id,
+      kind: 'find_association', sourceRecordId: 'find-target',
+      permissionId: 'permission-1', sessionId: 'session-target',
+      observedAt: Date.parse(NOW), createdAt: NOW,
+    });
+
+    await deleteSessionCascade('session-target');
+
+    expect(await db.hotspotPredictions.get(row.id)).toMatchObject({
+      outcome: 'unvisited', associatedFindIds: [],
+    });
+    expect(await db.hotspotPredictionEvidence.where('predictionId').equals(row.id).toArray())
+      .toEqual([expect.objectContaining({ kind: 'find_association', retractedAt: expect.any(Number) })]);
   });
 
   it("resolves and reopens an undug signal across find save and deletion", async () => {

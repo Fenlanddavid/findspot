@@ -246,7 +246,7 @@ export function validatePersistedBackupTables(
   for (const table of [
     'projects', 'permissions', 'fields', 'sessions', 'finds', 'significantFinds',
     'tracks', 'media', 'importedPackages', 'savedPoints', 'undugSignals',
-    'outstandingQuestions', 'questionNotes', 'permissionSections', 'sessionCoverage',
+    'outstandingQuestions', 'questionNotes', 'permissionSections', 'sessionCoverage', 'hotspotPredictionEvidence',
     'companionRecordings', 'companionImports', 'surfaceObservations',
   ] as const) {
     assertRowsHaveId(backup[table], table);
@@ -288,11 +288,24 @@ export function validatePersistedBackupTables(
     }
   });
   backup.finds.forEach((find, index) => {
+    const invalid = (field: string) =>
+      new Error(`Invalid format: finds[${index}] has an invalid ${field}`);
     if (!permissionIds.has(find.permissionId)) {
       throw new Error(`Invalid format: finds[${index}] references an unknown permission`);
     }
     if (find.sessionId && !sessionIds.has(find.sessionId)) {
       throw new Error(`Invalid format: finds[${index}] references an unknown session`);
+    }
+    if (find.completeness !== undefined
+        && !new Set(['Unassessed', 'Complete', 'Incomplete', 'Fragment']).has(find.completeness as string)) {
+      throw invalid('completeness');
+    }
+    if (find.locationMethod !== undefined
+        && !new Set(['live_gps', 'session_track', 'map_selected', 'imported', 'other']).has(find.locationMethod as string)) {
+      throw invalid('locationMethod');
+    }
+    for (const field of ['locationFixAt', 'locationFrozenAt'] as const) {
+      if (find[field] !== undefined && !isIsoDateString(find[field])) throw invalid(field);
     }
   });
   backup.surfaceObservations.forEach((observation, index) => {
@@ -512,7 +525,10 @@ export function validatePersistedBackupTables(
     if (typeof prediction.id !== 'string' || !prediction.id.trim()) throw invalid('id');
     if (typeof prediction.engineVersion !== 'string' || !prediction.engineVersion.trim()) throw invalid('engineVersion');
     if (!Number.isFinite(prediction.surfacedAt)) throw invalid('surfacedAt');
-    if (!['hit', 'searched_no_find', 'unvisited'].includes(prediction.outcome as string)) throw invalid('outcome');
+    if (![
+      'hit', 'searched_no_find', 'unvisited', 'visited_tracked', 'search_reported',
+      'no_relevant_find_reported', 'find_recorded',
+    ].includes(prediction.outcome as string)) throw invalid('outcome');
     if (!Array.isArray(prediction.center) || prediction.center.length !== 2 ||
         prediction.center.some((value: unknown) => !Number.isFinite(value))) throw invalid('center');
     if (!Array.isArray(prediction.bounds) || prediction.bounds.length !== 2) throw invalid('bounds');
@@ -535,6 +551,20 @@ export function validatePersistedBackupTables(
           (!Number.isInteger(aggregate[field]) || (aggregate[field] as number) < 0)) {
         throw invalid(field);
       }
+    }
+  });
+  const predictionIds = new Set(backup.hotspotPredictions.map(row => row.id));
+  backup.hotspotPredictionEvidence.forEach((evidence, index) => {
+    const invalid = (field: string) => new Error(`Invalid format: hotspotPredictionEvidence[${index}] has an invalid ${field}`);
+    if (!predictionIds.has(evidence.predictionId)) throw invalid('predictionId');
+    if (!['tracked_visit', 'search_report', 'explicit_negative', 'find_association'].includes(evidence.kind as string)) throw invalid('kind');
+    if (typeof evidence.sourceRecordId !== 'string' || !evidence.sourceRecordId.trim()) throw invalid('sourceRecordId');
+    if (!Number.isFinite(evidence.observedAt)) throw invalid('observedAt');
+    if (!isIsoDateString(evidence.createdAt)) throw invalid('createdAt');
+    if (evidence.retractedAt !== undefined && !Number.isFinite(evidence.retractedAt)) throw invalid('retractedAt');
+    if (evidence.coverageFraction !== undefined &&
+        (!Number.isFinite(evidence.coverageFraction) || (evidence.coverageFraction as number) < 0 || (evidence.coverageFraction as number) > 1)) {
+      throw invalid('coverageFraction');
     }
   });
   backup.outstandingQuestions.forEach((question, index) => {
@@ -659,6 +689,8 @@ export function validatePersistedBackupTables(
     hotspotPredictions: backup.hotspotPredictions as ValidatedBackupData['hotspotPredictions'],
     hotspotPredictionAggregates:
       backup.hotspotPredictionAggregates as ValidatedBackupData['hotspotPredictionAggregates'],
+    hotspotPredictionEvidence:
+      backup.hotspotPredictionEvidence as ValidatedBackupData['hotspotPredictionEvidence'],
     outstandingQuestions:
       backup.outstandingQuestions as unknown as ValidatedBackupData['outstandingQuestions'],
     questionNotes: backup.questionNotes as unknown as ValidatedBackupData['questionNotes'],

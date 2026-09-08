@@ -45,7 +45,8 @@ export const BACKUP_FIXTURE_FACTORIES = {
     objectType: 'Coin', lat: 52.2053, lon: 0.1218, gpsAccuracyM: 4,
     osGridRef: 'TL 447 588', w3w: '', period: 'Roman', material: 'Copper alloy',
     weightG: 4.2, widthMm: 18, heightMm: 18, depthMm: 2,
-    decoration: '', completeness: 'Complete', findContext: 'Ploughsoil',
+    decoration: '', completeness: 'Unassessed', findContext: 'Ploughsoil',
+    locationFixAt: ISO, locationFrozenAt: ISO, locationMethod: 'live_gps',
     storageLocation: 'Finds tray A', notes: 'Representative fidelity marker.',
     createdAt: ISO, updatedAt: ISO,
   }),
@@ -104,6 +105,12 @@ export const BACKUP_FIXTURE_FACTORIES = {
     id: 'fixture-engine-v1:Developing Signal', engineVersion: 'fixture-engine-v1',
     confidence: 'Developing Signal', surfacedCount: 1, searchedCount: 1,
     hitCount: 1, updatedAt: Date.parse(ISO),
+  }),
+  hotspotPredictionEvidence: () => ({
+    id: 'prediction-1:find_association:find-1', predictionId: 'prediction-1',
+    kind: 'find_association', sourceRecordId: 'find-1',
+    permissionId: 'permission-1', sessionId: 'session-1',
+    observedAt: Date.parse(ISO), createdAt: ISO,
   }),
   outstandingQuestions: () => ({
     id: 'question-1', permissionId: 'permission-1', ruleId: 'MOVEMENT_NO_FINDS',

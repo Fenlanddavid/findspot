@@ -6,6 +6,7 @@ import type {
   FindHotspotSignal,
   HotspotPrediction,
   HotspotPredictionAggregate,
+  HotspotPredictionEvidence,
   ImportedPackage,
   Media,
   OutstandingQuestion,
@@ -54,6 +55,7 @@ export type ValidatedBackupTables = {
   findHotspotSignals: FindHotspotSignal[];
   hotspotPredictions: HotspotPrediction[];
   hotspotPredictionAggregates: HotspotPredictionAggregate[];
+  hotspotPredictionEvidence: HotspotPredictionEvidence[];
   outstandingQuestions: OutstandingQuestion[];
   questionNotes: QuestionNote[];
   permissionSections: PermissionSection[];

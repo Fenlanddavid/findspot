@@ -262,6 +262,9 @@ export type SignificantFind = {
   updatedAt: string;
 };
 
+export type FindCompleteness = "Unassessed" | "Complete" | "Incomplete" | "Fragment";
+export type FindLocationMethod = "live_gps" | "session_track" | "map_selected" | "imported" | "other";
+
 export type Find = {
   id: string;
   projectId: string;
@@ -286,6 +289,12 @@ export type Find = {
   lat: number | null;
   lon: number | null;
   gpsAccuracyM: number | null;
+  /** ISO timestamp supplied by the location provider, not the later record save time. */
+  locationFixAt?: string;
+  /** How the stored coordinates were chosen. Absent on legacy records. */
+  locationMethod?: FindLocationMethod;
+  /** ISO timestamp at which the recorder accepted/froze this position. */
+  locationFrozenAt?: string;
   osGridRef: string;
   w3w: string;
 
@@ -326,7 +335,7 @@ export type Find = {
   depthMm: number | null;
 
   decoration: string;
-  completeness: "Complete" | "Incomplete" | "Fragment";
+  completeness: FindCompleteness;
   findContext: string;
 
   detector?: string;
@@ -504,7 +513,14 @@ export type FindHotspotSignal = {
     updatedAt:                  number;              // Unix ms — for TTL sweep
 };
 
-export type HotspotPredictionOutcome = 'hit' | 'searched_no_find' | 'unvisited';
+export type HotspotPredictionOutcome =
+  | 'unvisited'
+  | 'visited_tracked'
+  | 'search_reported'
+  | 'no_relevant_find_reported'
+  | 'find_recorded'
+  | 'hit'
+  | 'searched_no_find';
 
 /** Raw surfaced hotspot needed to measure the engine's denominator honestly. */
 export type HotspotPrediction = {
@@ -519,11 +535,36 @@ export type HotspotPrediction = {
   bounds: [[number, number], [number, number]];
   geohash6: string;
   outcome: HotspotPredictionOutcome;
+  legacyOutcome?: 'hit' | 'searched_no_find';
   searchedCoverage?: number;
   matchedFindId?: string;
   resolvedAt?: number;
   resolutionEvidence?: 'find' | 'tracked' | 'reported' | 'mixed';
   reportedConfirmationCount?: number;
+  associatedFindIds?: string[];
+  evidenceUpdatedAt?: number;
+  outcomeHistory?: Array<{ outcome: Exclude<HotspotPredictionOutcome, 'hit' | 'searched_no_find'>; at: number }>;
+};
+
+export type HotspotPredictionEvidenceKind =
+  | 'tracked_visit'
+  | 'search_report'
+  | 'explicit_negative'
+  | 'find_association';
+
+/** Links from a surfaced prediction to user/field evidence, including retracted history. */
+export type HotspotPredictionEvidence = {
+  id: string;
+  predictionId: string;
+  kind: HotspotPredictionEvidenceKind;
+  sourceRecordId: string;
+  observedAt: number;
+  sessionId?: string;
+  permissionId?: string;
+  coverageFraction?: number;
+  createdAt: string;
+  /** Set when the source is edited, deleted or relocated out of scope. */
+  retractedAt?: number;
 };
 
 /** Long-lived evidence retained after raw prediction records expire. */
@@ -733,7 +774,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 46;
+export const FINDSPOT_CURRENT_VERSION = 49;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -778,6 +819,7 @@ export class FindSpotDB extends Dexie {
   findHotspotSignals!: Table<FindHotspotSignal, string>;
   hotspotPredictions!: Table<HotspotPrediction, string>;
   hotspotPredictionAggregates!: Table<HotspotPredictionAggregate, string>;
+  hotspotPredictionEvidence!: Table<HotspotPredictionEvidence, string>;
   permissionSections!: Table<PermissionSection, string>;
   sessionCoverage!: Table<SessionCoverageObservation, string>;
   companionRecordings!: Table<CompanionRecordingRecord, string>;
@@ -1134,6 +1176,34 @@ export class FindSpotDB extends Dexie {
     // property on each permission while removing the ineffective index.
     declareFindSpotVersion(46).stores({
       permissions: 'id, projectId, name, type, permissionGranted, validFrom, isPinned, createdAt',
+    });
+
+    // v47: find recording-integrity metadata. All fields are additive and
+    // optional so legacy records remain honestly unknown rather than inferred.
+    declareFindSpotVersion(47).stores({});
+
+    // v48: split passive visit, reported search, explicit negative, and nearby
+    // recovery semantics. Preserve legacy inferred values for audit but exclude
+    // them from new calibration.
+    declareFindSpotVersion(48).stores({}).upgrade(async tx => {
+      await tx.table('hotspotPredictions').toCollection().modify(prediction => {
+        if (prediction.outcome === 'hit') {
+          prediction.legacyOutcome = 'hit';
+          prediction.outcome = 'find_recorded';
+        } else if (prediction.outcome === 'searched_no_find') {
+          prediction.legacyOutcome = 'searched_no_find';
+          prediction.outcome = prediction.resolutionEvidence === 'reported'
+            ? 'search_reported'
+            : 'visited_tracked';
+        }
+      });
+    });
+
+    // v49: additive evidence ledger for prediction lifecycle reconciliation.
+    // Existing summary rows remain intact; future refreshes populate links from
+    // current tracks, reports, explicit notes and finds without fabricating history.
+    declareFindSpotVersion(49).stores({
+      hotspotPredictionEvidence: 'id, predictionId, kind, sourceRecordId, observedAt',
     });
 
     // Production and migration fixtures both replay this exact registry.
