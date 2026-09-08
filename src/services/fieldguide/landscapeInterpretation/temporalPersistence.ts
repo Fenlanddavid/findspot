@@ -16,7 +16,9 @@ export function computeTemporalPersistence(
     const activePeriods = periodAggregates.filter(a => a.certaintyWeightedCount >= 0.5).length;
 
     let label: TemporalPersistenceLabel;
-    if (activePeriods >= 5) {
+    if (activePeriods === 0) {
+        label = 'insufficient_chronological_evidence';
+    } else if (activePeriods >= 5) {
         label = 'persistent_strategic_focus';
     } else if (activePeriods >= 3) {
         label = 'persistent';

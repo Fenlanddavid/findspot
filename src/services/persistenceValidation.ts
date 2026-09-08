@@ -16,6 +16,32 @@ import type { LandscapeInterpretation } from '../types/landscapeInterpretation';
 
 const finite = z.number().finite();
 const lonLat = z.tuple([finite, finite]);
+const evidenceProvenanceSchema = z.object({
+  observationId: z.string().min(1),
+  requestedSource: z.string().min(1),
+  deliveredSource: z.string().min(1),
+  datasetIdentity: z.string().min(1),
+  parentSourceIdentity: z.string().min(1),
+  sourceLineageIdentity: z.string().min(1).optional(),
+  lineageConfidence: z.enum(['verified', 'unknown']).optional(),
+  contentIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  decodedContentIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  deliveredDataType: z.enum([
+    'rendered_hillshade', 'rendered_relief', 'rendered_slope',
+    'rgb_imagery', 'elevation_dem', 'historic_record',
+  ]),
+  resolutionM: finite.positive().optional(),
+  sourceResolutionM: finite.positive().optional(),
+  horizontalCrs: z.string().optional(),
+  verticalUnits: z.literal('metres').optional(),
+  verticalDatum: z.string().min(1).optional(),
+  acquisitionDate: z.string().optional(),
+  retrievalDate: z.string().min(1),
+  fallbackStatus: z.enum(['requested', 'fallback', 'offline_cache']),
+  coverageStatus: z.enum(['complete', 'partial', 'unknown']).optional(),
+  limitations: z.array(z.string().min(1)).optional(),
+  tile: z.object({ z: finite.int(), x: finite.int(), y: finite.int() }).optional(),
+});
 
 const clusterSchema = z.object({
   id: z.string().min(1),
@@ -33,12 +59,41 @@ const clusterSchema = z.object({
   center: lonLat,
   source: z.enum([
     'terrain', 'satellite', 'historic', 'terrain_global', 'slope',
-    'hydrology', 'satellite_spring', 'satellite_summer',
+    'hydrology', 'satellite_spring', 'satellite_summer', 'elevation_dem',
   ]),
   sources: z.array(z.enum([
     'terrain', 'satellite', 'historic', 'terrain_global', 'slope',
-    'hydrology', 'satellite_spring', 'satellite_summer',
+    'hydrology', 'satellite_spring', 'satellite_summer', 'elevation_dem',
   ])),
+  provenance: z.array(evidenceProvenanceSchema).optional(),
+  observationKind: z.enum(['image_anomaly', 'elevation_measurement', 'historic_record']).optional(),
+  terrainMeasured: z.boolean().optional(),
+  elevationM: finite.optional(),
+  slopePercent: finite.nonnegative().optional(),
+  aspect: finite.min(0).max(360).optional(),
+  relativeReliefM: finite.optional(),
+  relativeReliefNorm: finite.optional(),
+  withinScanMergeCount: finite.int().nonnegative().optional(),
+  terrainMeasurementSupport: z.object({
+    role: z.enum(['feature_location', 'feature_footprint_summary']),
+    method: z.enum(['direct_sample', 'bilinear_interpolation', 'footprint_summary']),
+    coordinate: lonLat,
+    supportCoordinates: z.array(lonLat).min(1),
+    // Optional only for backwards-compatible validation of pre-v4 cached
+    // records. New derived measurements always write complete support lineage;
+    // the engine-version boundary prevents old records from being rescored.
+    supportSamples: z.array(z.object({
+      coordinate: lonLat,
+      weight: finite.positive().max(1),
+      provenance: z.array(evidenceProvenanceSchema).min(1),
+    })).min(1).optional(),
+    distanceFromFeatureM: finite.nonnegative(),
+    maxSupportDistanceM: finite.nonnegative(),
+    analysisWindowRadiusM: finite.positive(),
+    outputPixelSpacingM: finite.positive(),
+    sourceResolutionM: finite.positive().nullable(),
+    limitations: z.array(z.string().min(1)),
+  }).optional(),
 }).passthrough();
 
 const modernWaySchema = z.object({

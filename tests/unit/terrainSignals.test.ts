@@ -62,10 +62,10 @@ describe('deriveTerrainSignals — fallback path (no measured terrain)', () => {
         expect(out.terrainMeasured).toBe(false);
     });
 
-    it('fallback relativeReliefNorm and slopeGradient are 0 (not proxy-fabricated)', () => {
+    it('keeps fallback relative relief and gradient unknown', () => {
         const out = deriveTerrainSignals([c({ relativeElevation: 'Ridge' })], null);
-        expect(out.relativeReliefNorm).toBe(0);
-        expect(out.slopeGradient).toBe(0);
+        expect(out.relativeReliefNorm).toBeNull();
+        expect(out.slopeGradient).toBeNull();
     });
 
     it('empty cluster list returns terrainMeasured:false + proxy defaults', () => {
@@ -78,76 +78,69 @@ describe('deriveTerrainSignals — fallback path (no measured terrain)', () => {
     });
 });
 
-// ─── Proxy values ─────────────────────────────────────────────────────────────
+// ─── Unknown proxy values ─────────────────────────────────────────────────────
 
-describe('deriveTerrainProxy — categorical bands', () => {
-    it('Ridge → elevationM=18, slopePercent=3', () => {
-        const p = deriveTerrainProxy([c({ relativeElevation: 'Ridge' })], null);
-        expect(p.elevationM).toBe(18);
-        expect(p.slopePercent).toBe(3);
-    });
-
-    it('Hollow → elevationM=-2', () => {
-        const p = deriveTerrainProxy([c({ relativeElevation: 'Hollow' })], null);
-        expect(p.elevationM).toBe(-2);
-    });
-
-    it('Slope → elevationM=6, slopePercent=6', () => {
-        const p = deriveTerrainProxy([c({ relativeElevation: 'Slope', sources: ['slope'] })], null);
-        expect(p.elevationM).toBe(6);
-        expect(p.slopePercent).toBe(6);
-    });
-
-    it('Flat → elevationM=0, slopePercent=0', () => {
-        const p = deriveTerrainProxy([c({ relativeElevation: 'Flat' })], null);
-        expect(p.elevationM).toBe(0);
-        expect(p.slopePercent).toBe(0);
+describe('deriveTerrainProxy — image morphology is not physical terrain', () => {
+    it.each(['Ridge', 'Hollow', 'Slope', 'Flat'] as const)('keeps %s physical values unknown', relativeElevation => {
+        const p = deriveTerrainProxy([c({ relativeElevation })], null);
+        expect(p.elevationM).toBeNull();
+        expect(p.slopePercent).toBeNull();
+        expect(p.aspectDegrees).toBeNull();
     });
 });
 
 // ─── Measured path ────────────────────────────────────────────────────────────
 
 describe('deriveTerrainSignals — measured path', () => {
-    it('flags terrainMeasured:true when slopeGradient is present', () => {
-        const out = deriveTerrainSignals([c({ slopeGradient: 0.10 })], null);
-        expect(out.terrainMeasured).toBe(true);
+    it('keeps opposing aspects unknown instead of choosing an arbitrary direction', () => {
+        const out = deriveTerrainSignals([
+            c({ id: 'north', terrainMeasured: true, elevationM: 10, slopePercent: 5, aspect: 0 }),
+            c({ id: 'south', terrainMeasured: true, elevationM: 10, slopePercent: 5, aspect: 180 }),
+        ], null);
+        expect(out.aspectDegrees).toBeNull();
     });
 
-    it('flags terrainMeasured:true when relativeReliefNorm is present', () => {
-        const out = deriveTerrainSignals([c({ relativeReliefNorm: 0.05 })], null);
+    it('does not trust a numeric field without the explicit measurement flag', () => {
+        const out = deriveTerrainSignals([c({ slopeGradient: 0.10 })], null);
+        expect(out.terrainMeasured).toBe(false);
+    });
+
+    it('trusts physical values only with terrainMeasured=true', () => {
+        const out = deriveTerrainSignals([c({ terrainMeasured: true, relativeReliefNorm: 0.05, elevationM: 20, slopePercent: 4 })], null);
         expect(out.terrainMeasured).toBe(true);
     });
 
     it('averages slopeGradient and relativeReliefNorm across measured clusters', () => {
         const clusters = [
-            c({ id: 'a', slopeGradient: 0.10, relativeReliefNorm: 0.30, aspect: 0   }),
-            c({ id: 'b', slopeGradient: 0.30, relativeReliefNorm: 0.10, aspect: 90  }),
+            c({ id: 'a', terrainMeasured: true, slopeGradient: 0.10, relativeReliefNorm: 0.30, elevationM: 10, slopePercent: 5, aspect: 0 }),
+            c({ id: 'b', terrainMeasured: true, slopeGradient: 0.30, relativeReliefNorm: 0.10, elevationM: 20, slopePercent: 7, aspect: 90 }),
         ];
         const out = deriveTerrainSignals(clusters, null);
         expect(out.terrainMeasured).toBe(true);
         expect(out.slopeGradient).toBeCloseTo(0.20, 5);      // mean(0.10, 0.30)
         expect(out.relativeReliefNorm).toBeCloseTo(0.20, 5); // mean(0.30, 0.10)
-        expect(out.slopePercent).toBe(0);                    // legacy proxy, not normalised gradient × 100
+        expect(out.slopePercent).toBe(6);
+        expect(out.elevationM).toBe(15);
     });
 
-    it('keeps legacy slopePercent on the categorical proxy path', () => {
+    it('does not fabricate slope percent from an image gradient', () => {
         const out = deriveTerrainSignals([
             c({ slopeGradient: 0.155, relativeElevation: 'Slope', sources: ['slope'] }),
         ], null);
-        expect(out.slopeGradient).toBeCloseTo(0.155, 5);
-        expect(out.slopePercent).toBe(6);
+        expect(out.slopeGradient).toBeNull();
+        expect(out.slopePercent).toBeNull();
     });
 
-    it('keeps legacy elevationM on the categorical proxy path', () => {
+    it('does not fabricate elevation from a categorical ridge label', () => {
         const out = deriveTerrainSignals([
             c({ slopeGradient: 0.9, relativeReliefNorm: 0.9, relativeElevation: 'Ridge' }),
         ], null);
-        expect(out.elevationM).toBe(18);
+        expect(out.elevationM).toBeNull();
     });
 
     it('uses only the measured subset when clusters are mixed', () => {
         const clusters = [
-            c({ id: 'm', slopeGradient: 0.40, relativeReliefNorm: 0.40 }),
+            c({ id: 'm', terrainMeasured: true, slopeGradient: 0.40, relativeReliefNorm: 0.40, elevationM: 8, slopePercent: 3 }),
             c({ id: 'u', relativeElevation: 'Flat' }), // no measured fields → excluded
         ];
         const out = deriveTerrainSignals(clusters, null);
@@ -162,8 +155,8 @@ describe('deriveTerrainSignals — measured path', () => {
 describe('deriveTerrainSignals — primaryHotspot member scoping', () => {
     it('restricts to hotspot member clusters, ignoring non-members', () => {
         const clusters = [
-            c({ id: 'in',  slopeGradient: 0.50, relativeReliefNorm: 0.50 }),
-            c({ id: 'out', slopeGradient: 0.00, relativeReliefNorm: 0.00 }),
+            c({ id: 'in', terrainMeasured: true, slopeGradient: 0.50, relativeReliefNorm: 0.50, elevationM: 4, slopePercent: 2 }),
+            c({ id: 'out', terrainMeasured: true, slopeGradient: 0.00, relativeReliefNorm: 0.00, elevationM: 4, slopePercent: 2 }),
         ];
         // Only 'in' is a member
         const hotspot = { memberIds: ['in'] } as any;
@@ -174,21 +167,21 @@ describe('deriveTerrainSignals — primaryHotspot member scoping', () => {
 
     it('uses all clusters when hotspot has no members (empty memberIds)', () => {
         const clusters = [
-            c({ id: 'a', slopeGradient: 0.20 }),
-            c({ id: 'b', slopeGradient: 0.40 }),
+            c({ id: 'a', terrainMeasured: true, slopeGradient: 0.20, elevationM: 4, slopePercent: 2 }),
+            c({ id: 'b', terrainMeasured: true, slopeGradient: 0.40, elevationM: 4, slopePercent: 2 }),
         ];
         const hotspot = { memberIds: [] } as any;
         const out = deriveTerrainSignals(clusters, hotspot);
         expect(out.slopeGradient).toBeCloseTo(0.30, 5); // mean of both
     });
 
-    it('proxy scoping also restricts to hotspot members', () => {
+    it('proxy scoping still preserves physical unknowns', () => {
         const clusters = [
             c({ id: 'in',  relativeElevation: 'Ridge' }),
             c({ id: 'out', relativeElevation: 'Flat'  }),
         ];
         const hotspot = { memberIds: ['in'] } as any;
         const proxy = deriveTerrainProxy(clusters, hotspot);
-        expect(proxy.elevationM).toBe(18); // only 'in' (Ridge) counted
+        expect(proxy.elevationM).toBeNull();
     });
 });

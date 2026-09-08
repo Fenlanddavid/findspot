@@ -30,16 +30,50 @@ export interface ConfidenceResult {
     // Transparent breakdown of what raised or lowered this confidence level.
     // Ordered by weight descending. Powers the "why" list in the UI (P6).
     contributions: ConfidenceContribution[];
+    components: {
+        dataQuality: number;
+        observationAgreement: number;
+        interpretationStrength: number;
+    };
+}
+
+export interface HotspotConfidenceMetrics {
+    anomaly: number;
+    context: number;
+    /** Explicit hotspot convergence points, range 0–20. */
+    convergence: number;
+    behaviour: number;
+    penalty: number;
+    signalCount: number;
+    signalClassCount: number;
+    /** Percent, range 0–100. */
+    dataQuality?: number;
+    deliveryCompleteness?: number | null;
+    dataQualityReasons?: string[];
+    /** Percent agreement between distinct parent observations, range 0–100. */
+    observationAgreement?: number;
+    observationAgreementReasons?: string[];
+    /** Heuristic interpretation strength, range 0–100; not a probability. */
+    interpretationStrength?: number;
+}
+
+function percent(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.min(100, value))
+        : 0;
+}
+
+export function normaliseConvergencePoints(value: unknown): number {
+    return typeof value === 'number' && Number.isFinite(value)
+        ? Math.max(0, Math.min(20, value)) * 5
+        : 0;
 }
 
 export function computeConfidence(
     processScores: PrimaryProcessScore[],
     interpretationScores: SecondaryInterpretationScore[],
     primaryInterpretationId: SecondaryInterpretationId | null,
-    hotspotMetrics: {
-        anomaly: number; context: number; convergence: number;
-        behaviour: number; penalty: number; signalCount: number; signalClassCount: number;
-    } | null,
+    hotspotMetrics: HotspotConfidenceMetrics | null,
     recordSparsity: boolean,
     evidenceBalance?: {
         supportingPercent: number;
@@ -47,29 +81,17 @@ export function computeConfidence(
         missingCount: number;
     },
 ): ConfidenceResult {
-    // ── Process convergence ───────────────────────────────────────────────────
-    const processesAboveThreshold = processScores.filter(
-        p => p.finalScore > PROCESS_CONVERGENCE_THRESHOLD
-    ).length;
-    const processConvergence = (processesAboveThreshold / 6) * 100;
+    void processScores;
+    const primaryScore = primaryInterpretationId
+        ? interpretationScores.find(score => score.interpretationId === primaryInterpretationId)?.derivedScore
+        : undefined;
+    const dataQuality = percent(hotspotMetrics?.dataQuality);
+    const observationAgreement = percent(hotspotMetrics?.observationAgreement);
+    const interpretationStrength = percent(hotspotMetrics?.interpretationStrength ?? primaryScore);
 
-    // ── Hotspot convergence normalisation ─────────────────────────────────────
-    // Hotspot.metrics.convergence — assumed 0–100 based on fieldGuideTypes.ts structure.
-    // If value is ≤ 1, treat as 0–1 scale and multiply by 100.
-    let hotspotConvergenceNormalised = 0;
-    if (hotspotMetrics !== null) {
-        const raw = hotspotMetrics.convergence;
-        hotspotConvergenceNormalised = raw <= 1 ? raw * 100 : raw;
-    }
-
-    // ── Final confidence score ────────────────────────────────────────────────
-    let finalConfidenceScore: number;
-    if (hotspotMetrics !== null) {
-        // UNVALIDATED weights: process convergence 70%, hotspot 30%
-        finalConfidenceScore = processConvergence * 0.7 + hotspotConvergenceNormalised * 0.3;
-    } else {
-        finalConfidenceScore = processConvergence;
-    }
+    // These are deliberately separate concepts. The combined value is an
+    // unvalidated heuristic rank, not a calibrated probability.
+    let finalConfidenceScore = dataQuality * 0.35 + observationAgreement * 0.35 + interpretationStrength * 0.30;
 
     // Contradictory and missing evidence reduce confidence directly. This is
     // separate from behavioural scores so negative evidence can say "less
@@ -125,25 +147,19 @@ export function computeConfidence(
     // Weights are approximate contributions to finalConfidenceScore.
     const contributions: ConfidenceContribution[] = [];
 
-    // Process convergence component
-    if (processesAboveThreshold > 0) {
-        contributions.push({
-            label: `${processesAboveThreshold} of 6 landscape processes above threshold`,
-            sign:  processesAboveThreshold >= 2 ? '+' : '−',
-            weight: Math.round(processConvergence * 0.7),
-        });
+    if (hotspotMetrics?.deliveryCompleteness != null) {
+        contributions.push({ label: `Data delivery completeness ${Math.round(hotspotMetrics.deliveryCompleteness)}%`, sign: hotspotMetrics.deliveryCompleteness >= 75 ? '+' : '−', weight: 0 });
     } else {
-        contributions.push({ label: 'No landscape processes above threshold', sign: '−', weight: 30 });
+        contributions.push({ label: 'Data delivery completeness unknown', sign: '−', weight: 0 });
     }
-
-    // Hotspot convergence component
-    if (hotspotMetrics !== null) {
-        const hc = hotspotConvergenceNormalised;
-        contributions.push({
-            label: hc > 40 ? 'Strong hotspot signal convergence' : hc > 15 ? 'Moderate hotspot convergence' : 'Weak hotspot convergence',
-            sign:  hc > 20 ? '+' : '−',
-            weight: Math.round(hc * 0.3),
-        });
+    contributions.push({ label: `Analytical data suitability ${Math.round(dataQuality)}% (heuristic)`, sign: dataQuality >= 50 ? '+' : '−', weight: Math.round(dataQuality * 0.35) });
+    contributions.push({ label: `Distinct-observation agreement ${Math.round(observationAgreement)}%`, sign: observationAgreement >= 50 ? '+' : '−', weight: Math.round(observationAgreement * 0.35) });
+    contributions.push({ label: `Interpretation strength ${Math.round(interpretationStrength)}% (unvalidated heuristic)`, sign: interpretationStrength >= 50 ? '+' : '−', weight: Math.round(interpretationStrength * 0.30) });
+    for (const reason of hotspotMetrics?.dataQualityReasons ?? []) {
+        contributions.push({ label: reason, sign: '−', weight: 0 });
+    }
+    for (const reason of hotspotMetrics?.observationAgreementReasons ?? []) {
+        contributions.push({ label: reason, sign: observationAgreement >= 50 ? '+' : '−', weight: 0 });
     }
 
     // Evidence balance components
@@ -179,5 +195,5 @@ export function computeConfidence(
     // Sort by weight descending
     contributions.sort((a, b) => b.weight - a.weight);
 
-    return { tier, uncertainty, contributions };
+    return { tier, uncertainty, contributions, components: { dataQuality, observationAgreement, interpretationStrength } };
 }

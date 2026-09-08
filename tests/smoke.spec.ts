@@ -178,6 +178,7 @@ test("V5 Home folds a recent open signal into one bounded return card", async ({
 
 test("active sessions use the demand-mounted four-destination workspace", async ({ page }) => {
   test.setTimeout(45_000);
+  await page.setViewportSize({ width: 320, height: 720 });
   await page.goto("./");
   await expect(page.getByText('Local-first storage')).toBeVisible();
   const projects = await readIndexedDbStore(page, "projects") as Array<{ id: string }>;
@@ -211,10 +212,36 @@ test("active sessions use the demand-mounted four-destination workspace", async 
     page.getByText('Visit conditions', { exact: true }).boundingBox(),
   ]);
   expect(trailPanelBounds && conditionsPanelBounds && trailPanelBounds.y < conditionsPanelBounds.y).toBe(true);
-  await page.getByRole('button', { name: 'Add Find to Session' }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const addFind = page.getByRole('button', { name: 'Add Find to Session' });
+  await addFind.click();
   await expect(page.getByRole('heading', { name: 'Record a find' })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Detecting workspace' })).toBeVisible();
-  await page.getByRole('button', { name: 'Finish later' }).click();
+  await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(page.getByRole('button', { name: 'Add full details' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(addFind).toBeFocused();
+  await addFind.click();
+  const objectType = page.getByPlaceholder('e.g. buckle, coin, button');
+  await objectType.focus();
+  await page.setViewportSize({ width: 320, height: 420 });
+  const saveFind = page.getByRole('button', { name: 'Save find' });
+  await saveFind.scrollIntoViewIfNeeded();
+  const saveBounds = await saveFind.boundingBox();
+  expect(saveBounds && saveBounds.x >= 0 && saveBounds.x + saveBounds.width <= 320).toBe(true);
+  await page.evaluate(() => { document.documentElement.style.fontSize = '20px'; });
+  await expect(page.getByRole('button', { name: 'Finish later' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  const finishLater = page.getByRole('button', { name: 'Finish later' });
+  const finishBounds = await finishLater.boundingBox();
+  expect(finishBounds?.height).toBeGreaterThanOrEqual(44);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await finishLater.scrollIntoViewIfNeeded();
+  await expect(finishLater).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await finishLater.click();
   await expect(page.getByText('Find saved for later')).toBeVisible();
   await expect(page.getByText(/1 pending/)).toBeVisible();
   await expect(page.locator('.maplibregl-map')).toHaveCount(0);
@@ -245,6 +272,7 @@ test("active sessions use the demand-mounted four-destination workspace", async 
   await expect(page.locator('.maplibregl-map')).toHaveCount(0);
   await page.getByRole('button', { name: /Guide/ }).click();
   await expect(page).toHaveURL(/\/fieldguide/);
+  await page.setViewportSize({ width: 320, height: 720 });
   const guideWorkspaceNav = page.getByRole('navigation', { name: 'Detecting workspace' });
   await expect(guideWorkspaceNav).toBeVisible();
   await expect(guideWorkspaceNav.getByRole('button', { name: /Guide/ })).toHaveAttribute('aria-current', 'page');
@@ -252,6 +280,15 @@ test("active sessions use the demand-mounted four-destination workspace", async 
   await expect(page.getByText('Toggle satellite, LiDAR, old OS maps and your finds.')).toHaveCount(0);
   await expect(page.locator('.maplibregl-marker').filter({ hasText: 'Workspace Field' })).toBeVisible();
   await expect(page.getByText(/Reading scan data|Tap panel/)).toBeVisible({ timeout: 10_000 });
+  const scanArea = page.getByRole('button', { name: /Scan area|Scan again/ });
+  const scanBounds = await scanArea.boundingBox();
+  expect(scanBounds && scanBounds.x >= 0 && scanBounds.x + scanBounds.width <= 320).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 360, height: 720 });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '20px'; });
+  await expect(scanArea).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
   await guideWorkspaceNav.getByRole('button', { name: /Session/ }).click();
   await expect(page).toHaveURL(/\/session\/v5-workspace-session$/);
   await expect(page.getByText('This visit')).toBeVisible();
@@ -323,7 +360,7 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await expect(page.getByRole("dialog", { name: "Mark location" }).getByRole("button", { name: "Start point", exact: true })).toBeVisible();
   await page.getByRole("dialog", { name: "Mark location" }).getByRole("button", { name: "Close" }).click();
   await page.getByRole("button", { name: "Start in FindSpot" }).click();
-  await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
+  await expect(page.getByText('Trail recording', { exact: true }).first()).toBeVisible();
   await expect.poll(async () => {
     const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string; points?: unknown[] }>;
     return tracks.filter(track => track.sessionId === "tracking-lifecycle-session")
@@ -338,7 +375,7 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   }).toBe(false);
 
   await page.getByRole("button", { name: "Start in FindSpot" }).click();
-  await expect(page.getByText(/Trail recording ·/).first()).toBeVisible();
+  await expect(page.getByText('Trail recording', { exact: true }).first()).toBeVisible();
   await expect.poll(async () => {
     const tracks = await readIndexedDbStore(page, "tracks") as Array<{ sessionId?: string }>;
     return tracks.filter(track => track.sessionId === "tracking-lifecycle-session").length;
@@ -976,7 +1013,7 @@ test("New Rally on the Rallies tab opens the rally workflow", async ({ page }) =
   await expect(page.getByRole("button", { name: "Show gaps on map" })).toHaveCount(0);
   await page.getByRole("button", { name: "Open Newly Opened Field in FieldGuide" }).click();
   await expect(page).toHaveURL(/\/fieldguide/);
-  await expect(page.getByRole("button", { name: "Scan Area", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Scan area", exact: true })).toBeVisible();
 });
 
 test("organiser rally setup continues to share link generation", async ({ page }) => {

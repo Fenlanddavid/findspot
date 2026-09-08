@@ -86,7 +86,7 @@ describe('land access approach toolkit', () => {
     ]);
     const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
-    expect(sha256(engineSnapshot)).toBe('dda1c1b7e69947683bd67d3fa2c40e9ca09aa1f4d2c86de9f658d3004ee937fc');
-    expect(sha256(fieldGuideSnapshot)).toBe('64dce733c7336a5dd922d843229f1581993abf3b537b64da5bae144300388904');
+    expect(sha256(engineSnapshot)).toBe('423b8c2a2a4a4892950e455d387a3702a54e88eba04cb50892ac98012dc3c3ee');
+    expect(sha256(fieldGuideSnapshot)).toBe('4d4680f1a7a5f970edbe22c3814149e9b44e6f6297cadfe922734a3bbc5b214a');
   });
 });

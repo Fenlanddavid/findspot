@@ -7,6 +7,8 @@ import type {
     Cluster, TraceTarget, HistoricFind, PlaceSignal, HistoricRoute, Hotspot,
     HotspotClassification, LandscapeIntelligence, LandscapeSummary,
 } from '../../pages/fieldGuideTypes';
+import { HOTSPOT_TITLES } from '../../domain/fieldGuideMetadata';
+export { HOTSPOT_TITLES } from '../../domain/fieldGuideMetadata';
 import type { Find, SavedPoint, Permission, Field, Media } from '../../db';
 import type { LogEntry } from '../../utils/scanLogger';
 import type { DevAnnotation, AnnotationType, BroadPeriod, LandscapeType, AnnotationConfidence } from '../../utils/devAnnotation';
@@ -54,26 +56,6 @@ export const HISTORIC_LAYER_GROUPS = [
 ] as const;
 
 export const HISTORIC_LAYER_OPTIONS = HISTORIC_LAYER_GROUPS.flatMap(group => [...group.options]);
-
-export const HOTSPOT_TITLES: Record<HotspotClassification, string> = {
-    'Crossing Point Candidate':         'Crossing Point',
-    'Junction / Convergence Zone':      'Route Junction',
-    'Settlement Edge Candidate':        'Settlement Edge',
-    'Burial / Barrow Candidate':        'Burial / Barrow',
-    'Organised Field System Candidate': 'Field System',
-    'Palaeochannel Activity Zone':      'Former Watercourse',
-    'Wetland Margin Activity Zone':     'Wetland Margin',
-    'Route-Side Activity Zone':         'Movement Corridor',
-    'Multi-Period Occupation Zone':     'Multi-Period Site',
-    'Terrain Structure Candidate':      'Structural Feature',
-    'Spectral Activity Candidate':      'Cropmark Signal',
-    'Lowland Activity Zone':            'Lowland Activity Zone',
-    'Raised Activity Area':             'Raised Activity Area',
-    'Route-Influenced Area':            'Route-Influenced Area',
-    'Cropmark Activity Zone':           'Cropmark Activity Zone',
-    'Multi-Signal Activity Zone':       'Multi-Signal Activity Zone',
-    'General Activity Zone':            'Supporting Activity Zone',
-};
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
@@ -236,7 +218,7 @@ export interface FieldGuideContextValue {
     savedPoints: SavedPoint[];
 
     // Scoring hook
-    potentialScore: { score: number; reasons: string[]; breakdown?: { terrain: number; hydro: number; historic: number; signals: number } } | null;
+    potentialScore: { score: number; reasons: string[]; breakdown?: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } } | null;
     scanConfidence: string | null;
 
     // Media for selected user find

@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, Session } from "../db";
+import { db, Session, type Find } from "../db";
 import { captureGPS } from "../services/gps";
 import { fileToBlob } from "../services/photos";
 import { v4 as uuid } from "uuid";
@@ -14,6 +14,8 @@ export type QuickFindLocation = {
   lat: number;
   lon: number;
   gpsAccuracyM?: number | null;
+  fixTimestamp?: number;
+  captureMethod?: 'live_gps' | 'session_track' | 'map_selected' | 'other';
 };
 
 type QuickFindSessionContext = Pick<Session, "id" | "projectId" | "permissionId" | "fieldId">;
@@ -114,6 +116,8 @@ export function QuickFindFab({
       let lat: number | null = null;
       let lon: number | null = null;
       let acc: number | null = null;
+      let locationFixAt: string | undefined;
+      let locationMethod: Find['locationMethod'];
 
       const preferredLocation = getPreferredLocation?.();
       if (
@@ -124,6 +128,10 @@ export function QuickFindFab({
         lat = preferredLocation.lat;
         lon = preferredLocation.lon;
         acc = preferredLocation.gpsAccuracyM ?? null;
+        locationFixAt = preferredLocation.fixTimestamp
+          ? new Date(preferredLocation.fixTimestamp).toISOString()
+          : undefined;
+        locationMethod = preferredLocation.captureMethod ?? 'session_track';
         if (acc != null && acc > 50) setNoGpsWarning(true);
       } else {
         try {
@@ -131,6 +139,8 @@ export function QuickFindFab({
           lat = fix.lat;
           lon = fix.lon;
           acc = fix.accuracyM;
+          locationFixAt = new Date(fix.fixTimestamp).toISOString();
+          locationMethod = 'live_gps';
           if (acc != null && acc > 50) setNoGpsWarning(true);
         } catch {
           setNoGpsWarning(true);
@@ -167,6 +177,9 @@ export function QuickFindFab({
         lat,
         lon,
         gpsAccuracyM: acc,
+        locationFixAt,
+        locationMethod,
+        locationFrozenAt: lat != null && lon != null ? now : undefined,
         osGridRef: "",
         w3w: "",
         period: "Unknown",
@@ -176,7 +189,7 @@ export function QuickFindFab({
         heightMm: null,
         depthMm: null,
         decoration: "",
-        completeness: "Complete",
+        completeness: "Unassessed",
         findContext: "",
         storageLocation: "",
         notes: "Quick recorded via FAB",
@@ -206,6 +219,7 @@ export function QuickFindFab({
     e.currentTarget.value = "";
     if (!file || !lastQuickId) return;
 
+    let stored = false;
     try {
       const blob = await fileToBlob(file);
       const now = new Date().toISOString();
@@ -222,13 +236,16 @@ export function QuickFindFab({
         scalePresent: false,
         createdAt: now,
       });
+      stored = true;
       setShowSuccess(false);
       setConfirmSignificant(false);
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
     } catch (err) {
       setFabError("Failed to save photo: " + err);
     } finally {
-      setLastQuickId(null);
+      // Keep the committed find identity after a failure so the user can retry
+      // attaching the same photo without creating or guessing another record.
+      if (stored) setLastQuickId(null);
     }
   }
 

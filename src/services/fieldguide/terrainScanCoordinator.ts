@@ -1,7 +1,4 @@
-// ─── Terrain scan coordinator ─────────────────────────────────────────────────
-// Runs the terrain scan pipeline: tile processing → NHLE/AIM/route fetching →
-// cluster merging → hotspot generation.
-
+// Terrain scan pipeline: tiles → records/routes → clusters → hotspots.
 import { HistoricRoute } from '../../pages/fieldGuideTypes';
 import { db } from '../../db';
 import {
@@ -13,7 +10,7 @@ import { scanDataSource } from '../../engines/landscape/terrainEngine';
 import {
     findConsensus, analyzeContext, suppressDisturbance,
     applyNHLEProtection, applyAIMEnrichment,
-    applyRouteAssessments, applyRouteUnavailableFallback, getHotspotInput, MONUMENT_BOUNDARY_BUFFER_M,
+    applyRouteAssessments, applyRouteUnavailableFallback, getHotspotInput, getDistance, MONUMENT_BOUNDARY_BUFFER_M,
 } from '../../utils/fieldGuideAnalysis';
 import { buildTerrainHotspots, HOTSPOT_ENGINE_VERSION } from '../../engines/hotspot/hotspotEngine';
 import { SCAN_CONFIG } from '../../utils/scanConfig';
@@ -30,6 +27,7 @@ import { reportNonFatal } from '../diagLog';
 import { CACHE_POLICIES } from '../../shared/cachePolicy';
 import {
     applyOfflinePackAvailability,
+    attachRepresentativeTerrainMeasurements,
     collapseByProximity,
     extractMonumentPoints,
     padBoundsByMetres,
@@ -60,10 +58,7 @@ export async function runTerrainScanPipeline(
 
         const scanStart = Date.now();
         const perfStart = performance.now();
-
         const CACHE_TTL_MS = CACHE_POLICIES.fieldGuideTerrain.expiry.durationMs;
-        // Bump this string whenever scoring weights, thresholds, or gates change
-        // so existing caches are discarded rather than silently serving stale results.
         const ENGINE_VERSION = HOTSPOT_ENGINE_VERSION;
 
         const zoom   = SCAN_CONFIG.TERRAIN_ZOOM;
@@ -83,7 +78,7 @@ export async function runTerrainScanPipeline(
         const scanSouth = tileLat(tY_start + 3);
         const analysisBounds = { west: scanWest, south: scanSouth, east: scanEast, north: scanNorth };
 
-        // Tile-based cache key — deterministic for this exact viewport at Z16.
+        // Deterministic for this exact scan footprint.
         const tileKey = `${zoom}-${tX_start}-${tY_start}`;
 
         const qWest  = bounds.getWest();
@@ -242,10 +237,13 @@ export async function runTerrainScanPipeline(
                     terrain: false, terrain_global: false, slope: false, hydrology: false,
                     satellite_spring: false, satellite_summer: false,
                 };
+                const cachedAvailability = applyOfflinePackAvailability(cached.sourceAvailability, offlinePackMeta);
                 return {
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount,
-                    sourceAvailability: applyOfflinePackAvailability(cached.sourceAvailability, offlinePackMeta),
+                    sourceAvailability: cachedAvailability,
+                    sourceStatus: Object.fromEntries(Object.entries(cachedAvailability).map(([key, available]) => [key, available ? 'cached' : 'unavailable'])),
+                    sourceProvenance: rawCombined.flatMap(cluster => cluster.provenance ?? []),
                     questionTerrainAvailability,
                     fromCache: true, noSignal: false, scanStartCenter, scanStartBounds, analysisBounds,
                     historicRoutesAvailable,
@@ -277,6 +275,17 @@ export async function runTerrainScanPipeline(
         const terrainGlobalTask = scanDataSource('terrain_global', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerRegistry, signal);
         const slopeTask         = scanDataSource('slope',         zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerRegistry, signal);
 
+        // Terrain Tiles expose physical elevation through Terrarium RGB encoding.
+        // Use their supported Z15 resolution and calculate slope/aspect in metres.
+        const demZoom = Math.min(15, zoom);
+        const demN = 2 ** demZoom;
+        const demCX = (center.lng + 180) / 360 * demN;
+        const demCY = (1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * demN;
+        const demTask = scanDataSource(
+            'elevation_dem', demZoom, Math.floor(demCX) - 1, Math.floor(demCY) - 1,
+            bounds, demN, { features: [] }, null, workerRegistry, signal,
+        );
+
         onStatusChange('Reading hydrology...');
         const hydroStart = performance.now();
         const hydroTask = scanDataSource('hydrology', zoom, tX_start, tY_start, bounds, n, { features: [] }, null, workerRegistry, signal);
@@ -291,10 +300,10 @@ export async function runTerrainScanPipeline(
         const summerTask   = scanDataSource('satellite_summer', zoom, tX_start, tY_start, bounds, n, { features: [] }, waybackIds, workerRegistry, signal);
 
         try {
-            // NHLE, AIM, and all six tile workers resolve in parallel
-            const [nhleData, aimData, terrainResult, terrainGlobalResult, slopeResult, hydroResult, springResult, summerResult] = await Promise.all([
+            // NHLE, AIM, rendered layers, imagery versions, and physical DEM resolve in parallel.
+            const [nhleData, aimData, terrainResult, terrainGlobalResult, slopeResult, hydroResult, springResult, summerResult, demResult] = await Promise.all([
                 nhlePromise, aimPromise,
-                terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask,
+                terrainTask, terrainGlobalTask, slopeTask, hydroTask, springTask, summerTask, demTask,
             ]);
             const sourceWaitSeconds = seconds(perfStart);
             const terrainSeconds = seconds(terrainStart);
@@ -360,6 +369,7 @@ export async function runTerrainScanPipeline(
             const processStart = performance.now();
 
             const rawCombined = [...terrainHits, ...terrainGlobalHits, ...slopeHits, ...hydroHits, ...springHits, ...summerHits];
+            attachRepresentativeTerrainMeasurements(rawCombined, demResult.terrainMeasurements ?? []);
 
             // ── Source availability ──────────────────────────────────────────
             const sourceAvailability: Record<string, boolean> = applyOfflinePackAvailability({
@@ -367,6 +377,7 @@ export async function runTerrainScanPipeline(
                 terrain_global:   terrainGlobalResult.tilesLoaded > 0,
                 slope:            slopeResult.tilesLoaded > 0,
                 hydrology:        hydroResult.tilesLoaded > 0,
+                elevation_dem:    demResult.tilesLoaded > 0,
                 satellite_spring: springResult.tilesLoaded > 0,
                 satellite_summer: summerResult.tilesLoaded > 0,
             }, offlinePackMeta);
@@ -375,6 +386,7 @@ export async function runTerrainScanPipeline(
                 terrain_global:   terrainGlobalResult.tilesLoaded === 9,
                 slope:            slopeResult.tilesLoaded === 9,
                 hydrology:        hydroResult.tilesLoaded === 9,
+                elevation_dem:    demResult.tilesLoaded === 9,
                 satellite_spring: springResult.tilesLoaded === 9,
                 satellite_summer: summerResult.tilesLoaded === 9,
             };
@@ -382,6 +394,20 @@ export async function runTerrainScanPipeline(
             // If every tile source failed to load, the device has no signal.
             // Don't cache this result — it will resolve correctly once connectivity returns.
             const noSignal = Object.values(sourceAvailability).every(v => !v);
+            const tileCounts: Record<string, number> = {
+                terrain: terrainResult.tilesLoaded,
+                terrain_global: terrainGlobalResult.tilesLoaded,
+                slope: slopeResult.tilesLoaded,
+                hydrology: hydroResult.tilesLoaded,
+                elevation_dem: demResult.tilesLoaded,
+                satellite_spring: springResult.tilesLoaded,
+                satellite_summer: summerResult.tilesLoaded,
+            };
+            const resultBySource = { terrain: terrainResult, terrain_global: terrainGlobalResult, slope: slopeResult, hydrology: hydroResult, elevation_dem: demResult, satellite_spring: springResult, satellite_summer: summerResult };
+            const sourceStatus: Record<string, import('../../pages/fieldGuideTypes').LayerFetchStatus> = Object.fromEntries(
+                Object.entries(tileCounts).map(([key, count]) => [key, resultBySource[key as keyof typeof resultBySource].processingError ? 'processing_failed' : count === 0 ? 'unavailable' : count === 9 ? 'ok' : 'partial']),
+            );
+            const sourceProvenance = [terrainResult, terrainGlobalResult, slopeResult, hydroResult, demResult, springResult, summerResult].flatMap(result => result.provenance ?? []);
 
             const merged      = findConsensus(rawCombined);
             const aimEnriched = applyAIMEnrichment(merged, aimData);
@@ -401,7 +427,7 @@ export async function runTerrainScanPipeline(
             const palaeoCount = contextualized.filter(c => c.type.includes('Palaeochannel')).length;
             if (palaeoCount > 0) {
                 onLog(
-                    `> Hydrology: ${palaeoCount} palaeochannel signal${palaeoCount !== 1 ? 's' : ''} detected — ancient watercourse trace.`,
+                    `> Hydrology: ${palaeoCount} measured channel-like depression${palaeoCount !== 1 ? 's' : ''} detected — former-watercourse interpretation remains provisional.`,
                     'terrain',
                 );
             }
@@ -458,9 +484,10 @@ export async function runTerrainScanPipeline(
             return {
                 terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                 nhleData, aimData, routes, modernWays, monumentPoints, heritageCount, sourceAvailability,
+                sourceStatus, sourceProvenance,
                 questionTerrainAvailability,
                 fromCache: false, noSignal, scanStartCenter, scanStartBounds, analysisBounds,
-                historicRoutesAvailable,
+                historicRoutesAvailable, terrainContextMeasurements: demResult.terrainMeasurements ?? [],
             };
 
         } catch (e) {

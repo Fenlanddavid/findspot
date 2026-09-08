@@ -2,7 +2,7 @@ import { db } from '../db';
 import type { Find, FindHotspotSignal } from '../db';
 import type { Hotspot } from '../pages/fieldGuideTypes';
 import { getDistance } from '../utils/fieldGuideAnalysis';
-import { HOTSPOT_TITLES } from '../components/fieldGuide/FieldGuideContext';
+import { HOTSPOT_TITLES } from '../domain/fieldGuideMetadata';
 import { reportNonFatal } from './diagLog';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ export function geohashEncode(lat: number, lon: number, precision = 6): string {
 export interface HotspotFindFeedback {
     label:     string;
     note:      string;
-    status:    'validates' | 'extends' | 'neutral';
+    status:    'associated' | 'nearby';
     findCount: number;
     periods:   string[];
 }
@@ -61,20 +61,6 @@ export interface FindHotspotAnnotation {
     distanceM:    number | null;
     note:         string;
 }
-
-// ─── Period mapping for validation ───────────────────────────────────────────
-
-// null entry = any period validates (Multi-Period Occupation Zone)
-const CLASSIFICATION_PERIODS: Partial<Record<string, string[] | null>> = {
-    'Crossing Point Candidate':         ['Roman', 'Medieval', 'Bronze Age'],
-    'Burial / Barrow Candidate':        ['Bronze Age', 'Iron Age', 'Anglo-Saxon'],
-    'Settlement Edge Candidate':        ['Roman', 'Medieval', 'Anglo-Saxon', 'Iron Age'],
-    'Route-Side Activity Zone':         ['Roman', 'Medieval'],
-    'Junction / Convergence Zone':      ['Roman', 'Medieval'],
-    'Palaeochannel Activity Zone':      ['Bronze Age', 'Iron Age', 'Roman', 'Medieval'],
-    'Wetland Margin Activity Zone':     ['Bronze Age', 'Iron Age', 'Roman'],
-    'Multi-Period Occupation Zone':     null,
-};
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -105,7 +91,7 @@ function matchedFinds(hotspot: Hotspot, finds: Find[]): Find[] {
 function periodCountsFrom(finds: Find[]): Record<string, number> {
     const counts: Record<string, number> = {};
     for (const f of finds) {
-        if (f.period) counts[f.period] = (counts[f.period] ?? 0) + 1;
+        if (f.period && !/^unknown|not known|unassessed$/i.test(f.period)) counts[f.period] = (counts[f.period] ?? 0) + 1;
     }
     return counts;
 }
@@ -246,22 +232,7 @@ export function buildHotspotFindFeedback(
         !isWithinBounds(f.lon!, f.lat!, hotspot)
     );
 
-    // Determine status
-    let status: HotspotFindFeedback['status'] = 'neutral';
-    if (allNearby) {
-        status = 'extends';
-    } else {
-        const impliedPeriods = CLASSIFICATION_PERIODS[hotspot.classification];
-        if (impliedPeriods === null) {
-            // Multi-Period Occupation Zone — any period validates
-            status = 'validates';
-        } else if (impliedPeriods) {
-            if (periods.some(p => impliedPeriods.includes(p))) {
-                status = 'validates';
-            }
-        }
-        // All other classifications → neutral
-    }
+    const status: HotspotFindFeedback['status'] = allNearby ? 'nearby' : 'associated';
 
     // Build label
     const locationWord = allNearby ? 'nearby' : 'here';
@@ -280,10 +251,10 @@ export function buildHotspotFindFeedback(
     const hotspotTitle = HOTSPOT_TITLES[hotspot.classification] ?? hotspot.classification;
 
     let note: string;
-    if (status === 'validates' && periodStr) {
-        note = `${periodStr} material corroborates this ${hotspotTitle} zone.`;
-    } else if (status === 'extends') {
-        note = 'Finds nearby — this zone may extend beyond the predicted boundary.';
+    if (status === 'nearby') {
+        note = 'Finds are recorded nearby; this is a factual association, not validation of the interpretation.';
+    } else if (periodStr) {
+        note = `${periodStr} material is recorded in this ${hotspotTitle} area; site function remains unconfirmed.`;
     } else {
         note = `${count} find${count !== 1 ? 's' : ''} logged in or near this zone.`;
     }
@@ -323,7 +294,7 @@ export function buildFindHotspotAnnotation(
     const hotspotTitle = HOTSPOT_TITLES[bestMatch.hotspot.classification] ?? bestMatch.hotspot.classification;
 
     const note = bestMatch.status === 'within'
-        ? `Inside a predicted ${hotspotTitle} zone — this find may help confirm it.`
+        ? `Inside a predicted ${hotspotTitle} area — spatial association does not confirm the interpretation.`
         : `${Math.round(bestMatch.dist)}m from a predicted ${hotspotTitle} zone.`;
 
     return {

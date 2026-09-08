@@ -14,17 +14,21 @@ function trackingPresentation(props: {
   hasRecordedTrail: boolean;
   trackingStatus: TrackingStatus;
 }) {
-  if (props.isCompanionTracking) return { label: 'Companion recording', detail: '', tone: 'text-teal-200', dot: 'bg-teal-400' };
-  if (!props.isTracking && props.hasRecordedTrail) return { label: 'Session active', detail: 'Trail paused', tone: 'text-amber-300', dot: 'bg-amber-400' };
-  if (!props.isTracking) return { label: 'Session active', detail: 'Trail not started', tone: 'text-gray-300', dot: 'border-2 border-gray-500' };
+  if (props.isCompanionTracking) return { label: 'Companion recording', secondary: ['Trail recorded by Companion'], tone: 'text-teal-200', dot: 'bg-teal-400' };
+  if (!props.isTracking && props.hasRecordedTrail) return { label: 'Session active', secondary: ['Trail paused'], tone: 'text-amber-300', dot: 'bg-amber-400' };
+  if (!props.isTracking) return { label: 'Session active', secondary: ['Trail not started'], tone: 'text-gray-300', dot: 'border-2 border-gray-500' };
   const acceptedAge = props.trackingStatus.lastAcceptedFixAt ? Date.now() - props.trackingStatus.lastAcceptedFixAt : null;
-  if (props.trackingStatus.watchError) return { label: 'Trail recording', detail: 'GPS error', tone: 'text-red-300', dot: 'bg-red-400' };
-  if (acceptedAge === null) return { label: 'Trail recording', detail: 'Acquiring GPS', tone: 'text-amber-300', dot: 'animate-pulse bg-amber-400' };
-  if (acceptedAge > 120_000) return { label: 'Trail recording', detail: 'GPS lost', tone: 'text-red-300', dot: 'bg-red-400' };
-  if (acceptedAge > 10_000) return { label: 'Trail recording', detail: `GPS stale ${Math.round(acceptedAge / 1000)}s`, tone: 'text-amber-300', dot: 'bg-amber-400' };
+  if (props.trackingStatus.watchError) return { label: 'Trail recording', critical: `GPS error — ${props.trackingStatus.watchError}`, secondary: [], tone: 'text-red-300', dot: 'bg-red-400' };
+  if (acceptedAge === null) return { label: 'Trail recording', critical: 'Acquiring GPS — no accepted position yet', secondary: [], tone: 'text-amber-300', dot: 'animate-pulse bg-amber-400' };
+  if (acceptedAge > 120_000) return { label: 'Trail recording', critical: `GPS lost — last accepted position ${Math.round(acceptedAge / 1000)} seconds ago`, secondary: [], tone: 'text-red-300', dot: 'bg-red-400' };
+  if (acceptedAge > 10_000) return { label: 'Trail recording', critical: `GPS stale — last accepted position ${Math.round(acceptedAge / 1000)} seconds ago`, secondary: [], tone: 'text-amber-300', dot: 'bg-amber-400' };
   const accuracy = props.trackingStatus.lastAcceptedPoint?.accuracyM;
-  const wakeWarning = !props.trackingStatus.wakeLockSupported || !props.trackingStatus.wakeLockHeld ? ' · screen lock unprotected' : '';
-  return { label: 'Trail recording', detail: `${accuracy != null ? `GPS ±${Math.round(accuracy)}m` : 'GPS live'}${wakeWarning}`, tone: wakeWarning ? 'text-amber-300' : 'text-teal-200', dot: 'animate-pulse bg-teal-400' };
+  const wakeWarning = !props.trackingStatus.wakeLockSupported || !props.trackingStatus.wakeLockHeld;
+  return {
+    label: 'Trail recording',
+    secondary: [accuracy != null ? `Accuracy ±${Math.round(accuracy)} m` : 'Accuracy unknown', 'Fix live', ...(wakeWarning ? ['Screen lock unprotected'] : [])],
+    tone: wakeWarning ? 'text-amber-300' : 'text-teal-200', dot: 'animate-pulse bg-teal-400',
+  };
 }
 
 export function ActiveSessionShellHeader(props: {
@@ -56,10 +60,15 @@ export function ActiveSessionShellHeader(props: {
         <div className="flex items-center gap-2">
           <div className={`flex min-w-0 flex-1 items-center gap-2 text-3xs font-black uppercase tracking-[0.15em] ${status.tone}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${status.dot}`} />
-            <span className="truncate">{status.label}{status.detail ? ` · ${status.detail}` : ''}{!isOnline ? ' · Offline' : ''}</span>
+            <span>{status.label}</span>
           </div>
           <button type="button" aria-label="Session options" aria-expanded={showMenu} onClick={() => setShowMenu(value => !value)} className="grid min-h-11 min-w-11 place-items-center rounded-xl border border-white/15 text-lg font-black text-gray-300">•••</button>
           <button type="button" onClick={props.onFinish} className="min-h-11 rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2 text-2xs font-black uppercase tracking-wider text-red-200">Finish</button>
+        </div>
+        {status.critical && <p role="alert" className={`mt-1.5 whitespace-normal text-xs font-black leading-snug ${status.tone}`}>{status.critical}</p>}
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-3xs font-bold text-gray-400" aria-label="Tracking details">
+          {status.secondary.map(detail => <span key={detail}>{detail}</span>)}
+          <span>{isOnline ? 'Online' : 'Offline'}</span>
         </div>
         <div className="mt-1.5 flex min-w-0 items-baseline gap-2">
           <p className="min-w-0 flex-1 truncate text-base font-black">{props.permissionName}{props.fieldName ? <span className="font-bold text-gray-400"> · {props.fieldName}</span> : null}</p>

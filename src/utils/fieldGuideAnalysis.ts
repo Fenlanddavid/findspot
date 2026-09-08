@@ -3,6 +3,7 @@
 
 import { Cluster, HistoricRoute, ModernWay, RouteAssessment, RouteRelationship } from '../pages/fieldGuideTypes';
 import { distanceKilometers, distanceMeters } from './geo';
+import { assessEvidenceIndependence, hasDistinctImageryObservations, mergeEvidenceProvenance, observationsAreIndependent } from '../types/evidenceProvenance';
 
 export const MONUMENT_BOUNDARY_BUFFER_M = 20;
 
@@ -138,9 +139,9 @@ export function applyAIMEnrichment(clusters: Cluster[], aimData: AIMLike): Clust
                 c.findPotential = boostScore(c.findPotential, 25);
                 // High confidence only when independently corroborated by a physical
                 // sensor — AIM polygons alone are not sufficient ground-truth.
-                const hasPhysicalCorroboration =
-                    c.sources.includes('terrain') || c.sources.includes('terrain_global') ||
-                    (c.sources.includes('satellite_summer') && c.sources.includes('satellite_spring'));
+                const hasPhysicalCorroboration = c.terrainMeasured === true ||
+                    hasDistinctImageryObservations(c.provenance) ||
+                    (c.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback');
                 if (hasPhysicalCorroboration) c.confidence = 'High';
                 break;
             }
@@ -250,17 +251,6 @@ function boostScore(base: number, boost: number): number {
     return Math.min(96, 100 * (1 - Math.exp(-(raw + boost) / 100)));
 }
 
-// Source weights for confidence scoring — quality over count.
-// Historic source gets the highest weight; satellite_spring is the weakest.
-const SOURCE_WEIGHTS: Record<string, number> = {
-    terrain:          1.0,
-    terrain_global:   0.9,
-    hydrology:        0.9,
-    satellite_summer: 0.8,
-    satellite_spring: 0.7,
-    historic:         1.2,
-};
-
 // ─── Route bearing ────────────────────────────────────────────────────────────
 
 // Approximate route bearing from first → last geometry vertex.
@@ -315,10 +305,12 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
             const mergeThresholdM = c.source === m.source ? 25 : 40;
 
             if (dist < mergeThresholdM || canStitch) {
+                const addsIndependentObservation = observationsAreIndependent(m.provenance, c.provenance);
                 c.sources.forEach(src => {
                     if (!m.sources.includes(src)) m.sources.push(src);
                 });
                 if (!m.sources.includes(c.source)) m.sources.push(c.source);
+                m.provenance = mergeEvidenceProvenance(m.provenance, c.provenance);
 
                 if (canStitch && dist > mergeThresholdM) {
                     m.type = "Linear Pattern Anomaly";
@@ -336,7 +328,9 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
                 if (c.source === 'terrain') m.center = [c.center[0], c.center[1]];
                 else m.center = [(m.center[0] + c.center[0]) / 2, (m.center[1] + c.center[1]) / 2];
 
-                m.findPotential = boostScore(m.findPotential, c.findPotential * 0.4 * getWeight(c.source));
+                if (addsIndependentObservation) {
+                    m.findPotential = boostScore(m.findPotential, c.findPotential * 0.4 * getWeight(c.source));
+                }
 
                 if (c.source === 'hydrology') {
                     m.type = "Ancient Watercourse Signal";
@@ -344,26 +338,31 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
 
                 // Weighted confidence: quality > count — historic + terrain = high trust,
                 // satellite-only stays lower even with multiple spring/summer passes.
-                const weightedConf = m.sources.reduce((acc, s) => acc + (SOURCE_WEIGHTS[s] ?? 0.5), 0);
-                if (weightedConf >= 2.5) m.confidence = 'High';
-                else if (weightedConf >= 1.5) m.confidence = 'Medium';
+                const independentCount = assessEvidenceIndependence(m.provenance).independentObservationCount;
+                if (independentCount >= 3) m.confidence = 'High';
+                else if (independentCount >= 2) m.confidence = 'Medium';
 
                 // Track merge count for persistence scoring (applied post-loop)
-                m.rescanCount = (m.rescanCount || 1) + 1;
+                if (c.source === m.source || addsIndependentObservation) {
+                    m.withinScanMergeCount = (m.withinScanMergeCount || 1) + 1;
+                }
 
-                let score = (m.sources.length * 15);
+                // Derive persistence from the current deduplicated evidence set.
+                // Accumulating this on every merge let duplicate provenance raise
+                // the score even though it added no observation.
+                let score = 10 + assessEvidenceIndependence(m.provenance).independentObservationCount * 15;
                 if (m.sources.includes('terrain') && m.sources.includes('terrain_global')) score += 10;
                 if (m.sources.includes('slope')) score += 5;
                 if (c.scaleTier !== m.scaleTier) score += 20;
-                m.persistenceScore = Math.min(100, (m.persistenceScore || 0) + score);
+                m.persistenceScore = Math.min(100, Math.max(m.persistenceScore || 0, score));
 
                 found = true;
                 break;
             }
         }
         if (!found) {
-            const initialType = c.source === 'satellite_summer' ? "Cropmark Signal (Drought Response)" : c.type;
-            merged.push({ ...c, type: initialType, sources: [c.source], persistenceScore: 25, rescanCount: 1 });
+            const initialType = c.source === 'satellite_summer' ? "Vegetation Signal (Imagery Version)" : c.type;
+            merged.push({ ...c, type: initialType, sources: [c.source], persistenceScore: 25, withinScanMergeCount: 1 });
         }
     }
 
@@ -375,28 +374,25 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
 
         const hasSummer = m.sources.includes('satellite_summer');
         const hasSpring = m.sources.includes('satellite_spring');
+        const hasDistinctImagery = hasDistinctImageryObservations(m.provenance);
         const hasHistoric = m.sources.includes('historic');
-        const hasHardCorroboration = hasSummer || hasSpring || hasHistoric;
+        const hasHardCorroboration = hasDistinctImagery || hasHistoric;
 
-        if (hasSummer && hasSpring) {
-            // Multi-season agreement: strong archaeological signal — both summer
-            // drought stress and spring moisture response detected independently.
+        if (hasSummer && hasSpring && hasDistinctImagery) {
             m.findPotential = boostScore(m.findPotential, 17);
-            m.explanationLines.push('Multi-season cropmark agreement');
-            m.type = 'Cropmark Signal (Drought Response)';
+            m.explanationLines.push('Distinct imagery versions show a similar vegetation signal');
+            m.type = 'Vegetation Signal (Imagery Versions)';
         } else if (hasSummer) {
-            // Summer-only: useful but single-season
-            m.findPotential = boostScore(m.findPotential, 15);
-            m.type = 'Cropmark Signal (Drought Response)';
+            m.type = 'Vegetation Signal (Imagery Version)';
         }
 
         // Persistence here means multiple raw detections merged in one scan, not
         // repeated scans over time. It boosts potential, but only corroborated
         // signals can use it to earn High confidence.
-        if ((m.rescanCount || 0) >= 3) {
+        if ((m.withinScanMergeCount || 0) >= 3) {
             m.findPotential = boostScore(m.findPotential, 10);
             if (hasHardCorroboration) m.confidence = 'High';
-            m.explanationLines.push('Repeated detection within scan');
+            m.explanationLines.push('Several detections merged within this scan');
         }
 
         // Terrain-only clusters (including terrain/slope/hydrology combinations
@@ -411,7 +407,7 @@ export function findConsensus(rawClusters: Cluster[]): Cluster[] {
         if (m.confidence === 'High' && hasHistoric) {
             m.explanationLines.push('Historic data overlaps terrain signal');
         } else if (m.confidence === 'High' || m.confidence === 'Medium') {
-            if (m.sources.length >= 2) m.explanationLines.push('Multiple independent sources agree');
+            if (assessEvidenceIndependence(m.provenance).independentObservationCount >= 2) m.explanationLines.push('Deduplicated observations agree at this location');
         }
     }
 
@@ -475,8 +471,8 @@ export function analyzeContext(clusters: Cluster[], routes: HistoricRoute[] = []
                 if (dist < 100) {
                     c.findPotential = boostScore(c.findPotential, 12);
                     c.explanationLines.push("Roman road proximity");
-                    if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) {
-                        c.explanationLines.push("LiDAR relief agrees with movement corridor");
+                    if ((c.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback')) {
+                        c.explanationLines.push("Delivered LiDAR hillshade image overlaps the movement corridor");
                     }
                     hasRouteProximity = true;
                     if (c.routeAlignment === undefined) c.routeAlignment = computeRouteBearing(route.geometry);
@@ -668,7 +664,7 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
             }
             // Proportional penalty: preserves signal in heavily-worked landscapes.
             const penaltyFactor = risk === 'High' ? 0.4 : 0.2;
-            c.findPotential = Math.max(5, Math.round(c.findPotential * (1 - penaltyFactor)));
+            c.findPotential = Math.max(0, Math.round(c.findPotential * (1 - penaltyFactor)));
         } else {
             c.disturbanceRisk = 'Low';
         }
@@ -678,14 +674,14 @@ export function suppressDisturbance(clusters: Cluster[]): Cluster[] {
     // Computed once after all disturbance passes so disturbanceRisk is final.
     // Gives the UI and Engine Lab a per-cluster confidence decomposition.
     for (const c of results) {
-        const hasLidar   = c.sources.includes('terrain') || c.sources.includes('terrain_global');
-        const hasHydro   = c.sources.includes('hydrology');
+        const hasLidar   = (c.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback');
+        const hasHydro   = c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology');
         const hasSummer  = c.sources.includes('satellite_summer');
         const hasSpring  = c.sources.includes('satellite_spring');
         c.signalBreakdown = {
             terrain:    hasLidar  ? (c.confidence === 'High' ? 85 : c.confidence === 'Medium' ? 65 : 40) : 0,
             hydrology:  hasHydro  ? 60 : 0,
-            spectral:   (hasSummer && hasSpring) ? 80 : hasSummer ? 60 : hasSpring ? 40 : 0,
+            spectral:   hasDistinctImageryObservations(c.provenance) ? 80 : hasSummer || hasSpring ? 45 : 0,
             disturbance: c.disturbanceRisk === 'High' ? 80 : c.disturbanceRisk === 'Medium' ? 45 : 10,
         };
     }
@@ -770,11 +766,11 @@ function hasMultiScaleConfirmation(c: Cluster): boolean {
 }
 
 function hasBothSatelliteSeasons(c: Cluster): boolean {
-    return c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
+    return hasDistinctImageryObservations(c.provenance);
 }
 
 function hasHydrologyOrWetMarginSupport(c: Cluster): boolean {
-    return c.sources.includes('hydrology') ||
+    return (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology')) ||
         (c.metrics?.dryMarginScore  ?? 0) >= 0.55 ||
         (c.metrics?.flowConvergence ?? 0) >= 0.55;
 }
@@ -792,11 +788,7 @@ function hasPASOrHistoricContextNearby(c: Cluster): boolean {
 }
 
 function hasMultiSourceSupport(c: Cluster): boolean {
-    const physicalSources = c.sources.filter(s =>
-        s === 'terrain' || s === 'terrain_global' || s === 'hydrology' ||
-        s === 'satellite_spring' || s === 'satellite_summer' || s === 'historic',
-    );
-    return physicalSources.length >= 2;
+    return assessEvidenceIndependence(c.provenance).independentObservationCount >= 2;
 }
 
 // Junction / crossing / wet-margin convergence points are archaeologically
@@ -804,7 +796,7 @@ function hasMultiSourceSupport(c: Cluster): boolean {
 // nodes — hydrology context and flow convergence are more useful.
 function isAtRouteJunctionCrossingOrSpring(c: Cluster): boolean {
     if (c.isHighConfidenceCrossing) return true;
-    if (c.sources.includes('hydrology') && c.isOnCorridor) return true;
+    if (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology') && c.isOnCorridor) return true;
     if ((c.metrics?.flowConvergence ?? 0) >= 0.65 && c.isOnCorridor) return true;
     return false;
 }
@@ -892,7 +884,7 @@ export function assessRouteRelationship(
     }
 
     // ── Evidence-based risk reductions ────────────────────────────────────────
-    if (hasMultiScaleConfirmation(cluster))        { risk -= 15; debugFlags.push('has_multiscale'); }
+    if (hasMultiScaleConfirmation(cluster))        { debugFlags.push('has_multiscale_same_observation'); }
     if (hasBothSatelliteSeasons(cluster))          { risk -= 15; debugFlags.push('has_both_sat_seasons'); }
     if (hasHydrologyOrWetMarginSupport(cluster))   { risk -= 10; debugFlags.push('has_hydrology_wetmargin'); }
     if (hasHistoricMapOrAIMSupport(cluster))        {
@@ -1136,12 +1128,13 @@ export function computeFieldReliabilityScore(clusters: Cluster[]): FieldReliabil
 // the same gate and historic enhancement cannot reintroduce suppressed signals.
 
 function hasStrongIndependentEvidence(c: Cluster): boolean {
-    const hasLidar = c.sources.includes('terrain') || c.sources.includes('terrain_global');
-    const hasMultiSeasonSat = c.sources.includes('satellite_spring') && c.sources.includes('satellite_summer');
+    const hasLidar = (c.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback');
+    const hasMultiSeasonSat = hasDistinctImageryObservations(c.provenance);
 
     return (
-        (hasLidar && (hasMultiSeasonSat || c.sources.includes('hydrology') || c.multiScale === true)) ||
+        (hasLidar && (hasMultiSeasonSat || (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology')))) ||
         hasMultiSeasonSat ||
+        c.terrainMeasured === true ||
         c.aimInfo !== undefined
     );
 }

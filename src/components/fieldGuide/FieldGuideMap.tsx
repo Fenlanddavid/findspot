@@ -4,10 +4,10 @@ import { useSearchParams } from 'react-router';
 import { CoachTips } from '../CoachTips';
 import { ScaledImage } from '../ScaledImage';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
+import { HOTSPOT_ENGINE_VERSION } from '../../engines/hotspot/hotspotEngine';
 import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
 import type { TargetSignalStrength } from '../../engines/hotspot/targetInterpreter';
-import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
-import type { Cluster, Hotspot, HotspotClassification } from '../../pages/fieldGuideTypes';
+import type { Cluster } from '../../pages/fieldGuideTypes';
 import { SCAN_CONFIG } from '../../utils/scanConfig';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { createSavedPoint } from '../../services/fieldGuideMutations';
@@ -24,6 +24,8 @@ import {
 } from './FieldGuideContext';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { GeologyContextCard } from './GeologyContextCard';
+import { getHotspotResultHierarchy } from '../../domain/fieldGuideMetadata';
+import { evidenceProvenanceLabels } from '../../types/evidenceProvenance';
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
@@ -42,53 +44,6 @@ function getSignalBand(value: number | null | undefined, cap = 100): string {
     if (ratio >= 0.42) return 'Moderate';
     if (ratio > 0.08) return 'Trace';
     return 'Not present';
-}
-
-type HotspotResultHierarchy = {
-    signalStrength: 'Developing Signal' | 'Strong Signal' | 'Corroborated Signal';
-    whyItMatters: string;
-    nextAction: string;
-};
-
-function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength): HotspotResultHierarchy {
-    const signalStrength =
-        strength === 'Strong Zone' ? 'Corroborated Signal' :
-        strength === 'Moderate Zone' ? 'Strong Signal' :
-        'Developing Signal';
-
-    const whyByClassification: Record<HotspotClassification, string> = {
-        'Crossing Point Candidate':         'Movement compresses into a possible crossing point',
-        'Junction / Convergence Zone':      'Multiple movement lines converge in one area',
-        'Settlement Edge Candidate':        'Raised settlement-edge ground with supporting context',
-        'Burial / Barrow Candidate':        'Compact raised form consistent with funerary landscape use',
-        'Organised Field System Candidate': 'Structured linear pattern suggests managed land division',
-        'Palaeochannel Activity Zone':      'Former watercourse — activity concentrates at the channel margins',
-        'Wetland Margin Activity Zone':     'Activity concentrates along a wetland or former water edge',
-        'Route-Side Activity Zone':         'Landscape signals follow a historic movement corridor',
-        'Multi-Period Occupation Zone':     'Physical earthwork and spectral signals indicate layered use across time',
-        'Terrain Structure Candidate':      'Terrain response suggests a defined structural feature',
-        'Spectral Activity Candidate':      'Crop or spectral response suggests subsurface variation',
-        'Lowland Activity Zone':            'Signals cluster across lower-lying activity ground',
-        'Raised Activity Area':             'Slightly raised dry ground stands out from surroundings',
-        'Route-Influenced Area':            'Nearby route context appears to shape activity',
-        'Cropmark Activity Zone':           'Repeated cropmark response defines the activity zone',
-        'Multi-Signal Activity Zone':       'Independent landscape signals agree in the same area',
-        'General Activity Zone':            'Several weaker signals cluster into a supporting activity zone',
-    };
-
-    const nextAction = h.suggestedFocus
-        ? h.suggestedFocus
-        : h.isOnCorridor
-            ? 'Compare historic layer and follow the corridor edge'
-            : h.metrics.signalClassCount >= 3
-                ? 'Compare historic layer before marking targets'
-                : 'Review evidence breakdown and check field coverage';
-
-    return {
-        signalStrength,
-        whyItMatters: h.classificationReason || whyByClassification[h.classification],
-        nextAction,
-    };
 }
 
 function getProtectedTargetCopy(f: Cluster): { label: string; body: string; detail: string } {
@@ -275,8 +230,8 @@ export function FieldGuideMap() {
     const [searchParams] = useSearchParams();
 
     const bd = potentialScore?.breakdown ?? null;
-    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.signals } : null);
-    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.signals } : null);
+    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.imagery } : null);
+    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.imagery } : null);
     const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
     const mc = mapRef.current?.getCenter();
     const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
@@ -376,7 +331,7 @@ export function FieldGuideMap() {
                         <span className="text-lg shrink-0">⚠️</span>
                         <div className="flex-1 min-w-0">
                             <p className="text-xs font-bold text-amber-200">Concentrated find pattern</p>
-                            <p className="text-[0.6875rem] text-amber-300/80 mt-0.5 leading-snug">Your finds this session are clustering tightly. Could this be an in situ deposit?</p>
+                            <p className="text-[0.6875rem] text-amber-300/80 mt-0.5 leading-snug">Your finds this session are clustering tightly. Review the association; clustering alone does not establish an in-situ deposit.</p>
                         </div>
                         <div className="flex flex-col gap-1 shrink-0">
                             <button
@@ -782,7 +737,7 @@ export function FieldGuideMap() {
                                     <div className="space-y-2 mb-2">
                                         <div>
                                             <p className="text-[0.5625rem] font-black text-white/35 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
-                                            <p className="text-sm lg:text-sm font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
+                                            <p className="text-sm lg:text-sm font-bold text-white/85 leading-snug">{hierarchy.whatWasObserved}</p>
                                         </div>
                                         <div>
                                             <p className="text-[0.5625rem] font-black text-emerald-400/60 uppercase tracking-[0.18em] mb-0.5">Interpretive cue</p>
@@ -829,6 +784,14 @@ export function FieldGuideMap() {
                                     ))}
                                 </div>
                             </div>
+                            {evidenceProvenanceLabels(h.provenance).length > 0 && (
+                                <details className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                    <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-white/75">Source provenance</summary>
+                                    <ul className="space-y-1.5 pb-1">
+                                        {evidenceProvenanceLabels(h.provenance).map(label => <li key={label} className="text-xs font-medium leading-snug text-white/60">{label}</li>)}
+                                    </ul>
+                                </details>
+                            )}
                             {h.suggestedFocus && (
                                 <div className="mt-3 pt-3 border-t border-emerald-500/15">
                                     <p className="text-[0.625rem] font-black text-emerald-500/70 uppercase tracking-[0.12em] mb-1">Field focus</p>
@@ -1189,8 +1152,8 @@ export function FieldGuideMap() {
                                         { key: 'terrain_global',   label: 'Global Terrain' },
                                         { key: 'slope',            label: 'Slope' },
                                         { key: 'hydrology',        label: 'Hydrology' },
-                                        { key: 'satellite_spring', label: 'Spring SAT' },
-                                        { key: 'satellite_summer', label: 'Summer SAT' },
+                                        { key: 'satellite_spring', label: 'Imagery A' },
+                                        { key: 'satellite_summer', label: 'Imagery B' },
                                     ].map(({ key, label }) => {
                                         const usability = sourceUsability[key] ?? 'none';
                                         return (
@@ -1339,8 +1302,8 @@ export function FieldGuideMap() {
                                                     </div>
                                                     <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
                                                         <span className="block text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
-                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.signals || 0}%` }} /></div>
-                                                        <span className="text-base font-black text-purple-500">{getSignalBand(potentialScore.breakdown?.signals)}</span>
+                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.placeNames || 0}%` }} /></div>
+                                                        <span className="text-base font-black text-purple-500">{getSignalBand(potentialScore.breakdown?.placeNames)}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1362,7 +1325,7 @@ export function FieldGuideMap() {
                                                 const mb  = mapRef.current?.getBounds();
                                                 const payload = {
                                                     exportedAt:        new Date().toISOString(),
-                                                    engineVersion:     'FG-2026.05.20b',
+                                                    engineVersion:     HOTSPOT_ENGINE_VERSION,
                                                     fromCache:         scanFromCache,
                                                     scanCenter:        terrainScanCenterRef.current ?? (mc2 ? { lat: mc2.lat, lng: mc2.lng } : null),
                                                     scanStartBounds:   terrainScanBoundsRef.current,

@@ -40,14 +40,16 @@ function isExtractiveGeology(gc: GeologyContext | null): boolean {
 }
 
 function isStableGeology(gc: GeologyContext | null): boolean {
-    return !geologyContains(gc, ['peat', 'alluvium', 'made ground', 'disturbed', 'fill']);
+    if (!gc) return false;
+    const hasNamedGeology = Boolean(gc.raw.bedrockName || gc.raw.bedrockLithology || gc.raw.superficialName || gc.raw.superficialLithology);
+    return hasNamedGeology && !geologyContains(gc, ['peat', 'alluvium', 'made ground', 'disturbed', 'fill']);
 }
 
 // ─── Aspect helpers ───────────────────────────────────────────────────────────
 
-function isSouthFacingAspect(aspectDegrees: number): boolean {
+function isSouthFacingAspect(aspectDegrees: number | null): boolean {
     // South, SE, SW — 112.5° to 247.5°
-    return aspectDegrees >= 112.5 && aspectDegrees <= 247.5;
+    return aspectDegrees !== null && Number.isFinite(aspectDegrees) && aspectDegrees >= 112.5 && aspectDegrees <= 247.5;
 }
 
 // ─── Cap helper ───────────────────────────────────────────────────────────────
@@ -75,11 +77,11 @@ export interface MeasuredTerrain {
 export function computePrimaryProcesses(
     signals: AdaptedSignals,
     geologyContext: GeologyContext | null,
-    elevationM: number,
-    slopePercent: number,
-    aspectDegrees: number,
+    elevationM: number | null,
+    slopePercent: number | null,
+    aspectDegrees: number | null,
     region: TerrainRegionType,
-    potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    potentialBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null,
     lieHints?: LIEHints,
     measuredTerrain?: MeasuredTerrain,
 ): PrimaryProcessScore[] {
@@ -89,6 +91,8 @@ export function computePrimaryProcesses(
     const useMeasured = measuredTerrain?.terrainMeasured === true;
     const relief      = measuredTerrain?.relativeReliefNorm ?? 0;
     const gradient    = measuredTerrain?.slopeGradient      ?? 0;
+    const hasElevation = elevationM !== null && Number.isFinite(elevationM);
+    const hasSlope = slopePercent !== null && Number.isFinite(slopePercent);
 
     // ── 1. Occupation Potential ───────────────────────────────────────────────
     {
@@ -97,11 +101,11 @@ export function computePrimaryProcesses(
         const settlementSignals: string[] = [];
 
         // Slope < 10%: suitable for settlement (proxy path)
-        if (slopePercent < 10) { settlementScore += 15; }
+        if (hasSlope && slopePercent < 10) { settlementScore += 15; }
         // South/SE/SW aspect — score boost only; no signal push (aspect direction ≠ elevation)
         if (isSouthFacingAspect(aspectDegrees)) { settlementScore += 10; }
         // Elevation 5–50m above sea level (broad proxy for terrace/dry ground)
-        if (elevationM >= 5 && elevationM <= 50) { settlementScore += 10; settlementSignals.push('terrace_edge'); }
+        if (hasElevation && elevationM >= 5 && elevationM <= 50) { settlementScore += 10; settlementSignals.push('terrace_edge'); }
 
         // Measured terrain (vNext-P3): raised stable ground at low gradient —
         // the classic settlement position (terrace above wet, passable slope).
@@ -123,23 +127,27 @@ export function computePrimaryProcesses(
         // Stable geology
         if (isStableGeology(geologyContext)) { settlementScore += 8; }
         // Dry ground near water
-        if ((signals.waterProximity || hydroScore > 25) && slopePercent < 5) { settlementScore += 10; settlementSignals.push('dry_ground_water_proximity'); }
+        if ((signals.waterProximity || hydroScore > 25) && hasSlope && slopePercent < 5) { settlementScore += 10; settlementSignals.push('dry_ground_water_proximity'); }
         // LIE corroboration: terrain scan independently detected occupation signal.
         // Score-only boost — no contributingSignal added as this label has no
         // catalog entry in evidenceModel or narrativeGenerator.
-        if (lieHints?.hasOccupationSignal) { settlementScore += 12; }
+        if (lieHints?.hasOccupationSignal && useMeasured) { settlementScore += 12; }
 
         settlementScore = cap(settlementScore);
 
         // Agricultural suitability (used to reduce settlement overclaiming)
         let agriScore = 0;
         if (isFertileGeology(geologyContext)) agriScore += 30;
-        if (slopePercent < 5) agriScore += 20;
+        if (hasSlope && slopePercent < 5) agriScore += 20;
         if (isFreeDraining(geologyContext))   agriScore += 20;
         agriScore = cap(agriScore);
 
-        // UNVALIDATED weights: settlement 70%, agricultural reduction 30%
-        const rawScore = cap(settlementScore * 0.7 + agriScore * 0.3);
+        // Agricultural suitability is a competing explanation, not positive
+        // evidence for occupation. Only explicit cultivation morphology reduces
+        // the settlement interpretation; generic fertile terrain is reported in
+        // the resource process below.
+        const agriculturalAmbiguity = signals.ridgeAndFurrowPresent ? agriScore * 0.3 : 0;
+        const rawScore = cap(settlementScore * 0.7 - agriculturalAmbiguity);
         const multiplier = getRegionalMultiplier(processId, region);
 
         results.push({
@@ -168,7 +176,7 @@ export function computePrimaryProcesses(
         if (signals.confluencePresent)        { score += 20; contributingSignals.push('crossing_point'); }
 
         // Saddle/col heuristic: moderate elevation + moderate slope (proxy path)
-        if (elevationM > 20 && elevationM < 150 && slopePercent > 2 && slopePercent < 15) {
+        if (hasElevation && hasSlope && elevationM > 20 && elevationM < 150 && slopePercent > 2 && slopePercent < 15) {
             score += 15;
         }
 
@@ -199,7 +207,7 @@ export function computePrimaryProcesses(
         // Sub-component A: agricultural resource
         let agriScore = 0;
         if (isFertileGeology(geologyContext)) { agriScore += 18; }
-        if (slopePercent < 5)                 { agriScore += 12; }
+        if (hasSlope && slopePercent < 5)     { agriScore += 12; }
         if (signals.ridgeAndFurrowPresent)    { agriScore += 42; contributingSignals.push('ridge_and_furrow'); }
         if (isFreeDraining(geologyContext))   { agriScore += 18; }
         if (region === 'fen_peat' && !signals.ridgeAndFurrowPresent) {
@@ -285,36 +293,26 @@ export function computePrimaryProcesses(
         const processId: PrimaryProcessId = 'landscape_prominence';
         const contributingSignals: string[] = [];
 
-        // Heuristic: higher elevation + steeper slope = more prominent.
-        // When elevationM is 0 (not yet available from scan), fall back to the
-        // terrain score from potentialBreakdown — it is computed from real DEM
-        // data and reliably reflects terrain relief. Map 0–100 terrain score
-        // to a proportional prominence score.
+        // Heuristic: higher elevation + steeper slope = more prominent. Missing
+        // physical measurements remain unknown and contribute no terrain points.
         let score = 0;
-        const terrainScore = potentialBreakdown?.terrain ?? 0;
 
-        if (elevationM > 0) {
+        if (hasElevation && elevationM > 0) {
             // Real elevation data available — use it
             if (elevationM > 100) { score = 85; contributingSignals.push('high_ground_restricted_approach'); }
-            else if (elevationM > 50 && slopePercent > 5)  { score = 70; contributingSignals.push('slight_elevation'); }
-            else if (elevationM > 30 && slopePercent > 3)  { score = 55; contributingSignals.push('slight_elevation'); }
-            else if (elevationM > 15 && slopePercent > 2)  { score = 40; contributingSignals.push('slight_elevation'); }
-            else if (elevationM > 5  && slopePercent >= 1) { score = 25; }
+            else if (hasSlope && elevationM > 50 && slopePercent > 5)  { score = 70; contributingSignals.push('slight_elevation'); }
+            else if (hasSlope && elevationM > 30 && slopePercent > 3)  { score = 55; contributingSignals.push('slight_elevation'); }
+            else if (hasSlope && elevationM > 15 && slopePercent > 2)  { score = 40; contributingSignals.push('slight_elevation'); }
+            else if (hasSlope && elevationM > 5  && slopePercent >= 1) { score = 25; }
             else { score = 10; }
-        } else {
-            // No elevation — use terrain score as prominence proxy
-            // terrain score reflects DEM relief/anomaly: high = varied, interesting terrain
-            score = Math.round(terrainScore * 0.85); // scale: terrain 100 → prominence 85
-            if (terrainScore > 60) contributingSignals.push('slight_elevation');
-            if (terrainScore > 80) contributingSignals.push('high_ground_restricted_approach');
         }
 
         // Restricted approach bonus: steep slope suggests defended/prominent ground (proxy)
-        if (slopePercent > 15) { score = Math.min(100, score + 15); contributingSignals.push('high_ground_restricted_approach'); }
+        if (hasSlope && slopePercent > 15) { score = Math.min(100, score + 15); contributingSignals.push('high_ground_restricted_approach'); }
         // LIE corroboration: terrain scan independently classified a prominent landform.
         // Score-only boost — avoid reusing slight_elevation here as that would
         // misrepresent the source in any evidence breakdown.
-        if (lieHints?.hasLandformProminence) { score = Math.min(100, score + 10); }
+        if (lieHints?.hasLandformProminence && useMeasured) { score = Math.min(100, score + 10); }
 
         // Measured terrain (vNext-P3): locally raised ground is a direct measurement
         // of relative prominence. Thresholds: 0.05 = faint rise, 0.15 = clear rise.
@@ -350,7 +348,7 @@ export function computePrimaryProcesses(
         }
 
         // Terrace break: slope discontinuity proxy (moderate slope suggests terrace edge)
-        if (slopePercent > 2 && slopePercent < 8 && elevationM > 5) {
+        if (hasSlope && hasElevation && slopePercent > 2 && slopePercent < 8 && elevationM > 5) {
             score += 25;
             contributingSignals.push('terrace_edge');
         }
@@ -361,7 +359,7 @@ export function computePrimaryProcesses(
         }
 
         // Valley head: low elevation + moderate slope suggests valley-head position
-        if (elevationM < 30 && slopePercent > 3 && slopePercent < 10) {
+        if (hasElevation && hasSlope && elevationM < 30 && slopePercent > 3 && slopePercent < 10) {
             score += 20;
             contributingSignals.push('valley_head');
         }
@@ -379,7 +377,7 @@ export function computePrimaryProcesses(
         // LIE corroboration: terrain scan independently detected a landscape transition.
         // Score-only boost — terrace_edge would misrepresent this as a specific
         // landform observation rather than a generalised boundary classification.
-        if (lieHints?.hasBoundaryTransition) { score += 10; }
+        if (lieHints?.hasBoundaryTransition && useMeasured) { score += 10; }
 
         const rawScore = cap(score);
         const multiplier = getRegionalMultiplier(processId, region);

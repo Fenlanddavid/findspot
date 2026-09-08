@@ -64,6 +64,7 @@ export async function auditDatabaseIntegrity(
     database.undugSignals,
     database.findHotspotSignals,
     database.hotspotPredictions,
+    database.hotspotPredictionEvidence,
     database.outstandingQuestions,
     database.questionNotes,
     database.permissionSections,
@@ -77,7 +78,7 @@ export async function auditDatabaseIntegrity(
     const [
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
-      hotspotPredictions, outstandingQuestions, questionNotes,
+      hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
       surfaceObservations,
     ] = await Promise.all([
@@ -93,6 +94,7 @@ export async function auditDatabaseIntegrity(
       database.undugSignals.toArray(),
       database.findHotspotSignals.toArray(),
       database.hotspotPredictions.toArray(),
+      database.hotspotPredictionEvidence.toArray(),
       database.outstandingQuestions.toArray(),
       database.questionNotes.toArray(),
       database.permissionSections.toArray(),
@@ -104,7 +106,7 @@ export async function auditDatabaseIntegrity(
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
-      hotspotPredictions, outstandingQuestions, questionNotes,
+      hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
       surfaceObservations,
     };
@@ -123,6 +125,7 @@ export async function auditDatabaseIntegrity(
   const sectionById = new Map(rows.permissionSections.map(row => [row.id, row]));
   const trackIds = new Set(rows.tracks.map(row => row.id));
   const companionRecordingsById = new Map(rows.companionRecordings.map(row => [row.id, row]));
+  const predictionIds = new Set(rows.hotspotPredictions.map(row => row.id));
 
   let danglingPermissionIds = 0;
   for (const row of [
@@ -196,6 +199,15 @@ export async function auditDatabaseIntegrity(
     for (const linkedFindId of row.linkedFindIds ?? []) {
       if (!findIds.has(linkedFindId)) orphanedRecords += 1;
     }
+  }
+  for (const evidence of rows.hotspotPredictionEvidence) {
+    if (!predictionIds.has(evidence.predictionId)) orphanedRecords += 1;
+    if (missingOptionalId(evidence.permissionId, permissionIds)) danglingPermissionIds += 1;
+    // sessionId is immutable visit provenance, not a live foreign key. An
+    // active evidence link, however, must still have its source record.
+    if (evidence.retractedAt === undefined
+      && evidence.kind === 'find_association'
+      && !findIds.has(evidence.sourceRecordId)) orphanedRecords += 1;
   }
   for (const observation of rows.sessionCoverage) {
     const section = sectionById.get(observation.sectionId);

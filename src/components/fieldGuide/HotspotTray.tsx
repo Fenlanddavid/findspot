@@ -2,10 +2,10 @@ import React from 'react';
 import type maplibregl from 'maplibre-gl';
 import { getHotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
-import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
 import type { Hotspot, Cluster } from '../../pages/fieldGuideTypes';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HOTSPOT_TITLES } from './FieldGuideContext';
+import { getHotspotResultHierarchy } from '../../domain/fieldGuideMetadata';
 
 function getPotentialTier(score: number): string {
     if (score > 80) return 'High Potential';
@@ -19,55 +19,6 @@ function getPotentialTierShort(score: number): string {
     if (score > 60) return 'STRG';
     if (score > 35) return 'MOD';
     return 'LOW';
-}
-
-type HotspotResultHierarchy = {
-    signalStrength: 'Developing Signal' | 'Strong Signal' | 'Corroborated Signal';
-    whyItMatters: string;
-    nextAction: string;
-};
-
-import type { HotspotClassification } from '../../pages/fieldGuideTypes';
-
-function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength): HotspotResultHierarchy {
-    const signalStrength =
-        strength === 'Strong Zone' ? 'Corroborated Signal' :
-        strength === 'Moderate Zone' ? 'Strong Signal' :
-        'Developing Signal';
-
-    const whyByClassification: Record<HotspotClassification, string> = {
-        'Crossing Point Candidate':         'Movement compresses into a possible crossing point',
-        'Junction / Convergence Zone':      'Multiple movement lines converge in one area',
-        'Settlement Edge Candidate':        'Raised settlement-edge ground with supporting context',
-        'Burial / Barrow Candidate':        'Compact raised form consistent with funerary landscape use',
-        'Organised Field System Candidate': 'Structured linear pattern suggests managed land division',
-        'Palaeochannel Activity Zone':      'Former watercourse — activity concentrates at the channel margins',
-        'Wetland Margin Activity Zone':     'Activity concentrates along a wetland or former water edge',
-        'Route-Side Activity Zone':         'Landscape signals follow a historic movement corridor',
-        'Multi-Period Occupation Zone':     'Physical earthwork and spectral signals indicate layered use across time',
-        'Terrain Structure Candidate':      'Terrain response suggests a defined structural feature',
-        'Spectral Activity Candidate':      'Crop or spectral response suggests subsurface variation',
-        'Lowland Activity Zone':            'Signals cluster across lower-lying activity ground',
-        'Raised Activity Area':             'Slightly raised dry ground stands out from surroundings',
-        'Route-Influenced Area':            'Nearby route context appears to shape activity',
-        'Cropmark Activity Zone':           'Repeated cropmark response defines the activity zone',
-        'Multi-Signal Activity Zone':       'Independent landscape signals agree in the same area',
-        'General Activity Zone':            'Several weaker signals cluster into a supporting activity zone',
-    };
-
-    const nextAction = h.suggestedFocus
-        ? h.suggestedFocus
-        : h.isOnCorridor
-            ? 'Compare historic layer and follow the corridor edge'
-            : h.metrics.signalClassCount >= 3
-                ? 'Compare historic layer before marking targets'
-                : 'Review evidence breakdown and check field coverage';
-
-    return {
-        signalStrength,
-        whyItMatters: h.classificationReason || whyByClassification[h.classification],
-        nextAction,
-    };
 }
 
 function getProtectedTargetCopy(f: Cluster): { label: string; body: string; detail: string } {
@@ -155,7 +106,7 @@ export function HotspotTray() {
                                         </div>
                                         <span className="text-[0.5rem] font-black text-emerald-500/50 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">Priority</span>
                                     </div>
-                                    <p className="text-[0.6875rem] font-bold text-emerald-200/70 leading-tight line-clamp-2">{hier.whyItMatters}</p>
+                                    <p className="text-[0.6875rem] font-bold text-emerald-200/70 leading-tight line-clamp-2">{hier.whatWasObserved}</p>
                                 </button>
                             );
                             return (
@@ -219,7 +170,10 @@ export function HotspotTray() {
                         {traceTargets.map(t => {
                             const isSelected = t.id === selectedTraceId;
                             const sourceChips: string[] = [];
-                            if (t.sources.includes('terrain') || t.sources.includes('terrain_global')) sourceChips.push('LiDAR');
+                            const deliveredLocalLidar = (t.provenance ?? []).some(p => p.parentSourceIdentity.startsWith('ea-lidar-composite') && p.fallbackStatus !== 'fallback');
+                            const hasTerrainFallback = (t.provenance ?? []).some(p => p.fallbackStatus === 'fallback' && p.requestedSource.startsWith('terrain'));
+                            if (deliveredLocalLidar) sourceChips.push('LiDAR image');
+                            if (hasTerrainFallback) sourceChips.push('Global relief fallback');
                             if (t.sources.includes('satellite_summer') || t.sources.includes('satellite_spring')) sourceChips.push('Sat');
                             if (t.sources.includes('hydrology')) sourceChips.push('Hydro');
                             if (t.sources.includes('slope')) sourceChips.push('Slope');

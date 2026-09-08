@@ -39,6 +39,8 @@ export async function deletePermissionCascade(
   const findIds = finds.map(find => find.id);
   const significantFinds = await db.significantFinds.where('permissionId').equals(permissionId).toArray();
   const significantFindIds = significantFinds.map(find => find.id);
+  const predictionIds = (await db.hotspotPredictions.where('permissionId').equals(permissionId).toArray())
+    .map(prediction => prediction.id);
 
   await db.transaction(
     'rw',
@@ -55,6 +57,8 @@ export async function deletePermissionCascade(
       db.questionNotes,
       db.permissionSections,
       db.sessionCoverage,
+      db.hotspotPredictions,
+      db.hotspotPredictionEvidence,
       db.surfaceObservations,
     ],
     async () => {
@@ -69,6 +73,10 @@ export async function deletePermissionCascade(
       await db.sessionCoverage.where('permissionId').equals(permissionId).delete();
       await db.permissionSections.where('permissionId').equals(permissionId).delete();
       await db.surfaceObservations.where('permissionId').equals(permissionId).delete();
+      if (predictionIds.length > 0) {
+        await db.hotspotPredictionEvidence.where('predictionId').anyOf(predictionIds).delete();
+        await db.hotspotPredictions.bulkDelete(predictionIds);
+      }
 
       const questionIds = (
         await db.outstandingQuestions.where('permissionId').equals(permissionId).toArray()

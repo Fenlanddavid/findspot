@@ -16,39 +16,44 @@ import {
     getDistanceToLine,
     isRouteLikeWithoutModernWays,
 } from '../../utils/fieldGuideAnalysis';
+import { assessEvidenceIndependence, hasDeliveredDataType, hasDistinctImageryObservations } from '../../types/evidenceProvenance';
+
+function hasDeliveredLidar(f: Cluster): boolean {
+    return (f.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback');
+}
 
 // ─── Gate mirrors (must exactly match FieldGuide.tsx) ────────────────────────
 
 function hasTargetEvidence(f: Cluster): boolean {
-    const hasLidar = f.sources.includes('terrain') || f.sources.includes('terrain_global');
+    const hasLidar = hasDeliveredLidar(f);
     const hasSlopeWithPhysicalSupport = f.sources.includes('slope') && (
         hasLidar ||
-        f.sources.includes('hydrology') ||
-        f.sources.includes('satellite_spring') ||
-        f.sources.includes('satellite_summer')
+        f.terrainMeasured === true ||
+        hasDistinctImageryObservations(f.provenance)
     );
-    const hasCorroboratedHydrology = f.sources.includes('hydrology') && hasLidar;
+    const hasCorroboratedHydrology = f.observationKind === 'elevation_measurement' && f.sources.includes('hydrology') && hasLidar;
     return (
         hasLidar ||
         hasSlopeWithPhysicalSupport ||
         hasCorroboratedHydrology ||
-        (f.sources.includes('satellite_summer') && f.sources.includes('satellite_spring')) ||
+        hasDistinctImageryObservations(f.provenance) ||
+        f.terrainMeasured === true ||
         f.aimInfo !== undefined
     );
 }
 
 function hasLocalPhysicalEvidence(f: Cluster): boolean {
-    const hasLidar = f.sources.includes('terrain') || f.sources.includes('terrain_global');
+    const hasLidar = hasDeliveredLidar(f);
     const hasSlopeWithLocalSupport = f.sources.includes('slope') && (
         hasLidar ||
-        (f.sources.includes('satellite_spring') && f.sources.includes('satellite_summer')) ||
-        f.multiScale === true
+        f.terrainMeasured === true ||
+        hasDistinctImageryObservations(f.provenance)
     );
     return (
         hasLidar ||
         hasSlopeWithLocalSupport ||
-        (f.sources.includes('satellite_spring') && f.sources.includes('satellite_summer')) ||
-        f.multiScale === true
+        hasDistinctImageryObservations(f.provenance) ||
+        f.terrainMeasured === true
     );
 }
 
@@ -118,14 +123,12 @@ function markSuppressed(c: Cluster, reason: string): void {
 
 // ─── Physical source helpers ──────────────────────────────────────────────────
 
-const PHYSICAL_SOURCES = ['terrain', 'terrain_global', 'hydrology', 'satellite_spring', 'satellite_summer'] as const;
-
 function physicalSourceCount(f: Cluster): number {
-    return f.sources.filter(s => (PHYSICAL_SOURCES as readonly string[]).includes(s)).length;
+    return assessEvidenceIndependence(f.provenance).independentObservationCount;
 }
 
 function hasStrongPhysical(f: Cluster): boolean {
-    return f.sources.includes('terrain') || f.sources.includes('terrain_global');
+    return f.terrainMeasured === true || hasDeliveredLidar(f);
 }
 
 // ─── Trace score ──────────────────────────────────────────────────────────────
@@ -138,17 +141,18 @@ function computeTraceScore(c: Cluster, nearestDisplayDist: number): number {
     if (physicalSourceCount(c) > 0) score += 15;
 
     // Source quality
-    if (c.sources.includes('terrain') || c.sources.includes('terrain_global')) score += 18;
-    if (c.sources.includes('hydrology')) score += 10;
-    if (c.sources.includes('satellite_summer') && c.sources.includes('satellite_spring')) score += 14;
-    else if (c.sources.includes('satellite_summer')) score += 9;
-    else if (c.sources.includes('satellite_spring')) score += 5;
+    if (hasDeliveredLidar(c) || c.terrainMeasured === true) score += 18;
+    if (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology')) score += 10;
+    if (hasDistinctImageryObservations(c.provenance)) score += 14;
+    else if (hasDeliveredDataType(c.provenance, 'rgb_imagery')) score += 7;
 
-    // Multi-scale detection — stronger independent confirmation
-    if (c.multiScale) score += 10;
+    // Multi-scale persistence is a useful shape-strength signal, but remains a
+    // second transformation of the same parent raster rather than an independent
+    // observation.
+    if (c.multiScale) score += 4;
 
     // Relative elevation adds archaeological plausibility
-    if (c.relativeElevation === 'Ridge' || c.relativeElevation === 'Hollow') score += 4;
+    if (c.terrainMeasured === true && Math.abs(c.relativeReliefM ?? 0) >= 0.25) score += 4;
 
     // Disturbance context
     if (c.disturbanceRisk === 'Low')    score += 5;
@@ -173,8 +177,8 @@ function computeTraceScore(c: Cluster, nearestDisplayDist: number): number {
     const t = c.type;
     if (t.includes('Ring') || t.includes('Circular') || t.includes('Roundhouse') || t.includes('Barrow')) {
         score += 14;
-    } else if (t.includes('Palaeochannel')) {
-        score += 12;   // strong hydrology signal — palaeochannels are archaeologically meaningful
+    } else if (t.includes('Channel-like')) {
+        score += 6;
     } else if (t.includes('Enclosure') || t.includes('Structural')) {
         score += 7;
     } else if (t.includes('Linear') && !c.sources.includes('hydrology') && !c.multiScale) {
@@ -250,7 +254,7 @@ function classifyTraceType(
     if (t.includes('Structural')) {
         return 'weak_structural';
     }
-    if (t.includes('Palaeochannel') || (c.sources.includes('hydrology') && physicalSourceCount(c) === 1)) {
+    if (t.includes('Channel-like') || (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology') && physicalSourceCount(c) === 1)) {
         return 'hydrology_trace';
     }
     // Strongest terrain-water path: corroborated dryMarginScore + flowConvergence.
@@ -266,7 +270,7 @@ function classifyTraceType(
         return 'corridor_trace';
     }
     // Hydrology-backed dry margin: source list confirms a watercourse relationship.
-    if (c.sources.includes('hydrology') && c.polarity === 'Raised') {
+    if (c.observationKind === 'elevation_measurement' && c.sources.includes('hydrology') && c.polarity === 'Raised') {
         return 'dry_margin_trace';
     }
     // Terrain-only dry margin: geometry suggests raised ground beside lower terrain,
@@ -291,7 +295,7 @@ function getTraceLabel(type: TraceType, _sources: Cluster['sources']): string {
         case 'below_cut_supporting':  return 'Supporting Signal';
         case 'merged_echo':           return 'Merged Source Echo';
         case 'hydrology_trace':       return 'Hydrology Trace';
-        case 'spectral_trace':        return 'Spectral Trace';
+        case 'spectral_trace':        return 'Vegetation Image Signal';
         case 'boundary_trace':        return 'Boundary Trace';
         case 'suppressed_circular':   return 'Circular Anomaly';
         case 'weak_structural':       return 'Structural Trace';
@@ -313,13 +317,13 @@ function buildTraceReason(c: Cluster, type: TraceType): string {
         case 'merged_echo':
             return 'Sub-signal offset from a stronger target — independent spatial position worth noting.';
         case 'hydrology_trace':
-            return 'Subtle water-associated terrain response — possible palaeochannel or wet-margin signal.';
+            return 'Channel-like image morphology; a former watercourse is one possibility, not a measured result.';
         case 'spectral_trace':
-            return 'Satellite-derived vegetation anomaly without LiDAR confirmation — field verification recommended.';
+            return 'Exploratory RGB vegetation signal without independent terrain confirmation.';
         case 'boundary_trace':
             return 'Linear ditch or bank signal below target confidence — possible field boundary or enclosure edge.';
         case 'suppressed_circular':
-            return 'Weak circular morphology — possible ring ditch, barrow, or roundhouse below main confidence bar.';
+            return 'Weak circular morphology with unknown date and function; natural and modern alternatives remain.';
         case 'weak_structural':
             return 'Structural signal with insufficient corroboration — possible building remains or platform.';
         case 'fragmented_enclosure':
@@ -335,7 +339,7 @@ function buildTraceReason(c: Cluster, type: TraceType): string {
         case 'weak_multiscale':
             return 'Multi-scale agreement without sufficient evidence corroboration — scale-consistent anomaly worth exploring.';
         case 'single_source_landscape':
-            return 'Single physical source — credible but below the two-source threshold for a confirmed target.';
+            return 'Single delivered observation — inspectable, but not independent corroboration.';
         default: {
             const failed: string[] = [];
             if (!hasTargetEvidence(c))        failed.push('evidence gate');
@@ -499,6 +503,7 @@ export function computeTraceTargets(
             center:                c.center,
             type:                  c.type,
             sources:               c.sources,
+            provenance:            c.provenance,
             findPotential:         c.findPotential,
             confidence:            c.confidence,
             disturbanceRisk:       c.disturbanceRisk,
@@ -535,6 +540,7 @@ export function computeTraceTargets(
             center:                raw.center,
             type:                  raw.type,
             sources:               raw.sources,
+            provenance:            raw.provenance,
             findPotential:         raw.findPotential,
             confidence:            raw.confidence,
             disturbanceRisk:       raw.disturbanceRisk,
@@ -652,10 +658,10 @@ export function getTraceTags(cluster: TraceTarget | Cluster): string[] {
     }
 
     // Source chips
-    if (cluster.sources.includes('terrain') || cluster.sources.includes('terrain_global')) tags.push('LiDAR');
-    if (cluster.sources.includes('hydrology')) tags.push('Hydro');
-    if (cluster.sources.includes('satellite_summer') || cluster.sources.includes('satellite_spring')) tags.push('Spectral');
-    if (cluster.multiScale) tags.push('Multi-Scale');
+    if ((cluster.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback')) tags.push('LiDAR image');
+    if ('terrainMeasured' in cluster && cluster.terrainMeasured === true) tags.push('Elevation measured');
+    if (cluster.sources.includes('satellite_summer') || cluster.sources.includes('satellite_spring')) tags.push('Vegetation image');
+    if (cluster.multiScale) tags.push('Multi-scale transform');
 
     // Warning chips
     if (cluster.disturbanceRisk === 'High') tags.push('High Disturb.');

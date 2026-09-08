@@ -60,7 +60,7 @@ describe('captureGPS', () => {
     reportPosition(position(30));
     reportError(error(3, 'Position timed out'));
 
-    await expect(result).resolves.toEqual({ lat: 52.2053, lon: 0.1218, accuracyM: 30 });
+    await expect(result).resolves.toMatchObject({ lat: 52.2053, lon: 0.1218, accuracyM: 30 });
     expect(clearWatch).toHaveBeenCalledWith(41);
   });
 

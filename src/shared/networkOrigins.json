@@ -12,6 +12,7 @@
   { "origin": "https://wayback.maptiles.arcgis.com", "class": "automatic", "purpose": "Esri Wayback imagery" },
   { "origin": "https://environment.data.gov.uk", "class": "automatic", "purpose": "Environment Agency LiDAR WMS and tiles" },
   { "origin": "https://mapseries-tilesets.s3.amazonaws.com", "class": "automatic", "purpose": "National Library of Scotland historic mapping" },
+  { "origin": "https://s3.amazonaws.com", "class": "automatic", "purpose": "AWS Terrain Tiles Terrarium elevation DEM" },
   { "origin": "https://overpass-api.de", "class": "automatic", "purpose": "OpenStreetMap Overpass queries" },
   { "origin": "https://overpass.kumi.systems", "class": "automatic", "purpose": "OpenStreetMap Overpass failover" },
   { "origin": "https://overpass.osm.ch", "class": "automatic", "purpose": "OpenStreetMap Overpass failover" },

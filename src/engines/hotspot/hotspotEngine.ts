@@ -16,8 +16,15 @@ import {
     supportingExplanation,
     type HotspotExplanation,
 } from './hotspotExplanations';
-
-export const HOTSPOT_ENGINE_VERSION = 'FG-2026.07.21a';
+import {
+    assessEvidenceIndependence,
+    assessEvidenceQuality,
+    hasDeliveredDataType,
+    hasDistinctImageryObservations,
+    mergeEvidenceProvenance,
+} from '../../types/evidenceProvenance';
+export { HOTSPOT_ENGINE_VERSION } from '../../domain/engineVersions';
+import { HOTSPOT_ENGINE_VERSION } from '../../domain/engineVersions';
 
 // ─── Shared confidence evaluator ──────────────────────────────────────────────
 // Single model used after terrain scoring and again after historic enrichment,
@@ -143,12 +150,12 @@ interface ClassifyContext {
     behaviour:              number;
     signalCount:            number;
     signalClassCount:       number;
-    // New flags for Burial/Barrow and Field System classifications
+    // Morphology is observational; it does not assign archaeological function.
     hasCircularFeature:     boolean;
     hasLinearPattern:       boolean;
     hasSettlementContext:   boolean;
     disturbanceIsHigh:      boolean;
-    // B: Multi-period classification
+    // Distinct imagery versions, never inferred seasons.
     hasMultiSeasonSat:      boolean;
     hasAimEnrichment:       boolean;
     hasPalaeoChannel:       boolean;
@@ -178,29 +185,12 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 3. Burial / Barrow Candidate — isolated compact circular raised feature confirmed by LiDAR.
-    // Requires the cluster to have a circular earthwork type and high circularity, but must NOT
-    // sit within a settlement cluster (which would indicate a domestic rather than funerary feature).
-    // Ranked before Multi-Period: Bronze Age barrows are the highest-yield single site type for
-    // metal detecting in England. Specific morphological identity should win over broad periodisation.
+    // 3. Circular morphology — describe the observation before suggesting function.
     if (ctx.hasLidar && ctx.isRaised && ctx.hasCircularFeature &&
         !ctx.hasSettlementContext && ctx.anomaly >= 10) {
         return {
-            classification: 'Burial / Barrow Candidate',
-            reason:         'Compact circular raised feature — check heritage records before investigating',
-        };
-    }
-
-    // B: Multi-Period Occupation Zone — physical earthwork (LiDAR) and seasonal spectral signal
-    // (multi-season satellite) represent independent time-depths of deposition. Together with
-    // diverse signal classes, this indicates repeated human use rather than a single episode.
-    // Circular burial features take priority above this (already handled); non-circular
-    // multi-period evidence sits above broad settlement/wetland/route buckets.
-    if (!ctx.hasCircularFeature && ctx.hasLidar && ctx.hasMultiSeasonSat && ctx.signalClassCount >= 3 && ctx.anomaly >= 10) {
-        return {
-            classification: 'Multi-Period Occupation Zone',
-            reason:         'Physical earthwork and multi-season spectral signals — activity from more than one period',
-            secondaryTag:   ctx.hasAimEnrichment ? 'Historically recorded activity nearby' : undefined,
+            classification: 'Circular Terrain Feature',
+            reason:         'Compact circular raised morphology; function and date are unknown',
         };
     }
 
@@ -230,13 +220,12 @@ function classifyHotspot(ctx: ClassifyContext): {
         };
     }
 
-    // 5b. Palaeochannel Activity Zone — confirmed ancient watercourse without a
-    //     strong route-junction identity. Weak route proximity can still be part
-    //     of the watercourse story, so only convergence >= 6 suppresses this.
+    // 5b. Possible palaeochannel — reserved for a physically measured channel-like
+    // depression, and still presented as an interpretation rather than confirmation.
     if (ctx.hasPalaeoChannel && ctx.convergence < 6) {
         return {
             classification: 'Palaeochannel Activity Zone',
-            reason:         'Former watercourse — potential activity focus at channel edge or silted deposit zone',
+            reason:         'Measured channel-like depression; a former watercourse is one possible interpretation',
             secondaryTag:   ctx.hasRomanProximity ? 'Roman corridor influence' : undefined,
         };
     }
@@ -468,20 +457,22 @@ export function buildTerrainHotspots(
         const explanation: HotspotExplanation[] = [];
 
         const sources = new Set(members.flatMap(m => m.sources));
+        const provenance = mergeEvidenceProvenance(...members.map(m => m.provenance));
+        const evidenceAssessment = assessEvidenceIndependence(provenance);
+        const independentObservationCount = evidenceAssessment.independentObservationCount;
 
         // ── Signal presence flags (what data exists) ──────────────────────────
-        const hasLidar              = sources.has('terrain') || sources.has('terrain_global');
-        const hasSatellite          = sources.has('satellite_spring') || sources.has('satellite_summer');
-        const hasHydrology          = sources.has('hydrology');
-        const hasMultiSeasonSat     = sources.has('satellite_summer') && sources.has('satellite_spring');
+        const hasLidar              = provenance.some(p => p.parentSourceIdentity.startsWith('ea-lidar-composite') && p.fallbackStatus !== 'fallback');
+        const hasSatellite          = hasDeliveredDataType(provenance, 'rgb_imagery');
+        const hasHydrology          = members.some(m => m.observationKind === 'elevation_measurement' && m.sources.includes('hydrology'));
+        const hasMultiSeasonSat     = hasDistinctImageryObservations(provenance);
+        const hasMeasuredTerrain    = members.some(m => m.terrainMeasured === true) && hasDeliveredDataType(provenance, 'elevation_dem');
         const hasAimEnrichment      = members.some(m => m.aimInfo !== undefined);
-        const hasPalaeoChannel      = members.some(m => m.type.includes('Palaeochannel') && m.polarity === 'Sunken');
+        const hasPalaeoChannel      = members.some(m => m.observationKind === 'elevation_measurement' && m.type.includes('Former Channel') && m.polarity === 'Sunken');
         // Primary evidence: at least one hard physical or archaeological signal.
         // Context-only hotspots (route proximity, place-names, raised ground alone)
         // are excluded by this gate — they cannot create a hotspot by themselves.
-        // A confirmed palaeochannel from the hydrology worker is observable
-        // physical evidence, but it is scored conservatively below LiDAR.
-        const hasPrimaryEvidence    = hasLidar || hasMultiSeasonSat || hasAimEnrichment || hasPalaeoChannel;
+        const hasPrimaryEvidence    = hasLidar || hasMeasuredTerrain || hasMultiSeasonSat || hasAimEnrichment || hasPalaeoChannel;
 
         // ── Signal weighting roles (how each signal contributes) ──────────────
         // Satellite is either the primary terrain signal (no LiDAR) or a
@@ -491,26 +482,23 @@ export function buildTerrainHotspots(
         const satelliteIsSupporting = hasSatellite && hasLidar;
 
         if (hasLidar) {
-            const bestLidar = members.find(m => m.sources.includes('terrain') || m.sources.includes('terrain_global'));
+            const bestLidar = members.find(m => (m.provenance ?? []).some(p => p.parentSourceIdentity.startsWith('ea-lidar-composite') && p.fallbackStatus !== 'fallback'));
             let lidarScore = bestLidar?.confidence === 'High' ? 18 : (bestLidar?.confidence === 'Medium' ? 10 : 5);
             if (hasHydrology)            { lidarScore += 5; explanation.push(hotspotExplanation('lidar_hydrology', 'LiDAR + Hydrology correlation')); }
-            if (satelliteIsSupporting && sources.has('satellite_summer')) { lidarScore += 4; explanation.push(hotspotExplanation('lidar_spectral', 'LiDAR + Spectral agreement')); }
+            if (satelliteIsSupporting) { lidarScore += 4; explanation.push(hotspotExplanation('lidar_spectral', 'LiDAR + RGB imagery co-location')); }
             anomaly += lidarScore;
-            explanation.push(hotspotExplanation('lidar_relief', 'Reliable LiDAR relief signature'));
+            explanation.push(hotspotExplanation('lidar_relief', 'LiDAR hillshade image anomaly'));
         }
 
         if (satelliteIsPrimary) {
-            const hasSummer = sources.has('satellite_summer');
-            const hasSpring = sources.has('satellite_spring');
-            // Summer = 7 (raised: +8 → 15, clears hotspot threshold without needing routes)
-            anomaly += (hasSummer && hasSpring) ? 10 : (hasSummer ? 7 : 3);
-            explanation.push(hotspotExplanation('spectral_anomaly', 'Spectral vegetation anomaly'));
+            anomaly += hasMultiSeasonSat ? 10 : 6;
+            explanation.push(hotspotExplanation('spectral_anomaly', 'Exploratory RGB vegetation signal'));
         }
 
         const center        = c.center;
-        const isRaised      = members.some(m => m.polarity === 'Raised');
-        const hasSlope      = sources.has('slope');
-        const isSouthFacing = members.some(m => typeof m.aspect === 'number' && m.aspect >= 135 && m.aspect <= 225);
+        const isRaised      = hasMeasuredTerrain && members.some(m => (m.relativeReliefM ?? 0) > 0.25);
+        const hasSlope      = hasMeasuredTerrain && members.some(m => typeof m.slopePercent === 'number');
+        const isSouthFacing = hasMeasuredTerrain && members.some(m => typeof m.aspect === 'number' && m.aspect >= 135 && m.aspect <= 225);
 
         if (isRaised) {
             context += 8;
@@ -531,12 +519,11 @@ export function buildTerrainHotspots(
             }
         }
 
-        // ── Palaeochannel: treat as primary evidence contribution ─────────────
-        // A confirmed ancient watercourse is observable physical evidence.
-        // Capped at +8 anomaly — supports but does not dominate a hotspot.
+        // A measured channel-like depression is physical evidence, but its
+        // hydrological age and origin remain interpretive.
         if (hasPalaeoChannel) {
             anomaly += 8;
-            explanation.push(hotspotExplanation('palaeochannel', 'Palaeochannel — ancient watercourse signal'));
+            explanation.push(hotspotExplanation('palaeochannel', 'Measured channel-like depression — possible former watercourse'));
         }
 
         // ── Hydrology + terrain depression agreement (Refinement 3) ──────────
@@ -556,20 +543,20 @@ export function buildTerrainHotspots(
             }
         }
 
-        // ── Temporal agreement (multi-season satellite) ───────────────────────────
+        // ── Agreement between distinct delivered imagery versions ────────────────
         // Cluster-level boosts were applied in findConsensus; this captures the
         // hotspot-level signal so it appears in output and gets a score contribution.
         // For satellite-primary mode the base scoring already accounts for dual
         // season (+3 extra); only the supporting-LiDAR case adds anomaly here.
         if (hasMultiSeasonSat) {
             if (!satelliteIsPrimary) anomaly += 4;
-            explanation.push(hotspotExplanation('multi_season_cropmark', 'Multi-season cropmark agreement'));
+            explanation.push(hotspotExplanation('multi_season_cropmark', 'Distinct imagery versions show a similar vegetation signal'));
         }
 
         // ── Persistence (verified signal via repeat detection) ────────────────────
-        if (members.some(m => (m.rescanCount || 0) >= 3)) {
+        if (members.some(m => (m.withinScanMergeCount || 0) >= 3)) {
             context += 3;
-            explanation.push(hotspotExplanation('repeated_detection', 'Repeated detection across scans'));
+            explanation.push(hotspotExplanation('repeated_detection', 'Several detections merged within this scan'));
         }
 
         // ── Context labels from cluster analysis ──────────────────────────────────
@@ -757,11 +744,11 @@ export function buildTerrainHotspots(
         // Signal-count-aware penalties: heavily suppress weak isolated signals but
         // protect multi-source results where several independent layers agree.
         if (highDisturbanceCount > 0) {
-            penalty += sources.size >= 3 ? -3 : sources.size >= 2 ? -6 : -8;
+            penalty += signalClassCount >= 3 ? -3 : signalClassCount >= 2 ? -6 : -8;
             explanation.push(hotspotExplanation('ignore_modern_disturbance', 'IGNORE: High risk of modern disturbance'));
         }
         if (featurelessCount > 0) {
-            penalty += sources.size >= 3 ? -2 : sources.size >= 2 ? -4 : -6;
+            penalty += signalClassCount >= 3 ? -2 : signalClassCount >= 2 ? -4 : -6;
             if (featurelessCount / members.length > 0.5) explanation.push(hotspotExplanation('ignore_featureless', 'IGNORE: Uniform/Featureless terrain'));
         }
 
@@ -819,11 +806,11 @@ export function buildTerrainHotspots(
 
         // ── Disturbance gate ──────────────────────────────────────────────────
         // High-disturbance hotspots are only kept if there is strong independent
-        // evidence — AIM data, 3+ sources, multi-season satellite, or LiDAR +
+        // evidence — AIM data, distinct imagery, or delivered local LiDAR image +
         // hydrology agreement. Without this they are dropped entirely rather
         // than appearing as a penalised but still-surfaced result.
         if (highDisturbanceCount > 0) {
-            const hasStrongEvidence = hasAimEnrichment || sources.size >= 3 || hasMultiSeasonSat || (hasLidar && hasHydrology);
+            const hasStrongEvidence = hasAimEnrichment || independentObservationCount >= 3 || hasMultiSeasonSat || (hasLidar && hasHydrology);
             if (!hasStrongEvidence) continue;
         }
 
@@ -835,7 +822,7 @@ export function buildTerrainHotspots(
         // ── Low disturbance reward ────────────────────────────────────────────
         // Quiet, undisturbed land is archaeologically meaningful — low context
         // means the ground is more likely to retain its original character.
-        if (hotspotDisturbanceRisk === 'Low') context += 2;
+        // Low disturbance is descriptive context, not positive archaeological evidence.
 
         // ── Dimension caps ────────────────────────────────────────────────────
         // Prevents any one dimension from stacking into a false high-confidence
@@ -846,7 +833,7 @@ export function buildTerrainHotspots(
         const cappedBehaviour   = Math.min(behaviour,   20);  // raised 15→20: Roman roads are strongest predictor
         const cappedPenalty     = Math.max(penalty,    -20);
         const score       = Math.min(98, Math.max(0, cappedAnomaly + cappedContext + cappedConvergence + cappedBehaviour + cappedPenalty));
-        const signalCount = sources.size;
+        const signalCount = independentObservationCount;
         let confidence    = evaluateHotspotConfidence({ score, signalCount, behaviour, context, convergence });
 
         // ── Edge-of-scan check ────────────────────────────────────────────────
@@ -909,7 +896,7 @@ export function buildTerrainHotspots(
             hasRomanProximity, hasHistProximity,
             routeCount, isHighConfidenceCrossing,
             anomaly, context, convergence, behaviour,
-            signalCount: sources.size,
+            signalCount,
             signalClassCount,
             hasCircularFeature, hasLinearPattern, hasSettlementContext, disturbanceIsHigh,
             hasMultiSeasonSat, hasAimEnrichment, hasPalaeoChannel,
@@ -941,8 +928,8 @@ export function buildTerrainHotspots(
             suggestedFocus = 'Focus on both edges of the former channel — activity concentrates at the margins';
         } else if (classification === 'Junction / Convergence Zone') {
             suggestedFocus = 'Focus where the routes meet';
-        } else if (classification === 'Multi-Period Occupation Zone') {
-            suggestedFocus = 'Look for variation across the area — periods may be spatially offset';
+        } else if (classification === 'Circular Terrain Feature') {
+            suggestedFocus = 'Review heritage records and avoid disturbance until the feature is understood';
         } else if (hasRouteAlignment || classification === 'Route-Side Activity Zone') {
             suggestedFocus = 'Follow movement line';
         } else if (hasHydrology && members.some(m => m.polarity === 'Sunken')) {
@@ -961,7 +948,7 @@ export function buildTerrainHotspots(
         // satelliteIsPrimary: spectral signal is not visible in the field — no suggestion shown
 
         // ── Primary evidence gate ─────────────────────────────────────────────
-        // Drop context-only hotspots: must have LiDAR, multi-season satellite,
+        // Drop context-only hotspots: must have delivered LiDAR imagery, distinct imagery,
         // or AIM/known archaeology. Route proximity, raised ground, and
         // place-name signals alone cannot create a hotspot.
         if (!hasPrimaryEvidence) continue;
@@ -984,6 +971,16 @@ export function buildTerrainHotspots(
             minLat = Math.min(minLat, m.center[1]); maxLat = Math.max(maxLat, m.center[1]);
         });
 
+        const quality = assessEvidenceQuality(provenance, {
+            spatiallyRepresentativeMeasurement: hasMeasuredTerrain,
+        });
+        const observationAgreement = signalCount < 2
+            ? 0
+            : Math.min(90, 25 + (signalCount - 1) * 25);
+        const agreementReasons = signalCount < 2
+            ? evidenceAssessment.reasons
+            : [`${signalCount} deduplicated, spatially co-located observations contribute.`];
+
         results.push({
             id:                   `hs-${Math.round(c.center[0] * 1e5)}-${Math.round(c.center[1] * 1e5)}`,
             number:               0,
@@ -995,6 +992,7 @@ export function buildTerrainHotspots(
             secondaryTag,
             suggestedFocus,
             explanation:          prioritiseHotspotExplanations(explanation, 4),
+            provenance,
             center:               [(minLon + maxLon) / 2, (minLat + maxLat) / 2],
             bounds:               [[minLon - 0.0004, minLat - 0.0004], [maxLon + 0.0004, maxLat + 0.0004]],
             memberIds:            members.map(m => m.id),
@@ -1005,7 +1003,16 @@ export function buildTerrainHotspots(
             linkedCount: (() => { const ids = new Set<string>(); members.forEach(m => (m.linkedClusterIds ?? []).forEach(id => ids.add(id))); return ids.size; })(),
             disturbanceRisk:      hotspotDisturbanceRisk === 'Low' ? undefined : hotspotDisturbanceRisk,
             soilMechanics:        soilMechanics ?? undefined,
-            metrics:              { anomaly, context, convergence, behaviour, penalty, signalCount, signalClassCount },
+            metrics: {
+                anomaly, context, convergence, behaviour, penalty, signalCount, signalClassCount,
+                deliveryCompleteness: quality.deliveryCompleteness,
+                dataQuality: quality.score,
+                dataQualityReasons: quality.reasons,
+                observationAgreement,
+                observationAgreementReasons: agreementReasons,
+                interpretationStrength: score,
+                heuristicConfidence: true,
+            },
         });
     }
 

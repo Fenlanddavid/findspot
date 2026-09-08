@@ -6,17 +6,19 @@
 import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import { SCAN_CONFIG } from '../utils/scanConfig';
-import { resolveWaybackIds, waybackTileUrl } from '../utils/waybackService';
+import { resolveWaybackIds, waybackTileUrl, waybackVersionA, waybackVersionB } from '../utils/waybackService';
 import { findPackCoveringBbox } from '../services/offlinePack';
 import { reportNonFatal } from '../services/diagLog';
 
 const ZOOM = SCAN_CONFIG.TERRAIN_ZOOM;
 
-function tileUrls(zoom: number, tX: number, tY: number, waybackIds: { spring: number; summer: number } | null): string[] {
+function tileUrls(zoom: number, tX: number, tY: number, waybackIds: import('../utils/waybackService').WaybackIds | null): string[] {
     const urls: string[] = [];
     for (let dy = 0; dy < 3; dy++) {
         for (let dx = 0; dx < 3; dx++) {
             const tx = tX + dx, ty = tY + dy;
+            const demZoom = Math.min(15, zoom);
+            const demScale = 2 ** (zoom - demZoom);
             urls.push(
                 `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2025_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
                 `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2022_Multi_Directional_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
@@ -25,11 +27,12 @@ function tileUrls(zoom: number, tX: number, tY: number, waybackIds: { spring: nu
                 `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/${zoom}/${ty}/${tx}`,
                 `https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/${zoom}/${ty}/${tx}`,
                 `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`,
+                `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${demZoom}/${Math.floor(tx / demScale)}/${Math.floor(ty / demScale)}.png`,
             );
             if (waybackIds) {
                 urls.push(
-                    waybackTileUrl(waybackIds.spring, zoom, ty, tx),
-                    waybackTileUrl(waybackIds.summer, zoom, ty, tx),
+                    waybackTileUrl(waybackVersionA(waybackIds), zoom, ty, tx),
+                    waybackTileUrl(waybackVersionB(waybackIds), zoom, ty, tx),
                 );
             }
         }

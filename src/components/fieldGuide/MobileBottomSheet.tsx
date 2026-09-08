@@ -3,8 +3,7 @@ import maplibregl from 'maplibre-gl';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary } from '../../engines/hotspot/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
 import type { TargetSignalStrength } from '../../engines/hotspot/targetInterpreter';
-import type { HotspotSignalStrength } from '../../engines/hotspot/hotspotInterpreter';
-import type { Cluster, Hotspot, HotspotClassification, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
+import type { Cluster, LandscapeIntelligence } from '../../pages/fieldGuideTypes';
 import { ScaledImage } from '../ScaledImage';
 import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
 import { useFieldGuideContext } from './FieldGuideContext';
@@ -17,6 +16,8 @@ import { GeologyContextCard } from './GeologyContextCard';
 import { SMUnavailableBanner } from './SMUnavailableBanner';
 import { buildHotspotFindFeedback, buildFindHotspotAnnotation } from '../../services/findHotspotService';
 import { usePersistedHotspotSignals } from '../../hooks/usePersistedHotspotSignals';
+import { getHotspotResultHierarchy } from '../../domain/fieldGuideMetadata';
+import { evidenceProvenanceLabels } from '../../types/evidenceProvenance';
 
 function getSignalBand(value: number | null | undefined, cap = 100): string {
     const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
@@ -24,53 +25,6 @@ function getSignalBand(value: number | null | undefined, cap = 100): string {
     if (ratio >= 0.42) return 'Moderate';
     if (ratio > 0.08) return 'Trace';
     return 'Not present';
-}
-
-type HotspotResultHierarchy = {
-    signalStrength: 'Developing Signal' | 'Strong Signal' | 'Corroborated Signal';
-    whyItMatters: string;
-    nextAction: string;
-};
-
-function getHotspotResultHierarchy(h: Hotspot, strength: HotspotSignalStrength): HotspotResultHierarchy {
-    const signalStrength =
-        strength === 'Strong Zone' ? 'Corroborated Signal' :
-        strength === 'Moderate Zone' ? 'Strong Signal' :
-        'Developing Signal';
-
-    const whyByClassification: Record<HotspotClassification, string> = {
-        'Crossing Point Candidate':         'Movement compresses into a possible crossing point',
-        'Junction / Convergence Zone':      'Multiple movement lines converge in one area',
-        'Settlement Edge Candidate':        'Raised settlement-edge ground with supporting context',
-        'Burial / Barrow Candidate':        'Compact raised form consistent with funerary landscape use',
-        'Organised Field System Candidate': 'Structured linear pattern suggests managed land division',
-        'Palaeochannel Activity Zone':      'Former watercourse — activity concentrates at the channel margins',
-        'Wetland Margin Activity Zone':     'Activity concentrates along a wetland or former water edge',
-        'Route-Side Activity Zone':         'Landscape signals follow a historic movement corridor',
-        'Multi-Period Occupation Zone':     'Physical earthwork and spectral signals indicate layered use across time',
-        'Terrain Structure Candidate':      'Terrain response suggests a defined structural feature',
-        'Spectral Activity Candidate':      'Crop or spectral response suggests subsurface variation',
-        'Lowland Activity Zone':            'Signals cluster across lower-lying activity ground',
-        'Raised Activity Area':             'Slightly raised dry ground stands out from surroundings',
-        'Route-Influenced Area':            'Nearby route context appears to shape activity',
-        'Cropmark Activity Zone':           'Repeated cropmark response defines the activity zone',
-        'Multi-Signal Activity Zone':       'Independent landscape signals agree in the same area',
-        'General Activity Zone':            'Several weaker signals cluster into a supporting activity zone',
-    };
-
-    const nextAction = h.suggestedFocus
-        ? h.suggestedFocus
-        : h.isOnCorridor
-            ? 'Compare historic layer and follow the corridor edge'
-            : h.metrics.signalClassCount >= 3
-                ? 'Compare historic layer before marking targets'
-                : 'Review evidence breakdown and check field coverage';
-
-    return {
-        signalStrength,
-        whyItMatters: h.classificationReason || whyByClassification[h.classification],
-        nextAction,
-    };
 }
 
 function getProtectedTargetCopy(f: Cluster): { label: string; body: string; detail: string } {
@@ -762,7 +716,7 @@ export function MobileBottomSheet() {
                             <div className="space-y-2">
                                 <div>
                                     <p className="text-[0.5rem] font-black text-white/30 uppercase tracking-[0.18em] mb-0.5">Why it matters</p>
-                                    <p className="text-sm font-bold text-white/85 leading-snug">{hierarchy.whyItMatters}</p>
+                                    <p className="text-sm font-bold text-white/85 leading-snug">{hierarchy.whatWasObserved}</p>
                                 </div>
                                 <div>
                                     <p className="text-[0.5rem] font-black text-emerald-400/60 uppercase tracking-[0.18em] mb-0.5">Interpretive cue</p>
@@ -805,17 +759,25 @@ export function MobileBottomSheet() {
                                     ))}
                                 </div>
                             </div>
+                            {evidenceProvenanceLabels(h.provenance).length > 0 && (
+                                <details className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                                    <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-white/75">Source provenance</summary>
+                                    <ul className="space-y-1.5 pb-1">
+                                        {evidenceProvenanceLabels(h.provenance).map(label => <li key={label} className="text-xs font-medium leading-snug text-white/60">{label}</li>)}
+                                    </ul>
+                                </details>
+                            )}
                             {(() => {
                                 const feedback = buildHotspotFindFeedback(h, projectFinds);
                                 if (!feedback) return null;
-                                const isValidates = feedback.status === 'validates';
+                                const isAssociated = feedback.status === 'associated';
                                 return (
-                                    <div className={`mt-2 rounded-xl border px-3 py-2.5 space-y-1 ${isValidates ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-sky-500/6 border-sky-500/15'}`}>
+                                    <div className={`mt-2 rounded-xl border px-3 py-2.5 space-y-1 ${isAssociated ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-sky-500/6 border-sky-500/15'}`}>
                                         <div className="flex items-center gap-2">
-                                            <span className={`text-[0.5rem] font-black uppercase tracking-widest shrink-0 ${isValidates ? 'text-emerald-400' : 'text-sky-400'}`}>
+                                            <span className={`text-[0.5rem] font-black uppercase tracking-widest shrink-0 ${isAssociated ? 'text-emerald-400' : 'text-sky-400'}`}>
                                                 Your finds
                                             </span>
-                                            <span className={`text-[0.625rem] font-black ${isValidates ? 'text-emerald-200' : 'text-sky-200'}`}>
+                                            <span className={`text-[0.625rem] font-black ${isAssociated ? 'text-emerald-200' : 'text-sky-200'}`}>
                                                 {feedback.label}
                                             </span>
                                         </div>

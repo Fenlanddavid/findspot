@@ -84,7 +84,7 @@ export function extractSignals(
     nhleFeatures: NHLEFeature[],
     aimFeatures: AIMFeature[],
     routeFeatures: HistoricRoute[],
-    potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    potentialBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null,
 ): AdaptedSignals {
     // ── 1. Period aggregates from NHLE features ───────────────────────────────
     // NHLEFeature.properties only has Name and ListEntry — no PERIOD or CERTAINTY

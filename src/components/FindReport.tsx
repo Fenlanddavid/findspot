@@ -44,7 +44,7 @@ export function FindReport(props: {
     { label: "Material", value: find.material || "Not recorded" },
     { label: "Weight", value: find.weightG ? `${find.weightG}g` : "Not recorded" },
     { label: "Dimensions", value: [find.widthMm && `${find.widthMm}mm W`, find.heightMm && `${find.heightMm}mm H`, find.depthMm && `${find.depthMm}mm D`].filter(Boolean).join(", ") || "Not recorded" },
-    { label: "Completeness", value: find.completeness || "Not recorded" },
+    { label: "Completeness", value: find.completeness === "Unassessed" ? "Not assessed" : find.completeness || "Not recorded" },
   ];
 
   const locationRows = [

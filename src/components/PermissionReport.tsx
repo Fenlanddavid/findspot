@@ -195,7 +195,7 @@ function FindDetail({ find, media }: { find: Find; media: Media[] }) {
           <Detail label="Grid ref" value={gridRef} />
           <Detail label="Weight" value={find.weightG ? `${find.weightG}g` : ""} />
           <Detail label="Dimensions" value={dimensions} />
-          <Detail label="Completeness" value={find.completeness} />
+          <Detail label="Completeness" value={find.completeness === 'Unassessed' ? 'Not assessed' : find.completeness} />
         </div>
         {(find.decoration || find.notes) && (
           <div style={{ marginTop: 7, fontSize: 10.5, color: REPORT.muted, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>

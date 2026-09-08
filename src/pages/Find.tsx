@@ -33,7 +33,7 @@ const materials: Find["material"][] = [
 const coinMaterials: Find["material"][] = [
   "Gold", "Silver", "50% Silver", "Copper alloy", "Copper", "Cupro-Nickel", "Tin", "Other",
 ];
-const completenesses: Find["completeness"][] = ["Complete", "Incomplete", "Fragment"];
+const completenesses: Find["completeness"][] = ["Unassessed", "Complete", "Incomplete", "Fragment"];
 
 const DRAFT_KEY = "fs_find_draft";
 const FIRST_FIND_KEY = "fs_first_find";
@@ -89,6 +89,9 @@ type FormState = {
   lat: number | null;
   lon: number | null;
   acc: number | null;
+  locationFixAt?: string;
+  locationMethod?: Find['locationMethod'];
+  locationFrozenAt?: string;
   osGridRef: string;
   w3w: string;
   period: Find["period"];
@@ -134,6 +137,8 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     lat: initialLat ?? null,
     lon: initialLon ?? null,
     acc: null,
+    locationMethod: hasInitialLocation ? 'map_selected' : undefined,
+    locationFrozenAt: hasInitialLocation ? new Date().toISOString() : undefined,
     osGridRef: hasInitialLocation ? toOSGridRef(initialLat, initialLon) || "" : "",
     w3w: "",
     period: "Roman",
@@ -143,7 +148,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     heightMm: "",
     depthMm: "",
     decoration: "",
-    completeness: "Complete",
+    completeness: "Unassessed",
     findContext: "",
     detector: "",
     targetId: "",
@@ -379,6 +384,9 @@ export default function FindPage(props: {
             lat: f.lat,
             lon: f.lon,
             acc: f.gpsAccuracyM,
+            locationFixAt: f.locationFixAt,
+            locationMethod: f.locationMethod,
+            locationFrozenAt: f.locationFrozenAt,
             osGridRef: grid,
             notes: f.notes,
             foundDate: src
@@ -438,7 +446,17 @@ export default function FindPage(props: {
     try {
       const fix = await captureGPS({ onProgress: setLiveAccuracy, acceptRef: gpsAcceptRef.current });
       const grid = toOSGridRef(fix.lat, fix.lon);
-      setForm(prev => ({ ...prev, lat: fix.lat, lon: fix.lon, acc: fix.accuracyM, osGridRef: grid || prev.osGridRef }));
+      const frozenAt = new Date().toISOString();
+      setForm(prev => ({
+        ...prev,
+        lat: fix.lat,
+        lon: fix.lon,
+        acc: fix.accuracyM,
+        locationFixAt: new Date(fix.fixTimestamp).toISOString(),
+        locationMethod: 'live_gps',
+        locationFrozenAt: frozenAt,
+        osGridRef: grid || prev.osGridRef,
+      }));
     } catch (e: any) {
       setError(e?.message ?? "GPS failed");
     } finally {
@@ -520,6 +538,9 @@ export default function FindPage(props: {
         lat: form.lat,
         lon: form.lon,
         gpsAccuracyM: form.acc,
+        locationFixAt: form.locationFixAt,
+        locationMethod: form.locationMethod,
+        locationFrozenAt: form.locationFrozenAt,
         osGridRef: form.osGridRef,
         w3w: form.w3w.trim(),
         period: form.period,
@@ -619,6 +640,9 @@ export default function FindPage(props: {
         lat: form.lat,
         lon: form.lon,
         gpsAccuracyM: form.acc,
+        locationFixAt: form.locationFixAt,
+        locationMethod: form.locationMethod,
+        locationFrozenAt: form.locationFrozenAt,
         osGridRef: form.osGridRef,
         w3w: form.w3w.trim(),
         period: form.period,
@@ -679,6 +703,9 @@ export default function FindPage(props: {
         ruler: form.ruler.trim(),
         mint: form.mint.trim() || undefined,
         lat: form.lat, lon: form.lon, gpsAccuracyM: form.acc,
+        locationFixAt: form.locationFixAt,
+        locationMethod: form.locationMethod,
+        locationFrozenAt: form.locationFrozenAt,
         osGridRef: form.osGridRef, w3w: "",
         period: form.period, material: form.material,
         weightG: null, widthMm: null, heightMm: null, depthMm: null,
@@ -907,7 +934,14 @@ export default function FindPage(props: {
             onChange={(e) => {
               const val = e.target.value ? parseFloat(e.target.value) : null;
               const grid = (val !== null && form.lon !== null) ? toOSGridRef(val, form.lon) || form.osGridRef : form.osGridRef;
-              update({ lat: val, osGridRef: grid });
+              update({
+                lat: val,
+                osGridRef: grid,
+                acc: null,
+                locationFixAt: undefined,
+                locationMethod: 'other',
+                locationFrozenAt: val !== null && form.lon !== null ? new Date().toISOString() : undefined,
+              });
             }}
             placeholder="54.123456"
             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
@@ -922,7 +956,14 @@ export default function FindPage(props: {
             onChange={(e) => {
               const val = e.target.value ? parseFloat(e.target.value) : null;
               const grid = (val !== null && form.lat !== null) ? toOSGridRef(form.lat, val) || form.osGridRef : form.osGridRef;
-              update({ lon: val, osGridRef: grid });
+              update({
+                lon: val,
+                osGridRef: grid,
+                acc: null,
+                locationFixAt: undefined,
+                locationMethod: 'other',
+                locationFrozenAt: val !== null && form.lat !== null ? new Date().toISOString() : undefined,
+              });
             }}
             placeholder="-2.123456"
             className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
@@ -953,6 +994,12 @@ export default function FindPage(props: {
           </div>
         </label>
       </div>
+
+      {form.lat != null && form.lon != null && (
+        <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+          Source {form.locationMethod?.replaceAll('_', ' ') ?? 'unknown'} · Accuracy {form.acc == null ? 'unknown' : `±${Math.round(form.acc)} m`} · Fix {form.locationFixAt ? new Date(form.locationFixAt).toLocaleTimeString() : 'time unknown'}
+        </p>
+      )}
 
       {form.lat != null && form.lon != null && (
         <div className="text-[10px] font-mono opacity-40 flex gap-3 items-center">
@@ -1476,7 +1523,7 @@ export default function FindPage(props: {
                     <div className="mb-1.5 text-sm font-bold text-gray-700 dark:text-gray-300">Completeness</div>
                     <select value={form.completeness} onChange={(e) => update({ completeness: e.target.value as Find["completeness"] })}
                       className="w-full bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow">
-                      {completenesses.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {completenesses.map((c) => <option key={c} value={c}>{c === "Unassessed" ? "Not assessed" : c}</option>)}
                     </select>
                   </label>
                 </div>
@@ -1677,7 +1724,15 @@ export default function FindPage(props: {
             onClose={() => setIsPickingLocation(false)}
             onSelect={(pickedLat, pickedLon) => {
               const grid = toOSGridRef(pickedLat, pickedLon);
-              update({ lat: pickedLat, lon: pickedLon, acc: null, osGridRef: grid || "" });
+              update({
+                lat: pickedLat,
+                lon: pickedLon,
+                acc: null,
+                osGridRef: grid || "",
+                locationFixAt: undefined,
+                locationMethod: 'map_selected',
+                locationFrozenAt: new Date().toISOString(),
+              });
               setIsPickingLocation(false);
             }}
           />

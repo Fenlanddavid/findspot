@@ -83,6 +83,11 @@ export const BACKUP_TABLE_REGISTRY = {
     storageRole: 'user-data',
     reason: 'Long-term calibration denominators survive raw prediction retention sweeps.',
   },
+  hotspotPredictionEvidence: {
+    classification: 'backup',
+    storageRole: 'user-data',
+    reason: 'Prediction-to-field-evidence links preserve lifecycle history and make summary outcomes reproducible.',
+  },
   undugSignals: {
     classification: 'backup',
     storageRole: 'user-data',

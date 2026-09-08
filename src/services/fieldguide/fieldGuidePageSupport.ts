@@ -1,6 +1,11 @@
 import * as turf from '@turf/turf';
 import type { Cluster } from '../../pages/fieldGuideTypes';
 import { MONUMENT_BOUNDARY_BUFFER_M } from '../../utils/fieldGuideAnalysis';
+import { hasDistinctImageryObservations } from '../../types/evidenceProvenance';
+
+function hasDeliveredLidar(feature: Cluster): boolean {
+    return (feature.provenance ?? []).some(item => item.parentSourceIdentity.startsWith('ea-lidar-composite') && item.fallbackStatus !== 'fallback');
+}
 
 export const MONUMENT_BUFFER_FILL_PAINT = {
     'fill-color': '#f97316',
@@ -47,49 +52,34 @@ export function buildMonumentBufferGeoJSON(
 }
 
 export function hasTargetEvidence(feature: Cluster): boolean {
-    const hasLidar = (
-        feature.sources.includes('terrain')
-        || feature.sources.includes('terrain_global')
-    );
+    const hasLidar = hasDeliveredLidar(feature);
     const hasSlopeWithPhysicalSupport = feature.sources.includes('slope') && (
         hasLidar
-        || feature.sources.includes('hydrology')
-        || feature.sources.includes('satellite_spring')
-        || feature.sources.includes('satellite_summer')
+        || feature.terrainMeasured === true
+        || hasDistinctImageryObservations(feature.provenance)
     );
-    const hasCorroboratedHydrology = feature.sources.includes('hydrology') && hasLidar;
+    const hasCorroboratedHydrology = feature.observationKind === 'elevation_measurement' && feature.sources.includes('hydrology') && hasLidar;
     return (
         hasLidar
         || hasSlopeWithPhysicalSupport
         || hasCorroboratedHydrology
-        || (
-            feature.sources.includes('satellite_summer')
-            && feature.sources.includes('satellite_spring')
-        )
+        || hasDistinctImageryObservations(feature.provenance)
+        || feature.terrainMeasured === true
         || feature.aimInfo !== undefined
     );
 }
 
 export function hasLocalPhysicalEvidence(feature: Cluster): boolean {
-    const hasLidar = (
-        feature.sources.includes('terrain')
-        || feature.sources.includes('terrain_global')
-    );
+    const hasLidar = hasDeliveredLidar(feature);
     const hasSlopeWithLocalSupport = feature.sources.includes('slope') && (
         hasLidar
-        || (
-            feature.sources.includes('satellite_spring')
-            && feature.sources.includes('satellite_summer')
-        )
-        || feature.multiScale === true
+        || feature.terrainMeasured === true
+        || hasDistinctImageryObservations(feature.provenance)
     );
     return (
         hasLidar
         || hasSlopeWithLocalSupport
-        || (
-            feature.sources.includes('satellite_spring')
-            && feature.sources.includes('satellite_summer')
-        )
-        || feature.multiScale === true
+        || hasDistinctImageryObservations(feature.provenance)
+        || feature.terrainMeasured === true
     );
 }

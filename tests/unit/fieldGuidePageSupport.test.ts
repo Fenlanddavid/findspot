@@ -18,6 +18,23 @@ function cluster(overrides: Partial<Cluster> = {}): Cluster {
   } as Cluster;
 }
 
+const provenance = (parentSourceIdentity: string, deliveredDataType: 'rendered_hillshade' | 'rgb_imagery') => ({
+  observationId: parentSourceIdentity,
+  requestedSource: 'terrain',
+  deliveredSource: parentSourceIdentity,
+  datasetIdentity: parentSourceIdentity,
+  parentSourceIdentity,
+  contentIdentity: parentSourceIdentity.includes('version-b') ? 'b'.repeat(64) : 'a'.repeat(64),
+  decodedContentIdentity: parentSourceIdentity.includes('version-b') ? '2'.repeat(64) : '1'.repeat(64),
+  deliveredDataType,
+  ...(deliveredDataType === 'rgb_imagery' ? {
+    acquisitionDate: parentSourceIdentity.includes('version-b') ? '2025-06-01' : '2024-04-01',
+    tile: { z: 16, x: 1, y: 1 },
+  } : {}),
+  retrievalDate: '2026-09-08T00:00:00.000Z',
+  fallbackStatus: 'requested' as const,
+});
+
 describe('FieldGuide page support', () => {
   it('clamps persisted overlay opacity and uses the fallback for invalid values', () => {
     expect(clampOpacity(1.4, 0.5)).toBe(1);
@@ -25,8 +42,9 @@ describe('FieldGuide page support', () => {
     expect(clampOpacity(Number.NaN, 0.5)).toBe(0.5);
   });
 
-  it('preserves broad target evidence gates', () => {
-    expect(hasTargetEvidence(cluster({ sources: ['terrain'] }))).toBe(true);
+  it('requires honest delivered or measured evidence at the broad target gate', () => {
+    expect(hasTargetEvidence(cluster({ sources: ['terrain'] }))).toBe(false);
+    expect(hasTargetEvidence(cluster({ sources: ['terrain'], provenance: [provenance('ea-lidar-composite:tile', 'rendered_hillshade')] }))).toBe(true);
     expect(hasTargetEvidence(cluster({ sources: [], aimInfo: {
       type: 'Cropmark',
       period: 'Roman',
@@ -38,7 +56,18 @@ describe('FieldGuide page support', () => {
   it('requires local physical evidence independently of historic context', () => {
     expect(hasLocalPhysicalEvidence(cluster({
       sources: ['satellite_spring', 'satellite_summer'],
+      provenance: [
+        provenance('wayback:version-a', 'rgb_imagery'),
+        provenance('wayback:version-b', 'rgb_imagery'),
+      ],
     }))).toBe(true);
+    expect(hasLocalPhysicalEvidence(cluster({
+      sources: ['satellite_spring', 'satellite_summer'],
+      provenance: [
+        provenance('world-imagery:same', 'rgb_imagery'),
+        { ...provenance('world-imagery:same', 'rgb_imagery'), observationId: 'same-again' },
+      ],
+    }))).toBe(false);
     expect(hasLocalPhysicalEvidence(cluster({
       sources: [],
       aimInfo: { type: 'Cropmark', period: 'Roman', distance: 10 },

@@ -64,16 +64,24 @@ export async function cachedFetchAny(
     opts?: RequestInit,
     options?: { cacheOnly?: boolean },
 ): Promise<Response> {
+    return (await cachedFetchAnyWithMetadata(url, opts, options)).response;
+}
+
+export async function cachedFetchAnyWithMetadata(
+    url: string,
+    opts?: RequestInit,
+    options?: { cacheOnly?: boolean },
+): Promise<{ response: Response; fromCache: boolean }> {
     if (typeof caches !== 'undefined') {
         try {
             const cached = await caches.match(url);
-            if (cached) return cached;
+            if (cached) return { response: cached, fromCache: true };
         } catch (error) {
             console.warn('[cache] Cache read failed; using network', error);
         }
     }
     if (options?.cacheOnly) {
-        return new Response(null, { status: 504, statusText: 'Cache miss' });
+        return { response: new Response(null, { status: 504, statusText: 'Cache miss' }), fromCache: false };
     }
-    return fetch(url, opts);
+    return { response: await fetch(url, opts), fromCache: false };
 }

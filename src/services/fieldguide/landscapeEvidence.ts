@@ -10,9 +10,9 @@ import type { NHLEFeature, AIMFeature } from '../historicScanService';
 
 export interface LandscapeEvidence {
     terrain: {
-        relativeReliefNorm: number;
-        slopeGradient:      number;
-        aspectDegrees:      number;
+        relativeReliefNorm?: number;
+        slopeGradient?:      number;
+        aspectDegrees?:      number;
         relativeElevation?: string;
         polarity?:          string;
         measured:           boolean;
@@ -55,7 +55,7 @@ export function buildLandscapeEvidence(
     terrainSignals: {
         relativeReliefNorm?: number;
         slopeGradient?:      number;
-        aspectDegrees:       number;
+        aspectDegrees:       number | null;
         terrainMeasured:     boolean;
     },
     nearbyFindPeriods: string[],
@@ -78,10 +78,10 @@ export function buildLandscapeEvidence(
     const topPolar = [...polarCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
     const terrain: LandscapeEvidence['terrain'] = {
-        relativeReliefNorm: terrainSignals.relativeReliefNorm ?? 0,
-        slopeGradient:      terrainSignals.slopeGradient      ?? 0,
-        aspectDegrees:      terrainSignals.aspectDegrees,
         measured:           terrainSignals.terrainMeasured,
+        ...(terrainSignals.relativeReliefNorm == null ? {} : { relativeReliefNorm: terrainSignals.relativeReliefNorm }),
+        ...(terrainSignals.slopeGradient == null ? {} : { slopeGradient: terrainSignals.slopeGradient }),
+        ...(terrainSignals.aspectDegrees == null ? {} : { aspectDegrees: terrainSignals.aspectDegrees }),
         ...(topElev  ? { relativeElevation: topElev  } : {}),
         ...(topPolar ? { polarity:           topPolar } : {}),
     };

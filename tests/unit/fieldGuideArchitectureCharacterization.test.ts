@@ -26,6 +26,10 @@ const FIELD_GUIDE_MODULES = {
     '../../src/services/fieldguide/terrainScanSupport.ts',
     import.meta.url,
   ),
+  'services/fieldguide/terrainMeasurementSupport.ts': new URL(
+    '../../src/services/fieldguide/terrainMeasurementSupport.ts',
+    import.meta.url,
+  ),
   'services/fieldguide/historicScanCoordinator.ts': new URL(
     '../../src/services/fieldguide/historicScanCoordinator.ts',
     import.meta.url,
@@ -89,7 +93,7 @@ describe('FieldGuide architecture characterization', () => {
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
       'pages/FieldGuideController.tsx': 15,
-      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_318,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_319,
       'components/session/ActiveSessionGuideWorkspace.tsx': 44,
       'hooks/useFieldGuideMap.ts': 313,
       'hooks/useTerrainScan.ts': 77,
@@ -99,12 +103,13 @@ describe('FieldGuide architecture characterization', () => {
       'hooks/useFieldGuideRouteActions.ts': 94,
       'hooks/useActiveSessionGuideAutoScan.ts': 53,
       'hooks/useActiveSessionGuideContext.ts': 55,
-      'services/fieldguide/terrainScanCoordinator.ts': 473,
-      'services/fieldguide/terrainScanSupport.ts': 142,
+      'services/fieldguide/terrainScanCoordinator.ts': 500,
+      'services/fieldguide/terrainScanSupport.ts': 154,
+      'services/fieldguide/terrainMeasurementSupport.ts': 193,
       'services/fieldguide/historicScanCoordinator.ts': 405,
       'services/fieldguide/historicScanRecords.ts': 241,
-      'services/fieldguide/historicScanSupport.ts': 118,
-      'services/fieldguide/fieldGuidePageSupport.ts': 95,
+      'services/fieldguide/historicScanSupport.ts': 119,
+      'services/fieldguide/fieldGuidePageSupport.ts': 85,
       'services/fieldguide/scanOrchestrator.ts': 160,
       'services/fieldguide/postScanOrchestrator.ts': 71,
     });

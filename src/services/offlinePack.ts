@@ -12,7 +12,7 @@
 //     calls cachedFetch(url, CACHE_NAME) and gets the cached tile if present.
 
 import { db, Permission, SavedPoint, type GeoJSONPolygon } from '../db';
-import { resolveWaybackIds, waybackTileUrl, WaybackIds } from '../utils/waybackService';
+import { resolveWaybackIds, waybackTileUrl, waybackVersionA, waybackVersionB, WaybackIds } from '../utils/waybackService';
 import { SCAN_CONFIG } from '../utils/scanConfig';
 import { FINDSPOT_STATIC_BASE_URL } from '../utils/featureFlags';
 import { bboxToGeohash6Cells } from '../utils/geohashUtils';
@@ -45,7 +45,7 @@ const BYTES_PER_TILE_EST = 25_000;
 /** AIM index shards: if total aim-index is within this budget, cache whole set. */
 const AIM_PACK_MAX_SHARDS = 500;
 /** Tile URLs per cell before optional Wayback imagery. Must match tileUrlsForCell(). */
-const BASE_TILE_URLS_PER_CELL = 7;
+const BASE_TILE_URLS_PER_CELL = 8;
 const BASEMAP_ZOOMS = [14, 15, 16] as const;
 /** Staleness threshold in ms — 90 days. */
 export const PACK_STALE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -189,6 +189,10 @@ function padBboxByMetres(
 
 /** Tile URLs for a single tile cell. Mirrors useTilePrewarm.ts tile sources. */
 function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: WaybackIds | null): string[] {
+    const demZoom = Math.min(15, zoom);
+    const demScale = 2 ** (zoom - demZoom);
+    const demTx = Math.floor(tx / demScale);
+    const demTy = Math.floor(ty / demScale);
     const urls = [
         `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2025_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
         `https://services.arcgis.com/JJT1S6cy9mS999Xy/arcgis/rest/services/LIDAR_Composite_1m_DTM_2022_Multi_Directional_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
@@ -196,11 +200,12 @@ function tileUrlsForCell(tx: number, ty: number, zoom: number, waybackIds: Wayba
         `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`,
         `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/${zoom}/${ty}/${tx}`,
         `https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/${zoom}/${ty}/${tx}`,
+        `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${demZoom}/${demTx}/${demTy}.png`,
     ];
     if (waybackIds) {
         urls.push(
-            waybackTileUrl(waybackIds.spring, zoom, ty, tx),
-            waybackTileUrl(waybackIds.summer, zoom, ty, tx),
+            waybackTileUrl(waybackVersionA(waybackIds), zoom, ty, tx),
+            waybackTileUrl(waybackVersionB(waybackIds), zoom, ty, tx),
         );
     }
     urls.push(`https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`);
@@ -650,9 +655,13 @@ export async function buildPack(
     let tilesOk = 0;
     let tilesFailed = 0;
     const allTileUrls: string[] = [];
+    const uniqueTileUrls = new Set<string>();
     for (const [tx, ty] of tiles) {
         for (const url of tileUrlsForCell(tx, ty, ZOOM, waybackIds)) {
-            allTileUrls.push(url);
+            if (!uniqueTileUrls.has(url)) {
+                uniqueTileUrls.add(url);
+                allTileUrls.push(url);
+            }
         }
     }
     const totalTiles = allTileUrls.length;

@@ -270,7 +270,7 @@ export default function ScatterRecordingScreen({ workflowState, updateState, onN
         depthMm: null,
         depthCm: depthCm ? parseFloat(depthCm) : undefined,
         decoration: "",
-        completeness: "Complete",
+        completeness: "Unassessed",
         findContext: "Scatter find — Map Scatter workflow",
         storageLocation: "",
         notes: "",

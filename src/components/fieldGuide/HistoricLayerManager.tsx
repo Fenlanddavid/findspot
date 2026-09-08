@@ -26,8 +26,7 @@ import {
     discardLandscapeInterpretation,
     saveLandscapeInterpretation,
 } from '../../services/fieldGuideMutations';
-
-const ALIE_ENGINE_VERSION = 'ALIE-2026.06.22a';
+import { ALIE_ENGINE_VERSION } from '../../domain/engineVersions';
 
 function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
     return distanceMeters({ lat: lat1, lon: lon1 }, { lat: lat2, lon: lon2 });
@@ -192,8 +191,8 @@ export function HistoricLayerManager() {
     }
 
     const bd = potentialScore?.breakdown ?? null;
-    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.signals } : null);
-    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.signals } : null);
+    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.imagery } : null);
+    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.imagery } : null);
     const dedupedRoutes = [...historicRoutes.reduce((map, r) => {
         const key = `${r.type}:${r.name ?? ''}`;
         const existing = map.get(key);
@@ -330,8 +329,8 @@ export function HistoricLayerManager() {
                             { key: 'terrain_global', label: 'Terrain' },
                             { key: 'slope', label: 'Slope' },
                             { key: 'hydrology', label: 'Water' },
-                            { key: 'satellite_spring', label: 'Spring' },
-                            { key: 'satellite_summer', label: 'Summer' },
+                            { key: 'satellite_spring', label: 'Imagery A' },
+                            { key: 'satellite_summer', label: 'Imagery B' },
                         ].map(({ key, label }) => {
                             const usability = sourceUsability[key] ?? 'none';
                             return (
@@ -603,7 +602,7 @@ interface AlieSectionProps {
     sortedHotspots: import('../../pages/fieldGuideTypes').Hotspot[];
     displayTargets: Cluster[];
     terrainClusters: import('../../pages/fieldGuideTypes').Cluster[];
-    potentialScoreBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null;
+    potentialScoreBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null;
     mapRef: React.RefObject<import('maplibre-gl').Map | null>;
     alieAbortRef: React.MutableRefObject<AbortController | null>;
     landscapeInterpretation: LandscapeInterpretation | null;
@@ -849,8 +848,8 @@ function AlieSection({
             nhleFeatures,
             aimFeatures,
             {
-                relativeReliefNorm: terrainSignals.relativeReliefNorm,
-                slopeGradient:      terrainSignals.slopeGradient,
+                relativeReliefNorm: terrainSignals.relativeReliefNorm ?? undefined,
+                slopeGradient:      terrainSignals.slopeGradient ?? undefined,
                 aspectDegrees:      terrainSignals.aspectDegrees,
                 terrainMeasured:    terrainSignals.terrainMeasured ?? false,
             },

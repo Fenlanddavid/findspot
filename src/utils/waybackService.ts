@@ -1,7 +1,6 @@
 // ─── ArcGIS World Imagery Wayback release resolver ───────────────────────────
-// Fetches the Wayback catalog to get current numeric tile IDs for the most
-// recent spring and summer releases. IDs change monthly so we resolve them
-// dynamically rather than hardcoding, with fallback to known-good 2025 values.
+// Fetches two distinct imagery versions. Wayback release identifiers describe
+// publication/version order, not local acquisition season.
 //
 // Tile URL format (corrected):
 //   https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/
@@ -12,12 +11,18 @@ const CATALOG_URL =
 
 // Fallback to verified 2025 M values if catalog is unreachable
 // WB_2025_R05 (May 2025) = 25285,  WB_2025_R07 (July 2025) = 49999
-const FALLBACK: WaybackIds = { spring: 25285, summer: 49999 };
+const FALLBACK: WaybackIds = { versionA: 25285, versionB: 49999 };
 
 export interface WaybackIds {
-    spring: number;
-    summer: number;
+    versionA?: number;
+    versionB?: number;
+    /** Legacy offline-pack keys; treated only as version identities. */
+    spring?: number;
+    summer?: number;
 }
+
+export function waybackVersionA(ids: WaybackIds): number { return ids.versionA ?? ids.spring ?? FALLBACK.versionA!; }
+export function waybackVersionB(ids: WaybackIds): number { return ids.versionB ?? ids.summer ?? FALLBACK.versionB!; }
 
 // Session-level cache — stores the in-flight promise so concurrent callers
 // (e.g. two satellite workers) share a single fetch rather than each firing one.
@@ -65,12 +70,13 @@ async function _doResolve(): Promise<WaybackIds> {
 
         if (releases.length === 0) throw new Error('empty catalog');
 
-        // Records come newest-first. Find the most recent spring (R04/R05 ≈ Apr/May)
-        // and summer (R06/R07/R08 ≈ Jun/Jul/Aug) releases.
-        const spring = releases.find(r => r.rNum >= 4 && r.rNum <= 5)?.tileId ?? FALLBACK.spring;
-        const summer = releases.find(r => r.rNum >= 6 && r.rNum <= 8)?.tileId ?? FALLBACK.summer;
-
-        return { spring, summer };
+        // Records are newest-first. Select two distinct published versions;
+        // acquisition date must be resolved separately before any season claim.
+        const distinctIds = [...new Set(releases.map(release => release.tileId))];
+        return {
+            versionA: distinctIds[0] ?? FALLBACK.versionA,
+            versionB: distinctIds[1] ?? distinctIds[0] ?? FALLBACK.versionB,
+        };
     } catch {
         return FALLBACK;
     }

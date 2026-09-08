@@ -159,9 +159,9 @@ function buildSignalEvidence(processScores: PrimaryProcessScore[]): EvidenceItem
 function buildContradictingEvidence(
     signals: AdaptedSignals,
     geologyContext: GeologyContext | null,
-    slopePercent: number,
-    aspectDegrees: number,
-    potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    slopePercent: number | null,
+    aspectDegrees: number | null,
+    potentialBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null,
 ): EvidenceItem[] {
     const items: EvidenceItem[] = [];
     const hydroScore = potentialBreakdown?.hydro ?? 0;
@@ -174,11 +174,11 @@ function buildContradictingEvidence(
         items.push(evidence('heavy_clay_drainage', 'Heavy clay or mudstone may indicate poorer drainage', 'geology', 16, 'contradicting'));
     }
 
-    if (slopePercent >= 12) {
+    if (slopePercent !== null && slopePercent >= 12) {
         items.push(evidence('steep_slope_constraint', 'Steep slope constrains occupation and cultivation', 'terrain', 22, 'contradicting'));
     }
 
-    if (aspectDegrees < 112.5 || aspectDegrees > 247.5) {
+    if (aspectDegrees !== null && (aspectDegrees < 112.5 || aspectDegrees > 247.5)) {
         items.push(evidence('not_south_facing', 'Aspect is not strongly south-facing', 'terrain', 8, 'contradicting'));
     }
 
@@ -218,7 +218,7 @@ function computeLandscapeEngines(
     signalEvidence: EvidenceItem[],
     contradiction: EvidenceItem[],
     temporalPersistence: TemporalPersistenceLabel,
-    potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    potentialBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null,
 ): LandscapeEngineAssessment[] {
     const opportunityScore = cap(
         processScore(processScores, 'occupation_potential') * 0.23 +
@@ -233,6 +233,7 @@ function computeLandscapeEngines(
     const constraintScore = cap(wetConstraint + ((potentialBreakdown?.hydro ?? 0) > 70 ? 12 : 0));
 
     const temporalBase: Record<TemporalPersistenceLabel, number> = {
+        insufficient_chronological_evidence: 0,
         transient: 12,
         recurrent: 42,
         persistent: 66,
@@ -254,7 +255,7 @@ function computeLandscapeEngines(
         ...routeEvidence,
         ...signalEvidence.filter(e => ['ridge_and_furrow', 'water_proximity', 'high_ground_restricted_approach'].includes(e.id)),
     ];
-    if (temporalPersistence !== 'transient') {
+    if (temporalPersistence !== 'transient' && temporalPersistence !== 'insufficient_chronological_evidence') {
         memoryEvidence.push(evidence('multi_period_record_signal', 'Recorded evidence spans more than one period', 'historic_records', memoryScore * 0.25));
     }
 
@@ -426,9 +427,9 @@ export function computeEvidenceAssessment(
     primaryInterpretationId: SecondaryInterpretationId | null,
     signals: AdaptedSignals,
     geologyContext: GeologyContext | null,
-    slopePercent: number,
-    aspectDegrees: number,
-    potentialBreakdown: { terrain: number; hydro: number; historic: number; signals: number } | null,
+    slopePercent: number | null,
+    aspectDegrees: number | null,
+    potentialBreakdown: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null,
     temporalPersistence: TemporalPersistenceLabel,
     pasOutput?: PASAdapterOutput | null,
     personalFindsOutput?: PersonalFindsAdapterOutput | null,

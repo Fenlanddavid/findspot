@@ -31,6 +31,7 @@ import {
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { runGeologyContext } from '../../engines/geologyContext';
 import { sweepStaleGeologyCache } from '../../services/geologyContextCache';
+import { HOTSPOT_ENGINE_VERSION } from '../../engines/hotspot/hotspotEngine';
 import { applyGeologyModifier } from '../../engines/hotspot/hotspotEngine';
 import { geologyAuditWarning } from '../../engines/geologyContext/geologyAudit';
 import { getSetting } from '../../services/data';
@@ -905,7 +906,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
             lat: pendingAnnotation.lat,
             lon: pendingAnnotation.lon,
             timestamp: Date.now(),
-            engineVersion: 'FG-2026.05.20b',
+            engineVersion: HOTSPOT_ENGINE_VERSION,
             ...annotationForm,
             engineContext: captureEngineContext(pendingAnnotation.lat, pendingAnnotation.lon),
         };
@@ -930,7 +931,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
 
         const payload = {
             exportVersion:    '1',
-            engineVersion:    'FG-2026.05.20b',
+            engineVersion:    HOTSPOT_ENGINE_VERSION,
             exportedAt:       Date.now(),
             scanId:           tileKey,
             center:           { lat: center.lat, lng: center.lng },

@@ -9,8 +9,10 @@ export const generatePASDescription = (find: Find): string => {
   const parts: string[] = [];
 
   // 1. Initial Summary
-  const completeness = find.completeness ? find.completeness.toLowerCase() : "complete";
-  parts.push(`A ${completeness} ${find.material.toLowerCase()} ${find.objectType.toLowerCase()} of ${find.period} date.`);
+  const completeness = find.completeness && find.completeness !== 'Unassessed'
+    ? `${find.completeness.toLowerCase()} `
+    : '';
+  parts.push(`A ${completeness}${find.material.toLowerCase()} ${find.objectType.toLowerCase()} of ${find.period} date.`);
 
   // 2. Physical Description
   if (find.weightG || find.widthMm || find.heightMm) {

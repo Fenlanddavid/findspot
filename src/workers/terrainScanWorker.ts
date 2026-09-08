@@ -6,11 +6,18 @@
 // No DOM access (document/window) — OffscreenCanvas only.
 
 import { Cluster, SCAN_PROFILE } from '../pages/fieldGuideTypes';
-import { waybackTileUrl } from '../utils/waybackService';
-import { cachedFetchAny } from '../utils/cachedFetch';
+import { waybackTileUrl, waybackVersionA, waybackVersionB } from '../utils/waybackService';
+import { cachedFetchAnyWithMetadata } from '../utils/cachedFetch';
 import { dispatchWorkerRequest } from './protocol';
+import type { DeliveredDataType, EvidenceProvenance } from '../types/evidenceProvenance';
+import {
+    calculateElevationDerivatives,
+    decodeTerrariumPixel,
+    metresPerPixel,
+    type TerrainMeasurement,
+} from '../engines/terrain/elevationAnalysis';
 
-type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
+type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer' | 'elevation_dem';
 
 export interface WorkerParams {
     sourceType: SourceType;
@@ -21,12 +28,15 @@ export interface WorkerParams {
     bounds: { west: number; east: number; south: number; north: number };
     n: number;
     /** Resolved by the main thread before the worker starts — avoids duplicate catalog fetches */
-    waybackIds: { spring: number; summer: number } | null;
+    waybackIds: { versionA?: number; versionB?: number; spring?: number; summer?: number } | null;
 }
 
 export interface WorkerResult {
     clusters:    Cluster[];
     tilesLoaded: number;
+    provenance?: EvidenceProvenance[];
+    terrainMeasurements?: TerrainMeasurement[];
+    processingError?: boolean;
 }
 
 const TILE_SIZE = 256;
@@ -35,21 +45,79 @@ const UNLOADED_TILE_EDGE_MARGIN_PX = 8;
 
 // ─── Tile fetch helper ────────────────────────────────────────────────────────
 
-async function fetchBitmapTimed(url: string): Promise<ImageBitmap | null> {
+async function sha256(bytes: ArrayBuffer): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function fetchBitmapTimed(url: string): Promise<{
+    bitmap: ImageBitmap;
+    retrievedAt: string;
+    fromCache: boolean;
+    contentIdentity: string;
+    decodedContentIdentity: string;
+} | null> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 4000);
     try {
         // cachedFetchAny checks all open Cache Storage caches first (offline pack),
         // then falls through to network. caches.match() is available in dedicated
         // Workers in Chrome 43+, Firefox 44+, Safari 16+.
-        const res = await cachedFetchAny(url, { signal: ctrl.signal });
+        const { response: res, fromCache } = await cachedFetchAnyWithMetadata(url, { signal: ctrl.signal });
         clearTimeout(timer);
         if (!res.ok) return null;
-        return await createImageBitmap(await res.blob());
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        const identityCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const identityContext = identityCanvas.getContext('2d', { willReadFrequently: true });
+        if (!identityContext) return null;
+        identityContext.drawImage(bitmap, 0, 0);
+        const decoded = identityContext.getImageData(0, 0, bitmap.width, bitmap.height).data;
+        const [contentIdentity, decodedContentIdentity] = await Promise.all([
+            sha256(await blob.arrayBuffer()),
+            sha256(decoded.buffer.slice(decoded.byteOffset, decoded.byteOffset + decoded.byteLength) as ArrayBuffer),
+        ]);
+        return { bitmap, retrievedAt: new Date().toISOString(), fromCache, contentIdentity, decodedContentIdentity };
     } catch {
         clearTimeout(timer);
         return null;
     }
+}
+
+type DeliveredSource = {
+    id: string;
+    dataset: string;
+    parent: string;
+    dataType: DeliveredDataType;
+    resolutionM?: number;
+    sourceLineageIdentity?: string;
+    lineageConfidence?: 'verified' | 'unknown';
+};
+
+function sourceDescriptor(
+    sourceType: SourceType,
+    fallback: boolean,
+    waybackIds: WorkerParams['waybackIds'],
+): DeliveredSource {
+    if (sourceType === 'elevation_dem') return { id: 'aws-terrain-tiles-terrarium', dataset: 'AWS Terrain Tiles (Terrarium elevation)', parent: 'aws-terrain-tiles-terrarium', dataType: 'elevation_dem', sourceLineageIdentity: 'aws-terrain-tiles-terrarium', lineageConfidence: 'verified' };
+    // The publication year is not itself proof of a new acquisition. Group EA
+    // composite renderings under the underlying LiDAR composite lineage.
+    if (sourceType === 'terrain' && !fallback) return { id: 'ea-lidar-2025-hillshade', dataset: 'Environment Agency LiDAR Composite 1m DTM 2025 hillshade', parent: 'ea-lidar-composite-2025', dataType: 'rendered_hillshade', resolutionM: 1, sourceLineageIdentity: 'ea-lidar-composite', lineageConfidence: 'verified' };
+    if (sourceType === 'terrain_global' && !fallback) return { id: 'ea-lidar-2022-multidirectional-hillshade', dataset: 'Environment Agency LiDAR Composite 1m DTM 2022 multidirectional hillshade', parent: 'ea-lidar-composite-2022', dataType: 'rendered_hillshade', resolutionM: 1, sourceLineageIdentity: 'ea-lidar-composite', lineageConfidence: 'verified' };
+    if (sourceType === 'slope' && !fallback) return { id: 'ea-lidar-2022-rendered-slope', dataset: 'Environment Agency LiDAR Composite DTM 1m 2022 slope rendering', parent: 'ea-lidar-composite-2022', dataType: 'rendered_slope', resolutionM: 1, sourceLineageIdentity: 'ea-lidar-composite', lineageConfidence: 'verified' };
+    if (sourceType === 'satellite_spring' && !fallback) {
+        const id = waybackIds ? waybackVersionA(waybackIds) : 0;
+        return { id: `esri-wayback-${id}`, dataset: `Esri World Imagery Wayback version ${id}`, parent: `esri-world-imagery-wayback-${id}`, dataType: 'rgb_imagery' };
+    }
+    if (sourceType === 'satellite_summer' && !fallback) {
+        const id = waybackIds ? waybackVersionB(waybackIds) : 0;
+        return { id: `esri-wayback-${id}`, dataset: `Esri World Imagery Wayback version ${id}`, parent: `esri-world-imagery-wayback-${id}`, dataType: 'rgb_imagery' };
+    }
+    if (sourceType.startsWith('satellite_')) return { id: 'esri-world-imagery-current', dataset: 'Esri World Imagery current mosaic', parent: 'esri-world-imagery-current', dataType: 'rgb_imagery' };
+    if (sourceType === 'slope') return { id: 'esri-world-shaded-relief', dataset: 'Esri World Shaded Relief', parent: 'esri-world-shaded-relief', dataType: 'rendered_relief' };
+    if (sourceType === 'hydrology' && !fallback) return { id: 'esri-world-hillshade', dataset: 'Esri World Hillshade', parent: 'esri-world-elevation-hillshade', dataType: 'rendered_hillshade' };
+    if (sourceType === 'hydrology') return { id: 'esri-world-shaded-relief', dataset: 'Esri World Shaded Relief', parent: 'esri-world-shaded-relief', dataType: 'rendered_relief' };
+    return { id: fallback ? 'esri-world-hillshade-fallback' : 'esri-world-hillshade', dataset: fallback ? 'Esri World Hillshade fallback' : 'Esri World Hillshade', parent: 'esri-world-elevation-hillshade', dataType: 'rendered_hillshade' };
 }
 
 // ─── Convex hull perimeter ────────────────────────────────────────────────────
@@ -290,6 +358,7 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
 
     const promises: Promise<void>[] = [];
     const loadedTiles = new Array<boolean>(TILE_GRID_SIZE * TILE_GRID_SIZE).fill(false);
+    const tileProvenance: EvidenceProvenance[] = [];
     let successCount = 0;
 
     for (let dy = 0; dy < 3; dy++) {
@@ -312,35 +381,128 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
             } else if (sourceType === 'hydrology') {
                 primaryUrl  = `https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/${zoom}/${ty}/${tx}`;
                 fallbackUrl = `https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/${zoom}/${ty}/${tx}`;
+            } else if (sourceType === 'elevation_dem') {
+                primaryUrl = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tx}/${ty}.png`;
             } else if (sourceType === 'satellite_spring') {
-                primaryUrl  = waybackIds ? waybackTileUrl(waybackIds.spring, zoom, ty, tx) : '';
+                primaryUrl  = waybackIds ? waybackTileUrl(waybackVersionA(waybackIds), zoom, ty, tx) : '';
                 fallbackUrl = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
             } else if (sourceType === 'satellite_summer') {
-                primaryUrl  = waybackIds ? waybackTileUrl(waybackIds.summer, zoom, ty, tx) : '';
+                primaryUrl  = waybackIds ? waybackTileUrl(waybackVersionB(waybackIds), zoom, ty, tx) : '';
                 fallbackUrl = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`;
             }
 
             const dxCopy = dx, dyCopy = dy;
             promises.push((async () => {
-                let bitmap: ImageBitmap | null = null;
-                if (primaryUrl) bitmap = await fetchBitmapTimed(primaryUrl);
-                if (!bitmap && fallbackUrl) bitmap = await fetchBitmapTimed(fallbackUrl);
-                if (bitmap) {
-                    ctx.drawImage(bitmap, dxCopy * TILE_SIZE, dyCopy * TILE_SIZE);
-                    bitmap.close();
+                let fetched = primaryUrl ? await fetchBitmapTimed(primaryUrl) : null;
+                let usedFallback = false;
+                if (!fetched && fallbackUrl) {
+                    fetched = await fetchBitmapTimed(fallbackUrl);
+                    usedFallback = fetched !== null;
+                }
+                if (fetched) {
+                    ctx.drawImage(fetched.bitmap, dxCopy * TILE_SIZE, dyCopy * TILE_SIZE);
+                    fetched.bitmap.close();
                     loadedTiles[dyCopy * TILE_GRID_SIZE + dxCopy] = true;
                     successCount++;
+                    const delivered = sourceDescriptor(sourceType, usedFallback, waybackIds);
+                    tileProvenance.push({
+                        observationId: `${delivered.parent}:${zoom}/${tx}/${ty}`,
+                        requestedSource: sourceType,
+                        deliveredSource: delivered.id,
+                        datasetIdentity: delivered.dataset,
+                        parentSourceIdentity: delivered.parent,
+                        ...(delivered.sourceLineageIdentity ? { sourceLineageIdentity: delivered.sourceLineageIdentity } : {}),
+                        ...(delivered.lineageConfidence ? { lineageConfidence: delivered.lineageConfidence } : {}),
+                        contentIdentity: fetched.contentIdentity,
+                        decodedContentIdentity: fetched.decodedContentIdentity,
+                        deliveredDataType: delivered.dataType,
+                        ...(delivered.resolutionM ? { resolutionM: delivered.resolutionM, sourceResolutionM: delivered.resolutionM } : {}),
+                        horizontalCrs: 'EPSG:3857',
+                        retrievalDate: fetched.retrievedAt,
+                        fallbackStatus: usedFallback ? 'fallback' : fetched.fromCache ? 'offline_cache' : 'requested',
+                        tile: { z: zoom, x: tx, y: ty },
+                    });
                 }
             })());
         }
     }
 
     await Promise.all(promises);
-    if (successCount === 0) return { clusters: [], tilesLoaded: 0 };
+    if (successCount === 0) return { clusters: [], tilesLoaded: 0, provenance: [] };
+    const coverageStatus = successCount === TILE_GRID_SIZE * TILE_GRID_SIZE ? 'complete' : 'partial';
+    for (const item of tileProvenance) item.coverageStatus = coverageStatus;
 
     // ── Pixel extraction ──────────────────────────────────────────────────────
 
     const rawData = ctx.getImageData(0, 0, stitchSize, stitchSize).data;
+
+    if (sourceType === 'elevation_dem') {
+        const elevations = new Float32Array(stitchSize * stitchSize);
+        const valid = new Uint8Array(stitchSize * stitchSize);
+        for (let pixel = 0; pixel < elevations.length; pixel++) {
+            const offset = pixel * 4;
+            if (rawData[offset + 3] === 0) continue;
+            const elevationM = decodeTerrariumPixel(rawData[offset], rawData[offset + 1], rawData[offset + 2]);
+            // Terrarium's all-zero sentinel decodes to -32768 m. Treat values
+            // outside physical Earth bounds as nodata so their edges cannot
+            // create artificial slope or relief.
+            if (elevationM < -12_000 || elevationM > 9_000) continue;
+            elevations[pixel] = elevationM;
+            valid[pixel] = 1;
+        }
+        const measurements: TerrainMeasurement[] = [];
+        const centerResolutionM = metresPerPixel((bounds.north + bounds.south) / 2, zoom);
+        // About 20 m between context samples at every supported latitude/zoom.
+        // Feature values are interpolated later only from a valid enclosing cell.
+        const SAMPLE_STEP_PX = Math.max(2, Math.round(20 / centerResolutionM));
+        for (let y = SAMPLE_STEP_PX; y < stitchSize - SAMPLE_STEP_PX; y += SAMPLE_STEP_PX) {
+            for (let x = SAMPLE_STEP_PX; x < stitchSize - SAMPLE_STEP_PX; x += SAMPLE_STEP_PX) {
+                const lon = (tX_start + x / TILE_SIZE) / n * 360 - 180;
+                const yNorm = (tY_start + y / TILE_SIZE) / n;
+                const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * yNorm))) - Math.PI / 2);
+                if (lon < bounds.west || lon > bounds.east || lat < bounds.south || lat > bounds.north) continue;
+                const resolutionM = metresPerPixel(lat, zoom);
+                // Never shrink the nominal 50 m radius through a pixel cap.
+                const windowRadiusPx = Math.max(2, Math.ceil(50 / resolutionM));
+                const derivatives = calculateElevationDerivatives(
+                    elevations, valid, stitchSize, stitchSize, x, y, resolutionM, windowRadiusPx,
+                );
+                if (!derivatives) continue;
+                const tileX = tX_start + Math.floor(x / TILE_SIZE);
+                const tileY = tY_start + Math.floor(y / TILE_SIZE);
+                const provenance = tileProvenance.find(item => item.tile?.x === tileX && item.tile?.y === tileY);
+                if (!provenance) continue;
+                const measurementProvenance: EvidenceProvenance = {
+                    ...provenance,
+                    verticalUnits: 'metres',
+                    limitations: [
+                        'Terrarium map-tile pixel spacing is not a native source-resolution claim.',
+                    ],
+                };
+                measurements.push({
+                    lon, lat, ...derivatives,
+                    role: 'landscape_context',
+                    method: 'grid_sample',
+                    analysisWindowRadiusM: windowRadiusPx * resolutionM,
+                    outputPixelSpacingM: resolutionM,
+                    sourceResolutionM: null,
+                    supportCoordinates: [[lon, lat]],
+                    supportSamples: [{
+                        coordinate: [lon, lat],
+                        weight: 1,
+                        provenance: [measurementProvenance],
+                    }],
+                    limitations: [
+                        'Native/effective source resolution is not established by this tile request.',
+                        'This regular-grid sample describes surrounding landscape context until attached by valid local interpolation.',
+                    ],
+                    provenance: [measurementProvenance],
+                });
+            }
+        }
+        return { clusters: [], tilesLoaded: successCount, provenance: tileProvenance, terrainMeasurements: measurements };
+    }
+
     const preBlur = new Float32Array(stitchSize * stitchSize);
 
     for (let i = 0; i < rawData.length; i += 4) {
@@ -508,6 +670,8 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
                     sources: [sourceType as Cluster['source']],
                     polarity: 'Unknown',
                     scaleTier: tier.label as Cluster['scaleTier'],
+                    observationKind: 'image_anomaly',
+                    terrainMeasured: false,
                 };
 
                 let head = 0;
@@ -570,7 +734,8 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
                 const yNorm = (tY_start + midY / 256) / n;
                 const lat = (180 / Math.PI) * (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * yNorm))) - Math.PI / 2);
                 cluster.center  = [lon, lat];
-                cluster.polarity = sumLap < 0 ? 'Raised' : 'Sunken';
+                cluster.polarity = 'Unknown';
+                cluster.imagePolarity = sumLap < 0 ? 'lighter' : 'darker';
 
                 const meanRidgeStrength = sumRidge / areaPx;
                 const dirConsistency    = dirSamples > 0
@@ -588,36 +753,8 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
                 }
                 cluster.bearing = bearing;
 
-                if (sourceType.startsWith('terrain')) {
-                    const ix = Math.floor(midX), iy = Math.floor(midY);
-                    if (ix > 0 && ix < stitchSize - 1 && iy > 0 && iy < stitchSize - 1) {
-                        const dz_dx = (processed[iy * stitchSize + (ix + 1)] - processed[iy * stitchSize + (ix - 1)]) / 2.0;
-                        const dz_dy = (processed[(iy + 1) * stitchSize + ix] - processed[(iy - 1) * stitchSize + ix]) / 2.0;
-                        let aspect = Math.atan2(dz_dy, -dz_dx) * (180 / Math.PI);
-                        if (aspect < 0) aspect += 360;
-                        cluster.aspect = aspect;
-
-                        const cVal = processed[iy * stitchSize + ix];
-                        let higher = 0, lower = 0;
-                        const neighbors = [
-                            processed[(iy - 1) * stitchSize + (ix - 1)], processed[(iy - 1) * stitchSize + ix], processed[(iy - 1) * stitchSize + (ix + 1)],
-                            processed[iy * stitchSize + (ix - 1)],                                               processed[iy * stitchSize + (ix + 1)],
-                            processed[(iy + 1) * stitchSize + (ix - 1)], processed[(iy + 1) * stitchSize + ix], processed[(iy + 1) * stitchSize + (ix + 1)],
-                        ];
-                        neighbors.forEach(v => { if (v > cVal + 0.02) higher++; else if (v < cVal - 0.02) lower++; });
-
-                        if (higher >= 6)            cluster.relativeElevation = 'Hollow';
-                        else if (lower >= 6)         cluster.relativeElevation = 'Ridge';
-                        else if (higher >= 1 && lower >= 1) cluster.relativeElevation = 'Slope';
-                        else                         cluster.relativeElevation = 'Flat';
-
-                        // Measured terrain signals (vNext-P1): same gradients / ring values
-                        // already computed above. Normalised DEM units — NOT absolute metres.
-                        cluster.slopeGradient = Math.min(1, Math.hypot(dz_dx, dz_dy));
-                        const ringMean = neighbors.reduce((a, b) => a + b, 0) / neighbors.length;
-                        cluster.relativeReliefNorm = cVal - ringMean;
-                    }
-                }
+                // Rendered-image gradients describe pixel morphology only. They
+                // must never populate aspect, elevation, relief or slope fields.
 
                 // Bounds check
                 if (lon < bounds.west || lon > bounds.east || lat < bounds.south || lat > bounds.north) continue;
@@ -645,7 +782,7 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
 
                 // Classification
                 const isMovement = ratio > 6.0 && minAxis >= 6 && dirConsistency > 0.35;
-                const isPalaeo   = sourceType === 'hydrology' && ratio > 4.0 && cluster.polarity === 'Sunken' && minAxis >= 8 && dens > 0.25;
+                const isChannelLike = sourceType === 'hydrology' && ratio > 4.0 && minAxis >= 8 && dens > 0.25;
 
                 // Circularity threshold varies by source: ploughing distorts ring features
                 // in satellite imagery more than in LiDAR, so satellite uses a looser threshold
@@ -654,7 +791,7 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
 
                 if      (isHollow && circularity > 0.55 && areaPx > 150) cluster.type = 'Ring Feature (Possible Ditch or Enclosure)';
                 else if (isHollow && areaPx > 80)                        cluster.type = 'Enclosure Signal (Possible Earthwork)';
-                else if (isPalaeo)                                        cluster.type = 'Palaeochannel (Ancient Watercourse)';
+                else if (isChannelLike)                                   cluster.type = 'Linear Image Anomaly (Channel-like)';
                 else if (sourceType.startsWith('satellite_'))             cluster.type = 'Vegetation Stress Signal';
                 else if (isMovement)                                      cluster.type = 'Movement Signal (Possible Trackway)';
                 else if (ratio > 3.0)                                     cluster.type = 'Linear Feature (Ditch or Bank Signal)';
@@ -710,32 +847,17 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
                 cluster.confidence    = confidenceVal > 0.6 ? 'High' : confidenceVal > 0.35 ? 'Medium' : 'Subtle';
                 cluster.findPotential = Math.min(96, Math.round(confidenceVal * 100));
 
-                // ── Terrain-derived hydrology heuristics ──────────────────────
-                // Only meaningful for terrain sources (local-relief normalised data).
-                let dryMarginVal      = 0;
-                let flowConvergenceVal = 0;
-                if (sourceType.startsWith('terrain')) {
-                    const hx = Math.floor(midX), hy = Math.floor(midY);
-                    if (hx > 4 && hx < stitchSize - 5 && hy > 4 && hy < stitchSize - 5) {
-                        dryMarginVal      = computeDryMarginScore(hx, hy, processed, stitchSize);
-                        flowConvergenceVal = computeFlowConvergence(hx, hy, processed, stitchSize);
-                    }
-                }
-                const hydrologicalContextVal = dryMarginVal > 0 || flowConvergenceVal > 0
-                    ? Math.min(1.0, dryMarginVal * 0.55 + flowConvergenceVal * 0.45)
-                    : 0;
-
                 cluster.metrics = {
                     circularity, density: dens, ratio, area: areaPx,
                     ridgeStrength: meanRidgeStrength, dirConsistency, interiorDensity: interiorDensityVal,
-                    ...(dryMarginVal > 0 || flowConvergenceVal > 0 ? {
-                        dryMarginScore:            dryMarginVal,
-                        flowConvergence:           flowConvergenceVal,
-                        hydrologicalContext:       hydrologicalContextVal,
-                        hydrologyHeuristicVersion: 'terrain-hydro-v1',
-                        hydrologyUsed:             true,
-                    } : {}),
                 };
+                const minTileX = Math.max(0, Math.floor(cluster.minX / TILE_SIZE));
+                const maxTileX = Math.min(2, Math.floor(cluster.maxX / TILE_SIZE));
+                const minTileY = Math.max(0, Math.floor(cluster.minY / TILE_SIZE));
+                const maxTileY = Math.min(2, Math.floor(cluster.maxY / TILE_SIZE));
+                cluster.provenance = tileProvenance.filter(item => item.tile &&
+                    item.tile.x >= tX_start + minTileX && item.tile.x <= tX_start + maxTileX &&
+                    item.tile.y >= tY_start + minTileY && item.tile.y <= tY_start + maxTileY);
                 // points was only needed inside the worker — clear before postMessage to avoid
                 // structured-cloning potentially thousands of pixel coords per cluster.
                 cluster.points = [];
@@ -786,7 +908,7 @@ async function processSource(params: WorkerParams): Promise<WorkerResult> {
         }
     }
 
-    return { clusters: allClusters, tilesLoaded: successCount };
+    return { clusters: allClusters, tilesLoaded: successCount, provenance: tileProvenance };
 }
 
 // ─── Worker message handler ───────────────────────────────────────────────────

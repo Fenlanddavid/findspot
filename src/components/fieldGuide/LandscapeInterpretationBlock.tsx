@@ -274,14 +274,16 @@ export function LandscapeInterpretationBlock({
 
     // Temporal persistence label
     let temporalLabel: string;
-    if (recordSparsity && temporalPersistence === 'transient') {
+    if (temporalPersistence === 'insufficient_chronological_evidence') {
+        temporalLabel = 'Insufficient dated evidence to assess chronology';
+    } else if (recordSparsity && temporalPersistence === 'transient') {
         temporalLabel = getTemplateText('temporal_persistence_sparsity');
     } else if (temporalPersistence === 'persistent_strategic_focus') {
-        temporalLabel = 'Evidence spans multiple periods — persistent use of this landscape';
+        temporalLabel = 'Dated records suggest possible activity across several periods';
     } else if (temporalPersistence === 'persistent') {
-        temporalLabel = 'Evidence spans multiple periods';
+        temporalLabel = 'Dated records occur across several periods';
     } else if (temporalPersistence === 'recurrent') {
-        temporalLabel = 'Evidence from more than one period';
+        temporalLabel = 'Dated records occur in more than one period';
     } else {
         temporalLabel = 'Limited period evidence in records';
     }

@@ -10,7 +10,7 @@ export const COVERAGE_PRESENTATION = {
   gapsShown: 'Recorded coverage gaps are shown on the map.',
   gapsUnavailable: 'Recorded coverage gaps are unavailable for this field.',
   reportedIncluded: 'Marked searched areas are included.',
-  percentageCaveat: 'Recorded coverage is an estimate from saved reports and accepted GPS trail samples. It does not establish everything searched or that a field is complete.',
+  percentageCaveat: 'Recorded coverage is an estimate from saved reports and accepted GPS trail samples. Tracked estimates use a 5 m position-proximity model, not a measured detector sweep width. Neither source establishes everything searched or that a field is complete.',
 } as const;
 
 export type RecordedCoverageEstimate = {

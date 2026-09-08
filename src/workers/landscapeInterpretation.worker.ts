@@ -21,8 +21,9 @@ import { computeConfidence }                                           from '../
 import { isScheduledMonumentOverlap }                                  from '../services/fieldguide/landscapeInterpretation/scheduledMonumentGate';
 import { generateHedgedNarrative }                                     from '../services/fieldguide/landscapeInterpretation/narrativeGenerator';
 import { computeEvidenceAssessment }                                   from '../services/fieldguide/landscapeInterpretation/evidenceModel';
+import { ALIE_ENGINE_VERSION } from '../domain/engineVersions';
 
-const ENGINE_VERSION = 'ALIE-2026.06.22a';
+const ENGINE_VERSION = ALIE_ENGINE_VERSION;
 
 export function runLandscapeInterpretation(
     input: LandscapeInterpretationWorkerInput,
@@ -173,7 +174,7 @@ export function runLandscapeInterpretation(
         );
 
         // ── 11. Confidence model ──────────────────────────────────────────────
-        const { tier: confidenceTier, uncertainty, contributions: confidenceContributions } = computeConfidence(
+        const { tier: confidenceTier, uncertainty, contributions: confidenceContributions, components: confidenceComponents } = computeConfidence(
             processScores,
             interpretationScores,
             primaryInterpretationId,
@@ -221,6 +222,7 @@ export function runLandscapeInterpretation(
             recordSparsity,
             uncertainty,
             confidenceContributions,
+            confidenceComponents,
             scheduledMonumentOverlap,
             narrative,
             engineVersion: ENGINE_VERSION,

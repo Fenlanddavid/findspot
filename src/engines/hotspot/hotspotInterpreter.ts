@@ -148,14 +148,24 @@ const pools: Record<HotspotClassification, { summaries: string[]; strategies: st
     },
     'Burial / Barrow Candidate': {
         summaries: [
-            'a compact circular raised feature consistent with a burial mound or barrow.',
-            'an isolated elevated form that matches the signature of a burial monument.',
-            'a circular raised signal without settlement context — typical of a funerary feature.',
+            'a compact circular raised morphology; a funerary interpretation is possible but unconfirmed.',
+            'an isolated elevated form whose function and date require records review.',
+            'a circular raised signal that should be treated cautiously because its function is unknown.',
         ],
         strategies: [
-            'check heritage records before investigating — this type of feature is often protected.',
-            'focus on the edges of the feature rather than the centre.',
-            'if confirmed as a barrow, work the surrounding area rather than the mound itself.',
+            'review heritage records and seek conservation advice before any field action.',
+            'do not disturb a suspected funerary feature, whether or not it is scheduled.',
+            'record the morphology and location for appropriate heritage review.',
+        ],
+    },
+    'Circular Terrain Feature': {
+        summaries: [
+            'a compact circular raised morphology visible in the available terrain evidence.',
+            'a circular ground form whose archaeological function and date are unknown.',
+        ],
+        strategies: [
+            'review heritage records and seek conservation advice before any field action.',
+            'do not disturb it if a funerary interpretation remains possible.',
         ],
     },
     'Organised Field System Candidate': {
@@ -208,14 +218,10 @@ const pools: Record<HotspotClassification, { summaries: string[]; strategies: st
     },
     'Multi-Period Occupation Zone': {
         summaries: [
-            'a location used across more than one historical period — physical earthwork and spectral signals layer here independently.',
-            'an area where signals from different time periods concentrate in the same place.',
-            'a multi-period site where later activity overlaps with earlier landscape features.',
+            'a legacy multi-period label that lacks enough dated evidence for a chronological conclusion.',
         ],
         strategies: [
-            'search the wider area for period variation rather than expecting a single concentration point.',
-            'look for spatial offset between signals — different periods may cluster in slightly different locations.',
-            'start at the strongest physical signal, then search outward for period variation.',
+            'review dated records before making any statement about activity across periods.',
         ],
     },
     'Terrain Structure Candidate': {

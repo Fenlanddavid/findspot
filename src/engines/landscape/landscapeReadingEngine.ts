@@ -12,6 +12,7 @@
 
 import { Cluster, HistoricRoute } from '../../pages/fieldGuideTypes';
 import { getDistance, getDistanceToLine } from '../../utils/fieldGuideAnalysis';
+import { hasDistinctImageryObservations } from '../../types/evidenceProvenance';
 
 export interface LandscapeReading {
     score:   number;    // capped at 6 — only microTopo + dryMargin
@@ -28,6 +29,7 @@ interface MemberFlags {
     hasRouteProximity: boolean;
     hasSatSummer:      boolean;
     hasSatSpring:      boolean;
+    hasDistinctImagery: boolean;
     hasAlignment:      boolean;
     hasCrossing:       boolean;
     hasLidar:          boolean;
@@ -66,10 +68,10 @@ function buildFlags(members: Cluster[]): MemberFlags {
         if (firstCenter === null) firstCenter = m.center;
 
         const src = m.sources;
-        if (!hasHydro      && src.includes('hydrology'))       hasHydro = true;
+        if (!hasHydro && m.observationKind === 'elevation_measurement' && src.includes('hydrology')) hasHydro = true;
         if (!hasSatSummer  && src.includes('satellite_summer')) hasSatSummer = true;
         if (!hasSatSpring  && src.includes('satellite_spring')) hasSatSpring = true;
-        if (!hasLidar      && (src.includes('terrain') || src.includes('terrain_global'))) hasLidar = true;
+        if (!hasLidar && (m.provenance ?? []).some(p => p.parentSourceIdentity.startsWith('ea-lidar-composite') && p.fallbackStatus !== 'fallback')) hasLidar = true;
 
         if (m.polarity === 'Raised') {
             hasRaised = true;
@@ -77,7 +79,7 @@ function buildFlags(members: Cluster[]): MemberFlags {
         }
         if (m.polarity === 'Sunken') hasSunken = true;
 
-        if (src.includes('slope')) {
+        if (m.terrainMeasured === true && src.includes('slope')) {
             const area = m.metrics?.area ?? 0;
             if (!hasSlopeBreak && area >= 80) hasSlopeBreak = true;
             if (!hasGentleSlope && area > 60 && (m.metrics?.ratio ?? 0) < 4) hasGentleSlope = true;
@@ -118,7 +120,9 @@ function buildFlags(members: Cluster[]): MemberFlags {
     // De-duplicate hydro centers (raised clusters were pushed twice if they also have hydro source)
     return {
         hasHydro, hasRaised, hasSunken, hasSlopeBreak, hasRouteProximity,
-        hasSatSummer, hasSatSpring, hasAlignment, hasCrossing, hasLidar,
+        hasSatSummer, hasSatSpring,
+        hasDistinctImagery: hasDistinctImageryObservations(members.flatMap(m => m.provenance ?? [])),
+        hasAlignment, hasCrossing, hasLidar,
         isSouthFacing, hasGentleSlope, multiScaleConfirmed, highCircularity,
         hasEarthworkType, hasHollowForm, hasSolidForm, hasCorridorMember,
         bestDryMarginScore, bestFlowConvergence,
@@ -149,8 +153,7 @@ function microTopoScore(f: MemberFlags): { score: number; reason?: string } {
 
 function dryMarginScore(f: MemberFlags): { score: number; reason?: string } {
     // Path A
-    const hasMultiSeasonSat  = f.hasSatSummer && f.hasSatSpring;
-    const sourceQualifiers   = [f.hasSlopeBreak, f.hasRouteProximity, hasMultiSeasonSat].filter(Boolean).length;
+    const sourceQualifiers   = [f.hasSlopeBreak, f.hasRouteProximity, f.hasDistinctImagery].filter(Boolean).length;
     const sourcePathFires    = f.hasHydro && f.hasRaised && sourceQualifiers > 0;
     const sourceScore        = sourcePathFires ? (sourceQualifiers >= 2 ? 3 : 2) : 0;
 

@@ -13,6 +13,7 @@ import type {
     OverpassElement,
 } from '../historicScanService';
 import type { PASCellLookup } from '../pasDensityService';
+import { HISTORIC_CACHE_VERSION } from '../../domain/engineVersions';
 import type { QuestionSourceAvailability } from '../../outstandingQuestions/types';
 import type { LogLevel, LogSource } from '../../utils/scanLogger';
 import type { ScanContext } from './terrainScanSupport';
@@ -49,7 +50,7 @@ export interface HistoricScanCoordinatorOptions {
     isActive: () => boolean;
 }
 
-export const HISTORIC_CACHE_VERSION = 'HISTORIC-2026.07.26b';
+export { HISTORIC_CACHE_VERSION } from '../../domain/engineVersions';
 export const HISTORIC_CACHE_TTL_MS =
     CACHE_POLICIES.fieldGuideHistoric.expiry.durationMs;
 

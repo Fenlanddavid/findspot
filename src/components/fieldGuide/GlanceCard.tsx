@@ -59,8 +59,8 @@ export function GlanceCard({
 
     return (
         <div className="border border-blue-500/20 bg-blue-500/5 rounded-xl p-3 space-y-3">
-            <p className="text-[0.5625rem] font-black text-blue-300/70 uppercase tracking-[0.2em]">
-                Landscape Read
+            <p className="text-sm font-black text-blue-200">
+                Landscape read
             </p>
 
             {/* C1: SM overlap banner */}
@@ -86,15 +86,16 @@ export function GlanceCard({
 
             {/* C2 + C3: Headline + softened signal strength */}
             <div className="space-y-1.5">
+                <p className="text-xs font-bold text-white/65">Possible interpretation</p>
                 <p className="text-sm font-black text-white leading-snug">{title}</p>
-                <span className="inline-block text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-lg border bg-white/8 border-white/20 text-white/65">
+                <span className="inline-block rounded-lg border border-white/20 bg-white/8 px-2 py-1 text-xs font-black text-white/75">
                     {strengthLabel}
                 </span>
             </div>
 
             {/* Evidence clause — specific salient evidence on the glance */}
             {clause && (
-                <p className="text-2xs font-bold text-white/55 leading-snug">{clause}</p>
+                <div><p className="mb-1 text-xs font-bold text-white/65">What was observed</p><p className="text-sm font-bold text-white/75 leading-snug">{clause}</p></div>
             )}
             {rider && (
                 <p className="text-2xs font-bold text-amber-300/90 leading-snug">▲ {rider}</p>
@@ -107,7 +108,7 @@ export function GlanceCard({
                 </p>
             ) : (
                 <div className="space-y-1.5">
-                    <p className="text-[0.5625rem] font-black text-white/48 uppercase tracking-widest">Why?</p>
+                    <p className="text-xs font-bold text-white/65">Supporting sources and quality</p>
                     <div className="flex flex-wrap gap-1.5">
                         {reasons.map(r => (
                             <span
@@ -126,9 +127,14 @@ export function GlanceCard({
                 </div>
             )}
 
+            <div className="space-y-1">
+                <p className="text-xs font-bold text-white/65">Alternatives and limitations</p>
+                <p className="text-sm font-medium text-white/65 leading-snug">{showCaveat ? 'Available evidence includes material contradictions; competing interpretations remain possible.' : 'The evidence may have natural, agricultural, industrial, or modern explanations.'}</p>
+            </div>
+
             {/* C3: Hedge footnote */}
-            <p className="text-[0.5625rem] font-bold text-white/42 leading-snug">
-                Provisional landscape model — indicative only, not a prediction of finds.
+            <p className="text-xs font-bold text-white/60 leading-snug">
+                Unvalidated heuristic ranking — indicative only, not a calibrated probability or prediction of finds.
             </p>
 
             {/* Read full + don't show again */}
@@ -136,9 +142,9 @@ export function GlanceCard({
                 <button
                     type="button"
                     onClick={handleReadFull}
-                    className="w-full rounded-xl border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-black text-blue-300 uppercase tracking-widest transition-colors active:bg-blue-500/20"
+                    className="min-h-12 w-full rounded-xl border border-blue-400/35 bg-blue-500/10 px-4 text-sm font-black text-blue-200 transition-colors active:bg-blue-500/20"
                 >
-                    Read Full FieldGuide
+                    Review evidence and next action
                 </button>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
@@ -147,7 +153,7 @@ export function GlanceCard({
                         onChange={e => setDontShowAgain(e.target.checked)}
                         className="w-3 h-3 rounded border-white/20 bg-white/5 accent-blue-400"
                     />
-                    <span className="text-[0.5625rem] font-black text-white/42 uppercase tracking-widest leading-none">
+                    <span className="text-sm font-bold text-white/65 leading-none">
                         Don't show this summary again
                     </span>
                 </label>

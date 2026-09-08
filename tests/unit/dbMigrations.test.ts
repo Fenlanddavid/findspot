@@ -159,7 +159,7 @@ describe('FindSpot IndexedDB forward migrations', () => {
     current.close();
   });
 
-  it('adds coverage tables to a v40 database without changing existing prediction outcomes', async () => {
+  it('adds coverage tables and preserves legacy prediction meaning from a v40 database', async () => {
     const name = 'findspot-migration-v40-coverage';
     await createFixtureDb(name, 40, {
       projects: [{ id: 'project-1' }],
@@ -179,7 +179,8 @@ describe('FindSpot IndexedDB forward migrations', () => {
     expect(await current.sessionCoverage.count()).toBe(0);
     expect(await current.hotspotPredictions.get('prediction-1')).toMatchObject({
       engineVersion: 'engine-v1',
-      outcome: 'hit',
+      outcome: 'find_recorded',
+      legacyOutcome: 'hit',
     });
     expect(await current.projects.count()).toBe(1);
     expect(await current.permissions.count()).toBe(1);
@@ -278,6 +279,22 @@ describe('FindSpot IndexedDB forward migrations', () => {
     const current = await openCurrent(name);
     expect(current.permissions.schema.indexes.map(index => index.name)).not.toContain('boundary');
     expect(await current.permissions.get('permission-1')).toMatchObject({ boundary });
+    current.close();
+  });
+
+  it('preserves but marks legacy inferred prediction outcomes when upgrading v47', async () => {
+    const name = 'findspot-migration-v47-prediction-semantics';
+    await createFixtureDb(name, 47, {
+      hotspotPredictions: [
+        { id: 'hit', engineVersion: 'old', confidence: 'Strong Signal', surfacedAt: 1, outcome: 'hit' },
+        { id: 'inferred-negative', engineVersion: 'old', confidence: 'Strong Signal', surfacedAt: 1, outcome: 'searched_no_find', resolutionEvidence: 'tracked' },
+        { id: 'reported-search', engineVersion: 'old', confidence: 'Strong Signal', surfacedAt: 1, outcome: 'searched_no_find', resolutionEvidence: 'reported' },
+      ],
+    });
+    const current = await openCurrent(name);
+    expect(await current.hotspotPredictions.get('hit')).toMatchObject({ outcome: 'find_recorded', legacyOutcome: 'hit' });
+    expect(await current.hotspotPredictions.get('inferred-negative')).toMatchObject({ outcome: 'visited_tracked', legacyOutcome: 'searched_no_find' });
+    expect(await current.hotspotPredictions.get('reported-search')).toMatchObject({ outcome: 'search_reported', legacyOutcome: 'searched_no_find' });
     current.close();
   });
 });

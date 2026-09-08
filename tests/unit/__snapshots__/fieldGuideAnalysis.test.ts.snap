@@ -32,7 +32,7 @@ exports[`suppressDisturbance > snapshot — full suppression pipeline output 1`]
       "disturbance": 80,
       "hydrology": 0,
       "spectral": 0,
-      "terrain": 65,
+      "terrain": 0,
     },
     "source": "terrain",
     "sources": [
@@ -73,7 +73,7 @@ exports[`suppressDisturbance > snapshot — full suppression pipeline output 1`]
       "disturbance": 80,
       "hydrology": 0,
       "spectral": 0,
-      "terrain": 65,
+      "terrain": 0,
     },
     "source": "terrain",
     "sources": [
@@ -114,7 +114,7 @@ exports[`suppressDisturbance > snapshot — full suppression pipeline output 1`]
       "disturbance": 80,
       "hydrology": 0,
       "spectral": 0,
-      "terrain": 65,
+      "terrain": 0,
     },
     "source": "terrain",
     "sources": [

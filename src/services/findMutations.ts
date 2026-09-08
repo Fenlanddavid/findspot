@@ -1,6 +1,15 @@
 import { db } from '../db';
 import type { Find, Media } from '../db';
 import { reportNonFatal } from './diagLog';
+import { refreshHotspotPredictionOutcomes } from './hotspotPredictionService';
+
+async function refreshPredictionEvidence(...permissionIds: Array<string | null | undefined>): Promise<void> {
+  for (const permissionId of new Set(permissionIds.filter((id): id is string => !!id))) {
+    await refreshHotspotPredictionOutcomes(permissionId).catch(error => {
+      reportNonFatal('finds', 'Prediction evidence refresh failed', error);
+    });
+  }
+}
 
 export async function discardFindDraft(findId: string): Promise<void> {
   await db.transaction('rw', [db.finds, db.media], async () => {
@@ -69,6 +78,7 @@ export async function saveCompletedFind(
       reportNonFatal('finds', 'Source signal resolution failed', error);
     });
   }
+  await refreshPredictionEvidence(find.permissionId);
 }
 
 export async function savePendingFind(
@@ -77,6 +87,7 @@ export async function savePendingFind(
 ): Promise<void> {
   if (options.existing) await db.finds.update(find.id, find);
   else await db.finds.add({ ...find, createdAt: options.createdAt });
+  await refreshPredictionEvidence(find.permissionId);
 }
 
 export async function createPhotoDraftFind(find: Find): Promise<void> {
@@ -88,10 +99,13 @@ export async function addFindPhotos(media: Media[]): Promise<void> {
 }
 
 export async function saveFindEdits(find: Find, updatedAt: string): Promise<void> {
+  const previous = await db.finds.get(find.id);
   await db.finds.update(find.id, { ...find, updatedAt });
+  await refreshPredictionEvidence(previous?.permissionId, find.permissionId);
 }
 
 export async function deleteFindAndReopenSignal(findId: string, sourceSignalId?: string): Promise<void> {
+  const previous = await db.finds.get(findId);
   await db.transaction('rw', [db.finds, db.media, db.undugSignals], async () => {
     await db.media.where('findId').equals(findId).delete();
     await db.finds.delete(findId);
@@ -103,6 +117,7 @@ export async function deleteFindAndReopenSignal(findId: string, sourceSignalId?:
       });
     }
   });
+  await refreshPredictionEvidence(previous?.permissionId);
 }
 
 export async function replaceFindPhotoSlot(
@@ -135,18 +150,30 @@ export async function markPendingFindComplete(findId: string): Promise<void> {
 }
 
 export async function deletePendingFind(findId: string): Promise<void> {
+  const previous = await db.finds.get(findId);
   await db.transaction('rw', [db.finds, db.media], async () => {
     await db.media.where('findId').equals(findId).delete();
     await db.finds.delete(findId);
   });
+  await refreshPredictionEvidence(previous?.permissionId);
 }
 
 export async function createQuickFind(find: Find): Promise<void> {
   await db.finds.add(find);
+  await refreshPredictionEvidence(find.permissionId);
 }
 
 export async function attachQuickFindPhoto(media: Media): Promise<void> {
   await db.media.add(media);
+}
+
+/** Commit a quick find and its already-prepared attachment as one unit. */
+export async function saveQuickFind(find: Find, media?: Media): Promise<void> {
+  await db.transaction('rw', [db.finds, db.media], async () => {
+    await db.finds.add(find);
+    if (media) await db.media.add(media);
+  });
+  await refreshPredictionEvidence(find.permissionId);
 }
 
 export async function linkFindToSession(
@@ -155,6 +182,8 @@ export async function linkFindToSession(
   fieldId: string | null,
 ): Promise<void> {
   await db.finds.update(findId, { sessionId, fieldId, isPending: false });
+  const find = await db.finds.get(findId);
+  await refreshPredictionEvidence(find?.permissionId);
 }
 
 export async function calibrateFindPhoto(mediaId: string, pxPerMm: number): Promise<void> {

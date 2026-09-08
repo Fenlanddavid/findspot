@@ -367,7 +367,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 {(draft.material || draft.completeness || draft.detector || draft.decoration) && (
                   <div className="grid grid-cols-2 gap-x-6 gap-y-[14px] mb-5">
                     <DetailItem label="Material" value={draft.material} />
-                    <DetailItem label="Completeness" value={draft.completeness} />
+                    <DetailItem label="Completeness" value={draft.completeness === 'Unassessed' ? 'Not assessed' : draft.completeness} />
                     <DetailItem label="Detector" value={draft.detector} />
                     <DetailItem label="Decoration" value={draft.decoration} />
                   </div>
@@ -631,7 +631,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     value={draft.completeness} 
                     onChange={(e) => setDraft({ ...draft, completeness: e.target.value as any })}
                   >
-                    {["Complete", "Incomplete", "Fragment"].map(c => <option key={c} value={c}>{c}</option>)}
+                    {["Unassessed", "Complete", "Incomplete", "Fragment"].map(c => <option key={c} value={c}>{c === "Unassessed" ? "Not assessed" : c}</option>)}
                   </select>
                 </label>
               </div>

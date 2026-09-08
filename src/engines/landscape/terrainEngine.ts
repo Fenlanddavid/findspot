@@ -8,7 +8,7 @@ import type { WorkerParams, WorkerResult } from '../../workers/terrainScanWorker
 import { runWorkerRequest } from '../../workers/client';
 import { createTerrainScanWorker } from '../../workers/factory';
 
-type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
+type SourceType = 'terrain' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer' | 'elevation_dem';
 const TERRAIN_WORKER_TIMEOUT_MS = 30_000;
 
 function decodeLegacyTerrainResponse(value: unknown): WorkerResult | undefined {
@@ -71,7 +71,7 @@ export function scanDataSource(
             liveWorker = worker;
             workerReg?.push(worker);
         },
-    }).catch(() => ({ clusters: [], tilesLoaded: 0 })).finally(() => {
+    }).catch(() => ({ clusters: [], tilesLoaded: 0, processingError: true })).finally(() => {
         if (!workerReg || !liveWorker) return;
         const index = workerReg.indexOf(liveWorker);
         if (index !== -1) workerReg.splice(index, 1);

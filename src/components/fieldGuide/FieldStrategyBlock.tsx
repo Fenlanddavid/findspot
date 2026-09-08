@@ -100,7 +100,7 @@ function SearchStepCard({
                 <button
                     type="button"
                     onClick={() => onFocusTarget?.(target)}
-                    className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-1 text-[0.625rem] font-black uppercase tracking-widest text-emerald-200 transition-colors hover:bg-emerald-400/15"
+                    className="min-h-11 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-black text-emerald-200 transition-colors hover:bg-emerald-400/15"
                 >
                     Show on map
                 </button>
@@ -113,7 +113,7 @@ function SearchStepCard({
             {step.reasoning.length > 0 && (
                 <button
                     onClick={() => setOpen(v => !v)}
-                    className="flex items-center gap-1 text-[0.625rem] font-black text-white/45 uppercase tracking-widest hover:text-white/65 transition-colors"
+                    className="flex min-h-11 items-center gap-1 px-1 text-sm font-bold text-white/65 hover:text-white transition-colors"
                 >
                     <span>{open ? '−' : '+'}</span>
                     Signal basis
@@ -223,7 +223,7 @@ export function FieldStrategyBlock({ strategy, targetFeatures = [], onFocusTarge
                         <button
                             type="button"
                             onClick={() => onFocusTarget?.(firstTarget)}
-                            className="rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-2 py-1 text-[0.625rem] font-black uppercase tracking-widest text-emerald-100 transition-colors hover:bg-emerald-300/15"
+                            className="min-h-11 rounded-lg border border-emerald-300/30 bg-emerald-300/10 px-3 text-sm font-black text-emerald-100 transition-colors hover:bg-emerald-300/15"
                         >
                             Show start on map
                         </button>
@@ -259,7 +259,7 @@ export function FieldStrategyBlock({ strategy, targetFeatures = [], onFocusTarge
                 <div className="border-t border-white/8 pt-2 space-y-2">
                     <button
                         onClick={() => setAvoidOpen(v => !v)}
-                        className="flex items-center gap-1.5 text-xs font-black text-amber-300/75 hover:text-amber-300/95 transition-colors"
+                    className="flex min-h-11 items-center gap-1.5 text-sm font-black text-amber-200 hover:text-amber-100 transition-colors"
                     >
                         <span>{avoidOpen ? '−' : '+'}</span>
                         Leave until later ({strategy.avoidZones.length})
@@ -284,7 +284,7 @@ export function FieldStrategyBlock({ strategy, targetFeatures = [], onFocusTarge
             <div className="border-t border-white/8 pt-2">
                 <button
                     onClick={() => setWhyOpen(v => !v)}
-                    className="flex items-center gap-1.5 text-[0.625rem] font-black text-white/50 uppercase tracking-widest hover:text-white/75 transition-colors"
+                    className="flex min-h-11 items-center gap-1.5 text-sm font-bold text-white/65 hover:text-white transition-colors"
                 >
                     <span>{whyOpen ? '-' : '+'}</span>
                     Why this order

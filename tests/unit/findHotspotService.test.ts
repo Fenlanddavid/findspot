@@ -2,8 +2,9 @@
 // Pure function — no DB, no mocks needed.
 
 import { describe, it, expect } from 'vitest';
-import { summarisePersistedSignals } from '../../src/services/findHotspotService';
-import type { FindHotspotSignal } from '../../src/db';
+import { buildHotspotFindFeedback, summarisePersistedSignals } from '../../src/services/findHotspotService';
+import type { Find, FindHotspotSignal } from '../../src/db';
+import type { Hotspot } from '../../src/pages/fieldGuideTypes';
 
 // ─── Minimal fixture helper ───────────────────────────────────────────────────
 
@@ -93,5 +94,22 @@ describe('summarisePersistedSignals', () => {
         const records = [makeRecord({ geohash6: 'gcpvh0', findCount: 1, periodCounts: {} })];
         const result = summarisePersistedSignals(records);
         expect(result!.geohash6).toBe('gcpvh0');
+    });
+});
+
+describe('hotspot/find association wording', () => {
+    it('does not use an undated find as chronological corroboration', () => {
+        const hotspot = {
+            id: 'h1', center: [-1, 52], bounds: [[-1.001, 51.999], [-0.999, 52.001]],
+            classification: 'Circular Terrain Feature', score: 50,
+        } as unknown as Hotspot;
+        const find = {
+            id: 'f1', lat: 52, lon: -1, period: 'Unknown',
+        } as unknown as Find;
+        const result = buildHotspotFindFeedback(hotspot, [find]);
+        expect(result?.status).toBe('associated');
+        expect(result?.periods).toEqual([]);
+        expect(result?.note).toContain('logged in or near this zone');
+        expect(result?.note.toLowerCase()).not.toContain('validat');
     });
 });

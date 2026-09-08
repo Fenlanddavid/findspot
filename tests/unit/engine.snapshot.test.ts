@@ -171,14 +171,11 @@ function makeAlieInput(overrides: Partial<LandscapeInterpretationWorkerInput> = 
 
 // ─── (a) Hotspot engine — cluster with a hotspot ──────────────────────────────
 
-describe('hotspotEngine — (a) terrain cluster produces a hotspot', () => {
-  it('snapshot', () => {
+describe('hotspotEngine — (a) unprovenanced image cluster abstains', () => {
+  it('does not treat a legacy terrain label as delivered LiDAR evidence', () => {
     const cluster = makeCluster();
     const result = generateHotspots([cluster]);
-    // Must produce at least one hotspot from a high-confidence cluster.
-    expect(result.length).toBeGreaterThan(0);
-    // Snapshot the full scored output. Update only on intentional engine change.
-    expect(result).toMatchSnapshot();
+    expect(result).toHaveLength(0);
   });
 });
 
@@ -321,6 +318,15 @@ describe('P3 fallback invariant — no measured terrain does not drift processSc
 describe('P3 measured delta — applied only when terrainMeasured:true, correct direction', () => {
   const getScore = (scores: PrimaryProcessScore[], id: string) =>
     scores.find(p => p.processId === id)?.finalScore ?? 0;
+
+  it('does not give a north-facing slope the south-facing suitability contribution', () => {
+    const northFacing = buildProcessArgs();
+    northFacing.aspectDegrees = 0;
+    const southFacing = buildProcessArgs();
+    southFacing.aspectDegrees = 180;
+    expect(getScore(callProcessEngine(northFacing), 'occupation_potential'))
+      .toBeLessThan(getScore(callProcessEngine(southFacing), 'occupation_potential'));
+  });
 
   it('raised + low-gradient lifts settlement and prominence', () => {
     const args = buildProcessArgs();

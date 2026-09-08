@@ -93,7 +93,7 @@ export default function FindWhatNextScreen({ workflowState, onClose }: Props) {
         depthMm: null,
         depthCm: workflowState.depthCm ?? undefined,
         decoration: "",
-        completeness: "Complete",
+        completeness: "Unassessed",
         findContext: workflowState.soilObservations || "",
         storageLocation: "",
         notes: workflowState.firstPersonAccount || "",

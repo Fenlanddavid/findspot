@@ -90,7 +90,7 @@ export function computeDefensiveBehaviour(
     processScores: PrimaryProcessScore[],
     periodAggregates: PeriodSignalAggregate[],
     nhleDescriptions: string[],
-    slopePercent: number,
+    slopePercent: number | null,
     hasNHLEDefenceRecord: boolean,
 ): DefensiveBehaviourResult {
     const prominenceScore = getScore(processScores, 'landscape_prominence');
@@ -101,8 +101,8 @@ export function computeDefensiveBehaviour(
     // UNVALIDATED provisional: high ground + steep slopes = defensible
     let naturalDefensibility = 0;
     naturalDefensibility += prominenceScore * 0.6;           // prominence is the primary driver
-    if (slopePercent > 15) naturalDefensibility += 25;        // restricted approach
-    else if (slopePercent > 8) naturalDefensibility += 15;
+    if (slopePercent !== null && slopePercent > 15) naturalDefensibility += 25;        // restricted approach
+    else if (slopePercent !== null && slopePercent > 8) naturalDefensibility += 15;
     naturalDefensibility = Math.min(100, Math.max(0, naturalDefensibility));
 
     // ── Constructed defence ───────────────────────────────────────────────────

@@ -4,11 +4,6 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
 {
   "confidenceContributions": [
     {
-      "label": "1 of 6 landscape processes above threshold",
-      "sign": "−",
-      "weight": 12,
-    },
-    {
       "label": "2 evidence types missing",
       "sign": "−",
       "weight": 10,
@@ -23,45 +18,34 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
       "sign": "−",
       "weight": 5,
     },
+    {
+      "label": "Data delivery completeness unknown",
+      "sign": "−",
+      "weight": 0,
+    },
+    {
+      "label": "Analytical data suitability 0% (heuristic)",
+      "sign": "−",
+      "weight": 0,
+    },
+    {
+      "label": "Distinct-observation agreement 0%",
+      "sign": "−",
+      "weight": 0,
+    },
+    {
+      "label": "Interpretation strength 0% (unvalidated heuristic)",
+      "sign": "−",
+      "weight": 0,
+    },
   ],
   "depositionAffinity": {
     "convergenceMet": false,
     "noteTemplateId": null,
   },
   "evidenceAssessment": {
-    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with burial or commemorative use, including terrace or dry edge position, slightly elevated or overlooking ground, landscape prominence signal is moderate.",
-    "behaviourInteractions": [
-      {
-        "contradictingEvidence": [],
-        "drivers": [
-          "occupation_potential",
-          "landscape_prominence",
-        ],
-        "interactionId": "hilltop_settlement",
-        "label": "Hilltop Settlement",
-        "reasoning": "Occupation and prominence signals combine where higher ground could have offered visibility and defensibility.",
-        "score": 30,
-        "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-        ],
-        "tier": "low",
-      },
-    ],
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with mixed landscape use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "behaviourInteractions": [],
     "confidenceSummary": "High confidence: multiple datasets broadly agree with limited contradiction.",
     "contradictingEvidence": [],
     "contradictingPercent": 0,
@@ -71,16 +55,8 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "engineId": "landscape_opportunity",
         "label": "Landscape Opportunity",
         "reasoning": "Opportunity measures the features that would have attracted repeated activity, including water, route access, resources, shelter and visibility.",
-        "score": 19,
+        "score": 18,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -88,6 +64,14 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "tier": "low",
@@ -95,20 +79,20 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
       {
         "contradictingEvidence": [
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "engineId": "landscape_constraint",
@@ -140,7 +124,7 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "engineId": "landscape_memory",
         "label": "Landscape Memory",
         "reasoning": "Memory measures whether the same landscape appears suitable for reuse through time, especially where routes, dry ground, monuments or multi-period records persist.",
-        "score": 12,
+        "score": 0,
         "supportingEvidence": [],
         "tier": "very_low",
       },
@@ -167,43 +151,10 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
     "periodLikelihood": [
       {
         "contradictingEvidence": [],
-        "period": "prehistoric_bronze_age",
-        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 48,
-        "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-        ],
-        "tier": "moderate",
-      },
-      {
-        "contradictingEvidence": [],
         "period": "romano_british",
         "reasoning": "Romano-British likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 27,
+        "score": 20,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -212,30 +163,13 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
             "strength": "moderate",
             "weight": 12,
           },
-        ],
-        "tier": "low",
-      },
-      {
-        "contradictingEvidence": [],
-        "period": "iron_age",
-        "reasoning": "Iron Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 24,
-        "supportingEvidence": [
           {
             "id": "terrace_edge",
             "label": "Terrace or dry edge position",
             "polarity": "supporting",
             "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "tier": "low",
@@ -244,16 +178,8 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "contradictingEvidence": [],
         "period": "medieval",
         "reasoning": "Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 23,
+        "score": 19,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -261,24 +187,24 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "tier": "low",
       },
       {
         "contradictingEvidence": [],
-        "period": "early_medieval",
-        "reasoning": "Early Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 20,
+        "period": "iron_age",
+        "reasoning": "Iron Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 18,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -287,25 +213,50 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
             "strength": "moderate",
             "weight": 12,
           },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "prehistoric_bronze_age",
+        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 17,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
+          },
         ],
         "tier": "low",
       },
     ],
     "primaryInfluencingFactors": [
-      "Terrace or dry edge position",
       "Slightly elevated or overlooking ground",
+      "Terrace or dry edge position",
       "landscape prominence signal is moderate",
     ],
-    "suggestedInterpretation": "Possible burial or commemorative use",
+    "suggestedInterpretation": "Possible mixed landscape use",
     "supportingEvidence": [
-      {
-        "id": "terrace_edge",
-        "label": "Terrace or dry edge position",
-        "polarity": "supporting",
-        "source": "terrain",
-        "strength": "moderate",
-        "weight": 12,
-      },
       {
         "id": "slight_elevation",
         "label": "Slightly elevated or overlooking ground",
@@ -313,6 +264,14 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
         "source": "terrain",
         "strength": "moderate",
         "weight": 12,
+      },
+      {
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "weak",
+        "weight": 11,
       },
       {
         "id": "process_landscape_prominence",
@@ -329,7 +288,7 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
   "interpretationScores": [
     {
       "confidenceTier": "lower",
-      "derivedScore": 33.97,
+      "derivedScore": 27.65,
       "interpretationId": "settlement_activity_area",
       "periodAffinity": [
         {
@@ -538,8 +497,8 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
       ],
     },
     {
-      "confidenceTier": "moderate",
-      "derivedScore": 60,
+      "confidenceTier": "lower",
+      "derivedScore": 0,
       "interpretationId": "burial_landscape",
       "periodAffinity": [
         {
@@ -644,27 +603,27 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
     },
   ],
   "narrative": {
-    "periodSubstitution": "prehistoric_bronze_age",
+    "periodSubstitution": null,
     "signalSubstitutions": [
-      "occupies a terrace edge",
       "sits on a slight elevation overlooking lower ground",
+      "occupies a terrace edge",
     ],
-    "templateId": "burial_landscape_barrow_tentative",
+    "templateId": "mixed_indeterminate",
   },
-  "primaryInterpretationId": "burial_landscape",
+  "primaryInterpretationId": null,
   "processScores": [
     {
       "contributingSignals": [
         "terrace_edge",
       ],
-      "finalScore": 30.099999999999998,
+      "finalScore": 24.5,
       "processId": "occupation_potential",
-      "rawScore": 30.099999999999998,
+      "rawScore": 24.5,
       "regionalMultiplier": 1,
       "subComponents": [
         {
           "id": "settlement_suitability",
-          "score": 43,
+          "score": 35,
         },
         {
           "id": "agricultural_suitability",
@@ -724,8 +683,8 @@ exports[`ALIE pipeline — (d) minimal signals (no NHLE/AIM records) > snapshot 
   ],
   "recordSparsity": true,
   "scheduledMonumentOverlap": false,
-  "secondaryInterpretationId": "settlement_activity_area",
-  "temporalPersistence": "transient",
+  "secondaryInterpretationId": null,
+  "temporalPersistence": "insufficient_chronological_evidence",
   "uncertainty": "high",
 }
 `;
@@ -734,9 +693,9 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
 {
   "confidenceContributions": [
     {
-      "label": "1 of 6 landscape processes above threshold",
-      "sign": "−",
-      "weight": 12,
+      "label": "Interpretation strength 90% (unvalidated heuristic)",
+      "sign": "+",
+      "weight": 27,
     },
     {
       "label": "2 evidence types missing",
@@ -753,45 +712,29 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       "sign": "−",
       "weight": 5,
     },
+    {
+      "label": "Data delivery completeness unknown",
+      "sign": "−",
+      "weight": 0,
+    },
+    {
+      "label": "Analytical data suitability 0% (heuristic)",
+      "sign": "−",
+      "weight": 0,
+    },
+    {
+      "label": "Distinct-observation agreement 0%",
+      "sign": "−",
+      "weight": 0,
+    },
   ],
   "depositionAffinity": {
     "convergenceMet": false,
     "noteTemplateId": null,
   },
   "evidenceAssessment": {
-    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with defensive or controlling use, including terrace or dry edge position, slightly elevated or overlooking ground, landscape prominence signal is moderate.",
-    "behaviourInteractions": [
-      {
-        "contradictingEvidence": [],
-        "drivers": [
-          "occupation_potential",
-          "landscape_prominence",
-        ],
-        "interactionId": "hilltop_settlement",
-        "label": "Hilltop Settlement",
-        "reasoning": "Occupation and prominence signals combine where higher ground could have offered visibility and defensibility.",
-        "score": 30,
-        "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-        ],
-        "tier": "low",
-      },
-    ],
+    "archaeologicalReasoning": "This area exhibits characteristics commonly associated with defensive or controlling use, including slightly elevated or overlooking ground, terrace or dry edge position, landscape prominence signal is moderate.",
+    "behaviourInteractions": [],
     "confidenceSummary": "High confidence: multiple datasets broadly agree with limited contradiction.",
     "contradictingEvidence": [],
     "contradictingPercent": 0,
@@ -801,16 +744,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "engineId": "landscape_opportunity",
         "label": "Landscape Opportunity",
         "reasoning": "Opportunity measures the features that would have attracted repeated activity, including water, route access, resources, shelter and visibility.",
-        "score": 19,
+        "score": 18,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -818,6 +753,14 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "tier": "low",
@@ -825,20 +768,20 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       {
         "contradictingEvidence": [
           {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
             "polarity": "supporting",
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "engineId": "landscape_constraint",
@@ -897,43 +840,10 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
     "periodLikelihood": [
       {
         "contradictingEvidence": [],
-        "period": "prehistoric_bronze_age",
-        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 60,
-        "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-          {
-            "id": "slight_elevation",
-            "label": "Slightly elevated or overlooking ground",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
-        ],
-        "tier": "high",
-      },
-      {
-        "contradictingEvidence": [],
         "period": "romano_british",
         "reasoning": "Romano-British likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 44,
+        "score": 38,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -941,6 +851,14 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
           {
             "id": "period_record_romano_british",
@@ -957,16 +875,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "contradictingEvidence": [],
         "period": "iron_age",
         "reasoning": "Iron Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 39,
+        "score": 32,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -975,23 +885,23 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
             "strength": "moderate",
             "weight": 12,
           },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
+          },
         ],
-        "tier": "moderate",
+        "tier": "low",
       },
       {
         "contradictingEvidence": [],
         "period": "medieval",
         "reasoning": "Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 35,
+        "score": 30,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -999,6 +909,39 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
             "source": "terrain",
             "strength": "moderate",
             "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
+          },
+        ],
+        "tier": "low",
+      },
+      {
+        "contradictingEvidence": [],
+        "period": "prehistoric_bronze_age",
+        "reasoning": "Prehistoric / Bronze Age likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
+        "score": 29,
+        "supportingEvidence": [
+          {
+            "id": "slight_elevation",
+            "label": "Slightly elevated or overlooking ground",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "moderate",
+            "weight": 12,
+          },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
           },
         ],
         "tier": "low",
@@ -1007,16 +950,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "contradictingEvidence": [],
         "period": "early_medieval",
         "reasoning": "Early Medieval likelihood reflects period-specific landscape weighting, nearby records, and the current contradiction level.",
-        "score": 26,
+        "score": 17,
         "supportingEvidence": [
-          {
-            "id": "terrace_edge",
-            "label": "Terrace or dry edge position",
-            "polarity": "supporting",
-            "source": "terrain",
-            "strength": "moderate",
-            "weight": 12,
-          },
           {
             "id": "slight_elevation",
             "label": "Slightly elevated or overlooking ground",
@@ -1025,25 +960,25 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
             "strength": "moderate",
             "weight": 12,
           },
+          {
+            "id": "terrace_edge",
+            "label": "Terrace or dry edge position",
+            "polarity": "supporting",
+            "source": "terrain",
+            "strength": "weak",
+            "weight": 11,
+          },
         ],
         "tier": "low",
       },
     ],
     "primaryInfluencingFactors": [
-      "Terrace or dry edge position",
       "Slightly elevated or overlooking ground",
+      "Terrace or dry edge position",
       "landscape prominence signal is moderate",
     ],
     "suggestedInterpretation": "Possible defensive or controlling use",
     "supportingEvidence": [
-      {
-        "id": "terrace_edge",
-        "label": "Terrace or dry edge position",
-        "polarity": "supporting",
-        "source": "terrain",
-        "strength": "moderate",
-        "weight": 12,
-      },
       {
         "id": "slight_elevation",
         "label": "Slightly elevated or overlooking ground",
@@ -1051,6 +986,14 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
         "source": "terrain",
         "strength": "moderate",
         "weight": 12,
+      },
+      {
+        "id": "terrace_edge",
+        "label": "Terrace or dry edge position",
+        "polarity": "supporting",
+        "source": "terrain",
+        "strength": "weak",
+        "weight": 11,
       },
       {
         "id": "process_landscape_prominence",
@@ -1067,7 +1010,7 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
   "interpretationScores": [
     {
       "confidenceTier": "lower",
-      "derivedScore": 33.97,
+      "derivedScore": 27.65,
       "interpretationId": "settlement_activity_area",
       "periodAffinity": [
         {
@@ -1276,8 +1219,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       ],
     },
     {
-      "confidenceTier": "moderate",
-      "derivedScore": 60,
+      "confidenceTier": "lower",
+      "derivedScore": 0,
       "interpretationId": "burial_landscape",
       "periodAffinity": [
         {
@@ -1384,8 +1327,8 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
   "narrative": {
     "periodSubstitution": null,
     "signalSubstitutions": [
-      "occupies a terrace edge",
       "sits on a slight elevation overlooking lower ground",
+      "occupies a terrace edge",
     ],
     "templateId": "scheduled_monument_notice",
   },
@@ -1395,14 +1338,14 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
       "contributingSignals": [
         "terrace_edge",
       ],
-      "finalScore": 30.099999999999998,
+      "finalScore": 24.5,
       "processId": "occupation_potential",
-      "rawScore": 30.099999999999998,
+      "rawScore": 24.5,
       "regionalMultiplier": 1,
       "subComponents": [
         {
           "id": "settlement_suitability",
-          "score": 43,
+          "score": 35,
         },
         {
           "id": "agricultural_suitability",
@@ -1462,77 +1405,10 @@ exports[`ALIE pipeline — (e) scheduled monument overlap flag > snapshot 1`] = 
   ],
   "recordSparsity": true,
   "scheduledMonumentOverlap": true,
-  "secondaryInterpretationId": "burial_landscape",
+  "secondaryInterpretationId": null,
   "temporalPersistence": "transient",
-  "uncertainty": "high",
+  "uncertainty": "moderate",
 }
-`;
-
-exports[`hotspotEngine — (a) terrain cluster produces a hotspot > snapshot 1`] = `
-[
-  {
-    "bounds": [
-      [
-        52.4996,
-        -1.5004,
-      ],
-      [
-        52.5004,
-        -1.4996,
-      ],
-    ],
-    "center": [
-      52.5,
-      -1.5,
-    ],
-    "classification": "Multi-Signal Activity Zone",
-    "classificationReason": "Mixed signals from multiple independent sources",
-    "confidence": "Developing Signal",
-    "disturbanceRisk": undefined,
-    "explanation": [
-      {
-        "tag": "multi_season_cropmark",
-        "text": "Multi-season cropmark agreement",
-      },
-      {
-        "tag": "lidar_hydrology",
-        "text": "LiDAR + Hydrology correlation",
-      },
-      {
-        "tag": "lidar_spectral",
-        "text": "LiDAR + Spectral agreement",
-      },
-      {
-        "tag": "lidar_relief",
-        "text": "Reliable LiDAR relief signature",
-      },
-    ],
-    "id": "hs-5250000--150000",
-    "isHighConfidenceCrossing": false,
-    "isOnCorridor": false,
-    "linkedCount": 0,
-    "memberIds": [
-      "c1",
-    ],
-    "metrics": {
-      "anomaly": 33,
-      "behaviour": 0,
-      "context": 2,
-      "convergence": 6,
-      "penalty": 0,
-      "signalClassCount": 3,
-      "signalCount": 4,
-    },
-    "number": 1,
-    "role": undefined,
-    "scale": undefined,
-    "score": 38,
-    "secondaryTag": undefined,
-    "soilMechanics": undefined,
-    "suggestedFocus": undefined,
-    "type": "General Activity Zone",
-  },
-]
 `;
 
 exports[`hotspotEngine — (b) no clusters produces empty output > snapshot 1`] = `[]`;

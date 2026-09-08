@@ -4,7 +4,7 @@
  * are normalized during import.
  */
 export const DEFAULT_LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
-export const CURRENT_BACKUP_FORMAT_VERSION = 9 as const;
+export const CURRENT_BACKUP_FORMAT_VERSION = 11 as const;
 
 export type BackupContainer = 'json' | 'json-or-zip';
 
@@ -73,10 +73,22 @@ export const BACKUP_FORMAT_DEFINITIONS = [
     description: 'Adds local surface observations; legacy period synonyms normalize on restore.',
   },
   {
+    version: 9,
+    lifecycle: 'legacy',
+    container: 'json-or-zip',
+    description: 'Adds Surface Scatter context, durable origin-visit provenance and local photo ownership.',
+  },
+  {
+    version: 10,
+    lifecycle: 'legacy',
+    container: 'json-or-zip',
+    description: 'Adds unassessed completeness and optional find-location provenance without inferring legacy values.',
+  },
+  {
     version: CURRENT_BACKUP_FORMAT_VERSION,
     lifecycle: 'current',
     container: 'json-or-zip',
-    description: 'Adds Surface Scatter context, durable origin-visit provenance and local photo ownership.',
+    description: 'Adds the prediction evidence ledger so later finds and explicit negative reports retain their relationships.',
   },
 ] as const satisfies readonly BackupFormatDefinition[];
 

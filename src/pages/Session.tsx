@@ -898,8 +898,14 @@ export default function SessionPage(props: {
     ? { id: sessionId, projectId: props.projectId, permissionId: permission.id, fieldId }
     : null;
   const getLatestTrackLocation = React.useCallback(() => {
-    return liveLocation ? { lat: liveLocation.lat, lon: liveLocation.lon, gpsAccuracyM: liveLocation.accuracyM } : null;
-  }, [liveLocation]);
+    return liveLocation ? {
+      lat: liveLocation.lat,
+      lon: liveLocation.lon,
+      gpsAccuracyM: liveLocation.accuracyM,
+      fixTimestamp: trackingStatus.lastAcceptedFixAt ?? undefined,
+      captureMethod: 'session_track' as const,
+    } : null;
+  }, [liveLocation, trackingStatus.lastAcceptedFixAt]);
   async function saveWorkspacePoint(label: string, pointNote: string) {
     const preferred = getLatestTrackLocation();
     const location = preferred ?? await captureGPS();

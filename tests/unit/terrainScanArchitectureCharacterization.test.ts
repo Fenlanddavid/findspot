@@ -29,7 +29,7 @@ describe('terrain scan architecture characterization', () => {
     expect(occurrences(hook, /useEffect\(/g)).toBe(1);
     expect(occurrences(hook, /useCallback\(/g)).toBe(2);
     expect(occurrences(hook, /scanDataSource\(/g)).toBe(0);
-    expect(occurrences(coordinator, /scanDataSource\(/g)).toBe(6);
+    expect(occurrences(coordinator, /scanDataSource\(/g)).toBe(7);
     expect(hook).toContain('const runTerrainScan = useCallback(async (');
     expect(hook).toContain('runTerrainScanPipeline(params, {');
     expect(hook).not.toContain('fieldGuideCache');

@@ -16,7 +16,7 @@ import {
   sectionGeometryAtVersion,
 } from '../../shared/coverageRecords';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
-import { segmentCrossesRecordedGap } from '../../shared/trackSegments';
+import { interpolateAcceptedTrackPoints } from '../../shared/trackSegments';
 
 export const SECTION_LAYOUT_VERSION = 'h3-adaptive-v4';
 export const SECTION_TARGET_COUNT = 6;
@@ -29,8 +29,9 @@ export const SECTION_BALANCE_MEDIAN_FRACTION = 0.4;
 export const REPORTED_IMMEDIATE_MAX_AREA_M2 = 10_000;
 export const REPORTED_LARGE_SECTION_CONFIRMATIONS = 3;
 export const TRACK_SECTION_COVERAGE_THRESHOLD = 0.15;
-export const TRACK_SECTION_SWATH_RADIUS_M = 5;
-export const TRACK_SECTION_CALCULATION_VERSION = 'sample-grid-12-swath-5m-gap-aware-v2';
+/** Proximity model only; this is not a measured detector sweep width. */
+export const TRACK_POSITION_PROXIMITY_RADIUS_M = 5;
+export const TRACK_SECTION_CALCULATION_VERSION = 'sample-grid-12-position-proximity-5m-gap-aware-v3';
 export const PREDICTION_TRACK_COVERAGE_THRESHOLD = 0.2;
 const TRACK_SAMPLE_GRID_SIZE = 12;
 
@@ -42,6 +43,7 @@ type TrackPath = {
 type FindEvidence = {
   id: string;
   permissionId: string;
+  sessionId?: string | null;
   lat: number | null;
   lon: number | null;
   createdAt: string;
@@ -51,10 +53,19 @@ type FindEvidence = {
 type PredictionEvidenceTarget = {
   id: string;
   permissionId: string | null;
+  sessionId?: string | null;
   surfacedAt: number;
   center: [number, number];
   bounds: [[number, number], [number, number]];
-  outcome: 'hit' | 'searched_no_find' | 'unvisited';
+  outcome: 'find_recorded' | 'search_reported' | 'visited_tracked' | 'no_relevant_find_reported' | 'unvisited' | 'hit' | 'searched_no_find';
+};
+
+export type ExplicitPredictionReport = {
+  id: string;
+  permissionId: string;
+  anchor: [number, number];
+  observedAt: number;
+  sessionId?: string;
 };
 
 export type SectionSourceBoundary = {
@@ -80,17 +91,23 @@ export type ResolutionEvidence = 'find' | 'tracked' | 'reported' | 'mixed';
 export type PredictionResolutionDecision =
   | {
       predictionId: string;
-      outcome: 'hit';
+      outcome: 'find_recorded';
       evidence: ResolutionEvidence;
       matchedFindId: string;
+      matchedFindIds: string[];
+      searchedCoverage?: number;
       reportedConfirmationCount: number;
+      reportedObservationIds: string[];
+      explicitNegativeReportIds: string[];
     }
   | {
       predictionId: string;
-      outcome: 'searched_no_find';
-      evidence: Exclude<ResolutionEvidence, 'find'>;
+      outcome: 'unvisited' | 'visited_tracked' | 'search_reported' | 'no_relevant_find_reported';
+      evidence?: Exclude<ResolutionEvidence, 'find'>;
       searchedCoverage?: number;
       reportedConfirmationCount: number;
+      reportedObservationIds: string[];
+      explicitNegativeReportIds: string[];
     };
 
 function geometryFeature(geometry: GeoJSONArea): Feature<Polygon | MultiPolygon> {
@@ -328,34 +345,13 @@ function areaBounds(geometry: GeoJSONArea): [number, number, number, number] {
   return [bounds[0], bounds[1], bounds[2], bounds[3]];
 }
 
-function interpolateTrack(track: TrackPath): Array<[number, number]> {
-  if (track.points.length < 2) return [];
-  const sorted = [...track.points].sort((left, right) => left.timestamp - right.timestamp);
-  const samples: Array<[number, number]> = [];
-  for (let index = 1; index < sorted.length; index++) {
-    const previous = sorted[index - 1];
-    const current = sorted[index];
-    if (segmentCrossesRecordedGap(previous.timestamp, current.timestamp, track.gaps)) continue;
-    const timestampGap = current.timestamp - previous.timestamp;
-    const distanceM = getDistance([previous.lon, previous.lat], [current.lon, current.lat]);
-    if (timestampGap > 120_000 || distanceM > 200) continue;
-    const steps = Math.max(1, Math.ceil(distanceM / TRACK_SECTION_SWATH_RADIUS_M));
-    for (let step = 0; step <= steps; step++) {
-      const fraction = step / steps;
-      samples.push([
-        previous.lon + (current.lon - previous.lon) * fraction,
-        previous.lat + (current.lat - previous.lat) * fraction,
-      ]);
-    }
-  }
-  return samples;
-}
-
 export function trackedSectionCoverageFraction(
   geometry: GeoJSONArea,
   tracks: TrackPath[],
 ): number {
-  const trackSamples = tracks.flatMap(interpolateTrack);
+  const trackSamples = tracks.flatMap(track => interpolateAcceptedTrackPoints(track.points, track.gaps, {
+    sampleSpacingM: TRACK_POSITION_PROXIMITY_RADIUS_M,
+  }));
   if (trackSamples.length === 0) return 0;
 
   const [west, south, east, north] = areaBounds(geometry);
@@ -374,7 +370,7 @@ export function trackedSectionCoverageFraction(
   if (sectionSamples.length === 0) return 0;
   const covered = sectionSamples.filter(sample =>
     trackSamples.some(trackPoint =>
-      getDistance(trackPoint, sample) <= TRACK_SECTION_SWATH_RADIUS_M
+      getDistance(trackPoint, sample) <= TRACK_POSITION_PROXIMITY_RADIUS_M
     )
   ).length;
   return covered / sectionSamples.length;
@@ -394,7 +390,14 @@ function findMatchesPrediction(
   prediction: PredictionEvidenceTarget,
 ): boolean {
   if (find.lat == null || find.lon == null) return false;
-  if (prediction.permissionId && find.permissionId !== prediction.permissionId) return false;
+  // Permission is the durable scope across visits. Session is only a fallback
+  // scope for predictions created without a permission; completely unscoped
+  // predictions cannot become calibration associations automatically.
+  if (prediction.permissionId) {
+    if (find.permissionId !== prediction.permissionId) return false;
+  } else if (prediction.sessionId) {
+    if (find.sessionId !== prediction.sessionId) return false;
+  } else return false;
   const createdAt = Date.parse(find.createdAt);
   const foundAt = find.foundAt ? Date.parse(find.foundAt) : Number.NaN;
   // The actual find time is authoritative. Legacy records without a usable
@@ -450,12 +453,15 @@ export function resolvePredictionDecisions(input: {
   sections: PermissionSection[];
   observations: SessionCoverageObservation[];
   trackedCoverageByPrediction: ReadonlyMap<string, number>;
+  explicitNegativeReports?: ExplicitPredictionReport[];
 }): PredictionResolutionDecision[] {
   const sectionById = new Map(input.sections.map(section => [section.id, section]));
   const decisions: PredictionResolutionDecision[] = [];
 
   for (const prediction of input.predictions) {
-    if (prediction.outcome !== 'unvisited') continue;
+    // Pre-v48 summary tokens are audit-only. The service filters their marked
+    // rows; the pure resolver also abstains when called with a legacy token.
+    if (prediction.outcome === 'hit' || prediction.outcome === 'searched_no_find') continue;
     const relevant = input.observations.filter(observation =>
       observationCoversPrediction(observation, prediction, sectionById)
     );
@@ -464,15 +470,41 @@ export function resolvePredictionDecisions(input: {
     const trackedCoverage = input.trackedCoverageByPrediction.get(prediction.id) ?? 0;
     const hasTracked = trackedCoverage >= PREDICTION_TRACK_COVERAGE_THRESHOLD;
     const hasReported = reportedSessions.size > 0;
-    const matchedFind = input.finds.find(find => findMatchesPrediction(find, prediction));
+    const matchedFinds = input.finds.filter(find => findMatchesPrediction(find, prediction));
+    // Reports from later sessions remain eligible: permission + post-surface
+    // time + spatial overlap define the durable relationship.
+    const explicitNegativeReports = (input.explicitNegativeReports ?? []).filter(report => {
+      if (report.permissionId !== prediction.permissionId || report.observedAt < prediction.surfacedAt) return false;
+      const [[west, south], [east, north]] = prediction.bounds;
+      return (report.anchor[0] >= west && report.anchor[0] <= east && report.anchor[1] >= south && report.anchor[1] <= north)
+        || getDistance(report.anchor, prediction.center) <= 150;
+    });
+    const common = {
+      reportedConfirmationCount: reportedSessions.size,
+      reportedObservationIds: reported.map(observation => observation.id),
+      explicitNegativeReportIds: explicitNegativeReports.map(report => report.id),
+    };
 
-    if (matchedFind) {
+    if (matchedFinds.length > 0) {
       decisions.push({
         predictionId: prediction.id,
-        outcome: 'hit',
+        outcome: 'find_recorded',
         evidence: exposureEvidence(hasTracked, hasReported) ?? 'find',
-        matchedFindId: matchedFind.id,
-        reportedConfirmationCount: reportedSessions.size,
+        matchedFindId: matchedFinds[0].id,
+        matchedFindIds: matchedFinds.map(find => find.id),
+        searchedCoverage: hasTracked ? trackedCoverage : undefined,
+        ...common,
+      });
+      continue;
+    }
+
+    if (explicitNegativeReports.length > 0) {
+      decisions.push({
+        predictionId: prediction.id,
+        outcome: 'no_relevant_find_reported',
+        evidence: hasTracked ? 'mixed' : 'reported',
+        searchedCoverage: hasTracked ? trackedCoverage : undefined,
+        ...common,
       });
       continue;
     }
@@ -480,10 +512,10 @@ export function resolvePredictionDecisions(input: {
     if (hasTracked) {
       decisions.push({
         predictionId: prediction.id,
-        outcome: 'searched_no_find',
+        outcome: hasReported ? 'search_reported' : 'visited_tracked',
         evidence: hasReported ? 'mixed' : 'tracked',
         searchedCoverage: trackedCoverage,
-        reportedConfirmationCount: reportedSessions.size,
+        ...common,
       });
       continue;
     }
@@ -502,10 +534,15 @@ export function resolvePredictionDecisions(input: {
     if (reportedSessions.size >= requires) {
       decisions.push({
         predictionId: prediction.id,
-        outcome: 'searched_no_find',
+        outcome: 'search_reported',
         evidence: 'reported',
-        reportedConfirmationCount: reportedSessions.size,
+        ...common,
       });
+      continue;
+    }
+
+    if (prediction.outcome !== 'unvisited') {
+      decisions.push({ predictionId: prediction.id, outcome: 'unvisited', ...common });
     }
   }
   return decisions;

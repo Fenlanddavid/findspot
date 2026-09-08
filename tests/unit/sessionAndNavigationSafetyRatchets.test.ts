@@ -43,8 +43,8 @@ describe('session and navigation safety ratchets', () => {
       source('../../src/hooks/useActiveSessionGuideContext.ts'),
       source('../../src/pages/Session.tsx'),
     ]);
-    expect(workspace).toContain("detail: 'Trail paused'");
-    expect(workspace).toContain("detail: 'Trail not started'");
+    expect(workspace).toContain("secondary: ['Trail paused']");
+    expect(workspace).toContain("secondary: ['Trail not started']");
     expect(guideContext).toContain('hasRecordedTrail: (recordedTrailCount ?? 0) > 0');
     expect(session).toContain('hasRecordedTrail={!!tracks?.some');
   });

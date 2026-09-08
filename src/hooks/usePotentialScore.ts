@@ -10,7 +10,8 @@ export interface PotentialScore {
         terrain: number;
         hydro: number;
         historic: number;
-        signals: number;
+        placeNames: number;
+        imagery: number;
     };
 }
 
@@ -32,11 +33,11 @@ export function usePotentialScore() {
         const reasons: string[] = [];
 
         // 1. Terrain/Anomaly Potential (Derived from general surroundings)
-        const terrainPoints = 20;
+        const terrainPoints = 0;
 
         // 2. Hydrology Strength
         const nearbyHydroSignals = signals.filter(s => (s.type.includes('stream') || s.type.includes('river') || s.type.includes('water')) && s.distance < 1.0);
-        const hydroScore = Math.min(100, nearbyHydroSignals.length * 30 + 10);
+        const hydroScore = Math.min(100, nearbyHydroSignals.length * 30);
         if (nearbyHydroSignals.length > 0) reasons.push("Water-edge landscape signal");
 
         // 3. Historic Proximity (OSM + NHLE)
@@ -75,7 +76,7 @@ export function usePotentialScore() {
             reasons.push(`Local signal: ${bestSignal.name} (${bestSignal.meaning})`);
         }
 
-        const finalScore = Math.min(98, Math.max(15, (terrainPoints * 0.2) + (hydroScore * 0.2) + (historicPoints * 0.4) + (signalPoints * 0.2)));
+        const finalScore = Math.min(98, Math.max(0, (terrainPoints * 0.2) + (hydroScore * 0.2) + (historicPoints * 0.5) + (signalPoints * 0.3)));
 
         setPotentialScore({
             score: Math.round(finalScore),
@@ -84,7 +85,8 @@ export function usePotentialScore() {
                 terrain: terrainPoints,
                 hydro: hydroScore,
                 historic: Math.min(100, historicPoints),
-                signals: signalPoints
+                placeNames: signalPoints,
+                imagery: 0,
             }
         });
 

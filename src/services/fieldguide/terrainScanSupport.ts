@@ -6,10 +6,18 @@ import type {
     ModernWay,
     ScanBounds,
 } from '../../pages/fieldGuideTypes';
+import type { EvidenceProvenance } from '../../types/evidenceProvenance';
 import type { AIMResponse, NHLEFeature, NHLEResponse } from '../historicScanService';
 import type { PackMeta } from '../offlinePack';
 import type { LogLevel, LogSource } from '../../utils/scanLogger';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
+import { mergeEvidenceProvenance } from '../../types/evidenceProvenance';
+import type { TerrainMeasurement } from '../../engines/terrain/elevationAnalysis';
+
+export {
+    attachRepresentativeTerrainMeasurements,
+    interpolateTerrainMeasurementAt,
+} from './terrainMeasurementSupport';
 
 export interface ScanContext {
     terrainClusters: Cluster[];
@@ -35,6 +43,8 @@ export interface TerrainScanResult {
     monumentPoints: [number, number][];
     heritageCount: number;
     sourceAvailability: Record<string, boolean>;
+    sourceStatus: Record<string, import('../../pages/fieldGuideTypes').LayerFetchStatus>;
+    sourceProvenance: EvidenceProvenance[];
     questionTerrainAvailability: Record<string, boolean>;
     fromCache: boolean;
     noSignal: boolean;
@@ -42,6 +52,7 @@ export interface TerrainScanResult {
     scanStartBounds: { west: number; south: number; east: number; north: number };
     analysisBounds: ScanBounds;
     historicRoutesAvailable: boolean;
+    terrainContextMeasurements?: TerrainMeasurement[];
 }
 
 export interface TerrainScanParams {
@@ -107,6 +118,7 @@ export function collapseByProximity(features: Cluster[]): Cluster[] {
                 newHit.sources.forEach(source => {
                     if (!existing.sources.includes(source)) existing.sources.push(source);
                 });
+                existing.provenance = mergeEvidenceProvenance(existing.provenance, newHit.provenance);
                 if (newHit.confidence === 'High') existing.confidence = 'High';
                 anchored = true;
                 break;

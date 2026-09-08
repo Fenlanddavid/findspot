@@ -103,7 +103,7 @@ describe('worker lifecycle characterization', () => {
 
     worker.emitError();
 
-    await expect(resultPromise).resolves.toEqual({ clusters: [], tilesLoaded: 0 });
+    await expect(resultPromise).resolves.toEqual({ clusters: [], tilesLoaded: 0, processingError: true });
     expect(registry).toEqual([]);
     expect(worker.terminated).toBe(true);
   });

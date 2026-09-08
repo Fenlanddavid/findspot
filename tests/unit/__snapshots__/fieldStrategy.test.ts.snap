@@ -5,7 +5,7 @@ exports[`buildFieldStrategy > snapshot: mixed-behaviour scan 1`] = `
   "avoidZones": [
     {
       "hotspotId": "c",
-      "reason": "Current evidence suggests this ground is less likely to represent primary activity. Any material here may reflect plough movement rather than in-situ deposition.",
+      "reason": "Current evidence suggests this ground is less likely to represent primary activity. Any material here may reflect plough movement; its original depositional position is unknown.",
       "title": "Movement Corridor (Likely)",
     },
   ],

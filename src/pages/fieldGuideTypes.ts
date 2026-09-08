@@ -1,6 +1,7 @@
 // ─── Shared types & constants for the Field Guide feature ───────────────────
 
 import type { HotspotExplanation } from '../engines/hotspot/hotspotExplanations';
+import type { EvidenceProvenance, ObservationKind } from '../types/evidenceProvenance';
 
 /**
  * Per-layer fetch status for W2 offline-graceful states.
@@ -9,7 +10,7 @@ import type { HotspotExplanation } from '../engines/hotspot/hotspotExplanations'
  * - partial:     some tiles/shards missing (tile layers: tilesLoaded < 9)
  * - unavailable: fetch failed entirely; layer excluded from confident scoring
  */
-export type LayerFetchStatus = 'ok' | 'cached' | 'unavailable' | 'partial';
+export type LayerFetchStatus = 'ok' | 'cached' | 'unavailable' | 'partial' | 'processing_failed';
 
 export interface ScanBounds {
     west: number;
@@ -29,13 +30,21 @@ export interface Cluster {
     confidence: 'High' | 'Medium' | 'Subtle';
     findPotential: number;
     center: [number, number];
-    source: 'terrain' | 'satellite' | 'historic' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer';
-    sources: ('terrain' | 'satellite' | 'historic' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer')[];
+    source: 'terrain' | 'satellite' | 'historic' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer' | 'elevation_dem';
+    sources: ('terrain' | 'satellite' | 'historic' | 'terrain_global' | 'slope' | 'hydrology' | 'satellite_spring' | 'satellite_summer' | 'elevation_dem')[];
+    observationKind?: ObservationKind;
+    provenance?: EvidenceProvenance[];
+    /** True only for values decoded from physical elevation samples. */
+    terrainMeasured?: boolean;
+    imagePolarity?: 'lighter' | 'darker';
     polarity?: 'Raised' | 'Sunken' | 'Unknown';
     bearing?: number;
     contextLabel?: string;
     scaleTier?: 'Micro' | 'Structural' | 'Enclosure' | 'Landscape';
     persistenceScore?: number;
+    /** Number of detections consolidated during one scan; not temporal support. */
+    withinScanMergeCount?: number;
+    /** Legacy cache field, never interpreted as a repeat observation. */
     rescanCount?: number;
     disturbanceRisk?: 'Low' | 'Medium' | 'High';
     disturbanceReason?: string;
@@ -80,11 +89,29 @@ export interface Cluster {
     suppressedBy?: string[];
     // Signal strength decomposition for confidence transparency.
     signalBreakdown?: { terrain: number; hydrology: number; spectral: number; disturbance: number; };
-    // Measured terrain values emitted by terrainScanWorker (vNext-P1).
-    // Derived from the same normalised DEM used for aspect/relativeElevation —
-    // NOT absolute metres. relativeReliefNorm is signed (raised +, sunken −).
-    slopeGradient?:      number;  // 0–1 local gradient magnitude
-    relativeReliefNorm?: number;  // centre value minus ring mean (normalised DEM units)
+    // Physical terrain values. They must only be populated from an elevation DEM.
+    elevationM?: number;
+    slopePercent?: number;
+    slopeGradient?: number;
+    relativeReliefM?: number;
+    relativeReliefNorm?: number;
+    terrainMeasurementSupport?: {
+        role: 'feature_location' | 'feature_footprint_summary';
+        method: 'direct_sample' | 'bilinear_interpolation' | 'footprint_summary';
+        coordinate: [number, number];
+        supportCoordinates: Array<[number, number]>;
+        supportSamples: Array<{
+            coordinate: [number, number];
+            weight: number;
+            provenance: EvidenceProvenance[];
+        }>;
+        distanceFromFeatureM: number;
+        maxSupportDistanceM: number;
+        analysisWindowRadiusM: number;
+        outputPixelSpacingM: number;
+        sourceResolutionM: number | null;
+        limitations: string[];
+    };
     // Relationship annotation set by analyzeContext relationship pass.
     relationshipTag?: string;
 }
@@ -163,6 +190,7 @@ export type HotspotClassification =
     | 'Junction / Convergence Zone'
     | 'Settlement Edge Candidate'
     | 'Burial / Barrow Candidate'
+    | 'Circular Terrain Feature'
     | 'Organised Field System Candidate'
     | 'Palaeochannel Activity Zone'
     | 'Wetland Margin Activity Zone'
@@ -187,7 +215,7 @@ export type SoilMechanicsClass =
     | 'colluvial_accumulation'   // downslope from a raised source zone — receives moved material
     | 'wet_margin_preservation'  // low wet ground — good preservation, finds may be deeper
     | 'hilltop_source_zone'      // raised with slope below — original activity; check downslope too
-    | 'stable_plateau'           // raised, flat, undisturbed — artefacts likely in-situ
+    | 'stable_plateau'           // apparently stable ground; deposition remains unverified
     | 'disturbed_plough_slope';  // sloping + disturbed — artefacts may have shifted downslope
 
 export interface SoilMechanics {
@@ -271,6 +299,7 @@ export interface Hotspot {
     secondaryTag?:        string;
     suggestedFocus?:      string;
     explanation: HotspotExplanation[];
+    provenance?: EvidenceProvenance[];
     center: [number, number];
     bounds: [[number, number], [number, number]];
     memberIds: string[];
@@ -290,6 +319,13 @@ export interface Hotspot {
         penalty:          number;
         signalCount:      number;
         signalClassCount: number;
+        deliveryCompleteness?: number | null;
+        dataQuality?: number;
+        dataQualityReasons?: string[];
+        observationAgreement?: number;
+        observationAgreementReasons?: string[];
+        interpretationStrength?: number;
+        heuristicConfidence?: boolean;
     };
 }
 
@@ -414,6 +450,7 @@ export interface TraceTarget {
     center: [number, number];
     type: string;
     sources: Cluster['sources'];
+    provenance?: EvidenceProvenance[];
     findPotential: number;
     confidence: Cluster['confidence'];
     // Optional physical descriptors (carried through from source cluster)

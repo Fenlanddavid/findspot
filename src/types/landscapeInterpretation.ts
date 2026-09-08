@@ -71,6 +71,7 @@ export type ConfidenceTier = 'very_high' | 'high' | 'moderate' | 'lower';
 export type UncertaintyLevel = 'low' | 'moderate' | 'high';
 
 export type TemporalPersistenceLabel =
+    | 'insufficient_chronological_evidence'
     | 'transient'
     | 'recurrent'
     | 'persistent'
@@ -222,6 +223,11 @@ export interface LandscapeInterpretation {
     uncertainty: UncertaintyLevel;
     // Transparent breakdown of what raised / lowered confidence (P4).
     confidenceContributions?: ConfidenceContribution[];
+    confidenceComponents?: {
+        dataQuality: number;
+        observationAgreement: number;
+        interpretationStrength: number;
+    };
     scheduledMonumentOverlap: boolean;
     narrative: HedgedNarrative;
     engineVersion: string;
@@ -263,6 +269,13 @@ export interface LandscapeInterpretationWorkerInput {
         penalty: number;
         signalCount: number;
         signalClassCount: number;
+        deliveryCompleteness?: number | null;
+        dataQuality?: number;
+        dataQualityReasons?: string[];
+        observationAgreement?: number;
+        observationAgreementReasons?: string[];
+        interpretationStrength?: number;
+        heuristicConfidence?: boolean;
     } | null;
     hotspotContext?: {
         hasCrossingHotspot: boolean;
@@ -276,15 +289,16 @@ export interface LandscapeInterpretationWorkerInput {
     };
     centerLat: number;
     centerLon: number;
-    // Terrain values — use 0 as default when not available from scan
-    elevationM: number;
-    slopePercent: number;
-    aspectDegrees: number;
+    // Physical terrain values. null means unavailable; never substitute a
+    // favourable direction, flat slope or zero elevation.
+    elevationM: number | null;
+    slopePercent: number | null;
+    aspectDegrees: number | null;
     // Measured terrain signals from terrainScanWorker (vNext-P1).
     // Present when real DEM data underlies the scan; absent on cached / no-DEM
     // scans. The engine prefers these over the proxy values above.
-    relativeReliefNorm?: number;  // signed: centre vs ring mean (raised +, sunken −)
-    slopeGradient?:      number;  // 0–1 local gradient magnitude (normalised DEM)
+    relativeReliefNorm?: number | null;
+    slopeGradient?:      number | null;
     terrainMeasured?:    boolean; // true = measured values present and trustworthy
     // PotentialScore breakdown from the existing hotspot engine — used as
     // primary terrain/water proxy when raw terrain data is unavailable.
@@ -293,7 +307,8 @@ export interface LandscapeInterpretationWorkerInput {
         terrain: number;
         hydro: number;
         historic: number;
-        signals: number;
+        placeNames: number;
+        imagery: number;
     } | null;
     // PAS density cell — optional, additive-only (Phase B).
     // undefined / null = no PAS effect (P3 null-neutral).

@@ -43,7 +43,7 @@ export interface FieldStrategy {
 export interface FieldStrategyContext {
     historicRoutes?: HistoricRoute[];
     pasFindPeriods?: string[];
-    potentialBreakdown?: { terrain: number; hydro: number; historic: number; signals: number } | null;
+    potentialBreakdown?: { terrain: number; hydro: number; historic: number; placeNames: number; imagery: number } | null;
 }
 
 const PROCESS_LABELS: Record<PrimaryProcessId, string> = {
@@ -67,6 +67,7 @@ const CLASS_TO_PROCESS: Partial<Record<string, PrimaryProcessId>> = {
     'Palaeochannel Activity Zone':       'water_relationships',
     'Wetland Margin Activity Zone':      'water_relationships',
     'Burial / Barrow Candidate':         'landscape_prominence',
+    'Circular Terrain Feature':          'landscape_prominence',
     'Terrain Structure Candidate':       'landscape_prominence',
     'Organised Field System Candidate':  'boundary_relationships',
 };
@@ -75,13 +76,14 @@ const TECHNIQUE: Record<string, string> = {
     'Crossing Point Candidate':           'Cross-search the convergence from two directions; work outward from the crossing.',
     'Junction / Convergence Zone':        'Cross-search from opposite directions; investigate the junction before expanding.',
     'Settlement Edge Candidate':          'Slow overlapping grid; check the edge transition between zones.',
-    'Burial / Barrow Candidate':          'Work contour lines around any rise; wider spacing first, then tighten on concentrations.',
+    'Burial / Barrow Candidate':          'Review heritage records and seek conservation advice; do not disturb a suspected funerary feature.',
+    'Circular Terrain Feature':           'Review heritage records first; avoid disturbance while a funerary interpretation remains possible.',
     'Organised Field System Candidate':   'Long parallel transects following the field alignment.',
-    'Palaeochannel Activity Zone':        'Search the dry margins first; material in wet ground may sit deeper.',
+    'Palaeochannel Activity Zone':        'Compare mapped hydrology and records before treating the channel-like form as an ancient watercourse.',
     'Wetland Margin Activity Zone':       'Work the wet–dry boundary; prioritise slight rises along the margin.',
     'Route-Side Activity Zone':           'Walk parallel to the route corridor; check breaks of slope along it.',
     'Route-Influenced Area':              'Walk parallel to the route; investigate where it meets rising ground.',
-    'Multi-Period Occupation Zone':       'Tight overlapping grid; investigate concentrations before expanding.',
+    'Multi-Period Occupation Zone':       'Legacy label: review dated records before drawing any chronological or occupation conclusion.',
     'Multi-Signal Activity Zone':         'Tight overlapping grid; cross-search from a second direction.',
     'Terrain Structure Candidate':        'Focus on the crest and break of slope; work the contour.',
     'Raised Activity Area':               'Concentrate on the raised ground; sweep the slope below as well.',
@@ -95,8 +97,8 @@ const TECHNIQUE_DEFAULT = 'Systematic grid; prioritise slight rises and edge tra
 const APPROACH: Record<SoilMechanicsClass, string> = {
     colluvial_accumulation:   'Downslope catchment — material here may be displaced; also check the source ground upslope.',
     wet_margin_preservation:  'Good preservation but finds may be deeper — go slow and recover signals fully.',
-    hilltop_source_zone:      'Likely primary activity — also sweep the slope below for moved material.',
-    stable_plateau:           'Undisturbed ground — artefacts likely in-situ; a methodical grid pays off.',
+    hilltop_source_zone:      'Elevated ground may shed material downslope; this does not establish a primary activity area or original position.',
+    stable_plateau:           'Apparently stable ground; this does not establish that any material is in its original position.',
     disturbed_plough_slope:   'Ploughed/disturbed — material may have shifted downslope; treat scatters cautiously.',
 };
 
@@ -153,8 +155,9 @@ export function buildFieldStrategy(
     const medievalFinds = (context.pasFindPeriods ?? []).filter(p => /medieval/i.test(p)).length;
     const historicScore = context.potentialBreakdown?.historic ?? 0;
     const terrainScore = context.potentialBreakdown?.terrain ?? 0;
-    const spectralScore = context.potentialBreakdown?.signals ?? 0;
-    const alignedSignalCount = [historicScore, terrainScore, spectralScore].filter(v => v >= 50).length;
+    const placeNameScore = context.potentialBreakdown?.placeNames ?? 0;
+    const imageryScore = context.potentialBreakdown?.imagery ?? 0;
+    const alignedSignalCount = [historicScore, terrainScore, imageryScore, placeNameScore].filter(v => v >= 50).length;
     const hasRouteContext = romanRoutes.length > 0 || (context.historicRoutes?.length ?? 0) > 0;
     const hasStrongHistoricContext = hasRouteContext || medievalFinds > 0 || alignedSignalCount >= 2 || historicScore >= 50;
 
@@ -275,7 +278,7 @@ export function buildFieldStrategy(
             hotspotId: h.id,
             title: h.type,
             reason: `Current evidence suggests this ground is less likely to represent primary activity. `
-                + `Any material here may reflect ${cause} rather than in-situ deposition.`,
+                + `Any material here may reflect ${cause}; its original depositional position is unknown.`,
         };
     });
 

@@ -5,7 +5,7 @@
 // Two internal sub-scores are produced; the dominant one determines the period
 // bias fed to secondaryInterpretationEngine.
 
-import type { PrimaryProcessScore, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
+import type { PrimaryProcessScore, PeriodSignalAggregate, TemporalPersistenceLabel } from '../../../types/landscapeInterpretation';
 
 // ─── Output type ──────────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ function hasPeriodSignal(aggregates: PeriodSignalAggregate[], period: string, th
 export function computeBurialBehaviour(
     processScores: PrimaryProcessScore[],
     periodAggregates: PeriodSignalAggregate[],
-    temporalPersistenceLabel: 'transient' | 'recurrent' | 'persistent' | 'persistent_strategic_focus',
+    temporalPersistenceLabel: TemporalPersistenceLabel,
     hasNHLEBurialRecord: boolean,
 ): BurialBehaviourResult {
     const prominenceScore   = getScore(processScores, 'landscape_prominence');
@@ -41,33 +41,41 @@ export function computeBurialBehaviour(
     const occupationScore   = getScore(processScores, 'occupation_potential');
     const boundaryScore     = getScore(processScores, 'boundary_relationships');
 
-    // ── Sub-score A: barrow landscape ─────────────────────────────────────────
-    // UNVALIDATED provisional weights
+    const hasBronzeAgeEvidence = hasPeriodSignal(periodAggregates, 'prehistoric_bronze_age');
+    const hasEarlyMedievalEvidence = hasPeriodSignal(periodAggregates, 'early_medieval');
+    const hasRelevantDatedOrRecordedEvidence =
+        hasNHLEBurialRecord || hasBronzeAgeEvidence || hasEarlyMedievalEvidence;
+
+    // Terrain context cannot create a funerary interpretation by itself. These
+    // provisional contextual weights are only evaluated after relevant dated or
+    // recorded evidence is present.
     let barrowScore = 0;
-    if (prominenceScore > 50)                                    barrowScore += 40;
-    if (movementScore > 40)                                      barrowScore += 25;
-    if (hasPeriodSignal(periodAggregates, 'prehistoric_bronze_age')) barrowScore += 15;
-    // Isolated elevated position: high prominence, low occupation
-    if (prominenceScore > 50 && occupationScore < 40)           barrowScore += 20;
-    // NHLE burial record strengthens confidence
-    if (hasNHLEBurialRecord)                                    barrowScore = Math.min(100, barrowScore + 20);
+    if (hasRelevantDatedOrRecordedEvidence) {
+        if (prominenceScore > 50)                            barrowScore += 25;
+        if (movementScore > 40)                              barrowScore += 15;
+        if (hasBronzeAgeEvidence)                            barrowScore += 35;
+        if (prominenceScore > 50 && occupationScore < 40)   barrowScore += 10;
+        if (hasNHLEBurialRecord)                             barrowScore += 30;
+    }
 
     barrowScore = Math.min(100, Math.max(0, barrowScore));
 
     // ── Sub-score B: cemetery landscape ──────────────────────────────────────
     // UNVALIDATED provisional weights
     let cemeteryScore = 0;
-    if (occupationScore > 40)                                   cemeteryScore += 30;
-    if (boundaryScore > 35)                                     cemeteryScore += 25;
-    // Low prominence is acceptable for cemetery placement
-    if (prominenceScore < 50)                                   cemeteryScore += 10;
-    if (hasPeriodSignal(periodAggregates, 'early_medieval'))    cemeteryScore += 20;
-    if (hasNHLEBurialRecord)                                    cemeteryScore = Math.min(100, cemeteryScore + 20);
+    if (hasRelevantDatedOrRecordedEvidence) {
+        if (occupationScore > 40)                           cemeteryScore += 20;
+        if (boundaryScore > 35)                             cemeteryScore += 15;
+        if (prominenceScore < 50)                           cemeteryScore += 5;
+        if (hasEarlyMedievalEvidence)                        cemeteryScore += 40;
+        if (hasNHLEBurialRecord)                             cemeteryScore += 30;
+    }
 
     cemeteryScore = Math.min(100, Math.max(0, cemeteryScore));
 
     // ── Mortuary complex compound state ───────────────────────────────────────
     const mortuaryComplex =
+        hasRelevantDatedOrRecordedEvidence &&
         barrowScore > 65 &&
         (temporalPersistenceLabel === 'persistent' || temporalPersistenceLabel === 'persistent_strategic_focus');
 
