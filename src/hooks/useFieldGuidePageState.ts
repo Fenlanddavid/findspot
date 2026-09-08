@@ -1,5 +1,5 @@
 import { useReducer, useRef, useState } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { Find } from '../db';
 import type {
     AIMResponse,

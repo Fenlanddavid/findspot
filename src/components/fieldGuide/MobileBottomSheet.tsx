@@ -1,5 +1,5 @@
 import React from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { buildInterpretation, getInterpretationLabel, getHotspotSignalStrength, getSignalTypeSummary } from '../../engines/hotspot/hotspotInterpreter';
 import { buildTargetInterpretation, getTargetVerdict } from '../../engines/hotspot/targetInterpreter';
 import type { TargetSignalStrength } from '../../engines/hotspot/targetInterpreter';

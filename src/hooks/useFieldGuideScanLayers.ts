@@ -1,5 +1,5 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { Cluster, Hotspot, TraceTarget } from '../pages/fieldGuideTypes';
 
 type Options = {

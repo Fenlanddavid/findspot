@@ -1,5 +1,5 @@
 import { useEffect, type MutableRefObject, type RefObject } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import type { SavedPoint } from '../db';
 import { reportNonFatal } from '../services/diagLog';
 import { removeSavedPoint } from '../services/fieldGuideMutations';

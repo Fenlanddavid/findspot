@@ -7,7 +7,7 @@
 // acts as a fallback so LiDAR mode is never blank outside England.
 // OS source is the same 6-inch-second tileset FieldGuide already uses (NLS).
 
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 
 export type BasemapMode = 'satellite' | 'os' | 'lidar' | 'streets';
 

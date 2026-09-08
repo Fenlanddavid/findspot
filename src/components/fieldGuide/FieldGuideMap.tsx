@@ -1,5 +1,5 @@
 import React from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import { useSearchParams } from 'react-router';
 import { CoachTips } from '../CoachTips';
 import { ScaledImage } from '../ScaledImage';

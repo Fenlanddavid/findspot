@@ -5,7 +5,7 @@ import { pagePersistence } from "../services/pagePersistence";
 import { useSearchParams } from "react-router";
 import { ScaledImage } from "../components/ScaledImage";
 import { FindModal } from "../components/FindModal";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { saveFindMapStyle } from "../services/mapPreferenceMutations";
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import type maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import type { RefObject } from 'react';
 import type { GeologyContext } from '../../engines/geologyContext';
 import type { CoachTip } from '../CoachTips';

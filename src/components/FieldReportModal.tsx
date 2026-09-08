@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -98,7 +98,7 @@ function captureMap(
 
     const map = new maplibregl.Map({
       container,
-      preserveDrawingBuffer: true,
+      canvasContextAttributes: { preserveDrawingBuffer: true },
       attributionControl: false,
       style: {
         version: 8,
