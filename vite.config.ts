@@ -94,6 +94,12 @@ export default defineConfig({
       devOptions: { enabled: false },
     })
   ],
+  // MapLibre 6 loads its worker as a sibling module at runtime. Prebundling the
+  // package can leave that worker out of Vite's optimized-dependency directory
+  // on a clean machine, causing maps to stall in CI and fresh installations.
+  optimizeDeps: {
+    exclude: ['maplibre-gl'],
+  },
   build: {
     // Map rendering and PDF export are deliberately isolated into cacheable
     // vendor chunks. Keep the warning threshold aligned with those libraries

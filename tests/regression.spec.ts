@@ -747,7 +747,7 @@ test("completed historic mobile sheet keeps context details and layer controls",
     );
   });
 
-  await page.getByRole("button", { name: "Scan Area", exact: true }).click();
+  await page.getByRole("button", { name: "Scan area", exact: true }).click();
 
   await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Supporting Context", { exact: true })).toBeVisible();
