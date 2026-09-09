@@ -16,6 +16,12 @@ const romanRoadsRevision = createHash('sha256')
   .update(ROMAN_ROADS_DATASET.generation)
   .update(readFileSync(new URL(`./public/${ROMAN_ROADS_DATASET.assetPath}`, import.meta.url)))
   .digest('hex')
+const mapLibreWorkerSource = readFileSync(
+  new URL('./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url),
+)
+const mapLibreWorkerSharedSource = readFileSync(
+  new URL('./node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs', import.meta.url),
+)
 
 export default defineConfig({
   base: '/findspot/',
@@ -25,6 +31,24 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    {
+      name: 'emit-maplibre-worker',
+      apply: 'build',
+      generateBundle() {
+        // MapLibre 6 resolves its module worker beside the bundled library.
+        // Preserve that exact sibling name in production deployments.
+        this.emitFile({
+          type: 'asset',
+          fileName: 'assets/maplibre-gl-worker.mjs',
+          source: mapLibreWorkerSource,
+        })
+        this.emitFile({
+          type: 'asset',
+          fileName: 'assets/maplibre-gl-shared.mjs',
+          source: mapLibreWorkerSharedSource,
+        })
+      },
+    },
     VitePWA({
       // 'prompt' instead of 'autoUpdate' so a mid-session refresh doesn't
       // interrupt the user or risk a DB migration running without consent.
@@ -73,7 +97,7 @@ export default defineConfig({
         ]
       },
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg}'],
         // Explicitly precache the PAS density index (not covered by glob above
         // which excludes .json to avoid caching clubs.json / events.json).
         // Content-hash the fixed URL so Workbox replaces it when data changes.
