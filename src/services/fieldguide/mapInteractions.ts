@@ -40,8 +40,12 @@ export function bindFieldGuideMapInteractions(
 ): void {
     const callbacks = () => options.callbacks();
     const isAnnotating = () => options.annotationMode();
+    const targetLayers = ['targets-hitbox', 'trace-targets-circle'];
+    const targetAt = (event: maplibregl.MapMouseEvent): boolean => (
+        map.queryRenderedFeatures(event.point, { layers: targetLayers }).length > 0
+    );
 
-    map.on('click', 'targets-circle', (event) => {
+    map.on('click', 'targets-hitbox', (event) => {
         if (isAnnotating()) return;
         if (event.features?.[0]) callbacks().onFeatureClick(event.features[0].properties?.id);
     });
@@ -56,7 +60,7 @@ export function bindFieldGuideMapInteractions(
         map.getCanvas().style.cursor = '';
     });
     map.on('click', 'pas-circles', (event) => {
-        if (isAnnotating() || !event.features?.[0]) return;
+        if (isAnnotating() || targetAt(event) || !event.features?.[0]) return;
         const props = event.features[0].properties as Record<string, unknown>;
         callbacks().onPASFindLog(`HERITAGE: ${props.objectType} - ${props.id}`);
         callbacks().onPASFindSelect({
@@ -75,13 +79,13 @@ export function bindFieldGuideMapInteractions(
     map.on('click', 'hotspots-fill', (event) => {
         if (isAnnotating()) return;
         const priority = map.queryRenderedFeatures(event.point, {
-            layers: ['targets-circle', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles'],
+            layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles'],
         });
         if (priority.length > 0) return;
         if (event.features?.[0]) callbacks().onHotspotClick(event.features[0].properties?.id);
     });
     map.on('click', 'user-finds-hitbox', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const props = event.features?.[0]?.properties as Record<string, unknown> | undefined;
         if (props?.id) callbacks().onUserFindClick(String(props.id));
     });
@@ -91,7 +95,7 @@ export function bindFieldGuideMapInteractions(
             return;
         }
         const hits = map.queryRenderedFeatures(event.point, {
-            layers: ['targets-circle', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill'],
+            layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill'],
         });
         if (hits.length > 0) return;
         callbacks().onMonumentClick(null);
@@ -101,16 +105,16 @@ export function bindFieldGuideMapInteractions(
     map.on('move', () => callbacks().onZoomChange(map.getZoom()));
 
     map.on('click', 'historic-routes-roman', (event) => {
-        if (!isAnnotating()) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
+        if (!isAnnotating() && !targetAt(event)) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
     });
     map.on('click', 'roman-standalone', (event) => {
-        if (!isAnnotating()) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
+        if (!isAnnotating() && !targetAt(event)) options.showLabel(romanRoadLabel(event.features?.[0]?.properties as Record<string, unknown> | undefined));
     });
-    map.on('click', 'historic-routes-trackway', () => {
-        if (!isAnnotating()) options.showLabel('Historic Trackway');
+    map.on('click', 'historic-routes-trackway', (event) => {
+        if (!isAnnotating() && !targetAt(event)) options.showLabel('Historic Trackway');
     });
     map.on('click', 'corridors-fill', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const props = event.features?.[0]?.properties as Record<string, unknown> | undefined;
         options.showLabel(routeLabel(
             props?.type,
@@ -119,30 +123,30 @@ export function bindFieldGuideMapInteractions(
         ));
     });
     map.on('click', 'landscape-context-fill', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const props = event.features?.[0]?.properties;
         if (props?.kind === 'route_context') return;
         options.showLabel(String(props?.label || 'Landscape Context'));
     });
     map.on('click', 'crossings-circle', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const props = event.features?.[0]?.properties as Record<string, unknown> | undefined;
         const a = routeLabel(props?.typeA, props?.nameA, props?.typeA === 'roman_road' ? 'Roman Road' : 'Trackway');
         const b = routeLabel(props?.typeB, props?.nameB, props?.typeB === 'roman_road' ? 'Roman Road' : 'Trackway');
         options.showLabel(`Route Crossing: ${a} × ${b}`);
     });
     map.on('click', 'monuments-fill', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const name = event.features?.[0]?.properties?.Name as string | undefined;
         callbacks().onMonumentClick(name ?? '');
     });
     map.on('click', 'monument-buffer-fill', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const name = event.features?.[0]?.properties?.Name as string | undefined;
         callbacks().onMonumentClick(name ?? '');
     });
     map.on('click', 'aim-fill', (event) => {
-        if (isAnnotating()) return;
+        if (isAnnotating() || targetAt(event)) return;
         const props = event.features?.[0]?.properties as Record<string, unknown> | undefined;
         const type = String(props?.MONUMENT_TYPE || 'Aerial Monument');
         const period = props?.PERIOD ? ` · ${props.PERIOD}` : '';

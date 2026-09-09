@@ -95,7 +95,7 @@ describe('FieldGuide architecture characterization', () => {
       'pages/FieldGuideController.tsx': 15,
       'components/fieldGuide/FieldGuideWorkspace.tsx': 1_319,
       'components/session/ActiveSessionGuideWorkspace.tsx': 44,
-      'hooks/useFieldGuideMap.ts': 313,
+      'hooks/useFieldGuideMap.ts': 322,
       'hooks/useTerrainScan.ts': 77,
       'hooks/useHistoricScan.ts': 82,
       'hooks/useFieldGuidePageState.ts': 290,

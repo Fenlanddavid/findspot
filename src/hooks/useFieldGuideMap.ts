@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
 import { Find, SavedPoint } from '../db';
@@ -45,6 +45,10 @@ export const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: Layer
     { id: 'landscape-context-outline',       visibleWhen: s => s.historicMode && s.visibility.context },
     { id: 'crossings-halo',                  visibleWhen: s => s.historicMode && s.visibility.crossings },
     { id: 'crossings-circle',                visibleWhen: s => s.historicMode && s.visibility.crossings },
+    { id: 'monument-buffer-fill',            visibleWhen: s => s.historicMode && s.visibility.monuments },
+    { id: 'monument-buffer-outline',         visibleWhen: s => s.historicMode && s.visibility.monuments },
+    { id: 'monuments-fill',                  visibleWhen: s => s.historicMode && s.visibility.monuments },
+    { id: 'monuments-outline',               visibleWhen: s => s.historicMode && s.visibility.monuments },
     { id: 'cluster-links-casing',            visibleWhen: s => !s.historicMode && s.devMode },
     { id: 'cluster-links-line',              visibleWhen: s => !s.historicMode && s.devMode },
     // Keep targets/hotspots available in landscape review mode. The combined
@@ -54,6 +58,7 @@ export const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: Layer
     { id: 'targets-halo',                    visibleWhen: () => true },
     { id: 'targets-selected',                visibleWhen: () => true },
     { id: 'targets-circle',                  visibleWhen: () => true },
+    { id: 'targets-hitbox',                  visibleWhen: () => true },
     { id: 'hotspots-outline',                visibleWhen: () => true },
     { id: 'hotspots-fill',                   visibleWhen: () => true },
 ];
@@ -109,6 +114,9 @@ export function useFieldGuideMap({
     // Keep callbacks and annotation mode ref current on every render
     useEffect(() => { callbacksRef.current = callbacks; });
     useEffect(() => { annotationModeRef.current = annotationMode; });
+    const handleTargetMarkerClick = useCallback((id: string) => {
+        callbacksRef.current.onFeatureClick(id);
+    }, []);
 
     // ── Map initialisation (runs once) ────────────────────────────────────────
     useEffect(() => {
@@ -263,6 +271,7 @@ export function useFieldGuideMap({
         selectedTraceId,
         primaryTargetId,
         targetLabelMarkersRef,
+        onTargetClick: handleTargetMarkerClick,
     });
 
     useFieldGuideHistoricLayers({

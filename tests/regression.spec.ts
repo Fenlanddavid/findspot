@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "./fixtures";
 import type { Cluster, Hotspot, ModernWay } from "../src/pages/fieldGuideTypes";
 import { applyNHLEProtection, applyRouteAssessments } from "../src/utils/fieldGuideAnalysis";
-import { applyGeologyModifier } from "../src/engines/hotspot/hotspotEngine";
+import { applyGeologyModifier, HOTSPOT_ENGINE_VERSION } from "../src/engines/hotspot/hotspotEngine";
 import { classifyGeology } from "../src/engines/geologyContext/geologyClassifier";
 import { buildGeologyDisplay } from "../src/engines/geologyContext/geologyExplain";
 import { fetchBgsGeology } from "../src/engines/geologyContext/geologyContextClient";
@@ -92,7 +92,10 @@ async function readIndexedDbStore(page: Page, storeName: string) {
   }), storeName);
 }
 
-async function mockFieldGuideHistoricScan(page: Page) {
+async function mockFieldGuideHistoricScan(
+  page: Page,
+  monumentGeometry: 'point' | 'polygon' = 'point',
+) {
   const overpassResponse = {
     elements: [
       {
@@ -125,6 +128,11 @@ async function mockFieldGuideHistoricScan(page: Page) {
   await page.route("https://services.arcgisonline.com/**", route => route.abort());
   await page.route("https://environment.data.gov.uk/**", route => route.abort());
   await page.route("https://mapseries-tilesets.s3.amazonaws.com/**", route => route.abort());
+  await page.route("https://findspot-static.trials-uk.workers.dev/**/sm-index/**", route => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "Use mocked live monument service" }),
+  }));
   await page.route("**/roman-roads-gb.geojson?generation=*", route => route.fulfill({
     status: 200,
     contentType: "application/json",
@@ -177,7 +185,16 @@ async function mockFieldGuideHistoricScan(page: Page) {
       type: "FeatureCollection",
       features: [{
         type: "Feature",
-        geometry: {
+        geometry: monumentGeometry === 'polygon' ? {
+          type: 'Polygon',
+          coordinates: [[
+            [-1.4780, 53.3760],
+            [-1.4620, 53.3760],
+            [-1.4620, 53.3860],
+            [-1.4780, 53.3860],
+            [-1.4780, 53.3760],
+          ]],
+        } : {
           type: "Point",
           coordinates: [-1.4703, 53.3813],
         },
@@ -770,6 +787,72 @@ test("completed historic mobile sheet keeps context details and layer controls",
     && row.historicLookup
     && typeof row.createdAt === "number"
   ))).toBe(true);
+});
+
+test("scheduled boundary stays visible and an overlapping target remains tappable", async ({ page }) => {
+  test.setTimeout(45_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockFieldGuideHistoricScan(page, 'polygon');
+  await page.addInitScript(() => {
+    localStorage.setItem("fs_onboarding_v2_done", "1");
+    localStorage.setItem("fs_onboarding_done", "1");
+    localStorage.setItem("fs_fg_helpers_seen", "1");
+    localStorage.setItem("fs_fg_sheet", "0");
+  });
+
+  await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
+  const canvas = page.locator(".maplibregl-canvas");
+  await canvas.waitFor({ state: "visible" });
+  await page.waitForTimeout(1_500);
+  await putIndexedDbRows(page, "fieldGuideCache", [{
+    id: "16-32499-21231",
+    createdAt: Date.now(),
+    engineVersion: HOTSPOT_ENGINE_VERSION,
+    sourceAvailability: { terrain: true },
+    modernWays: [],
+    modernWaysFetchedAt: Date.now(),
+    rawClusters: [{
+      id: "overlapping-target",
+      points: [{ x: 384, y: 384 }],
+      minX: 370,
+      maxX: 398,
+      minY: 370,
+      maxY: 398,
+      type: "Compact Signal",
+      score: 82,
+      number: 1,
+      isProtected: false,
+      confidence: "High",
+      findPotential: 78,
+      center: [-1.4701, 53.3811],
+      source: "terrain",
+      sources: ["terrain"],
+      metrics: { circularity: 0.82, density: 0.74, ratio: 1.1, area: 240 },
+    }],
+  }]);
+
+  await page.getByRole("button", { name: "Scan area", exact: true }).click();
+
+  await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  await page.getByTestId("fieldguide-mobile-sheet-handle").click({ position: { x: 315, y: 28 } });
+  await expect(page.getByTestId("fieldguide-mobile-sheet")).toHaveClass(/max-h-\[136px\]/);
+  await page.waitForTimeout(400);
+  // Select a rendered part of the monument away from the target hit area.
+  await page.mouse.click(bounds!.x + bounds!.width / 2 + 60, bounds!.y + bounds!.height / 2);
+  await expect(page.getByRole("heading", { name: "Regression Scheduled Barrow", exact: true })).toBeVisible();
+
+  // Collapse the legal card, then tap the target where it overlaps the same
+  // monument. The target must win the interaction-priority decision.
+  await page.getByTestId("fieldguide-mobile-sheet-handle").click({ position: { x: 315, y: 28 } });
+  await expect(page.getByTestId("fieldguide-mobile-sheet")).toHaveClass(/max-h-\[136px\]/);
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: "Open protected target", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Regression Scheduled Barrow", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Scheduled Monument", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Legal protection applies", { exact: true })).toBeVisible();
 });
 
 test("field guide mobile sheet cannot scroll or rubber-band the page behind it", async ({ page }) => {

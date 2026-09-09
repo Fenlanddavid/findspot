@@ -201,8 +201,18 @@ export function registerFieldGuideMapLayers(map: maplibregl.Map): boolean {
             'circle-stroke-color': ['case', ['get', 'isProtected'], '#fecaca', ['get', 'isPrimary'], '#d1fae5', '#f8fafc'],
         },
     });
-    map.moveLayer('trace-targets-circle');
-    map.moveLayer('trace-targets-selected');
+    // Keep the visible circle unchanged while providing a field-friendly
+    // 48 px minimum tap target. A near-transparent rendered layer remains
+    // queryable without obscuring the map.
+    map.addLayer({
+        id: 'targets-hitbox', type: 'circle', source: 'targets',
+        paint: {
+            'circle-radius': 24,
+            'circle-color': '#ffffff',
+            'circle-opacity': 0.01,
+            'circle-stroke-width': 0,
+        },
+    });
 
     map.addSource('pas-finds', { type: 'geojson', data: emptyGeoJSON() });
     map.addLayer({ id: 'pas-circles', type: 'circle', source: 'pas-finds', layout: { visibility: 'none' }, paint: { 'circle-radius': 10, 'circle-color': '#3b82f6', 'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
@@ -238,6 +248,22 @@ export function registerFieldGuideMapLayers(map: maplibregl.Map): boolean {
     map.addSource('dev-annotations', { type: 'geojson', data: emptyGeoJSON() });
     map.addLayer({ id: 'dev-annotations-halo', type: 'circle', source: 'dev-annotations', paint: { 'circle-radius': 18, 'circle-color': '#f97316', 'circle-opacity': 0.15, 'circle-stroke-width': 0 } });
     map.addLayer({ id: 'dev-annotations-circle', type: 'circle', source: 'dev-annotations', paint: { 'circle-radius': 6, 'circle-color': '#f97316', 'circle-opacity': 1, 'circle-stroke-width': 2, 'circle-stroke-color': '#fff', 'circle-stroke-opacity': 0.9 } });
+
+    // Broad context polygons are registered after monument data, so restore a
+    // deliberate field-map stack: legal boundaries above contextual fills,
+    // and tappable targets above the boundaries they may overlap.
+    for (const layerId of [
+        'monument-buffer-fill',
+        'monument-buffer-outline',
+        'monuments-fill',
+        'monuments-outline',
+        'targets-halo',
+        'targets-selected',
+        'targets-circle',
+        'targets-hitbox',
+        'trace-targets-circle',
+        'trace-targets-selected',
+    ]) map.moveLayer(layerId);
 
     return true;
 }

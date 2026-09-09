@@ -13,7 +13,25 @@ type Options = {
     selectedTraceId: string | null;
     primaryTargetId: string | null;
     targetLabelMarkersRef: MutableRefObject<maplibregl.Marker[]>;
+    onTargetClick: (id: string) => void;
 };
+
+function makeTargetHitElement(accessibleName: string, onActivate: () => void): HTMLButtonElement {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.setAttribute('aria-label', accessibleName);
+    element.style.background = 'transparent';
+    element.style.border = '0';
+    element.style.cursor = 'pointer';
+    element.style.height = '48px';
+    element.style.padding = '0';
+    element.style.width = '48px';
+    element.addEventListener('click', event => {
+        event.stopPropagation();
+        onActivate();
+    });
+    return element;
+}
 
 function makeTargetLabelElement(label: string, primary: boolean): HTMLDivElement {
     const el = document.createElement('div');
@@ -63,6 +81,7 @@ export function useFieldGuideScanLayers({
     selectedTraceId,
     primaryTargetId,
     targetLabelMarkersRef,
+    onTargetClick,
 }: Options): void {
     useEffect(() => {
         const source = mapRef.current?.getSource('hotspots-overlay') as maplibregl.GeoJSONSource | undefined;
@@ -120,8 +139,19 @@ export function useFieldGuideScanLayers({
         const map = mapRef.current;
         if (!map) return;
         detectedFeatures
-            .filter(feature => !feature.isRouteArtefactRisk && !feature.isProtected)
+            .filter(feature => !feature.isRouteArtefactRisk)
             .forEach(feature => {
+                const hitMarker = new maplibregl.Marker({
+                    element: makeTargetHitElement(
+                        feature.isProtected
+                            ? 'Open protected target'
+                            : `Open target ${feature.number.toString().padStart(2, '0')}`,
+                        () => onTargetClick(feature.id),
+                    ),
+                    anchor: 'center',
+                }).setLngLat(feature.center).addTo(map);
+                targetLabelMarkersRef.current.push(hitMarker);
+                if (feature.isProtected) return;
                 const marker = new maplibregl.Marker({
                     element: makeTargetLabelElement(
                         feature.number.toString(),
@@ -131,7 +161,7 @@ export function useFieldGuideScanLayers({
                 }).setLngLat(feature.center).addTo(map);
                 targetLabelMarkersRef.current.push(marker);
             });
-    }, [detectedFeatures, primaryTargetId, mapReadyVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [detectedFeatures, primaryTargetId, mapReadyVersion, onTargetClick]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         const source = mapRef.current?.getSource('trace-targets') as maplibregl.GeoJSONSource | undefined;

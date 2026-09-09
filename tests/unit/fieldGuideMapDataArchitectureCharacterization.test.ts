@@ -28,7 +28,7 @@ describe('FieldGuide map-data architecture characterization', () => {
       readFile(ROMAN_STANDALONE_SERVICE, 'utf8'),
     ]);
 
-    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(313);
+    expect(mapHook.trimEnd().split(/\r?\n/)).toHaveLength(322);
     expect(scanLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(historicLayersHook.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(325);
     expect(occurrences(mapHook, /useEffect\(/g)).toBe(6);
@@ -52,9 +52,8 @@ describe('FieldGuide map-data architecture characterization', () => {
     ]);
 
     expect(scanLayersHook).toContain('.filter(feature => !feature.isRouteArtefactRisk)');
-    expect(scanLayersHook).toContain(
-      '.filter(feature => !feature.isRouteArtefactRisk && !feature.isProtected)',
-    );
+    expect(scanLayersHook).toContain('if (feature.isProtected) return;');
+    expect(scanLayersHook).toContain("? 'Open protected target'");
     expect(scanLayersHook).toContain("const key = [feature.id, linkedId].sort().join('|')");
     expect(historicLayersHook).toContain(
       'coordinates: [find.lon + count * 0.0001, find.lat + count * 0.0001]',

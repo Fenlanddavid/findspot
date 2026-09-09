@@ -47,6 +47,7 @@ const EXPECTED_LAYER_IDS = [
   'targets-halo',
   'targets-selected',
   'targets-circle',
+  'targets-hitbox',
   'pas-circles',
   'historic-routes-roman-casing',
   'historic-routes-roman',
@@ -102,7 +103,18 @@ describe('FieldGuide map layer registry', () => {
     expect(registerFieldGuideMapLayers(map)).toBe(true);
     expect(sourceIds).toEqual(EXPECTED_SOURCE_IDS);
     expect(layerIds).toEqual(EXPECTED_LAYER_IDS);
-    expect(moves).toEqual(['trace-targets-circle', 'trace-targets-selected']);
+    expect(moves).toEqual([
+      'monument-buffer-fill',
+      'monument-buffer-outline',
+      'monuments-fill',
+      'monuments-outline',
+      'targets-halo',
+      'targets-selected',
+      'targets-circle',
+      'targets-hitbox',
+      'trace-targets-circle',
+      'trace-targets-selected',
+    ]);
   });
 
   it('keeps the seven basemap and raster overlay layers in their declared order', () => {
@@ -175,6 +187,46 @@ describe('FieldGuide map interaction router', () => {
     expect(routed.onHotspotClick).toHaveBeenCalledWith('hotspot-1');
   });
 
+  it('does not let an overlapping monument clear a target tap', () => {
+    const handlers = new Map<string, (event: any) => void>();
+    const queryRenderedFeatures = vi.fn(() => [{ properties: { id: 'target-1' } }]);
+    const map = {
+      on: vi.fn((event: string, layerOrHandler: string | ((event: any) => void), maybeHandler?: (event: any) => void) => {
+        const layer = typeof layerOrHandler === 'string' ? layerOrHandler : '*';
+        handlers.set(`${event}:${layer}`, maybeHandler ?? layerOrHandler as (event: any) => void);
+      }),
+      queryRenderedFeatures,
+      getCanvas: () => ({ style: { cursor: '' } }),
+      getZoom: () => 16,
+    } as unknown as maplibregl.Map;
+    const routed = callbacks();
+
+    bindFieldGuideMapInteractions(map, {
+      callbacks: () => routed,
+      annotationMode: () => false,
+      showLabel: vi.fn(),
+    });
+
+    handlers.get('click:targets-hitbox')!({
+      point: {},
+      features: [{ properties: { id: 'target-1' } }],
+    });
+    handlers.get('click:monuments-fill')!({
+      point: {},
+      features: [{ properties: { Name: 'Overlapping monument' } }],
+    });
+
+    expect(routed.onFeatureClick).toHaveBeenCalledWith('target-1');
+    expect(routed.onMonumentClick).not.toHaveBeenCalled();
+
+    queryRenderedFeatures.mockReturnValue([]);
+    handlers.get('click:monuments-fill')!({
+      point: {},
+      features: [{ properties: { Name: 'Standalone monument' } }],
+    });
+    expect(routed.onMonumentClick).toHaveBeenCalledWith('Standalone monument');
+  });
+
   it('routes annotation, empty-map and crossing interactions without overlap', () => {
     const handlers = new Map<string, (event: any) => void>();
     const queryRenderedFeatures = vi.fn(() => []);
@@ -241,7 +293,7 @@ describe('FieldGuide map interaction router', () => {
       showLabel,
     });
 
-    handlers.get('click:targets-circle')!({
+    handlers.get('click:targets-hitbox')!({
       features: [{ properties: { id: 'target-1' } }],
     });
     handlers.get('click:trace-targets-circle')!({

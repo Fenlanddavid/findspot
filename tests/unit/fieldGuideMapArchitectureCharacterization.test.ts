@@ -23,14 +23,14 @@ describe('FieldGuide map architecture characterization', () => {
       readFile(INTERACTIONS, 'utf8'),
     ]);
 
-    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(313);
+    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(322);
     expect(registry.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(interactions.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(occurrences(hook, /map\.addSource\(/g)).toBe(0);
     expect(occurrences(hook, /map\.addLayer\(/g)).toBe(0);
     expect(occurrences(hook, /map\.on\(/g)).toBe(0);
     expect(occurrences(registry, /map\.addSource\(/g)).toBe(17);
-    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(36);
+    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(37);
     expect(occurrences(interactions, /map\.on\(/g)).toBe(19);
     expect(hook).toContain('registerFieldGuideMapLayers(map)');
     expect(hook).toContain('bindFieldGuideMapInteractions(map, {');
@@ -40,15 +40,17 @@ describe('FieldGuide map architecture characterization', () => {
     const source = await readFile(INTERACTIONS, 'utf8');
 
     expect(source).toContain(
-      "layers: ['targets-circle', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles']",
+      "layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles']",
     );
     expect(source).toContain(
-      "layers: ['targets-circle', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill']",
+      "layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill']",
     );
     expect(source).toContain("showLabel('Historic Trackway')");
     expect(source).toContain('showLabel(`Route Crossing: ${a} × ${b}`)');
     expect(source).toContain(
       'callbacks().onAnnotationDrop(event.lngLat.lat, event.lngLat.lng)',
     );
+    expect(source).toContain("map.on('click', 'targets-hitbox'");
+    expect(source).toContain('if (isAnnotating() || targetAt(event)) return;');
   });
 });
