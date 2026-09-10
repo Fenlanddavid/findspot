@@ -83,6 +83,15 @@ export function useSessionMap(params: {
     fieldFindMarkersRef.current = fieldFindMarkers;
     const [isFollowing, setIsFollowing] = useState(true);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
+    const [mapUnavailable, setMapUnavailable] = useState(false);
+    useEffect(() => {
+        setMapUnavailable(false);
+        if (!enabled) return;
+        const timer = window.setTimeout(() => {
+            if (mapRef.current && !mapRef.current.isStyleLoaded()) setMapUnavailable(true);
+        }, 15_000);
+        return () => window.clearTimeout(timer);
+    }, [enabled, viewportKey]);
     const [scheduledMonumentCoverage, setScheduledMonumentCoverage] = useState<ScheduledMonumentMapCoverage>(
         INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
     );
@@ -220,13 +229,17 @@ export function useSessionMap(params: {
                     if (preservedViewport) initialFitCompleteRef.current = true;
                 } catch (error) {
                     console.error('Map init failed:', error);
+                    setMapUnavailable(true);
                     setScheduledMonumentCoverage({
                         ...INITIAL_SCHEDULED_MONUMENT_MAP_COVERAGE,
                         status: 'error',
                     });
                     return;
                 }
+                map.on('error', () => setMapUnavailable(true));
+                map.on('webglcontextlost', () => setMapUnavailable(true));
                 map.on('load', () => {
+                    setMapUnavailable(false);
                     registerRomanStandaloneLayers(map);
                     map.addSource('scheduled-monuments', { type: 'geojson', data: EMPTY_FEATURE_COLLECTION });
                     if (!map.hasImage('scheduled-monument-hatch')) {
@@ -307,7 +320,10 @@ export function useSessionMap(params: {
                     viewportRef.current = { center: [map.getCenter().lng, map.getCenter().lat], zoom: map.getZoom() };
                 });
                 mapRef.current = map;
-            }).catch(error => console.error('Map layers failed to load:', error));
+            }).catch(error => {
+                console.error('Map layers failed to load:', error);
+                if (!cancelled) setMapUnavailable(true);
+            });
             return () => { cancelled = true; };
         } else if (mapRef.current.isStyleLoaded()) {
             updateMapData(mapRef.current);
@@ -464,5 +480,5 @@ export function useSessionMap(params: {
         };
     }, [enabled, mapReadyVersion, scheduledMonumentCachePreparing, scheduledMonumentCacheVersion]);
 
-    return { mapDivRef, layerControl: mapLayers.control, scheduledMonumentCoverage, ...mapSelection };
+    return { mapDivRef, mapUnavailable, layerControl: mapLayers.control, scheduledMonumentCoverage, ...mapSelection };
 }

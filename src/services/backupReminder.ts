@@ -48,14 +48,14 @@ function reminderCopy(
       ? 'Backup Due'
       : 'Backup Recommended';
   if (changedFindCount === 0) {
-    return { title, message: 'This device has records that have never been backed up.' };
+    return { title, message: 'Check an external full backup, including photos, to protect this device’s records.' };
   }
   const noun = changedFindCount === 1 ? 'find has' : 'finds have';
   return {
     title,
     message: hasExternalBackup
-      ? `${changedFindCount} ${noun} changed since your last backup.`
-      : `${changedFindCount} ${noun} not yet been protected by an external backup.`,
+      ? `${changedFindCount} ${noun} changed since the full backup you last confirmed.`
+      : `Check a full backup, including photos. No external full backup has been confirmed for these ${changedFindCount} ${changedFindCount === 1 ? 'find' : 'finds'}.`,
   };
 }
 
@@ -101,7 +101,7 @@ export async function getBackupReminderState(now = Date.now()): Promise<BackupRe
   const [permissionCount, finds, lastBackup, snoozedUntil] = await Promise.all([
     db.permissions.filter(permission => !permission.isDefault).count(),
     db.finds.toArray(),
-    db.settings.get('lastBackupDate'),
+    db.settings.get('lastConfirmedFullBackupDate'),
     db.settings.get('backupSnoozedUntil'),
   ]);
   return evaluateBackupReminder({

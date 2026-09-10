@@ -54,13 +54,20 @@ export type {
   ValidatedBackupMedia,
 } from "./backup/schema";
 
-export async function markExternalBackupSaved() {
-  const now = new Date().toISOString();
+export type BackupKind = 'full' | 'records';
+
+export async function markBackupExportPrepared(kind: BackupKind, snapshotAt: string) {
+  await db.settings.put({ key: kind === 'full' ? 'lastFullBackupExportDate' : 'lastRecordsBackupExportDate', value: snapshotAt });
+}
+
+// Call only after the user confirms checking an external copy. Use the capture
+// start, not the later confirmation time, so intervening edits remain due.
+export async function markExternalBackupSaved(snapshotAt: string, kind: BackupKind) {
   await db.transaction('rw', db.settings, async () => {
-    await db.settings.put({ key: "lastBackupDate", value: now });
-    await db.settings.delete('backupSnoozedUntil');
+    await db.settings.put({ key: kind === 'full' ? 'lastConfirmedFullBackupDate' : 'lastConfirmedRecordsBackupDate', value: snapshotAt });
+    if (kind === 'full') await db.settings.delete('backupSnoozedUntil');
   });
-  return now;
+  return snapshotAt;
 }
 
 export async function exportToCSV(): Promise<string> {

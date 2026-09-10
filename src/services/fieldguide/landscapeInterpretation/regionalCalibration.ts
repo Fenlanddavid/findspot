@@ -1,5 +1,8 @@
 // ─── Regional Calibration ─────────────────────────────────────────────────────
-// Derives a coarse terrain-type multiplier from BGS geology description.
+// Derives a coarse deposit context from explicit superficial deposits.
+// Bedrock age, lithology and ancient depositional environments do not establish
+// present-day relief, moorland cover or wetness. Measured terrain is scored by
+// primaryProcessEngine independently; unsupported regional context is neutral.
 //
 // IMPORTANT: All multipliers here are UNVALIDATED provisional weights.
 // They represent a first-pass regional adjustment and must be tuned against
@@ -17,29 +20,6 @@ export type TerrainRegionType =
 
 // ─── Geology description → region ─────────────────────────────────────────────
 
-const LOWLAND_RIVER_PATTERNS  = ['alluvium', 'river terrace', 'glacial outwash', 'sand and gravel', 'gravel terrace', 'fluvial', 'outwash'];
-const CHALK_LIMESTONE_PATTERNS = ['chalk', 'limestone', 'oolite', 'jurassic', 'cretaceous'];
-const FEN_PEAT_PATTERNS        = [
-    'peat',
-    'fenland',
-    'fen',
-    'marsh',
-    'estuarine',
-    'tidal flat',
-    'tidal-flat',
-    'marine',
-    'lacustrine',
-    'saltmarsh',
-    'salt marsh',
-    'warp',
-];
-const UPLAND_MOORLAND_PATTERNS = ['millstone grit', 'carboniferous', 'moorland', 'gritstone', 'granite', 'basalt', 'gabbro', 'schist'];
-
-function matchesAny(text: string, patterns: string[]): boolean {
-    const lower = text.toLowerCase();
-    return patterns.some(p => lower.includes(p));
-}
-
 export function deriveTerrainRegion(geologyContext: GeologyContext | null): TerrainRegionType {
     if (!geologyContext) return 'unknown';
 
@@ -47,14 +27,15 @@ export function deriveTerrainRegion(geologyContext: GeologyContext | null): Terr
     const descriptions = [
         raw.superficialName       ?? '',
         raw.superficialLithology  ?? '',
-        raw.bedrockName           ?? '',
-        raw.bedrockLithology      ?? '',
     ].join(' ');
 
-    if (matchesAny(descriptions, FEN_PEAT_PATTERNS))        return 'fen_peat';
-    if (matchesAny(descriptions, LOWLAND_RIVER_PATTERNS))   return 'lowland_river_valley';
-    if (matchesAny(descriptions, CHALK_LIMESTONE_PATTERNS)) return 'chalk_limestone_upland';
-    if (matchesAny(descriptions, UPLAND_MOORLAND_PATTERNS)) return 'upland_moorland';
+    const peat = /\bpeat\b/i.test(descriptions);
+    const river = /\balluvium\b|\briver terrace\b/i.test(descriptions);
+    // Mixed deposits do not justify choosing one region by keyword order.
+    if (peat && river) return 'unknown';
+    if (peat) return 'fen_peat';
+    if (river) return 'lowland_river_valley';
+    // Chalk is not proof of upland; granite is not proof of moorland.
     return 'unknown';
 }
 

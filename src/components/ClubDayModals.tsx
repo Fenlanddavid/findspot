@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useId } from "react";
 import QRCode from "qrcode";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Field } from "../db";
-import { markClubDayExportSubmitted, saveClubDayShareDetails } from "../services/permissionMutations";
+import { markClubDayExportPrepared, saveClubDayShareDetails } from "../services/permissionMutations";
 import { createClubDayPack, exportClubDayData, mergeClubDayData, ClubDayMergeResult, getSetting, setSetting, compactClubDayPackJson } from "../services/data";
 import { loadRallyDayReview } from "../services/rallyDayReview";
 import { RallyDayReviewPanel } from "./RallyDayReviewPanel";
@@ -440,7 +440,7 @@ export function ExportClubDayModal({
       a.click();
       URL.revokeObjectURL(url);
 
-      await markClubDayExportSubmitted(permissionId, new Date().toISOString());
+      await markClubDayExportPrepared(permissionId, new Date().toISOString());
       setExportedFile(file);
       setExported(true);
     } catch (e: any) {
@@ -464,7 +464,7 @@ export function ExportClubDayModal({
           <div className="space-y-4">
             <div className="w-12 h-12 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center mx-auto text-xl font-black text-teal-600">✓</div>
             <p className="text-sm font-bold text-center text-gray-800 dark:text-gray-100">
-              File saved to your Downloads folder.
+              Export prepared. Check that the download finished before sending the file.
             </p>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-2">
               <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">How to send the file</p>
@@ -472,7 +472,7 @@ export function ExportClubDayModal({
                 <li>Open WhatsApp, email, or any app</li>
                 <li>Tap the attachment / paperclip icon</li>
                 <li>Choose <strong>Document</strong> or <strong>File</strong></li>
-                <li>Open your <strong>Downloads</strong> folder</li>
+                <li>Find the completed download, usually in <strong>Downloads</strong></li>
                 <li>Select the <strong>{exportedFile?.name}</strong> file</li>
               </ol>
             </div>
@@ -526,7 +526,7 @@ export function ExportClubDayModal({
             )}
 
             <div className="p-3 bg-teal-50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-800 rounded-xl text-xs text-teal-700 dark:text-teal-300 mb-5">
-              No server. No account. Your data is only shared when you export it.
+              No server. No account. You choose how to send the exported file.
             </div>
 
             <div className="flex gap-3">

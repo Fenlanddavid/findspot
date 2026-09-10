@@ -24,7 +24,9 @@ export async function saveClubDayShareDetails(
   await db.permissions.update(permissionId, updates);
 }
 
-export async function markClubDayExportSubmitted(permissionId: string, submittedAt: string): Promise<void> {
+// Legacy field name retained for lossless restore compatibility. This records
+// export preparation only; neither historical nor new values verify delivery.
+export async function markClubDayExportPrepared(permissionId: string, submittedAt: string): Promise<void> {
   await db.permissions.update(permissionId, { submittedAt });
 }
 

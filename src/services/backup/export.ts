@@ -10,6 +10,7 @@ import {
   type BackupExportProgress,
 } from './mediaArchive';
 import type { BackupExportManifest } from './schema';
+import { cleanupStaleExportSnapshots, withExportSnapshot } from './exportSnapshot';
 
 export type { BackupExportProgress } from './mediaArchive';
 
@@ -91,14 +92,10 @@ async function collectManifestData(database: FindSpotDB): Promise<BackupExportMa
  */
 export async function exportData(options: BackupExportOptions = {}): Promise<Blob> {
   const database = options.database ?? db;
-  const manifest = await collectManifestData(database);
-
-  if (options.includeMedia !== true) {
-    return new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-  }
-
-  return createMediaArchive(manifest, {
-    onProgress: options.onProgress,
-    database,
-  });
+  await cleanupStaleExportSnapshots();
+  return withExportSnapshot(database, options.includeMedia === true,
+    () => collectManifestData(database), async (manifest, snapshot) => {
+      if (!snapshot) return new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      return createMediaArchive(manifest, { onProgress: options.onProgress, database: snapshot });
+    });
 }

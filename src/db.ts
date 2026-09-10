@@ -121,7 +121,7 @@ export type Permission = {
   organiserEmail?: string;              // Included in pack; used for export mailto link
   significantFindInstructions?: string; // Shown prominently on member permission
   clubDayPublicNotes?: string;          // Optional rally/event notes for members
-  submittedAt?: string;                 // ISO timestamp set when member exports their data
+  submittedAt?: string;                 // Legacy name: export prepared at, NEVER verified delivery
 
   createdAt: string;
   updatedAt: string;

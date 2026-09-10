@@ -58,23 +58,23 @@ export function ActiveSessionShellHeader(props: {
     <header className="relative shrink-0 border-b border-white/10 bg-gray-950/95 px-4 pb-2.5 pt-[calc(0.55rem+env(safe-area-inset-top))] backdrop-blur">
       <div className="mx-auto max-w-4xl">
         <div className="flex items-center gap-2">
-          <div className={`flex min-w-0 flex-1 items-center gap-2 text-3xs font-black uppercase tracking-[0.15em] ${status.tone}`}>
+          <div className={`flex min-w-0 flex-1 items-center gap-2 text-sm font-black ${status.tone}`}>
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${status.dot}`} />
-            <span>{status.label}</span>
+            <span><span className="block text-xs font-bold text-gray-200">Session active</span>{status.label === 'Session active' ? status.secondary[0] : status.label}</span>
           </div>
           <button type="button" aria-label="Session options" aria-expanded={showMenu} onClick={() => setShowMenu(value => !value)} className="grid min-h-11 min-w-11 place-items-center rounded-xl border border-white/15 text-lg font-black text-gray-300">•••</button>
           <button type="button" onClick={props.onFinish} className="min-h-11 rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2 text-2xs font-black uppercase tracking-wider text-red-200">Finish</button>
         </div>
-        {status.critical && <p role="alert" className={`mt-1.5 whitespace-normal text-xs font-black leading-snug ${status.tone}`}>{status.critical}</p>}
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-3xs font-bold text-gray-400" aria-label="Tracking details">
-          {status.secondary.map(detail => <span key={detail}>{detail}</span>)}
+        {status.critical && <p className={`mt-1.5 whitespace-normal text-sm font-bold leading-snug ${status.tone}`}>{status.critical}</p>}
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs font-bold text-gray-300" aria-label="Tracking details">
+          {(status.label === 'Session active' ? status.secondary.slice(1) : status.secondary).map(detail => <span key={detail}>{detail}</span>)}
           <span>{isOnline ? 'Online' : 'Offline'}</span>
         </div>
         <div className="mt-1.5 flex min-w-0 items-baseline gap-2">
           <p className="min-w-0 flex-1 truncate text-base font-black">{props.permissionName}{props.fieldName ? <span className="font-bold text-gray-400"> · {props.fieldName}</span> : null}</p>
           <p className="shrink-0 text-2xs font-bold text-gray-400">{props.durationText} · {props.findCount} find{props.findCount === 1 ? '' : 's'}{props.pendingCount > 0 ? ` · ${props.pendingCount} pending` : ''}</p>
         </div>
-        {props.boundaryStatus && props.boundaryStatus.kind !== 'inside' && <p className={`mt-1 text-3xs font-black uppercase tracking-wider ${props.boundaryStatus.kind === 'outside' ? 'text-red-300' : props.boundaryStatus.kind === 'near' ? 'text-amber-300' : 'text-gray-400'}`}>{props.boundaryStatus.label}</p>}
+        {props.boundaryStatus && props.boundaryStatus.kind !== 'inside' && <p className={`mt-1 text-sm font-bold ${props.boundaryStatus.kind === 'outside' ? 'text-red-300' : props.boundaryStatus.kind === 'near' ? 'text-amber-300' : 'text-gray-300'}`}>{props.boundaryStatus.label}</p>}
         {showMenu && <div className="absolute right-20 top-[calc(3.5rem+env(safe-area-inset-top))] z-[130] w-52 rounded-xl border border-white/15 bg-gray-950 p-2 shadow-2xl">
           <button type="button" onClick={props.onPermission} className="min-h-11 w-full rounded-lg px-3 text-left text-xs font-black text-gray-200 hover:bg-white/5">Open permission</button>
         </div>}
@@ -123,6 +123,7 @@ export function ActiveSessionWorkspace(props: {
   workspaceTab: ActiveWorkspaceTab;
   onSelectTab: (tab: ActiveWorkspaceTab) => void;
   mapDivRef: RefObject<HTMLDivElement | null>;
+  mapUnavailable?: boolean;
   scheduledMonumentCoverage: ScheduledMonumentMapCoverage;
   mapLayerControl: ReactNode;
   permissionName: string;
@@ -181,6 +182,7 @@ export function ActiveSessionWorkspace(props: {
 }) {
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [showSessionFinds, setShowSessionFinds] = useState(false);
   const hasVisitConditions = !!props.landUse.trim() || props.isStubble;
   const [visitConditionsExpanded, setVisitConditionsExpanded] = useState(() => !hasVisitConditions);
@@ -190,7 +192,10 @@ export function ActiveSessionWorkspace(props: {
   async function addNote() {
     if (!note.trim() || savingNote) return;
     setSavingNote(true);
-    try { await props.onAddNote(note.trim()); setNote(''); } finally { setSavingNote(false); }
+    setNoteError(null);
+    try { await props.onAddNote(note.trim()); setNote(''); }
+    catch { setNoteError('Your note was not saved. It is still here; please try again.'); }
+    finally { setSavingNote(false); }
   }
   return (
     <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-gray-950 text-white">
@@ -204,6 +209,14 @@ export function ActiveSessionWorkspace(props: {
           <section className="relative h-full min-h-[460px] bg-gray-900" aria-label="Session map">
             <div className="absolute inset-0 grid place-items-center text-center text-sm text-gray-500"><div><div className="text-2xl">⌖</div><p className="mt-2">The map appears when a boundary, trail or live track is available.</p></div></div>
             <div ref={props.mapDivRef} className="absolute inset-0" />
+            {props.mapUnavailable && <div role="status" className="absolute inset-x-4 top-24 z-[100] rounded-xl border border-amber-300 bg-gray-950 p-4 text-sm text-white">
+              <p className="font-bold">Map unavailable or incomplete</p>
+              <p className="mt-1">Your visit stays open. Recording and saved visit details are still accessible. Map protection boundaries may be missing.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => props.onSelectTab('record')} className="min-h-11 rounded-lg bg-teal-400 px-4 font-bold text-gray-950">Open Record</button>
+                <button onClick={() => props.onSelectTab('session')} className="min-h-11 rounded-lg border border-white/30 px-4 font-bold">View visit</button>
+              </div>
+            </div>}
             <ScheduledMonumentCoverageLine state={props.scheduledMonumentCoverage} />
             <div className="absolute right-4 top-4 z-[100] grid justify-items-end gap-2">
               {props.isTracking ? (
@@ -381,6 +394,7 @@ export function ActiveSessionWorkspace(props: {
             </div>
             <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
               <label className="text-xs font-black" htmlFor="active-session-note">Quick session note</label>
+              {noteError && <p role="alert" className="mt-2 text-sm text-amber-200">{noteError}</p>}
               <div className="mt-2 flex gap-2"><input id="active-session-note" value={note} onChange={event => setNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void addNote(); }} placeholder="Conditions, detector changes, access…" className="min-h-12 min-w-0 flex-1 rounded-xl border border-white/15 bg-gray-950 px-3 text-sm text-white placeholder:text-gray-600" /><button type="button" disabled={!note.trim() || savingNote} onClick={() => void addNote()} className="min-h-12 rounded-xl bg-teal-400 px-4 text-xs font-black text-gray-950 disabled:opacity-40">Add</button></div>
             </div>
             {props.pendingCount > 0 && <button type="button" onClick={props.onPending} className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-left text-sm font-bold text-amber-200">{props.pendingCount} pending find{props.pendingCount === 1 ? '' : 's'} to finish</button>}

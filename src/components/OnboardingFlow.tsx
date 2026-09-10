@@ -107,6 +107,12 @@ export default function OnboardingFlow() {
         setStep('done');
     }
 
+    function startTask(destination: string) {
+        markDone();
+        setVisible(false);
+        nav(destination);
+    }
+
     function leave() {
         setVisible(false);
         nav(pendingDestination);
@@ -236,6 +242,11 @@ export default function OnboardingFlow() {
                             </p>
                         </div>
 
+                        <div className="mt-4 grid gap-2">
+                            <p className="text-sm text-white/70">Start with a location or a find. Your profile, detector and permission details can be added later.</p>
+                            <button onClick={() => startTask('/fieldguide')} className="min-h-12 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Scan land now</button>
+                            <button onClick={() => startTask('/find')} className="min-h-12 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold text-white">Record a find now</button>
+                        </div>
                         {actionFooter('Get Started', () => setStep('choose'))}
                     </>
                 )}
@@ -265,7 +276,7 @@ export default function OnboardingFlow() {
                             </button>}
 
                             <button
-                                onClick={() => setStep('finds')}
+                                onClick={() => startTask('/find')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
                             >
                                 <div className="flex items-center gap-3">
@@ -279,7 +290,7 @@ export default function OnboardingFlow() {
                             </button>
 
                             <button
-                                onClick={() => setStep('fieldguide')}
+                                onClick={() => startTask('/fieldguide')}
                                 className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
                             >
                                 <div className="flex items-center gap-3">
@@ -535,7 +546,7 @@ export default function OnboardingFlow() {
                         <div className="mb-6">
                             <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-3">Set up your profile</h2>
                             <p className="text-[13px] text-white/60 leading-relaxed mb-4">
-                                A few details in Settings make the rest of the app work properly. It only takes a minute and you can update everything later.
+                                Optional details in Settings can pre-fill your records and reports. You can scan and record finds before adding them.
                             </p>
 
                             <div className="space-y-2.5 mb-4">
@@ -608,7 +619,7 @@ export default function OnboardingFlow() {
                                     <span className="text-base mt-0.5">📊</span>
                                     <div>
                                         <p className="text-[12px] font-black text-white mb-0.5">Coverage &amp; sessions</p>
-                                        <p className="text-2xs text-white/45 leading-snug">Each visit opens a focused Map, Record, Session and Guide workspace. Over time you can see what ground you've covered and what's still undetected.</p>
+                                        <p className="text-2xs text-white/45 leading-snug">Each visit opens a focused Map, Record, Session and Guide workspace. Over time you can review your recorded trails and searched areas. Gaps in records do not prove that ground is undetected.</p>
                                     </div>
                                 </div>
                             </div>

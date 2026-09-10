@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 type MockRow = Record<string, unknown>;
 
 // vi.hoisted runs before imports, so the mock tables exist when vi.mock fires.
-const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOutstandingQuestions, mockPermissions, mockTracks, mockCalculateCoverage } =
+const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOutstandingQuestions, mockPermissions, mockTracks, mockObservations, mockCalculateCoverage } =
   vi.hoisted(() => {
     function _makeTable() {
       let data: Record<string, unknown>[] = [];
@@ -62,6 +62,7 @@ const { mockSignificantFinds, mockUndugSignals, mockSessions, mockFinds, mockOut
       mockOutstandingQuestions: _makeTable(),
       mockPermissions: _makeTable(),
       mockTracks: _makeTable(),
+      mockObservations: _makeTable(),
       mockCalculateCoverage: vi.fn(),
     };
   });
@@ -75,6 +76,7 @@ vi.mock("../../src/db", () => ({
     outstandingQuestions: mockOutstandingQuestions,
     permissions: mockPermissions,
     tracks: mockTracks,
+    surfaceObservations: mockObservations,
   },
 }));
 
@@ -145,6 +147,7 @@ function resetAll() {
   mockOutstandingQuestions._setData([]);
   mockPermissions._setData([]);
   mockTracks._setData([]);
+  mockObservations._setData([]);
   mockCalculateCoverage.mockReset();
   mockCalculateCoverage.mockReturnValue(null);
 }
@@ -154,6 +157,39 @@ function resetAll() {
 const NOW = new Date("2026-07-05T12:00:00.000Z");
 
 beforeEach(() => resetAll());
+
+describe('permission continuity from authoritative records', () => {
+  it('uses visit start time to order visits recorded on the same date', async () => {
+    mockSessions._setData([
+      makeSession({ id: 'a-morning', date: '2026-07-05', sessionStartedAt: '2026-07-05T08:00:00Z', notes: 'Morning visit' }),
+      makeSession({ id: 'z-afternoon', date: '2026-07-05', sessionStartedAt: '2026-07-05T11:00:00Z', notes: 'Later visit' }),
+    ]);
+    const facts = await derivePermissionPulse(PERM_ID, NOW);
+    expect(facts.find(f => f.templateId === 'last_visit_note')?.slots.note).toBe('Later visit');
+  });
+  it('reflects edited notes, removed observations and reopened investigations without cached novelty', async () => {
+    mockPermissions._setData([{ id: PERM_ID }]);
+    mockSessions._setData([makeSession({ id: 'recent', date: NOW.toISOString(), notes: 'Dry surface', isFinished: false })]);
+    mockObservations._setData([{ id: 'observation', sessionId: 'recent' }]);
+    mockOutstandingQuestions._setData([{ id: 'question', permissionId: PERM_ID, status: 'RESOLVED' }]);
+    const first = await derivePermissionPulse(PERM_ID, NOW);
+    expect(first.find(f => f.templateId === 'last_visit')?.slots.state).toContain('still open');
+    expect(first.find(f => f.templateId === 'last_visit_note')?.slots.note).toBe('Dry surface');
+    expect(first.find(f => f.templateId === 'last_visit_observations')?.slots.count).toBe(1);
+    expect(await derivePermissionPulse(PERM_ID, NOW)).toEqual(first);
+    mockSessions._setData([makeSession({ id: 'recent', date: NOW.toISOString(), notes: 'Corrected note', isFinished: true })]);
+    mockObservations._setData([]);
+    mockOutstandingQuestions._setData([{ id: 'question', permissionId: PERM_ID, status: 'NEEDS_EVIDENCE' }]);
+    const updated = await derivePermissionPulse(PERM_ID, NOW);
+    expect(updated.find(f => f.templateId === 'last_visit_note')?.slots.note).toBe('Corrected note');
+    expect(updated.find(f => f.templateId === 'last_visit_observations')).toBeUndefined();
+    expect(updated.find(f => f.templateId === 'questions_changed')?.slots.count).toBe(1);
+    mockSessions._setData([]);
+    const deleted = await derivePermissionPulse(PERM_ID, NOW);
+    expect(deleted.find(f => f.templateId === 'last_visit')).toBeUndefined();
+    expect(deleted.find(f => f.templateId === 'permission_setup')).toBeDefined();
+  });
+});
 
 describe("permissionPulse — empty permission", () => {
   it("returns [] for a permission with no data", async () => {
@@ -321,12 +357,12 @@ describe("permissionPulse — permission context", () => {
 });
 
 describe("permissionPulse — d1 (last visit)", () => {
-  it("gapDays 0 is omitted", async () => {
+  it("shows a visit recorded today", async () => {
     mockSessions._setData([
       makeSession({ id: "s1", date: NOW.toISOString() }),
     ]);
     const facts = await derivePermissionPulse(PERM_ID, NOW);
-    expect(facts.find((f) => f.templateId === "last_visit")).toBeUndefined();
+    expect(facts.find((f) => f.templateId === "last_visit")?.slots.gapDays).toBe(0);
   });
 
   it("43 days ago produces slot value 43", async () => {

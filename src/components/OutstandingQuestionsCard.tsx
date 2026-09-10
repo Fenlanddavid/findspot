@@ -619,8 +619,9 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
 
       {permission.boundary && <ProtectionBanner protection={permission.protectionStatus} />}
 
+      <PermissionPulseCard permissionId={permissionId} embedded onOpenInvestigations={() => setExpanded(true)} />
+
       {expanded && <>
-      <PermissionPulseCard permissionId={permissionId} embedded />
 
       <PermissionSurfaceObservations permission={permission} />
 

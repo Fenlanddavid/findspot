@@ -34,7 +34,7 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
       )}
       {permission.submittedAt && (
         <div className="absolute right-0 top-0 z-10 rounded-bl bg-emerald-500 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-white">
-          Data sent ✓
+          Export prepared
         </div>
       )}
       {permission.isDefault && (

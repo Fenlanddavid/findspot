@@ -51,9 +51,9 @@ describe('backup import characterization', () => {
   it('clears a reminder snooze when an external backup is saved', async () => {
     await db.settings.put({ key: 'backupSnoozedUntil', value: '2099-01-01T00:00:00.000Z' });
 
-    const savedAt = await markExternalBackupSaved();
+    const savedAt = await markExternalBackupSaved('2026-09-09T10:00:00.000Z', 'full');
 
-    expect(await getSetting('lastBackupDate', null)).toBe(savedAt);
+    expect(await getSetting('lastConfirmedFullBackupDate', null)).toBe(savedAt);
     expect(await db.settings.get('backupSnoozedUntil')).toBeUndefined();
   });
 

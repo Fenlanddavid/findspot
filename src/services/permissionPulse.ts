@@ -29,6 +29,9 @@ export type PulseTemplateId =
   | "crop_change_stubble"
   | "crop_change_crop"
   | "last_visit_finds"
+  | "last_visit_note"
+  | "last_visit_observations"
+  | "permission_setup"
   | "seasonal_pattern";
 
 export interface PulseFact {
@@ -59,13 +62,16 @@ export const PULSE_TEMPLATES: Record<PulseTemplateId, string> = {
   open_signals:
     "{count} un-dug signal{s} await{verb} investigation.",
   last_visit:
-    "Last detected here {gapDays} days ago.",
+    "Latest recorded visit: {date}{state}.",
+  last_visit_note: "Visit note: {note}",
+  last_visit_observations: "{count} surface observation{s} recorded on that visit.",
+  permission_setup: "No visits recorded yet. Add a location or boundary when you are ready to review this land; recording is available without a scan.",
   crop_change_stubble:
     "Now in stubble — was {prevCrop} on your last visit.",
   crop_change_crop:
     "Crop recorded as {crop}, previously {prevCrop}.",
   last_visit_finds:
-    "Your last session produced {count} find{s}{nameClause}.",
+    "{count} find{s} recorded on that visit{nameClause}.",
   questions_changed:
     "{count} open FieldGuide investigation{s} need{verb} review.",
   coverage_context:
@@ -94,6 +100,9 @@ const TEMPLATE_ORDER: PulseTemplateId[] = [
   "crop_change_stubble",
   "crop_change_crop",
   "last_visit_finds",
+  "last_visit_observations",
+  "last_visit_note",
+  "permission_setup",
   // ambient
   "seasonal_pattern",
 ];
@@ -153,7 +162,7 @@ export async function derivePermissionPulse(
         severity: "obligation",
         templateId: templateForSFStatus[sf.status],
         slots: {},
-        link: { kind: "sf-resume", sfId: sf.id },
+        link: { kind: "route", to: `/finds-box?tab=significant&sf=${sf.id}` },
       });
     }
   }
@@ -183,7 +192,7 @@ export async function derivePermissionPulse(
   const activeQuestions = await db.outstandingQuestions
     .where("permissionId")
     .equals(permissionId)
-    .filter(q => q.status !== "RESOLVED")
+    .filter(q => q.status !== "RESOLVED" && !q.dismissedByUser)
     .count();
 
   if (activeQuestions > 0) {
@@ -243,30 +252,48 @@ export async function derivePermissionPulse(
   }
 
   // ── Sessions (shared by d1, d2, d3, m1) ────────────────────────────────
-  // Sort newest first; prefer finished sessions
+  // Latest visit including open visits, with stable ties.
   sessions.sort((a, b) => {
     const da = new Date(a.date).getTime();
     const db_ = new Date(b.date).getTime();
-    return db_ - da;
+    const startedA = Date.parse(a.sessionStartedAt ?? a.createdAt) || 0;
+    const startedB = Date.parse(b.sessionStartedAt ?? b.createdAt) || 0;
+    return db_ - da || startedB - startedA || a.id.localeCompare(b.id);
   });
 
-  const lastSession = sessions.find((s) => s.isFinished) || sessions[0];
+  const lastSession = sessions[0];
 
   // ── d1: last visit ─────────────────────────────────────────────────────
   if (lastSession) {
     const gapDays = Math.floor(
       (now.getTime() - new Date(lastSession.date).getTime()) / 86_400_000
     );
-    if (gapDays > 0) {
+    if (Number.isFinite(gapDays)) {
       facts.push({
         id: "last_visit",
         permissionId,
         severity: "delta",
         templateId: "last_visit",
-        slots: { gapDays },
+        slots: { gapDays, date: new Date(lastSession.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), state: lastSession.isFinished ? '' : ' · still open' },
         link: { kind: "route", to: `/session/${lastSession.id}` },
       });
     }
+  }
+
+  if (lastSession) {
+    const observations = await db.surfaceObservations.where('sessionId').equals(lastSession.id).count();
+    if (observations) facts.push({
+      id: 'last_visit_observations', permissionId, severity: 'delta', templateId: 'last_visit_observations',
+      slots: { count: observations, s: observations === 1 ? '' : 's' },
+      link: { kind: 'route', to: `/session/${lastSession.id}` },
+    });
+    if (lastSession.notes?.trim()) facts.push({
+      id: 'last_visit_note', permissionId, severity: 'delta', templateId: 'last_visit_note',
+      slots: { note: lastSession.notes.trim().slice(0, 180) },
+      link: { kind: 'route', to: `/session/${lastSession.id}` },
+    });
+  } else if (permission) {
+    facts.push({ id: 'permission_setup', permissionId, severity: 'ambient', templateId: 'permission_setup', slots: {} });
   }
 
   // ── d2: crop change ────────────────────────────────────────────────────
@@ -342,6 +369,7 @@ export async function derivePermissionPulse(
           s: sessionFinds.length === 1 ? "" : "s",
           nameClause,
         },
+        link: { kind: 'route', to: `/session/${lastSession.id}` },
       });
     }
   }

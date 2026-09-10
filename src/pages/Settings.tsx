@@ -13,6 +13,8 @@ import {
   importData,
   exportToCSV,
   markExternalBackupSaved,
+  markBackupExportPrepared,
+  type BackupKind,
   estimateMediaSizeBytes,
   MEDIA_EXPORT_WARN_BYTES,
   readBackupManifest,
@@ -217,6 +219,10 @@ export default function Settings() {
   const [ncmdExpiry, setNcmdExpiry] = useState("");
   const [membershipCardImage, setMembershipCardImage] = useState<string | null>(null);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
+  const [lastRecordsBackup, setLastRecordsBackup] = useState<string | null>(null);
+  const [confirmedFullBackup, setConfirmedFullBackup] = useState<string | null>(null);
+  const [confirmedRecordsBackup, setConfirmedRecordsBackup] = useState<string | null>(null);
+  const [backupToCheck, setBackupToCheck] = useState<{ kind: BackupKind; snapshotAt: string } | null>(null);
   const [theme, setTheme] = useState("dark");
   const [detectors, setDetectors] = useState<string[]>([]);
   const [defaultDetector, setDefaultDetector] = useState("");
@@ -272,7 +278,10 @@ export default function Settings() {
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("membershipCardImage", null).then(setMembershipCardImage);
-    getSetting("lastBackupDate", null).then(setLastBackup);
+    getSetting("lastFullBackupExportDate", null).then(setLastBackup);
+    getSetting("lastRecordsBackupExportDate", null).then(setLastRecordsBackup);
+    getSetting("lastConfirmedFullBackupDate", null).then(setConfirmedFullBackup);
+    getSetting("lastConfirmedRecordsBackupDate", null).then(setConfirmedRecordsBackup);
     getSetting<BackupRecoveryReport | null>("lastRestoreReport", null).then(setLastRestoreReport);
     getSetting("theme", "dark").then(setTheme);
     getSetting("detectors", ["Minelab Equinox 800", "Nokta Legend"]).then(val => {
@@ -439,12 +448,14 @@ export default function Settings() {
 
   async function handleExport() {
     setExporting(true);
+    setDataError(null);
     try {
-      // Data-only by default — photos excluded to avoid OOM on mobile.
+      const snapshotAt = new Date().toISOString();
       const blob = await exportData({ includeMedia: false });
       triggerDownload(blob, `findspot-backup-${new Date().toISOString().slice(0, 10)}.json`);
-      const savedAt = await markExternalBackupSaved();
-      setLastBackup(savedAt);
+      await markBackupExportPrepared('records', snapshotAt);
+      setLastRecordsBackup(snapshotAt);
+      setBackupToCheck({ kind: 'records', snapshotAt });
     } catch (e) {
       setDataError("Export failed: " + e);
     } finally {
@@ -466,19 +477,34 @@ export default function Settings() {
     setMediaWarnPending(false);
     setExportingWithMedia(true);
     setFullBackupProgress(0);
+    setDataError(null);
     try {
+      const snapshotAt = new Date().toISOString();
       const blob = await exportData({
         includeMedia: true,
         onProgress: progress => setFullBackupProgress(progress.percent),
       });
       triggerDownload(blob, `findspot-full-backup-${new Date().toISOString().slice(0, 10)}.zip`);
-      const savedAt = await markExternalBackupSaved();
-      setLastBackup(savedAt);
+      await markBackupExportPrepared('full', snapshotAt);
+      setLastBackup(snapshotAt);
+      setBackupToCheck({ kind: 'full', snapshotAt });
     } catch (e) {
       setDataError("Full backup failed: " + e);
     } finally {
       setExportingWithMedia(false);
       setFullBackupProgress(null);
+    }
+  }
+
+  async function confirmBackupChecked() {
+    if (!backupToCheck) return;
+    try {
+      await markExternalBackupSaved(backupToCheck.snapshotAt, backupToCheck.kind);
+      if (backupToCheck.kind === 'full') setConfirmedFullBackup(backupToCheck.snapshotAt);
+      else setConfirmedRecordsBackup(backupToCheck.snapshotAt);
+      setBackupToCheck(null);
+    } catch (error) {
+      setDataError(`Could not record your backup confirmation: ${error}`);
     }
   }
 
@@ -651,7 +677,7 @@ export default function Settings() {
             </p>
           </div>
           <span className={`hidden sm:inline-flex text-xs font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-600 text-white" : "bg-amber-100 text-amber-800"}`}>
-            {lastBackup ? "Backup saved" : "Save backup"}
+            {lastBackup ? "Export prepared" : "Save backup"}
           </span>
         </div>
       </div>
@@ -766,6 +792,10 @@ export default function Settings() {
           <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">Data actions</h3>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Save a backup first. Restore only when replacing this device’s local archive.</p>
         </div>
+        <button onClick={requestExportWithMedia} disabled={exportingWithMedia || exporting || mediaWarnPending || importing} className="mb-3 min-h-14 w-full rounded-xl bg-emerald-700 px-4 py-3 text-left text-sm font-black text-white disabled:opacity-60">
+          {exportingWithMedia ? `Preparing full backup ${fullBackupProgress ?? 0}%…` : 'Full backup, including photos'}
+          <span className="mt-1 block text-xs font-normal">ZIP file · records, photographs and attachments</span>
+        </button>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Link
             to="/companion-import"
@@ -775,10 +805,10 @@ export default function Settings() {
           </Link>
           <button
             onClick={handleExport}
-            disabled={exporting}
+            disabled={exporting || exportingWithMedia || importing}
             className="rounded-xl bg-emerald-600 py-3 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-60"
           >
-            {exporting ? "Saving…" : "Backup JSON"}
+            {exporting ? "Preparing…" : "Records only, without photos"}
           </button>
           <label className={`flex items-center justify-center rounded-xl border border-gray-200 bg-white py-3 text-xs font-black uppercase tracking-widest text-gray-700 shadow-sm transition-colors hover:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 ${importing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}>
             {importing ? "Restoring…" : "Restore"}
@@ -797,7 +827,7 @@ export default function Settings() {
       {/* Media size info + full backup */}
       <div className="mt-3 mb-6 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          <span className="font-bold">Backup JSON</span> saves records only (no photos).
+          <span className="font-bold">Records only, without photos</span> uses JSON. Full backups use ZIP and temporarily need additional device storage while preparing photos.
           {mediaPhotoCount !== null && mediaPhotoCount > 0 && mediaSizeBytes !== null && (
             <> {mediaPhotoCount} photo{mediaPhotoCount !== 1 ? 's' : ''} on device
               ({Math.round(mediaSizeBytes / (1024 * 1024))} MB raw).</>
@@ -809,15 +839,29 @@ export default function Settings() {
             </span>
           )}
         </p>
-        {mediaPhotoCount !== null && mediaPhotoCount > 0 && (
-          <button
-            onClick={requestExportWithMedia}
-            disabled={exportingWithMedia || mediaWarnPending}
-            className="shrink-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-xs font-black uppercase tracking-widest px-3 py-2 rounded-lg hover:border-emerald-400 disabled:opacity-60 transition-colors"
-          >
-            {exportingWithMedia ? `Saving ${fullBackupProgress ?? 0}%…` : "Backup + Photos"}
-          </button>
-        )}
+      </div>
+
+      {backupToCheck && <div role="status" className="mb-4 rounded-xl border border-emerald-300 p-4 text-sm dark:border-emerald-700">
+        <p className="font-bold">{backupToCheck.kind === 'full' ? 'Full backup' : 'Records-only backup'} prepared. Check that the download finished and keep a copy outside this device.</p>
+        <p className="mt-2">{backupToCheck.kind === 'records' ? 'This file does not protect your photographs. ' : ''}FindSpot cannot verify where the browser saved your file.</p>
+        <button onClick={() => void confirmBackupChecked()} className="mt-3 min-h-11 rounded-lg bg-emerald-700 px-4 font-bold text-white">I’ve checked an external copy</button>
+      </div>}
+      <div className="mb-4 rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-700">
+        <p className="font-bold">Backup export history</p>
+        <p className="mt-2">Full backup, including photos: {lastBackup ? `prepared ${formatBackupDate(lastBackup)}` : 'none recorded'}</p>
+        <p>Records only, without photos: {lastRecordsBackup ? `prepared ${formatBackupDate(lastRecordsBackup)}` : 'none recorded'}</p>
+        <p className="mt-2">External full copy checked by you: {confirmedFullBackup ? `snapshot from ${formatBackupDate(confirmedFullBackup)}` : 'not confirmed'}</p>
+        <p>External records-only copy checked by you: {confirmedRecordsBackup ? `snapshot from ${formatBackupDate(confirmedRecordsBackup)}` : 'not confirmed'}</p>
+        <p className="mt-2 text-xs">Older backup history did not distinguish photos or verify storage. Recovery requires an external backup file.</p>
+        <details className="mt-3">
+          <summary className="min-h-11 cursor-pointer font-bold">Moving to another device</summary>
+          <ol className="list-decimal space-y-2 pl-5">
+            <li>Prepare a full backup and check that the ZIP download finished.</li>
+            <li>Copy the file somewhere accessible from your new device.</li>
+            <li>Open FindSpot there, choose Restore, and review the validated contents before replacing its records.</li>
+            <li>Check your finds, photos and permissions on the new device before clearing the old one.</li>
+          </ol>
+        </details>
       </div>
 
       {/* Diagnostic log export */}
@@ -1172,15 +1216,15 @@ export default function Settings() {
 
             <div className="flex items-center justify-between gap-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-xl">
               <div>
-                <h3 className="font-bold text-gray-800 dark:text-gray-100">Saved JSON Backup</h3>
+                <h3 className="font-bold text-gray-800 dark:text-gray-100">Full backup export</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {lastBackup 
-                    ? `Last backed up on ${new Date(lastBackup).toLocaleDateString()} at ${new Date(lastBackup).toLocaleTimeString()}`
-                    : "No JSON backup has been saved from this browser yet."}
+                    ? `Prepared ${formatBackupDate(lastBackup)}. Check your external copy in Backup.`
+                    : "No full backup export has been recorded from this browser yet."}
                 </p>
               </div>
               <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${lastBackup ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                {lastBackup ? "Saved" : "Not saved"}
+                {lastBackup ? "Prepared" : "Not recorded"}
               </span>
             </div>
 

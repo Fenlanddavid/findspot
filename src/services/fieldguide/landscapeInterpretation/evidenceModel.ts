@@ -166,7 +166,9 @@ function buildContradictingEvidence(
     const items: EvidenceItem[] = [];
     const hydroScore = potentialBreakdown?.hydro ?? 0;
 
-    if (signals.wetlandPresent || hydroScore >= 65 || geologyContains(geologyContext, ['peat', 'alluvium'])) {
+    // Deposits and ancient formation names do not establish present wetness.
+    // Use hydrology evidence here, just as in the primary process engine.
+    if (signals.wetlandPresent || hydroScore >= 65) {
         items.push(evidence('wet_ground_or_floodplain', 'Wet ground or floodplain influence reduces certainty', 'hydrology', hydroScore >= 65 ? 26 : 18, 'contradicting'));
     }
 

@@ -15,7 +15,7 @@ export type BackupExportProgress = {
 
 export type MediaArchiveOptions = {
   onProgress?: (progress: BackupExportProgress) => void;
-  database?: FindSpotDB;
+  database?: Pick<FindSpotDB, 'media'>;
 };
 
 const MEDIA_MIME_EXTENSIONS: Readonly<Record<string, string>> = {

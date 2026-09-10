@@ -1155,7 +1155,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         </div>
                         {submittedAt && (
                           <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
-                            ✓ Data sent to organiser on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Your finds are still stored on this device.
+                            Export prepared on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Delivery to the organiser is not confirmed. Your finds are still stored on this device.
                           </div>
                         )}
                         {significantFindInstructions && (

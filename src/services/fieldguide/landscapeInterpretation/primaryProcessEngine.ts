@@ -253,17 +253,16 @@ export function computePrimaryProcesses(
         // it is derived from real DEM/hydrology analysis. Feature-based signals
         // (NHLE names, AIM types) add on top. hydro is 0–100.
         const hydroScore = potentialBreakdown?.hydro ?? 0;
-        if (hydroScore > 0) {
-            // Scale: hydro 100 → +50 base contribution; hydro 50 → +25
-            score += Math.round(hydroScore * 0.5);
-            if (hydroScore > 30) contributingSignals.push('water_proximity');
-        }
+        // The adapter derives waterProximity and wetlandPresent from this same
+        // hydro value. Take the strongest water contribution once; these are
+        // related descriptions, not independent corroborating observations.
+        score += Math.max(Math.round(hydroScore * 0.5), signals.waterProximity ? 20 : 0, signals.wetlandPresent ? 15 : 0);
+        if (hydroScore > 30 || signals.waterProximity) contributingSignals.push('water_proximity');
 
         // Feature-based additions
-        if (signals.waterProximity)   { score += 20; if (!contributingSignals.includes('water_proximity')) contributingSignals.push('water_proximity'); }
         if (signals.confluencePresent){ score += 25; contributingSignals.push('confluence'); }
-        if (signals.wetlandPresent)   { score += 15; }
-        if (region === 'fen_peat')     { score += 30; contributingSignals.push('water_proximity'); }
+        // Regional deposits modify existing evidence; they cannot manufacture
+        // a present-day water feature or independent corroboration.
 
         // Fordable crossing: roman road + water proximity = likely crossing
         if (signals.romanRoadPresent && (signals.waterProximity || hydroScore > 30)) {
@@ -370,10 +369,7 @@ export function computePrimaryProcesses(
             contributingSignals.push('marginal_ground');
         }
 
-        if (region === 'fen_peat') {
-            score += 20;
-            contributingSignals.push('marginal_ground');
-        }
+        // Peat deposits alone do not establish a present-day landscape edge.
         // LIE corroboration: terrain scan independently detected a landscape transition.
         // Score-only boost — terrace_edge would misrepresent this as a specific
         // landform observation rather than a generalised boundary classification.

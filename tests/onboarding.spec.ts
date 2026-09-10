@@ -33,12 +33,31 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test('first scan opens directly without profile setup and onboarding stays dismissed', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Scan land now' }).click();
+  await expect(page).toHaveURL(/\/fieldguide/);
+  await expect(page.getByRole('dialog', { name: 'Understand where people used the landscape' })).toHaveCount(0);
+  expect(await durableSetting(page, 'recorderName')).toBeUndefined();
+  await expect.poll(() => durableSetting(page, 'fs_onboarding_v2_done')).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('dialog', { name: 'Understand where people used the landscape' })).toHaveCount(0);
+});
+
+test('first recording opens directly without a permission profile or scan', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Record a find now' }).click();
+  await expect(page).toHaveURL(/\/find(?:\?|$)/);
+  await expect.poll(() => durableSetting(page, 'fs_onboarding_v2_done')).toBe(true);
+  expect(await durableSetting(page, 'recorderName')).toBeUndefined();
+});
+
 test("fresh installs see onboarding despite the generated default permission", async ({ page }) => {
   await page.goto("./");
 
   const dialog = page.getByRole("dialog", { name: "Understand where people used the landscape" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Get Started" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeFocused();
 
   const permissions = await page.evaluate(() => new Promise<Array<{ isDefault?: boolean }>>((resolve, reject) => {
     const request = indexedDB.open("findspot_uk");
@@ -80,13 +99,13 @@ test("onboarding behaves as a keyboard modal", async ({ page }) => {
 
   const dialog = page.getByRole("dialog", { name: "Understand where people used the landscape" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Get Started" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeFocused();
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
 
   await page.keyboard.press("Shift+Tab");
   await expect(dialog.getByRole("button", { name: "Skip Quick Start" })).toBeFocused();
   await page.keyboard.press("Tab");
-  await expect(dialog.getByRole("button", { name: "Get Started" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeFocused();
 
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);

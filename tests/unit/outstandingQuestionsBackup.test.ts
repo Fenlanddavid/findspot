@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strFromU8, unzipSync } from 'fflate';
 
@@ -45,6 +46,7 @@ const { tables, db } = vi.hoisted(() => {
     tables,
     db: {
       ...tables,
+      table: (name: keyof typeof tables) => tables[name],
       transaction: vi.fn(async (_mode: string, _tables: unknown[], callback: () => Promise<void>) => callback()),
     },
   };

@@ -419,6 +419,7 @@ export default function SessionPage(props: {
   }, [fieldTracks, tracks]);
   const {
     mapDivRef,
+    mapUnavailable,
     layerControl: sessionMapLayerControl,
     scheduledMonumentCoverage,
     selection: sessionMapSelection,
@@ -980,6 +981,7 @@ export default function SessionPage(props: {
           onSelectTab={setWorkspaceTab}
           mapDivRef={mapDivRef}
           scheduledMonumentCoverage={scheduledMonumentCoverage}
+          mapUnavailable={mapUnavailable}
           mapLayerControl={<SessionMapLayerPicker control={sessionMapLayerControl} fieldHistory={{
             trailsAvailable: previousTrailsAvailable,
             trailsVisible: showFieldTrails,

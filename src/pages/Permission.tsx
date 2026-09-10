@@ -1039,7 +1039,7 @@ export default function PermissionPage(props: {
 
                         {submittedAt && (
                             <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
-                                Data sent to organiser on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                                Export prepared on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · delivery not confirmed
                             </div>
                         )}
 
@@ -1257,7 +1257,7 @@ export default function PermissionPage(props: {
                                                         {memberFindCount} {memberFindCount === 1 ? "find" : "finds"}
                                                     </span>
                                                     <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/60 text-teal-700 dark:text-teal-300">
-                                                        Data sent
+                                                        Data imported
                                                     </span>
                                                 </div>
                                             </div>
@@ -1272,6 +1272,11 @@ export default function PermissionPage(props: {
 
             {(!isClubDayMember || isEditing) && (!isRally || isEditing || !isEdit || persona === 'personal' || persona === 'kept_record') && (
             <React.Fragment>
+            {isEdit && id && !isEditing && (
+              <div id="outstanding-questions-section" className="lg:col-span-3 scroll-mt-4">
+                <OutstandingQuestionsCard permissionId={id} />
+              </div>
+            )}
             <PermissionFieldsColumn
                 permissionId={id}
                 isEdit={isEdit}
@@ -1467,11 +1472,6 @@ export default function PermissionPage(props: {
               </div>
             )}
 
-            {isEdit && id && (
-              <div id="outstanding-questions-section" className="lg:col-span-3 scroll-mt-4">
-                <OutstandingQuestionsCard permissionId={id} />
-              </div>
-            )}
             </React.Fragment>
             )}
 

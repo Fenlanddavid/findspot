@@ -1547,14 +1547,15 @@ test("settings can export and restore a backup", async ({ page }) => {
   await page.goto("./settings");
   await dismissNonBlockingPrompts(page);
   const backupDownloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Backup JSON" }).click();
+  await page.getByRole("button", { name: "Records only, without photos" }).click();
   const backupDownload = await backupDownloadPromise;
   expect(backupDownload.suggestedFilename()).toMatch(/^findspot-backup-\d{4}-\d{2}-\d{2}\.json$/);
   const backupPath = await backupDownload.path();
   expect(backupPath).toBeTruthy();
   const backup = JSON.parse(await readFile(backupPath!, "utf8"));
   expect((backup.permissions as any[]).some((row) => row.name === "Smoke Backup Permission")).toBe(true);
-  await expect(page.getByText("Backup saved").first()).toBeVisible();
+  await expect(page.getByText(/Records-only backup prepared/)).toBeVisible();
+  await expect(page.getByText('Backup saved', { exact: true })).toHaveCount(0);
 
   const csvDownloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "CSV", exact: true }).click();
@@ -1633,7 +1634,7 @@ test("backup reminder respects user data, a recent backup and snooze state", asy
   await expect(page.getByRole('button', { name: 'Back up' })).toBeVisible();
 
   await putIndexedDbRow(page, "settings", {
-    key: "lastBackupDate",
+    key: "lastConfirmedFullBackupDate",
     value: new Date().toISOString(),
   });
   await page.reload();
@@ -1646,11 +1647,11 @@ test("backup reminder respects user data, a recent backup and snooze state", asy
     updatedAt: changedAt,
   })));
   await page.reload();
-  await expect(page.getByText("20 finds have changed since your last backup.").first()).toBeVisible();
+  await expect(page.getByText("20 finds have changed since the full backup you last confirmed.").first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Later" })).toHaveCount(0);
 
   await putIndexedDbRow(page, "settings", {
-    key: "lastBackupDate",
+    key: "lastConfirmedFullBackupDate",
     value: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
   });
   await putIndexedDbRow(page, "settings", {

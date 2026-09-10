@@ -43,9 +43,11 @@ function renderSlottedText(fact: PulseFact): string {
 export function PermissionPulseCard({
   permissionId,
   embedded = false,
+  onOpenInvestigations,
 }: {
   permissionId: string;
   embedded?: boolean;
+  onOpenInvestigations?: () => void;
 }) {
   const nav = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -59,14 +61,22 @@ export function PermissionPulseCard({
 
   // Obligations are never collapsed behind the +n toggle.
   const obligations = facts.filter((f) => f.severity === "obligation");
-  const rest = facts.filter((f) => f.severity !== "obligation");
-  const visibleSlots = 5 - obligations.length;
-  const visibleRest = expanded ? rest : rest.slice(0, Math.max(0, visibleSlots));
+  const rest = facts.filter((f) => f.severity !== "obligation").sort((a, b) => {
+    const order = ['last_visit', 'last_visit_finds', 'last_visit_observations', 'questions_changed', 'open_signals', 'last_visit_note'];
+    const rank = (id: string) => order.includes(id) ? order.indexOf(id) : order.length;
+    return rank(a.templateId) - rank(b.templateId);
+  });
+  // Keep the latest visit and open questions visible even when obligations
+  // occupy the usual summary slots.
+  const essential = new Set(['last_visit', 'questions_changed']);
+  const detailSlots = Math.max(0, 5 - obligations.length - rest.filter(f => essential.has(f.templateId)).length);
+  let detailsShown = 0;
+  const visibleRest = expanded ? rest : rest.filter(f => essential.has(f.templateId) || detailsShown++ < detailSlots);
   const hiddenCount = rest.length - visibleRest.length;
 
   const allVisible = [...obligations, ...visibleRest];
 
-  // Header: "SINCE YOUR LAST VISIT" if any session-derived facts exist,
+  // Header: "YOUR RECORDED VISITS" if any session-derived facts exist,
   // else "THIS PERMISSION" (e.g. obligation on a session-less permission).
   const sessionTemplateIds = new Set([
     "coverage_context",
@@ -77,11 +87,14 @@ export function PermissionPulseCard({
     "seasonal_pattern",
   ]);
   const hasSessionFacts = facts.some((fact) => sessionTemplateIds.has(fact.templateId));
-  const header = hasSessionFacts ? "SINCE YOUR LAST VISIT" : "THIS PERMISSION";
+  const header = hasSessionFacts ? "YOUR RECORDED VISITS" : "THIS PERMISSION";
+  const nextAction = facts.find(fact => fact.severity === 'obligation' && fact.link)
+    ?? facts.find(fact => fact.severity === 'action' && fact.link);
 
   function handleTap(fact: PulseFact) {
     if (!fact.link) return;
     if (fact.link.kind === "scroll") {
+      if (fact.link.anchorId === 'outstanding-questions-section') onOpenInvestigations?.();
       document
         .getElementById(fact.link.anchorId)
         ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -113,7 +126,7 @@ export function PermissionPulseCard({
           return (
             <Tag
               key={fact.id}
-              className={`text-left text-xs font-bold leading-snug ${style.className} ${style.italic ? "italic" : ""} ${isInteractive ? "hover:opacity-80 transition-opacity" : ""}`}
+              className={`text-left text-sm font-medium leading-snug ${style.className} ${style.italic ? "italic" : ""} ${isInteractive ? "min-h-11 py-1 hover:opacity-80 transition-opacity" : ""}`}
               onClick={isInteractive ? () => handleTap(fact) : undefined}
             >
               {style.prefix}
@@ -124,12 +137,15 @@ export function PermissionPulseCard({
         {hiddenCount > 0 && !expanded && (
           <button
             onClick={() => setExpanded(true)}
-            className="mt-1 text-left text-xs font-bold text-gray-500 transition-colors hover:text-gray-700 dark:hover:text-gray-300"
+            className="mt-1 min-h-11 text-left text-xs font-bold text-gray-500 transition-colors hover:text-gray-700 dark:hover:text-gray-300"
           >
             + {hiddenCount} more
           </button>
         )}
       </div>
+      {nextAction && <button type="button" onClick={() => handleTap(nextAction)} className="mt-2 min-h-11 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-bold text-white">
+        {nextAction.severity === 'obligation' ? 'Review outstanding obligation' : nextAction.templateId === 'questions_changed' ? 'Review investigations' : 'Review open signals'}
+      </button>}
     </div>
   );
 }
