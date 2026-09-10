@@ -128,6 +128,8 @@ test('full backup has explicit photo coverage and download is not confirmed stor
   }));
   await page.goto('./settings?tab=data');
   await page.getByRole('button', { name: 'Backup', exact: true }).click();
+  const reminder = page.getByRole('heading', { name: 'Backup Recommended', exact: true });
+  await expect(reminder).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: /^Full backup, including photos/ }).click();
   const file = await download;
@@ -144,7 +146,49 @@ test('full backup has explicit photo coverage and download is not confirmed stor
   await page.screenshot({ path: info.outputPath('backup-prepared.png') });
   await page.getByRole('button', { name: 'I’ve checked an external copy' }).click();
   await expect(page.getByText(/External full copy checked by you: snapshot from/)).toBeVisible();
+  await expect(reminder).toHaveCount(0);
 });
+
+for (const kind of ['full', 'records'] as const) {
+  test(`${kind} backup check survives reopening Settings and only a confirmed full copy clears the reminder`, async ({ page }) => {
+    await seed(page);
+    await page.goto('./settings?tab=data');
+    const reminder = page.getByRole('heading', { name: 'Backup Recommended', exact: true });
+    await expect(reminder).toBeVisible();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: kind === 'full'
+      ? /^Full backup, including photos/ : 'Records only, without photos' }).click();
+    expect(await (await download).failure()).toBeNull();
+    const checkCopy = page.getByRole('button', { name: 'I’ve checked an external copy' });
+    await expect(checkCopy).toBeVisible();
+    await expect(reminder).toBeVisible();
+    await page.reload();
+    await expect(checkCopy).toBeVisible();
+
+    // A failed confirmation must keep both the reminder and the retry action.
+    await page.evaluate(() => {
+      const original = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (value: unknown, ...args: unknown[]) {
+        if (this.name === 'settings' && (value as { key?: string }).key?.startsWith('lastConfirmed')) {
+          IDBObjectStore.prototype.put = original;
+          throw new DOMException('Injected confirmation failure', 'QuotaExceededError');
+        }
+        return Reflect.apply(original, this, [value, ...args]);
+      };
+    });
+    await checkCopy.click();
+    await expect(page.getByText(/Could not record your backup confirmation/)).toBeVisible();
+    await expect(reminder).toBeVisible();
+    await checkCopy.click();
+    await expect(checkCopy).toHaveCount(0);
+    await expect(reminder).toHaveCount(kind === 'full' ? 0 : 1);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Backup & Restore', exact: true })).toBeVisible();
+    await expect(page.getByText(new RegExp(`External ${kind === 'full' ? 'full' : 'records-only'} copy checked by you: snapshot from`))).toBeVisible();
+    await expect(checkCopy).toHaveCount(0);
+    await expect(reminder).toHaveCount(kind === 'full' ? 0 : 1);
+  });
+}
 
 test('rally download and historical export dates never claim delivery', async ({ page }) => {
   await seed(page);

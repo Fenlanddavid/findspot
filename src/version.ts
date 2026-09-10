@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'Clearer visit summaries, safer backups and improved landscape interpretation.';
+export const UPDATE_NOTES = 'Backup reminders now clear after confirmation, with an easier final check.';

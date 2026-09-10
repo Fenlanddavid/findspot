@@ -29,10 +29,7 @@ import type { SignificantFind } from "./db";
 import { migrateLegacyClientStorage } from './services/clientStorage';
 import { runIntegrityAuditAfterSchemaChange } from './services/integrityAudit';
 import { reportNonFatal } from './services/diagLog';
-import {
-  getBackupReminderState,
-  type BackupReminderState,
-} from './services/backupReminder';
+import { getBackupReminderState } from './services/backupReminder';
 import {
   DiscoverIcon,
   FieldGuideIcon,
@@ -69,7 +66,7 @@ type BeforeInstallPromptEvent = Event & {
 function Shell() {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [backupReminder, setBackupReminder] = useState<BackupReminderState | null>(null);
+  const backupReminder = useLiveQuery(() => getBackupReminderState(), [], null);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true);
@@ -91,10 +88,6 @@ function Shell() {
     if (!projectId || sfWorkflow.isOpen) return;
     findResumable(projectId).then(setResumableSf).catch(() => setResumableSf(null));
   }, [projectId, sfWorkflow.isOpen]);
-
-  const checkBackupStatus = useCallback(async () => {
-    setBackupReminder(await getBackupReminderState());
-  }, []);
 
   useEffect(() => {
     ensureDefaultProject().then(async (id) => {
@@ -140,9 +133,6 @@ function Shell() {
         setIsInAppBrowser(true);
     }
 
-    // Check backup status
-    checkBackupStatus();
-
     // Check storage quota — warn if over 80% full
     const checkStorageQuota = async () => {
       try {
@@ -154,7 +144,7 @@ function Shell() {
       }
     };
     checkStorageQuota();
-  }, [checkBackupStatus]);
+  }, []);
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
@@ -192,9 +182,6 @@ function Shell() {
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
     await setSetting("backupSnoozedUntil", thirtyDaysFromNow.toISOString());
-    setBackupReminder(current => current
-      ? { ...current, level: 'none', snoozed: true }
-      : null);
   }
 
   const project = useLiveQuery(async () => (projectId ? db.projects.get(projectId) : null), [projectId]);
@@ -424,10 +411,10 @@ function Shell() {
             </div>
             <div className="flex gap-2 shrink-0">
               <button
-                onClick={() => { setBackupReminder(null); nav("/settings"); }}
+                onClick={() => nav("/settings?tab=data")}
                 className="bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
               >
-                Go to Settings →
+                Review backup →
               </button>
               {backupReminder?.level !== 'urgent' && (
                 <button

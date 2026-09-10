@@ -278,10 +278,25 @@ export default function Settings() {
     getSetting("ncmdNumber", "").then(setNcmdNumber);
     getSetting("ncmdExpiry", "").then(setNcmdExpiry);
     getSetting("membershipCardImage", null).then(setMembershipCardImage);
-    getSetting("lastFullBackupExportDate", null).then(setLastBackup);
-    getSetting("lastRecordsBackupExportDate", null).then(setLastRecordsBackup);
-    getSetting("lastConfirmedFullBackupDate", null).then(setConfirmedFullBackup);
-    getSetting("lastConfirmedRecordsBackupDate", null).then(setConfirmedRecordsBackup);
+    Promise.all([
+      getSetting<string | null>("lastFullBackupExportDate", null),
+      getSetting<string | null>("lastRecordsBackupExportDate", null),
+      getSetting<string | null>("lastConfirmedFullBackupDate", null),
+      getSetting<string | null>("lastConfirmedRecordsBackupDate", null),
+    ]).then(([full, records, confirmedFull, confirmedRecords]) => {
+      setLastBackup(full);
+      setLastRecordsBackup(records);
+      setConfirmedFullBackup(confirmedFull);
+      setConfirmedRecordsBackup(confirmedRecords);
+      // Keep the check available if the user leaves Settings to save the file.
+      const pending = ([
+        { kind: 'full' as const, snapshotAt: full, confirmedAt: confirmedFull },
+        { kind: 'records' as const, snapshotAt: records, confirmedAt: confirmedRecords },
+      ]).find(({ snapshotAt, confirmedAt }) => snapshotAt
+        && Number.isFinite(Date.parse(snapshotAt))
+        && !(confirmedAt && Date.parse(confirmedAt) >= Date.parse(snapshotAt)));
+      if (pending?.snapshotAt) setBackupToCheck({ kind: pending.kind, snapshotAt: pending.snapshotAt });
+    }).catch(error => reportNonFatal('settings', 'Backup history could not be loaded', error));
     getSetting<BackupRecoveryReport | null>("lastRestoreReport", null).then(setLastRestoreReport);
     getSetting("theme", "dark").then(setTheme);
     getSetting("detectors", ["Minelab Equinox 800", "Nokta Legend"]).then(val => {
@@ -498,6 +513,7 @@ export default function Settings() {
 
   async function confirmBackupChecked() {
     if (!backupToCheck) return;
+    setDataError(null);
     try {
       await markExternalBackupSaved(backupToCheck.snapshotAt, backupToCheck.kind);
       if (backupToCheck.kind === 'full') setConfirmedFullBackup(backupToCheck.snapshotAt);
@@ -792,6 +808,13 @@ export default function Settings() {
           <h3 className="text-sm font-black text-gray-900 dark:text-gray-100">Data actions</h3>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Save a backup first. Restore only when replacing this device’s local archive.</p>
         </div>
+        {backupToCheck && <div role="status" className="mb-4 rounded-xl border border-emerald-300 p-4 text-sm dark:border-emerald-700">
+          <p className="font-bold">{backupToCheck.kind === 'full' ? 'Full backup' : 'Records-only backup'} prepared. Check that the download finished and keep a copy outside this device.</p>
+          <p className="mt-2">{backupToCheck.kind === 'records'
+            ? 'This file does not protect your photographs. The full-backup reminder will remain.'
+            : 'Confirm below after checking your saved copy to update the backup reminder.'} FindSpot cannot verify where the browser saved your file.</p>
+          <button onClick={() => void confirmBackupChecked()} className="mt-3 min-h-11 rounded-lg bg-emerald-700 px-4 font-bold text-white">I’ve checked an external copy</button>
+        </div>}
         <button onClick={requestExportWithMedia} disabled={exportingWithMedia || exporting || mediaWarnPending || importing} className="mb-3 min-h-14 w-full rounded-xl bg-emerald-700 px-4 py-3 text-left text-sm font-black text-white disabled:opacity-60">
           {exportingWithMedia ? `Preparing full backup ${fullBackupProgress ?? 0}%…` : 'Full backup, including photos'}
           <span className="mt-1 block text-xs font-normal">ZIP file · records, photographs and attachments</span>
@@ -841,11 +864,6 @@ export default function Settings() {
         </p>
       </div>
 
-      {backupToCheck && <div role="status" className="mb-4 rounded-xl border border-emerald-300 p-4 text-sm dark:border-emerald-700">
-        <p className="font-bold">{backupToCheck.kind === 'full' ? 'Full backup' : 'Records-only backup'} prepared. Check that the download finished and keep a copy outside this device.</p>
-        <p className="mt-2">{backupToCheck.kind === 'records' ? 'This file does not protect your photographs. ' : ''}FindSpot cannot verify where the browser saved your file.</p>
-        <button onClick={() => void confirmBackupChecked()} className="mt-3 min-h-11 rounded-lg bg-emerald-700 px-4 font-bold text-white">I’ve checked an external copy</button>
-      </div>}
       <div className="mb-4 rounded-xl border border-gray-200 p-4 text-sm dark:border-gray-700">
         <p className="font-bold">Backup export history</p>
         <p className="mt-2">Full backup, including photos: {lastBackup ? `prepared ${formatBackupDate(lastBackup)}` : 'none recorded'}</p>
