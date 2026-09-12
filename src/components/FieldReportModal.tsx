@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import React, { useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -447,12 +448,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
     setGenerating(true);
     try {
       const { blob, filename } = await buildPDFBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, filename);
     } catch (e: any) {
       setPdfError("PDF generation failed: " + (e.message || e));
     } finally {

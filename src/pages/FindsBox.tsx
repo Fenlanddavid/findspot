@@ -1,3 +1,4 @@
+import { FindsMap } from '../components/FindsMap';
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -105,6 +106,27 @@ export default function FindsBox(props: { projectId: string }) {
   const filterPeriod = searchParams.get("period");
   const filterMaterial = searchParams.get("material");
   const filterType = searchParams.get("type");
+  const filterSession = searchParams.get('session');
+  const dateFrom = searchParams.get('from') ?? '';
+  const dateTo = searchParams.get('to') ?? '';
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterPermission = searchParams.get('permission');
+  const sort = searchParams.get('sort') ?? 'newest';
+  const validDate = (value: string) => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
+  const invalidDates = !validDate(dateFrom) || !validDate(dateTo) || !!(dateFrom && dateTo && dateFrom > dateTo);
+  function setParam(key: string, value: string) {
+    setSearchParams(prev => { const next = new URLSearchParams(prev); if (value) next.set(key, value); else next.delete(key); return next; }, { replace: true });
+  }
+  const visit = useLiveQuery(async () => filterSession ? pagePersistence.sessions.get(filterSession) : undefined, [filterSession]);
+  const mapView = searchParams.get('view') === 'map';
+  const selectedId = searchParams.get('selected');
+  function openRecord(id: string) {
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('selected', id); return next; }, { replace: true });
+    setOpenFindId(id);
+  }
+  function setView(view: 'gallery' | 'map') {
+    setSearchParams(prev => { const next = new URLSearchParams(prev); next.set('view', view); return next; }, { replace: true });
+  }
   const openSfParam = searchParams.get("sf");
   const openSignalParam = searchParams.get('signal');
 
@@ -215,7 +237,7 @@ export default function FindsBox(props: { projectId: string }) {
     return {
       total: finds.length,
       complete: finds.filter(f => !f.isPending).length,
-      top: finds.filter(f => !!f.isFavorite && !f.isPending).length,
+      top: finds.filter(f => !!f.isFavorite).length,
       pending: finds.filter(f => !!f.isPending).length,
       located: finds.filter(f => f.lat != null && f.lon != null).length,
     };
@@ -225,9 +247,14 @@ export default function FindsBox(props: { projectId: string }) {
     if (!finds) return undefined;
     const query = searchQuery.trim().toLowerCase();
     return finds.filter(find => {
-      if (activeFilter === "top" && (!find.isFavorite || find.isPending)) return false;
+      if (activeFilter === "top" && !find.isFavorite) return false;
       if (activeFilter === "pending" && !find.isPending) return false;
-      if (activeFilter === "all" && find.isPending) return false;
+      if (filterSession && find.sessionId !== filterSession) return false;
+      if (filterPermission && find.permissionId !== filterPermission) return false;
+      if (invalidDates) return false;
+      const date = getFindDate(find).slice(0, 10);
+      if (dateFrom && date < dateFrom) return false;
+      if (dateTo && date > dateTo) return false;
       if (filterPeriod && find.period !== filterPeriod) return false;
       if (filterMaterial && find.material !== filterMaterial) return false;
       if (filterType) {
@@ -239,12 +266,23 @@ export default function FindsBox(props: { projectId: string }) {
       }
       if (query && !searchText(find, permissionMap.get(find.permissionId)).includes(query)) return false;
       return true;
+    }).sort((a, b) => {
+      const aDate = sort === 'edited' ? a.updatedAt || getFindDate(a) : getFindDate(a);
+      const bDate = sort === 'edited' ? b.updatedAt || getFindDate(b) : getFindDate(b);
+      return (sort === 'oldest' ? aDate.localeCompare(bDate) : bDate.localeCompare(aDate)) || a.id.localeCompare(b.id);
     });
-  }, [activeFilter, filterMaterial, filterPeriod, filterType, finds, permissionMap, searchQuery]);
+  }, [activeFilter, filterMaterial, filterPeriod, filterType, filterSession, filterPermission, invalidDates, sort, dateFrom, dateTo, finds, permissionMap, searchQuery]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [activeFilter, filterMaterial, filterPeriod, filterType, searchQuery]);
+  }, [activeFilter, filterMaterial, filterPeriod, filterType, filterPermission, filterSession, dateFrom, dateTo, sort, searchQuery]);
+
+  useEffect(() => {
+    if (filteredFinds && selectedId && !filteredFinds.some(find => find.id === selectedId)) {
+      setOpenFindId(null);
+      setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('selected'); return next; }, { replace: true });
+    }
+  }, [filteredFinds, selectedId, setSearchParams]);
 
   const visibleFinds = useMemo(
     () => filteredFinds?.slice(0, visibleCount) ?? [],
@@ -264,6 +302,14 @@ export default function FindsBox(props: { projectId: string }) {
     return map;
   }, [findIds]);
 
+  function clearFilters() {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      for (const key of ['filter', 'q', 'from', 'to', 'type', 'period', 'material', 'session', 'permission']) next.delete(key);
+      return next;
+    }, { replace: true });
+  }
+
   function updateSearch(value: string) {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -280,13 +326,6 @@ export default function FindsBox(props: { projectId: string }) {
       else next.set("filter", filter);
       return next;
     }, { replace: true });
-  }
-
-  function openMapView() {
-    const next = new URLSearchParams(searchParams);
-    next.set("view", "map");
-    if (next.get("filter") === "top") next.delete("filter");
-    navigate(`/finds?${next.toString()}`);
   }
 
   function convertSignalToFind(signal: UndugSignal) {
@@ -308,20 +347,28 @@ export default function FindsBox(props: { projectId: string }) {
   const hasAnyFinds = (stats?.total ?? 0) > 0;
   const noMatches = !isLoading && hasAnyFinds && (filteredFinds?.length ?? 0) === 0;
   const emptyMain = !isLoading && !hasAnyFinds;
-  const hasFilters = !!searchQuery || activeFilter !== "all" || !!filterPeriod || !!filterMaterial || !!filterType;
+  const hasFilters = !!searchQuery || activeFilter !== "all" || !!filterPeriod || !!filterMaterial || !!filterType || !!filterSession || !!dateFrom || !!dateTo || !!filterPermission;
+  const visitName = visit ? `${permissionMap.get(visit.permissionId)?.name || 'Visit'} · ${new Date(visit.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Visit no longer available';
+  const chips = [
+    ['q', searchQuery], ['filter', activeFilter === 'top' ? 'Favourites' : activeFilter === 'pending' ? 'Finish later' : ''],
+    ['permission', filterPermission ? permissionMap.get(filterPermission)?.name || 'Unknown permission' : ''],
+    ['session', filterSession ? visitName : ''], ['period', filterPeriod], ['material', filterMaterial], ['type', filterType],
+    ['from', dateFrom ? `From ${dateFrom}` : ''], ['to', dateTo ? `To ${dateTo}` : ''],
+  ].filter((entry): entry is [string, string] => !!entry[1]);
+  const filterCount = chips.filter(([key]) => key !== 'q' && key !== 'filter').length;
   const openSignal = openSignalId ? undugSignals?.find(signal => signal.id === openSignalId) ?? null : null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-24">
-      <header className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-start">
+      <header className="relative mt-4">
         <div>
-          <h1 className="m-0 text-3xl font-black tracking-tight text-gray-950 dark:text-gray-50">Finds</h1>
+          <h1 className="m-0 pr-28 text-2xl font-semibold tracking-tight text-gray-950 dark:text-gray-50">Finds</h1>
 
           <div className="mt-3 flex flex-wrap gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 w-fit">
             <button
               type="button"
-              onClick={() => setMainTab("finds")}
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${
+              aria-pressed={mainTab === "finds"} onClick={() => setMainTab("finds")}
+              className={`min-h-11 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
                 mainTab === "finds"
                   ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-500 dark:text-gray-400"
@@ -331,8 +378,8 @@ export default function FindsBox(props: { projectId: string }) {
             </button>
             <button
               type="button"
-              onClick={() => setMainTab("significant")}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${
+              aria-pressed={mainTab === "significant"} onClick={() => setMainTab("significant")}
+              className={`flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
                 mainTab === "significant"
                   ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-500 dark:text-gray-400"
@@ -340,79 +387,42 @@ export default function FindsBox(props: { projectId: string }) {
             >
               Significant
               {(significantFinds?.length ?? 0) > 0 && (
-                <span className="rounded-full bg-red-500 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center leading-none">
+                <span className="rounded-full bg-red-500 text-white text-xs font-black w-4 h-4 flex items-center justify-center leading-none">
                   {significantFinds!.length}
                 </span>
               )}
             </button>
             <button
               type="button"
-              onClick={() => setMainTab("signals")}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${
+              aria-pressed={mainTab === "signals"} onClick={() => setMainTab("signals")}
+              className={`flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
                 mainTab === "signals"
                   ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
                   : "text-gray-500 dark:text-gray-400"
               }`}
             >
-              Un-dug
+              Un-dug signals
               {(undugSignals?.length ?? 0) > 0 && (
-                <span className="rounded-full bg-emerald-600 text-white text-3xs font-black min-w-4 h-4 px-1 flex items-center justify-center leading-none">
+                <span className="rounded-full bg-emerald-600 text-white text-xs font-black min-w-4 h-4 px-1 flex items-center justify-center leading-none">
                   {undugSignals!.length}
                 </span>
               )}
             </button>
           </div>
 
-          {mainTab === "finds" && !emptyMain && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setFilter("all")}
-                className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "all" ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950" : "border-gray-200 bg-white text-gray-600 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
-              >
-                <div className="text-base font-black leading-none">{stats?.complete ?? "--"}</div>
-                <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">All</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter("top")}
-                className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "top" ? "border-amber-500 bg-amber-500 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
-              >
-                <div className="text-base font-black leading-none">{stats?.top ?? "--"}</div>
-                <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Top</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter("pending")}
-                className={`min-h-11 rounded-xl border px-4 py-2 text-left transition-colors ${activeFilter === "pending" ? "border-amber-600 bg-amber-600 text-white" : "border-gray-200 bg-white text-gray-600 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"}`}
-              >
-                <div className="text-base font-black leading-none">{stats?.pending ?? "--"}</div>
-                <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Pending</div>
-              </button>
-              <div className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-left text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                <div className="text-base font-black leading-none">{stats?.located ?? "--"}</div>
-                <div className="mt-1 text-[9px] font-black uppercase tracking-widest opacity-70">Mapped</div>
-              </div>
-            </div>
-          )}
+
         </div>
 
         {mainTab === "finds" && !emptyMain && (
-          <div className="flex flex-wrap gap-2 sm:justify-end">
+          <div className="absolute right-0 top-0">
             <button
               type="button"
               onClick={() => navigate("/find?manual=true")}
-              className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white shadow-sm transition-colors hover:bg-emerald-500"
+              className="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-emerald-500"
             >
               Add Find
             </button>
-            <button
-              type="button"
-              onClick={openMapView}
-              className="min-h-11 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-emerald-700"
-            >
-              Map View
-            </button>
+
           </div>
         )}
       </header>
@@ -497,7 +507,7 @@ export default function FindsBox(props: { projectId: string }) {
                       <h2 className="m-0 text-sm font-black text-gray-900 transition-colors group-hover:text-emerald-600 dark:text-gray-100 dark:group-hover:text-emerald-400">
                         {signalSummary(signal)}
                       </h2>
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-3xs font-black uppercase tracking-widest text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-black uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                         Open
                       </span>
                     </div>
@@ -525,7 +535,7 @@ export default function FindsBox(props: { projectId: string }) {
       )}
 
       {mainTab === "finds" && !emptyMain && (
-        <section className="mt-5 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <section className="mt-3">
           <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-2 sm:flex-row">
             <label className="relative flex-1">
               <span className="sr-only">Search finds</span>
@@ -543,35 +553,39 @@ export default function FindsBox(props: { projectId: string }) {
             {hasFilters && (
               <button
                 type="button"
-                onClick={() => setSearchParams({}, { replace: true })}
-                className="min-h-11 rounded-xl border border-gray-200 px-4 text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 dark:border-gray-700 dark:text-gray-400"
+                onClick={clearFilters}
+                className="min-h-11 rounded-xl border border-gray-200 px-4 text-xs font-black uppercase tracking-wide text-gray-500 transition-colors hover:border-red-300 hover:text-red-600 dark:border-gray-700 dark:text-gray-400"
               >
-                Clear
+                Clear all
               </button>
             )}
           </form>
-          {(filterPeriod || filterMaterial || filterType) && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {filterPeriod && (
-                <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-                  {filterPeriod}
-                </span>
-              )}
-              {filterMaterial && (
-                <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-                  {filterMaterial}
-                </span>
-              )}
-              {filterType && (
-                <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-                  {filterType}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(['all', 'top', 'pending'] as const).map(value => <button key={value} type="button" aria-pressed={activeFilter === value} onClick={() => setFilter(value)} className={`min-h-11 rounded-xl px-2 py-2 text-sm font-medium ${activeFilter === value ? 'bg-emerald-700 text-white' : 'border border-gray-300 dark:border-gray-600'}`}>{value === 'all' ? 'All records' : value === 'top' ? 'Favourites' : 'Finish later'}</button>)}
+          </div>
+          {chips.length > 0 && <div className="mt-2 flex flex-wrap gap-2">{chips.map(([key, label]) => <button key={key} type="button" className="ui-chip" aria-label={`Remove ${label} filter`} onClick={() => setParam(key, '')}>{label} ×</button>)}</div>}
         </section>
       )}
 
+      {mainTab === 'finds' && <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="flex gap-2" aria-label="Finds view">
+          <button type="button" aria-pressed={!mapView} onClick={() => setView('gallery')} className={`min-h-11 rounded-xl border px-4 text-sm ${!mapView ? 'bg-emerald-700 text-white' : 'border-gray-300 dark:border-gray-700'}`}>Gallery</button>
+          <button type="button" aria-pressed={mapView} onClick={() => setView('map')} className={`min-h-11 rounded-xl border px-4 text-sm ${mapView ? 'bg-emerald-700 text-white' : 'border-gray-300 dark:border-gray-700'}`}>Map</button>
+        </div>
+        <button type="button" className="ui-secondary" aria-expanded={filtersOpen} aria-controls="finds-filters" onClick={() => setFiltersOpen(value => !value)}>Filters{filterCount ? ` (${filterCount})` : ''}</button>
+        <label className="flex min-w-0 items-center gap-2 text-sm">Sort <select aria-label="Sort finds" className="ui-input" value={sort} onChange={event => setParam('sort', event.target.value)}><option value="newest">Newest found</option><option value="oldest">Oldest found</option><option value="edited">Recently edited</option></select></label>
+      </div>}
+      {mainTab === 'finds' && filtersOpen && <section id="finds-filters" aria-label="Find filters" className="mt-3 grid gap-3 rounded-xl border border-gray-300 p-3 dark:border-gray-700 sm:grid-cols-2">
+        <label className="text-sm">Permission<select className="ui-input" value={filterPermission ?? ''} onChange={e => setParam('permission', e.target.value)}><option value="">All permissions</option>{permissions?.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <label className="text-sm">Period<select className="ui-input" value={filterPeriod ?? ''} onChange={e => setParam('period', e.target.value)}><option value="">All periods</option>{[...new Set(finds?.map(f => f.period))].sort().map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="text-sm">Material<select className="ui-input" value={filterMaterial ?? ''} onChange={e => setParam('material', e.target.value)}><option value="">All materials</option>{[...new Set(finds?.map(f => f.material))].sort().map(value => <option key={value}>{value}</option>)}</select></label>
+        <label className="text-sm">Type<input className="ui-input" value={filterType ?? ''} onChange={e => setParam('type', e.target.value)} /></label>
+        <label className="text-sm">Found from<input className="ui-input" type="date" value={dateFrom} onChange={e => setParam('from', e.target.value)} /></label>
+        <label className="text-sm">Found to<input className="ui-input" type="date" value={dateTo} onChange={e => setParam('to', e.target.value)} /></label>
+      </section>}
+      {mainTab === 'finds' && invalidDates && <p role="alert" className="ui-error mt-3">Enter valid dates. The end date must be on or after the start date. Open Filters to correct the range.</p>}
+      {mainTab === 'finds' && filteredFinds && <p role="status" className="ui-meta mt-3">{filteredFinds.length} {filteredFinds.length === 1 ? 'record' : 'records'}</p>}
+      {mainTab === 'finds' && mapView && filteredFinds && <FindsMap key={props.projectId} projectId={props.projectId} finds={filteredFinds} selectedId={selectedId} onOpen={openRecord} onGallery={() => setView('gallery')} />}
       {mainTab === "finds" && isLoading && (
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
@@ -594,14 +608,14 @@ export default function FindsBox(props: { projectId: string }) {
             <button
               type="button"
               onClick={() => navigate("/find?manual=true")}
-              className="min-h-11 rounded-xl bg-emerald-600 px-5 text-xs font-black uppercase tracking-widest text-white transition-colors hover:bg-emerald-500"
+              className="min-h-11 rounded-xl bg-emerald-600 px-5 text-xs font-black uppercase tracking-wide text-white transition-colors hover:bg-emerald-500"
             >
               Add Find
             </button>
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+              className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-wide text-gray-600 transition-colors hover:border-emerald-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
             >
               Home
             </button>
@@ -614,15 +628,15 @@ export default function FindsBox(props: { projectId: string }) {
           <h2 className="mb-2 text-lg font-black text-gray-900 dark:text-gray-100">No matching finds</h2>
           <button
             type="button"
-            onClick={() => setSearchParams({}, { replace: true })}
-            className="mt-3 min-h-11 rounded-xl border border-gray-200 px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:text-gray-300"
+            onClick={clearFilters}
+            className="mt-3 min-h-11 rounded-xl border border-gray-200 px-5 text-xs font-black uppercase tracking-wide text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:text-gray-300"
           >
             Clear filters
           </button>
         </div>
       )}
 
-      {mainTab === "finds" && !isLoading && !emptyMain && !noMatches && (
+      {mainTab === "finds" && !mapView && !isLoading && !emptyMain && !noMatches && (
         <>
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleFinds.map(find => {
@@ -633,8 +647,8 @@ export default function FindsBox(props: { projectId: string }) {
                 <button
                   key={find.id}
                   type="button"
-                  onClick={() => setOpenFindId(find.id)}
-                  className={`group overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:bg-gray-800 ${find.isPending ? "border-amber-300 dark:border-amber-700" : "border-gray-200 hover:border-emerald-200 dark:border-gray-700 dark:hover:border-emerald-800"}`}
+                  aria-pressed={selectedId === find.id} onClick={() => openRecord(find.id)}
+                  className={`group ${selectedId === find.id ? "ring-2 ring-blue-500" : ""} overflow-hidden rounded-2xl border bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:bg-gray-800 ${find.isPending ? "border-amber-300 dark:border-amber-700" : "border-gray-200 hover:border-emerald-200 dark:border-gray-700 dark:hover:border-emerald-800"}`}
                   aria-label={`Open ${find.objectType || "find"} ${find.findCode}`}
                 >
                   <div className="relative aspect-[4/3] bg-gray-100 dark:bg-gray-900">
@@ -645,16 +659,16 @@ export default function FindsBox(props: { projectId: string }) {
                         imgClassName="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-[10px] font-black uppercase tracking-widest text-gray-300 dark:text-gray-600">
+                      <div className="flex h-full w-full items-center justify-center text-xs font-black uppercase tracking-wide text-gray-300 dark:text-gray-600">
                         No photo
                       </div>
                     )}
                     <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-                      <span className="rounded-lg bg-black/65 px-2 py-1 font-mono text-[9px] font-bold text-white shadow-sm backdrop-blur">
+                      <span className="rounded-lg bg-black/65 px-2 py-1 font-mono text-xs font-bold text-white shadow-sm backdrop-blur">
                         {find.findCode}
                       </span>
                       {find.isPending && (
-                        <span className="rounded-lg bg-amber-500 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white shadow-sm">
+                        <span className="rounded-lg bg-amber-500 px-2 py-1 text-xs font-black uppercase tracking-wide text-white shadow-sm">
                           Pending
                         </span>
                       )}
@@ -677,11 +691,11 @@ export default function FindsBox(props: { projectId: string }) {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      <span className={`rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-widest ${periodClass}`}>
+                      <span className={`rounded-lg px-2 py-1 text-xs font-black uppercase tracking-wide ${periodClass}`}>
                         {find.period}
                       </span>
                       {find.material !== "Other" && (
-                        <span className="rounded-lg bg-gray-100 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-gray-600 dark:bg-gray-900 dark:text-gray-300">
+                        <span className="rounded-lg bg-gray-100 px-2 py-1 text-xs font-black uppercase tracking-wide text-gray-600 dark:bg-gray-900 dark:text-gray-300">
                           {find.material}
                         </span>
                       )}
@@ -697,7 +711,7 @@ export default function FindsBox(props: { projectId: string }) {
               <button
                 type="button"
                 onClick={() => setVisibleCount(count => count + PAGE_SIZE)}
-                className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-widest text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                className="min-h-11 rounded-xl border border-gray-200 bg-white px-5 text-xs font-black uppercase tracking-wide text-gray-600 transition-colors hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
               >
                 Load more
               </button>

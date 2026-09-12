@@ -1,3 +1,6 @@
+import { useRecordNavigationGuard } from '../hooks/useRecordNavigationGuard';
+import { useRecordingViewport } from '../hooks/useRecordingViewport';
+import { fixTimeIso } from '../utils/captureLocationStatus';
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -12,9 +15,6 @@ import { CoachTip, CoachTips } from "../components/CoachTips";
 import type { WorkflowState } from "../types/significantFind";
 import { ephemeralLocal, useDurableSetting } from '../services/clientStorage';
 import {
-  addFindPhotos,
-  createPhotoDraftFind,
-  discardFindDraft,
   resolveFindPermission,
   saveCompletedFind,
   savePendingFind,
@@ -273,12 +273,15 @@ export default function FindPage(props: {
 
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
-  // dbDraftId: auto-created DB record to hold photos before the user explicitly saves.
-  // Does NOT trigger the green banner or form lockout — only savedId does.
-  const [dbDraftId, setDbDraftId] = useState<string | null>(null);
-  const dbDraftIdRef = useRef<string | null>(null);
-  const committedDraftIdsRef = useRef<Set<string>>(new Set());
+  useRecordingViewport();
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [stagedPhotos, setStagedPhotos] = useState<Media[]>([]);
+  const [removedPhotoIds, setRemovedPhotoIds] = useState<string[]>([]);
+  const [processingPhoto, setProcessingPhoto] = useState(false);
+  const navigationGuard = useRecordNavigationGuard(userModified || processingPhoto || stagedPhotos.length > 0 || removedPhotoIds.length > 0, savingRef, clearDraft);
+  const retryId = useRef(uuid());
+  const returnToOrigin = () => navigate(sessionId ? `/session/${sessionId}` : currentPermissionId ? `/permission/${currentPermissionId}` : '/finds-box');
   const [isPickingLocation, setIsPickingLocation] = useState(false);
 
   // #5 — GPS capturing state
@@ -308,18 +311,6 @@ export default function FindPage(props: {
     setOpenSections(prev => ({ ...prev, [s]: !prev[s] }));
 
   const stickyPhotoRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    dbDraftIdRef.current = dbDraftId;
-  }, [dbDraftId]);
-
-  useEffect(() => {
-    return () => {
-      const draftId = dbDraftIdRef.current;
-      if (!draftId || committedDraftIdsRef.current.has(draftId)) return;
-      discardFindDraft(draftId).catch((e) => console.error("Failed to clean up abandoned photo draft", e));
-    };
-  }, []);
 
   // Load settings — uses setForm directly, not update(), to avoid triggering userModified
   useEffect(() => {
@@ -427,10 +418,10 @@ export default function FindPage(props: {
 
   const media = useLiveQuery(
     async () => {
-      const id = savedId || dbDraftId;
+      const id = savedId || props.quickId;
       return id ? pagePersistence.media.where("findId").equals(id).toArray() : [];
     },
-    [savedId, dbDraftId]
+    [savedId, props.quickId]
   );
 
   async function doGPS() {
@@ -452,7 +443,7 @@ export default function FindPage(props: {
         lat: fix.lat,
         lon: fix.lon,
         acc: fix.accuracyM,
-        locationFixAt: new Date(fix.fixTimestamp).toISOString(),
+        locationFixAt: fixTimeIso(fix.fixTimestamp),
         locationMethod: 'live_gps',
         locationFrozenAt: frozenAt,
         osGridRef: grid || prev.osGridRef,
@@ -471,8 +462,9 @@ export default function FindPage(props: {
   }
 
   function resetForm() {
+    retryId.current = uuid();
+    setStagedPhotos([]); setRemovedPhotoIds([]);
     setSavedId(null);
-    setDbDraftId(null);
     setForm({ ...makeInitialForm(), findCode: makeFindCode() });
     setUserModified(false);
     clearDraft();
@@ -505,12 +497,14 @@ export default function FindPage(props: {
   }
 
   async function saveFind(): Promise<string | null> {
+    if (savingRef.current || processingPhoto) return null;
+    savingRef.current = true;
     setError(null);
     setSaving(true);
     try {
       const trimmedName = locationName.trim() || "No Location";
-      const id = savedId || dbDraftId || props.quickId || uuid();
-      const isEditMode = !!(savedId || dbDraftId || props.quickId);
+      const id = savedId || props.quickId || retryId.current;
+      const isEditMode = !!(savedId || props.quickId);
       const now = new Date().toISOString();
       const targetPermissionId = await resolvePermission(trimmedName, now, currentPermissionId);
 
@@ -568,7 +562,9 @@ export default function FindPage(props: {
         existing: !!(props.quickId || isEditMode),
         createdAt: now,
         sourceSignalId: props.sourceSignalId,
+        photos: { upsert: stagedPhotos.map(photo => ({ ...photo, findId: id })), removeIds: removedPhotoIds },
       });
+      setStagedPhotos([]); setRemovedPhotoIds([]);
 
       setSetting("lastPeriod", form.period);
       setSetting("lastMaterial", form.material);
@@ -579,7 +575,8 @@ export default function FindPage(props: {
 
       clearDraft();
       setUserModified(false);
-      committedDraftIdsRef.current.add(id);
+      navigationGuard.committed();
+      savingRef.current = false;
       setSavedId(id);
 
       const isFirstFind = !hasRecordedFindBefore;
@@ -591,7 +588,7 @@ export default function FindPage(props: {
       }
 
       if (props.quickId) {
-        setTimeout(() => navigate("/"), 500);
+        returnToOrigin();
       }
       return id;
     } catch (e: any) {
@@ -602,17 +599,21 @@ export default function FindPage(props: {
       }
       return null;
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
   // #1 — "Finish Later": save as pending find and return to home
   async function saveAsPending() {
+    if (savingRef.current || processingPhoto) return;
+    savingRef.current = true;
+    setError(null);
     setSaving(true);
     try {
       const trimmedName = locationName.trim() || "No Location";
-      // If a photo draft already exists, update it rather than creating a duplicate
-      const id = dbDraftId || uuid();
+      // Retries use the same identity; the transaction keeps failed writes atomic.
+      const id = props.quickId || retryId.current;
       const now = new Date().toISOString();
       const targetPermissionId = await resolvePermission(trimmedName, now, currentPermissionId);
 
@@ -620,7 +621,7 @@ export default function FindPage(props: {
         ? new Date(`${form.foundDate}T${form.foundTime || "00:00"}`).toISOString()
         : undefined;
 
-      const clubDayAttribution = dbDraftId ? {} : await getClubDayAttribution(targetPermissionId);
+      const clubDayAttribution = props.quickId ? {} : await getClubDayAttribution(targetPermissionId);
 
       const pendingData: Omit<Find, 'createdAt'> = {
         id,
@@ -665,133 +666,40 @@ export default function FindPage(props: {
         updatedAt: now,
       };
 
-      await savePendingFind(pendingData, { existing: !!dbDraftId, createdAt: now });
+      await savePendingFind(pendingData, { existing: !!props.quickId, createdAt: now, photos: { upsert: stagedPhotos.map(photo => ({ ...photo, findId: id })), removeIds: removedPhotoIds } });
+      setStagedPhotos([]); setRemovedPhotoIds([]); setUserModified(false);
 
       if (navigator.vibrate) navigator.vibrate([50]);
-      committedDraftIdsRef.current.add(id);
+      navigationGuard.committed();
+      savingRef.current = false;
       clearDraft();
-      navigate("/");
+      returnToOrigin();
     } catch (e: any) {
       setError(e?.message ?? "Save failed");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
 
-  // Creates a minimal pending DB record solely to anchor photos, without triggering
-  // the saved state or locking the form. Used by addPhotos when no record exists yet.
-  async function saveDraftForPhoto(): Promise<string | null> {
+  // Photos stay in the draft until the record and media can commit together.
+  async function addPhotos(files: FileList | null, photoType?: Media['photoType'], replaceId?: string) {
+    if (!files?.length || savingRef.current || processingPhoto) return;
+    const selected = Array.from(files);
+    setProcessingPhoto(true); setError(null);
     try {
-      const trimmedName = locationName.trim() || "No Location";
-      const id = uuid();
-      const now = new Date().toISOString();
-      const permId = await resolvePermission(trimmedName, now, currentPermissionId);
-      const clubDayAttribution = await getClubDayAttribution(permId);
-      await createPhotoDraftFind({
-        id,
-        projectId: props.projectId,
-        permissionId: permId,
-        ...clubDayAttribution,
-        fieldId,
-        sessionId,
-        findCode: form.findCode.trim() || makeFindCode(),
-        objectType: form.objectType.trim() || "",
-        findCategory: form.findCategory || undefined,
-        coinType: form.coinType.trim(),
-        coinDenomination: form.coinDenomination.trim(),
-        coinSpink: form.coinSpink.trim() || undefined,
-        ruler: form.ruler.trim(),
-        mint: form.mint.trim() || undefined,
-        lat: form.lat, lon: form.lon, gpsAccuracyM: form.acc,
-        locationFixAt: form.locationFixAt,
-        locationMethod: form.locationMethod,
-        locationFrozenAt: form.locationFrozenAt,
-        osGridRef: form.osGridRef, w3w: "",
-        period: form.period, material: form.material,
-        weightG: null, widthMm: null, heightMm: null, depthMm: null,
-        detector: undefined, targetId: undefined, depthCm: undefined,
-        decoration: "", completeness: form.completeness, findContext: "",
-        dateRange: undefined, storageLocation: "",
-        notes: form.notes.trim(),
-        isPending: true,
-        createdAt: now, updatedAt: now,
-      });
-      setDbDraftId(id);
-      return id;
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to prepare photo record");
-      return null;
-    }
+      const items = await Promise.all(selected.map(async file => ({
+        id: uuid(), projectId: props.projectId, findId: retryId.current, type: 'photo' as const,
+        photoType: photoType || 'other' as const, filename: file.name, mime: file.type,
+        blob: await fileToBlob(file), caption: '', scalePresent: false, createdAt: new Date().toISOString(),
+      })));
+      if (replaceId) setRemovedPhotoIds(ids => [...ids, replaceId]);
+      setStagedPhotos(rows => [...rows.filter(row => row.id !== replaceId), ...items]);
+      setUserModified(true);
+    } catch { setError('Could not prepare the photo. Your previous selection is still here; try again.'); }
+    finally { setProcessingPhoto(false); }
   }
-
-  // #4 — photos no longer require a prior explicit save
-  async function addPhotos(files: FileList | null, photoType?: Media["photoType"]) {
-    if (!files || files.length === 0) return;
-    setError(null);
-    try {
-      let targetId = savedId || dbDraftId;
-      if (!targetId) {
-        targetId = await saveDraftForPhoto();
-        if (!targetId) return;
-      }
-
-      const now = new Date().toISOString();
-      const items: Media[] = [];
-
-      for (const f of Array.from(files)) {
-        const blob = await fileToBlob(f);
-        items.push({
-          id: uuid(),
-          projectId: props.projectId,
-          findId: targetId,
-          type: "photo",
-          photoType: photoType || "other",
-          filename: f.name,
-          mime: f.type || "application/octet-stream",
-          blob,
-          caption: "",
-          scalePresent: false,
-          createdAt: now,
-        });
-      }
-
-      await addFindPhotos(items);
-    } catch (e: any) {
-      if (e?.name === 'QuotaExceededError' || e?.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-        setError("Device storage full — go to Settings to back up and free space.");
-      } else {
-        setError(e?.message ?? "Photo add failed");
-      }
-    }
-  }
-
-  function PhotoThumb(props: { mediaId: string; filename: string; photoType?: string }) {
-    const [media, setMedia] = useState<Media | null>(null);
-
-    useEffect(() => {
-      let active = true;
-      pagePersistence.media.get(props.mediaId).then(m => {
-        if (active && m) setMedia(m);
-      });
-      return () => { active = false; };
-    }, [props.mediaId]);
-
-    if (!media) return <div className="w-full h-32 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-lg" />;
-
-    return (
-      <div className="relative group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden aspect-square">
-        <ScaledImage media={media} imgClassName="object-cover" className="w-full h-full" />
-        <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[10px] truncate absolute bottom-0 inset-x-0 z-10 flex justify-between items-center">
-          <span>{props.filename}</span>
-          {media.photoType && (
-            <span className={`px-1 rounded uppercase text-[8px] font-bold ${media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-              {media.photoType === 'in-situ' ? 'In Situ' : media.photoType === 'cleaned' ? 'Cleaned' : media.photoType}
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const displayPhotos = [...(media ?? []).filter(row => !removedPhotoIds.includes(row.id)), ...stagedPhotos];
 
   // #5 — GPS status line derived from current accuracy
   const gpsStatus = useMemo(() => {
@@ -842,7 +750,7 @@ export default function FindPage(props: {
     props.onSignificantFind?.({
       permissionId: currentPermissionId,
       sessionId,
-      linkedFindId: savedId || dbDraftId || props.quickId || null,
+      linkedFindId: savedId || props.quickId || null,
       lat: form.lat,
       lon: form.lon,
       gpsAccuracyM: form.acc,
@@ -1020,7 +928,7 @@ export default function FindPage(props: {
   );
 
   return (
-    <div className="grid gap-6 max-w-4xl mx-auto pb-8 sm:pb-[calc(8rem+env(safe-area-inset-bottom))] scroll-pb-[calc(10rem+env(safe-area-inset-bottom))]">
+    <div className="record-form grid gap-6 max-w-4xl mx-auto scroll-pb-[calc(10rem+env(safe-area-inset-bottom))]">
       <CoachTips
         storageKey={FIND_HELPERS_SEEN_KEY}
         tips={findCoachTips}
@@ -1036,6 +944,7 @@ export default function FindPage(props: {
           setFindCoachStep(index);
         }}
       />
+      {navigationGuard.dialog}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 px-1">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
@@ -1052,7 +961,7 @@ export default function FindPage(props: {
             </button>
           )}
           <button
-            onClick={() => navigate("/finds")}
+            onClick={() => navigate("/finds-box")}
             className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all text-sm"
           >
             Open All Finds
@@ -1196,7 +1105,7 @@ export default function FindPage(props: {
               </button>
             )}
             <button
-              onClick={() => navigate("/finds")}
+              onClick={() => navigate("/finds-box")}
               className="bg-white text-emerald-700 hover:bg-emerald-50 px-4 py-2 rounded-xl font-bold text-sm transition-colors shadow-sm"
             >
               Open Finds
@@ -1620,32 +1529,37 @@ export default function FindPage(props: {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-100">
                 <span>In Situ Photo</span>
-                <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "in-situ")} className="hidden" />
+                <input type="file" accept="image/*" capture="environment" disabled={saving || processingPhoto} onChange={(e) => { void addPhotos(e.target.files, "in-situ"); e.target.value = ""; }} className="sr-only" />
               </label>
               <label className="px-3 py-3 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer flex flex-col items-center justify-center gap-1 text-center bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 hover:bg-blue-100">
                 <span>Cleaned Photo</span>
-                <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "cleaned")} className="hidden" />
+                <input type="file" accept="image/*" capture="environment" disabled={saving || processingPhoto} onChange={(e) => { void addPhotos(e.target.files, "cleaned"); e.target.value = ""; }} className="sr-only" />
               </label>
             </div>
 
             <div className="flex gap-2">
               <label className="flex-1 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-gray-700 dark:text-gray-200">
                 Upload Files
-                <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} className="hidden" />
+                <input type="file" accept="image/*" multiple disabled={saving || processingPhoto} onChange={(e) => { void addPhotos(e.target.files); e.target.value = ""; }} className="sr-only" />
               </label>
             </div>
           </div>
 
-          {(!media || media.length === 0) && (
+          {(displayPhotos.length === 0) && (
             <div className="text-center py-6 text-sm border border-dashed border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50/60 dark:bg-gray-900/30">
               <p className="font-bold text-gray-500 dark:text-gray-400">No photos yet</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Add an in situ photo first, then a cleaned photo when available.</p>
             </div>
           )}
 
-          {media && media.length > 0 && (
+          {displayPhotos.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
-              {media.map(m => <PhotoThumb key={m.id} mediaId={m.id} filename={m.filename} />)}
+              {displayPhotos.map(m => <div key={m.id} className="min-w-0 rounded-xl border border-gray-300 p-2 dark:border-gray-700">
+                <ScaledImage media={m} className="h-28 w-full" imgClassName="object-contain" />
+                <p className="ui-meta break-words">{stagedPhotos.includes(m) ? 'Photo ready · not yet saved' : m.filename}</p>
+                <label className="ui-secondary mt-2 block cursor-pointer">Replace / Retake<input aria-label={`Replace ${m.filename}`} type="file" accept="image/*" capture="environment" disabled={saving || processingPhoto} onChange={e => { void addPhotos(e.target.files, m.photoType, m.id); e.target.value = ''; }} className="sr-only" /></label>
+                <button type="button" className="ui-danger mt-2 w-full" disabled={saving || processingPhoto} onClick={() => { setStagedPhotos(rows => rows.filter(row => row.id !== m.id)); setRemovedPhotoIds(ids => [...ids, m.id]); setUserModified(true); }}>Remove photo</button>
+              </div>)}
             </div>
           )}
         </div>
@@ -1657,10 +1571,10 @@ export default function FindPage(props: {
         </div>
       )}
 
-      {/* #2 — Sticky bottom save bar */}
-      <div className={`relative sm:fixed sm:bottom-0 sm:left-0 sm:right-0 z-30 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-gray-200 dark:border-gray-700 sm:border-x-0 sm:border-b-0 rounded-2xl sm:rounded-none px-3 sm:px-4 pt-2 sm:pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] ${findCoachActive && findCoachStep === 3 ? "ring-4 ring-purple-300/30" : ""}`}>
-        <div className="basis-full min-w-0 flex items-center justify-between gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
-          <span className="truncate">{saveBarContext}</span>
+      {/* Save area follows the visible viewport and stays above primary navigation. */}
+      <div className={`record-save-bar fixed inset-x-0 z-40 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border border-gray-200 dark:border-gray-700 sm:border-x-0 sm:border-b-0 rounded-2xl sm:rounded-none px-3 sm:px-4 pt-2 sm:pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex flex-wrap sm:flex-nowrap gap-2 sm:gap-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] ${findCoachActive && findCoachStep === 3 ? "ring-4 ring-purple-300/30" : ""}`}>
+        <div className="basis-full min-w-0 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+          <span className="break-words">{saveBarContext}</span>
           {gpsStatus && <span className={`shrink-0 ${gpsStatus.color}`}>{gpsStatus.label}</span>}
         </div>
         {/* Quick photo shortcut — always active (#4) */}
@@ -1671,21 +1585,11 @@ export default function FindPage(props: {
             type="file"
             accept="image/*"
             capture="environment"
-            onChange={(e) => addPhotos(e.target.files, "in-situ")}
-            className="hidden"
+            disabled={saving || processingPhoto} onChange={(e) => { void addPhotos(e.target.files, "in-situ"); e.target.value = ""; }}
+            className="sr-only"
           />
         </label>
 
-        {props.onSignificantFind && (
-          <button
-            type="button"
-            onClick={openSignificantFindFromForm}
-            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl font-bold text-sm transition-all shrink-0 bg-amber-50 dark:bg-amber-950/30 border-2 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40"
-          >
-            <span className="hidden sm:inline">Significant Find</span>
-            <span className="sm:hidden">Significant</span>
-          </button>
-        )}
 
         {gpsCapturing && !savedId && (
           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold absolute -top-6 left-0 right-0 text-center bg-amber-50 dark:bg-amber-900/30 py-1">
@@ -1697,22 +1601,23 @@ export default function FindPage(props: {
         {isQuick && !savedId && (
           <button
             onClick={saveAsPending}
-            disabled={saving}
+            disabled={saving || processingPhoto}
             className="px-3 sm:px-4 py-3 rounded-xl font-bold text-sm bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all shrink-0 disabled:opacity-50"
           >
             Finish Later
           </button>
         )}
 
+        {error && <p role="alert" className="ui-error basis-full">{error} Your draft is still here. Please try again.</p>}
         {/* Primary save button */}
         <button
           onClick={saveFind}
-          disabled={saving}
+          disabled={saving || processingPhoto}
           className={`min-w-[9rem] flex-1 px-4 sm:px-6 py-3 rounded-xl font-bold text-base shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:transform-none ${
             savedId ? "bg-green-600 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"
           }`}
         >
-          {saving ? "Saving..." : savedId ? "Saved" : "Save Find"}
+          {saving ? "Saving..." : processingPhoto ? "Preparing photo…" : savedId && !userModified && !stagedPhotos.length && !removedPhotoIds.length ? "Saved" : "Save Find"}
         </button>
       </div>
 

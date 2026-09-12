@@ -66,13 +66,16 @@ export function ActiveSessionShellHeader(props: {
           <button type="button" onClick={props.onFinish} className="min-h-11 rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2 text-2xs font-black uppercase tracking-wider text-red-200">Finish</button>
         </div>
         {status.critical && <p className={`mt-1.5 whitespace-normal text-sm font-bold leading-snug ${status.tone}`}>{status.critical}</p>}
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs font-bold text-gray-300" aria-label="Tracking details">
+        <details open={status.critical || !isOnline ? true : undefined} className="mt-1 text-sm text-gray-300">
+          <summary className="min-h-11 cursor-pointer py-2 font-medium">Location and recording status</summary>
+          <div className="flex flex-wrap gap-x-3 gap-y-1" aria-label="Tracking details">
           {(status.label === 'Session active' ? status.secondary.slice(1) : status.secondary).map(detail => <span key={detail}>{detail}</span>)}
           <span>{isOnline ? 'Online' : 'Offline'}</span>
-        </div>
-        <div className="mt-1.5 flex min-w-0 items-baseline gap-2">
-          <p className="min-w-0 flex-1 truncate text-base font-black">{props.permissionName}{props.fieldName ? <span className="font-bold text-gray-400"> · {props.fieldName}</span> : null}</p>
-          <p className="shrink-0 text-2xs font-bold text-gray-400">{props.durationText} · {props.findCount} find{props.findCount === 1 ? '' : 's'}{props.pendingCount > 0 ? ` · ${props.pendingCount} pending` : ''}</p>
+          </div>
+        </details>
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-2">
+          <p className="min-w-0 flex-1 break-words text-base font-bold">{props.permissionName}{props.fieldName ? <span className="font-bold text-gray-400"> · {props.fieldName}</span> : null}</p>
+          <p className="text-sm font-medium text-gray-300">{props.durationText} · {props.findCount} find{props.findCount === 1 ? '' : 's'}{props.pendingCount > 0 ? ` · ${props.pendingCount} pending` : ''}</p>
         </div>
         {props.boundaryStatus && props.boundaryStatus.kind !== 'inside' && <p className={`mt-1 text-sm font-bold ${props.boundaryStatus.kind === 'outside' ? 'text-red-300' : props.boundaryStatus.kind === 'near' ? 'text-amber-300' : 'text-gray-300'}`}>{props.boundaryStatus.label}</p>}
         {showMenu && <div className="absolute right-20 top-[calc(3.5rem+env(safe-area-inset-top))] z-[130] w-52 rounded-xl border border-white/15 bg-gray-950 p-2 shadow-2xl">

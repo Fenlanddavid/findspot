@@ -598,9 +598,12 @@ test("deleting a pending find removes attached media", async ({ page }) => {
 
   await page.goto("./pending");
   await expect(page.getByText("REG-PENDING")).toBeVisible();
-  await page.getByRole("button", { name: "Delete" }).click();
-  await page.getByRole("button", { name: "Yes" }).click();
-  await expect(page.getByText("Queue is empty")).toBeVisible();
+  await page.getByRole('button', { name: /Open.*REG-PENDING/ }).click();
+  await page.getByRole('button', { name: 'Finish record', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete Find', exact: true }).click();
+  await page.getByRole("button", { name: "Yes", exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Open.*REG-PENDING/ })).toHaveCount(0);
 
   const [finds, media] = await Promise.all([
     readIndexedDbStore(page, "finds"),
@@ -838,7 +841,7 @@ test("scheduled boundary stays visible and an overlapping target remains tappabl
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
   await page.getByTestId("fieldguide-mobile-sheet-handle").click({ position: { x: 315, y: 28 } });
-  await expect(page.getByTestId("fieldguide-mobile-sheet")).toHaveClass(/max-h-\[136px\]/);
+  await expect(page.getByRole("button", { name: "Expand landscape panel" })).toHaveAttribute("aria-expanded", "false");
   await page.waitForTimeout(400);
   // Select a rendered part of the monument away from the target hit area.
   await page.mouse.click(bounds!.x + bounds!.width / 2 + 60, bounds!.y + bounds!.height / 2);
@@ -847,7 +850,7 @@ test("scheduled boundary stays visible and an overlapping target remains tappabl
   // Collapse the legal card, then tap the target where it overlaps the same
   // monument. The target must win the interaction-priority decision.
   await page.getByTestId("fieldguide-mobile-sheet-handle").click({ position: { x: 315, y: 28 } });
-  await expect(page.getByTestId("fieldguide-mobile-sheet")).toHaveClass(/max-h-\[136px\]/);
+  await expect(page.getByRole("button", { name: "Expand landscape panel" })).toHaveAttribute("aria-expanded", "false");
   await page.waitForTimeout(400);
   await page.getByRole("button", { name: "Open protected target", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Regression Scheduled Barrow", exact: true })).toHaveCount(0);
@@ -884,6 +887,9 @@ test("field guide mobile sheet cannot scroll or rubber-band the page behind it",
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
   await expect(page.getByTestId("fieldguide-mobile-sheet-handle")).toHaveCSS("touch-action", "none");
+  await expect(page.getByTestId("fieldguide-mobile-sheet-scroll")).toBeHidden();
+  await page.getByRole("button", { name: "Expand landscape panel" }).click();
+  await expect(page.getByTestId("fieldguide-mobile-sheet-scroll")).toBeVisible();
   await expect(page.getByTestId("fieldguide-mobile-sheet-scroll")).toHaveCSS("overscroll-behavior", "contain");
 
   await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Home" }).click();

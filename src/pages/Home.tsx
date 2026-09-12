@@ -251,13 +251,13 @@ export default function Home(props: {
       { label: 'Scan with Field Guide', mobileLabel: 'Field Guide',  action: props.goFieldGuide },
       { label: 'Discover Rallies',     mobileLabel: 'Rallies',     action: () => nav('/discover') },
     ] : isEstablished ? [
-      backupNeeded   ? { label: 'Back Up Your Data',   mobileLabel: 'Back Up',       action: () => nav('/settings') } : null,
-      nameNotSet     ? { label: 'Set Your Name',        mobileLabel: 'Set Name',      action: () => nav('/settings') } : null,
+      backupNeeded   ? { label: 'Back Up Your Data',   mobileLabel: 'Back Up',       action: () => nav('/settings?tab=data') } : null,
+      nameNotSet     ? { label: 'Set Your Name',        mobileLabel: 'Set Name',      action: () => nav('/settings?tab=profile') } : null,
       permsWithoutBoundary.length > 0
                      ? { label: 'Add a Field Boundary', mobileLabel: 'Add Boundary',  action: () => nav(`/permission/${permsWithoutBoundary[0].id}`) } : null,
       dominantPeriod ? { label: `View ${dominantPeriod} Finds`, mobileLabel: `${dominantPeriod} Finds`, action: () => props.goFindsWithFilter(`period=${dominantPeriod}`) } : null,
       totalFinds >= 10
-                     ? { label: 'Export to CSV',        mobileLabel: 'Export CSV',    action: () => nav('/settings') } : null,
+                     ? { label: 'Export to CSV',        mobileLabel: 'Export CSV',    action: () => nav('/settings?tab=data') } : null,
       realPerms.length > 0
                      ? { label: 'Share a Permission',   mobileLabel: 'Share',         action: () => setShowClubRallyModal(true) } : null,
       { label: 'Discover Rallies',     mobileLabel: 'Rallies', action: () => nav('/discover') },
@@ -344,7 +344,7 @@ export default function Home(props: {
         {contextualBackup?.level === 'recommended' && !privacyExpanded && (
           <button
             type="button"
-            onClick={() => nav('/settings')}
+            onClick={() => nav('/settings?tab=data')}
             className="shrink-0 rounded-full border border-teal-700/40 px-2 py-1 text-2xs font-black uppercase tracking-wide text-teal-700 dark:text-teal-300"
           >
             Back up
@@ -381,7 +381,7 @@ export default function Home(props: {
               { label: "Save permission", detail: "Add land details.", action: props.goPermission, active: true },
               { label: "Scan land", detail: "Read the area.", action: props.goFieldGuide, active: false },
               { label: "Record find", detail: "Start a find record.", action: () => props.goFind(), active: false },
-              { label: "Back up", detail: "Protect local data.", action: () => nav('/settings'), active: false },
+              { label: "Back up", detail: "Protect local data.", action: () => nav('/settings?tab=data'), active: false },
             ].map((item, index) => (
               <button
                 key={item.label}
@@ -506,7 +506,7 @@ export default function Home(props: {
       ) : contextualBackup && (contextualBackup.level === 'important' || contextualBackup.level === 'urgent') ? (
         <button
           type="button"
-          onClick={() => nav('/settings')}
+          onClick={() => nav('/settings?tab=data')}
           className={`flex w-full items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left ${
             contextualBackup.level === 'urgent'
               ? 'border-red-400 bg-red-50 dark:border-red-800 dark:bg-red-900/15'

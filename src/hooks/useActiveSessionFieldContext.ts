@@ -35,10 +35,10 @@ export function useActiveSessionFieldContext(params: {
     const point = (params.tracks ?? []).flatMap(track => track.points ?? [])
       .filter(candidate => Number.isFinite(candidate.lat) && Number.isFinite(candidate.lon))
       .sort((left, right) => left.timestamp - right.timestamp).at(-1);
-    return point ? { lat: point.lat, lon: point.lon, accuracyM: point.accuracy ?? null, headingDegrees: point.headingDegrees ?? null } : null;
+    return point ? { lat: point.lat, lon: point.lon, accuracyM: point.accuracy ?? null, headingDegrees: point.headingDegrees ?? null, fixTimestamp: point.timestamp, captureMethod: 'session_track' } : null;
   }, [params.tracks]);
   const liveLocation: FieldLocation | null = params.trackingPoint
-    ? { lat: params.trackingPoint.lat, lon: params.trackingPoint.lon, accuracyM: params.trackingPoint.accuracyM, headingDegrees: params.trackingPoint.headingDegrees }
+    ? { lat: params.trackingPoint.lat, lon: params.trackingPoint.lon, accuracyM: params.trackingPoint.accuracyM, headingDegrees: params.trackingPoint.headingDegrees, fixTimestamp: params.trackingPoint.timestamp, captureMethod: 'session_track' }
     : params.manualLocation ?? (params.trackFallbackEnabled ? latestTrackLocation : null);
   const markers = useMemo(() => [
     ...(params.finds ?? []).flatMap<SessionMapMarker>(find => find.lat != null && find.lon != null ? [{ id: find.id, kind: 'find', lat: find.lat, lon: find.lon }] : []),

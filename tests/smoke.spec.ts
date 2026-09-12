@@ -219,22 +219,22 @@ test("active sessions use the demand-mounted four-destination workspace", async 
   await expect(page.getByRole('navigation', { name: 'Detecting workspace' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
-  await expect(page.getByRole('button', { name: 'Add full details' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Add more details' })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(addFind).toBeFocused();
   await addFind.click();
   const objectType = page.getByPlaceholder('e.g. buckle, coin, button');
   await objectType.focus();
   await page.setViewportSize({ width: 320, height: 420 });
-  const saveFind = page.getByRole('button', { name: 'Save find' });
+  const saveFind = page.getByRole('button', { name: 'Save & finish later' });
   await saveFind.scrollIntoViewIfNeeded();
   const saveBounds = await saveFind.boundingBox();
   expect(saveBounds && saveBounds.x >= 0 && saveBounds.x + saveBounds.width <= 320).toBe(true);
   await page.evaluate(() => { document.documentElement.style.fontSize = '20px'; });
-  await expect(page.getByRole('button', { name: 'Finish later' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save & finish later' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
-  const finishLater = page.getByRole('button', { name: 'Finish later' });
+  const finishLater = page.getByRole('button', { name: 'Save & finish later' });
   const finishBounds = await finishLater.boundingBox();
   expect(finishBounds?.height).toBeGreaterThanOrEqual(44);
   await page.setViewportSize({ width: 844, height: 390 });
@@ -327,6 +327,8 @@ test("the session Guide shell keeps authoritative finish reachable", async ({ pa
 });
 
 test("V5 browser tracking pauses, resumes, recovers after reload and keeps local actions offline", async ({ page, context }) => {
+  // This journey includes two tracking starts, reload recovery and an offline round trip.
+  test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./");
   await expect(page.getByText("Local-first storage", { exact: false })).toBeVisible();
@@ -420,7 +422,7 @@ test("V5 browser tracking pauses, resumes, recovers after reload and keeps local
   await context.setOffline(false);
   await page.goto("./");
   await expect(page.getByText("Detecting now")).toBeVisible();
-  await page.getByRole("button", { name: "Resume" }).click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
   await expect(page).toHaveURL(/session\/tracking-lifecycle-session$/);
   await expect(page.getByText(/Trail paused/)).toBeVisible();
   await expect(visitConditions.getByText("Pasture · Stubble", { exact: true })).toBeVisible();

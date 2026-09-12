@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -25,14 +26,7 @@ export default function LandAccess() {
   }
 
   function downloadAgreement() {
-    const url = URL.createObjectURL(new Blob([LAND_ACCESS_AGREEMENT_TEMPLATE], { type: 'text/plain;charset=utf-8' }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = LAND_ACCESS_AGREEMENT_FILENAME;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    triggerDownload(new Blob([LAND_ACCESS_AGREEMENT_TEMPLATE], { type: 'text/plain;charset=utf-8' }), LAND_ACCESS_AGREEMENT_FILENAME);
   }
 
   return (

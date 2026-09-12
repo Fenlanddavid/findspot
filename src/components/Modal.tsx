@@ -1,4 +1,7 @@
 import React, { useEffect, useId, useRef } from "react";
+import { useDialogScrollLock } from '../hooks/useDialogScrollLock';
+
+const dialogStack: HTMLElement[] = [];
 
 export interface ModalProps {
   title: React.ReactNode;
@@ -11,16 +14,21 @@ export interface ModalProps {
 export default function Modal(props: ModalProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(props.onClose);
+  onCloseRef.current = props.onClose;
+  useDialogScrollLock();
 
   useEffect(() => {
     const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
+    if (panel) dialogStack.push(panel);
     const focusableSelector = [
       "a[href]",
       "button:not([disabled])",
       "textarea:not([disabled])",
       "input:not([disabled])",
       "select:not([disabled])",
+      "summary",
       "[tabindex]:not([tabindex='-1'])",
     ].join(",");
 
@@ -31,8 +39,10 @@ export default function Modal(props: ModalProps) {
     };
 
     const handler = (e: KeyboardEvent) => {
+      if (dialogStack.at(-1) !== panel) return;
       if (e.key === "Escape") {
-        props.onClose();
+        e.preventDefault();
+        onCloseRef.current();
         return;
       }
 
@@ -61,9 +71,10 @@ export default function Modal(props: ModalProps) {
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener("keydown", handler);
+      if (panel) dialogStack.splice(dialogStack.indexOf(panel), 1);
       previousActive?.focus();
     };
-  }, [props.onClose]);
+  }, []);
 
   if (props.fullScreen) {
     return (
@@ -80,7 +91,7 @@ export default function Modal(props: ModalProps) {
             <button 
               onClick={props.onClose} 
               aria-label="Close dialog"
-              className="p-2 bg-gray-100 dark:bg-gray-800 hover:bg-red-500 hover:text-white rounded-full transition-all text-gray-500 shadow-sm"
+              className="min-h-11 min-w-11 p-2 bg-gray-100 dark:bg-gray-800 hover:bg-red-500 hover:text-white rounded-full transition-all text-gray-500 shadow-sm"
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -108,21 +119,21 @@ export default function Modal(props: ModalProps) {
           <>
             <div className="flex justify-between items-center gap-2 mb-2">
               <h2 id={titleId} className="m-0 text-xl font-bold tracking-[0.3px] text-gray-700 dark:text-gray-200 truncate">{props.title}</h2>
-              <button onClick={props.onClose} aria-label="Close dialog" className="shrink-0 p-2 rounded-xl transition-all duration-[140ms] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.08] active:bg-gray-200 dark:active:bg-white/[0.05] active:scale-95">
+              <button onClick={props.onClose} aria-label="Close dialog" className="min-h-11 min-w-11 shrink-0 p-2 rounded-xl transition-all duration-[140ms] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.08] active:bg-gray-200 dark:active:bg-white/[0.05] active:scale-95">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
                 </svg>
               </button>
             </div>
-            <div className="flex items-center gap-3 flex-nowrap mb-2">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
               {props.headerActions}
             </div>
           </>
         ) : (
           <div className="flex justify-between gap-2 items-start mb-4">
             <h2 id={titleId} className="m-0 text-xl font-bold tracking-[0.3px] text-gray-700 dark:text-gray-200 break-words">{props.title}</h2>
-            <button onClick={props.onClose} aria-label="Close dialog" className="shrink-0 mt-0.5 p-2 rounded-xl transition-all duration-[140ms] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.08] active:bg-gray-200 dark:active:bg-white/[0.05] active:scale-95">
+            <button onClick={props.onClose} aria-label="Close dialog" className="min-h-11 min-w-11 shrink-0 mt-0.5 p-2 rounded-xl transition-all duration-[140ms] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/[0.08] active:bg-gray-200 dark:active:bg-white/[0.05] active:scale-95">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>

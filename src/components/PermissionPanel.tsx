@@ -153,7 +153,7 @@ export function PermissionPanel(props: {
                     onClick={props.onTogglePermissionCoverage}
                     className={`mt-2 w-full py-2 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 border-2 ${props.showPermissionCoverage ? 'bg-orange-600 border-orange-600 text-white shadow-lg' : 'bg-orange-50 dark:bg-orange-900/20 border-orange-100 dark:border-orange-800 text-orange-700 dark:text-orange-400 hover:border-orange-500'}`}
                 >
-                    🧭 {props.showPermissionCoverage ? 'Coverage Active' : 'Show Undetected Gaps'}
+                    🧭 {props.showPermissionCoverage ? 'Coverage Active' : 'Show recorded coverage gaps'}
                     {props.showPermissionCoverage && props.permissionCoveragePercent !== undefined && (
                         <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">
                             {Math.round(100 - props.permissionCoveragePercent)}% GAPS

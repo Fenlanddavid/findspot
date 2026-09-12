@@ -4,10 +4,11 @@ import type { Media } from "../db";
 import { ScaleBar } from "./ScaleBar";
 import { calibrateFindPhoto } from "../services/findMutations";
 
-export function ScaleCalibrationModal(props: { media: Media; url: string; onClose: () => void }) {
+export function ScaleCalibrationModal(props: { media: Media; url: string; onClose: () => void; onApply?: (pxPerMm: number) => void }) {
   const [points, setPoints] = useState<{ x: number; y: number }[]>([]);
   const [mm, setMm] = useState("10");
   const imgRef = useRef<HTMLImageElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleImageClick(e: React.MouseEvent<HTMLImageElement>) {
     // Offset is relative to the target element (the image)
@@ -40,13 +41,17 @@ export function ScaleCalibrationModal(props: { media: Media; url: string; onClos
 
   async function save() {
     if (calculatedPxPerMm === null || !isFinite(calculatedPxPerMm) || calculatedPxPerMm <= 0) return;
-    await calibrateFindPhoto(props.media.id, calculatedPxPerMm);
-    props.onClose();
+    try {
+      if (props.onApply) props.onApply(calculatedPxPerMm);
+      else await calibrateFindPhoto(props.media.id, calculatedPxPerMm);
+      props.onClose();
+    } catch { setError('The scale could not be saved. Please try again.'); }
   }
 
   return (
     <Modal onClose={props.onClose} title="Calibrate Digital Scale">
       <div className="grid gap-4">
+        {error && <p role="alert" className="text-sm text-red-600 dark:text-red-300">{error}</p>}
         <p className="text-sm opacity-75 text-gray-700 dark:text-gray-300">Tap two points on the photo that represent a known distance (e.g. 10mm on a ruler or the diameter of a coin).</p>
         
         <div className="relative cursor-crosshair border-2 border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-black flex items-center justify-center min-h-[300px]">

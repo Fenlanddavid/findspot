@@ -1,7 +1,9 @@
+import { chooseCurrentUnfinishedSession } from './session/activeSessionContext';
 import { db, Permission, Field } from "../db";
 import { geometryAreaM2, persistedCoveragePercent } from './permissionSummary';
 
 export type EnrichedPermission = Permission & {
+  activeSessionId?: string | null;
   fields: Field[];
   cumulativePercent: number | null;
   totalAcres: number | null;
@@ -153,6 +155,7 @@ export async function enrichPermissions(
       fields,
       cumulativePercent,
       totalAcres,
+      activeSessionId: chooseCurrentUnfinishedSession(sessions).session?.id ?? null,
       sessionCount: sessions.length,
       lastSessionDate,
       findCount,

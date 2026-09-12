@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import React, { useRef, useState, useEffect } from "react";
 import { Modal } from "./Modal";
 import type { Permission, Media } from "../db";
@@ -283,14 +284,7 @@ export function AgreementModal(props: {
     setError(null);
     try {
       const { blob, filename } = await generateAndSaveAgreement();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      triggerDownload(blob, filename);
     } catch (err: any) {
       setError("PDF generation failed: " + (err.message || err));
     } finally {

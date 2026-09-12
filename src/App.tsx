@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, Suspense } from "react";
-import { BrowserRouter, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation } from "react-router";
+import { createBrowserRouter, RouterProvider, Routes, Route, Link, NavLink, useNavigate, useSearchParams, useLocation, Navigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { db } from "./db";
@@ -45,9 +45,7 @@ export { Logo } from "./components/Logo";
 const PermissionPage = React.lazy(() => import("./pages/Permission"));
 const FindPage = React.lazy(() => import("./pages/Find"));
 const SessionPage = React.lazy(() => import("./pages/Session"));
-const AllFinds = React.lazy(() => import("./pages/AllFinds"));
 const FindsBox = React.lazy(() => import("./pages/FindsBox"));
-const PendingFinds = React.lazy(() => import("./pages/PendingFinds"));
 const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
 const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
 const Discover = React.lazy(() => import("./pages/Discover"));
@@ -76,6 +74,7 @@ function Shell() {
   const { confirm: confirmAction, dialog: confirmDialog } = useConfirmDialog();
   const nav = useNavigate();
   const location = useLocation();
+  const isFindsRoute = ["/finds", "/finds-box", "/pending", "/find"].includes(location.pathname);
   const isFieldGuideRoute = location.pathname === "/fieldguide";
   const isActiveSessionGuide = isFieldGuideRoute && new URLSearchParams(location.search).has('sessionId');
   useViewportScrollLock(isFieldGuideRoute);
@@ -323,7 +322,7 @@ function Shell() {
         <div className="flex items-center justify-between gap-2 sm:gap-4">
             <Link to="/" className="no-underline flex items-center gap-2 sm:gap-3 group min-w-0 outline-none [-webkit-tap-highlight-color:transparent] focus:outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-emerald-400/60">
               <Logo />
-              <h1 className="m-0 text-xl min-[360px]:text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
+              <h1 className="m-0 truncate text-[clamp(1rem,5vw,1.5rem)] sm:text-4xl font-black tracking-tight bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 bg-clip-text text-transparent group-hover:from-emerald-400 group-hover:to-sky-400 transition-all duration-500">FindSpot</h1>
             </Link>
             
             <div className="flex items-center gap-1 sm:gap-2 border-l border-gray-200 pl-2 dark:border-gray-700 sm:border-0 sm:pl-0 shrink-0">
@@ -354,7 +353,7 @@ function Shell() {
                 Permissions
               </NavLink>
               <NavLink to="/discover" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Discover</NavLink>
-              <NavLink to="/finds-box" className={({ isActive }) => `hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isActive ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</NavLink>
+              <Link to="/finds-box" aria-current={isFindsRoute ? "page" : undefined} className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors ${isFindsRoute ? "text-emerald-600 dark:text-emerald-400 font-bold" : ""}`}>Finds</Link>
             </nav>
 
             <div className="hidden sm:flex items-center gap-3">
@@ -364,10 +363,10 @@ function Shell() {
       </header>}
 
       <main>
-        {needRefresh && (
-          <div className="mb-4 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-4 flex items-center justify-between gap-4">
+        {needRefresh && !showQuotaWarning && (
+          <div className="mb-4 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-sky-800 dark:text-sky-300">
-              <span className="font-bold">Update available.</span> {UPDATE_NOTES}
+              <span className="font-bold">Update available.</span><details className="mt-1"><summary className="cursor-pointer py-1">What’s changed</summary>{UPDATE_NOTES}</details>
             </div>
             <button
               onClick={async () => {
@@ -386,7 +385,7 @@ function Shell() {
           </div>
         )}
         {showQuotaWarning && (
-          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <span className="text-xl">🔴</span>
               <div>
@@ -395,7 +394,7 @@ function Shell() {
               </div>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button onClick={() => { setShowQuotaWarning(false); nav("/settings"); }} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Back Up Now</button>
+              <button onClick={() => { setShowQuotaWarning(false); nav("/settings?tab=data"); }} className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">Back Up Now</button>
               <button onClick={() => setShowQuotaWarning(false)} className="text-red-700 dark:text-red-400 text-xs font-bold hover:underline px-2">Dismiss</button>
             </div>
           </div>
@@ -446,9 +445,9 @@ function Shell() {
             <Route path="/find" element={<FindRouter projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/land-access" element={<LandAccess />} />
-            <Route path="/finds" element={<AllFinds projectId={projectId} />} />
+            <Route path="/finds" element={<Navigate replace to={`/finds-box${location.search}`} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
-            <Route path="/pending" element={<PendingFinds projectId={projectId} />} />
+            <Route path="/pending" element={<Navigate replace to={`/finds-box?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(location.search)), filter: "pending" })}`} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("auto", context); }} />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/join" element={<JoinClubDay />} />
@@ -473,17 +472,18 @@ function Shell() {
             { to: "/permissions", label: "Permissions", icon: PermissionsIcon },
             { to: "/discover", label: "Discover", icon: DiscoverIcon },
             { to: "/finds-box", label: "Finds", icon: FindsIcon },
-          ].map(item => (
-            <NavLink
+          ].map(item => {
+            const active = item.to === "/finds-box" ? isFindsRoute : location.pathname === item.to || (item.to !== "/" && location.pathname.startsWith(`${item.to}/`));
+            return <Link
               key={item.to}
               to={item.to}
-              end={item.to === "/"}
-              className={({ isActive }) => `flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[9px] font-bold leading-tight transition-colors ${isActive ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}
+              aria-current={active ? "page" : undefined}
+              className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-0.5 text-[9px] font-bold leading-tight transition-colors ${active ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "text-gray-500 dark:text-gray-400"}`}
             >
               <item.icon className="h-[18px] w-[18px] shrink-0" />
               <span className="max-w-full whitespace-nowrap">{item.label}</span>
-            </NavLink>
-          ))}
+            </Link>;
+          })}
         </div>
       </nav>}
 
@@ -595,7 +595,7 @@ function HomeRouter({ projectId, isStandalone, promptInstall }: { projectId: str
         nav(`/find${q ? `?${q}` : ""}`);
       }}
       goAllFinds={() => nav("/finds-box")}
-      goFindsWithFilter={(filter: string) => filter === 'filter=pending' ? nav('/pending') : nav(`/finds-box?${filter}`)}
+      goFindsWithFilter={(filter: string) => nav(`/finds-box?${filter}`)}
       goFindsBox={() => nav("/finds-box")}
       goFieldGuide={() => nav("/fieldguide")}
     />
@@ -675,12 +675,12 @@ class AppErrorBoundary extends React.Component<{ children: React.ReactNode }, { 
   }
 }
 
+const appRouter = createBrowserRouter([{ path: '*', element: <Shell /> }], { basename: import.meta.env.BASE_URL });
+
 export default function App() {
   return (
     <AppErrorBoundary>
-      <BrowserRouter basename={import.meta.env.BASE_URL}>
-        <Shell />
-      </BrowserRouter>
+      <RouterProvider router={appRouter} />
     </AppErrorBoundary>
   );
 }

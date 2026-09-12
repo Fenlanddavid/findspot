@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { diagLog, reportNonFatal } from '../../services/diagLog';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { distanceMeters } from '../../utils/geo';
-import { FIELDGUIDE_SHORT_NOTICE } from '../../utils/legalCopy';
+import { FieldGuideNotice } from './FieldGuideNotice';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_GROUPS } from './FieldGuideContext';
 import { LandscapeInterpretationBlock } from './LandscapeInterpretationBlock';
@@ -580,9 +580,7 @@ export function HistoricLayerManager() {
                     )}
                 </div>
             )}
-            <div className="px-1 text-center text-[0.625rem] font-medium leading-snug text-slate-400">
-                {FIELDGUIDE_SHORT_NOTICE}
-            </div>
+            <FieldGuideNotice />
             {historicScanComplete && heritageGatewayCenter && (
                 <HeritageGatewayLink lat={heritageGatewayCenter.lat} lng={heritageGatewayCenter.lng} />
             )}

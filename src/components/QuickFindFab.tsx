@@ -1,3 +1,5 @@
+import { fixTimeIso } from '../utils/captureLocationStatus';
+import { captureLocationStatus } from '../utils/captureLocationStatus';
 import React from "react";
 import { useNavigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -58,7 +60,7 @@ export function QuickFindFab({
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [lastQuickId, setLastQuickId] = React.useState<string | null>(null);
   const [lastPermName, setLastPermName] = React.useState<string | null>(null);
-  const [noGpsWarning, setNoGpsWarning] = React.useState(false);
+  const [locationNotice, setLocationNotice] = React.useState<string | null>(null);
   const [fabError, setFabError] = React.useState<string | null>(null);
   const [confirmSignificant, setConfirmSignificant] = React.useState(false);
   const [fabUsed, setFabUsed] = useDurableSetting('fs_fab_used', false);
@@ -102,7 +104,7 @@ export function QuickFindFab({
     if (isCapturing) return;
     setIsCapturing(true);
     setFabError(null);
-    setNoGpsWarning(false);
+    setLocationNotice(null);
 
     try {
       if (navigator.vibrate) navigator.vibrate(50);
@@ -117,6 +119,7 @@ export function QuickFindFab({
       let lon: number | null = null;
       let acc: number | null = null;
       let locationFixAt: string | undefined;
+      let capturedAt: number | undefined;
       let locationMethod: Find['locationMethod'];
 
       const preferredLocation = getPreferredLocation?.();
@@ -128,22 +131,24 @@ export function QuickFindFab({
         lat = preferredLocation.lat;
         lon = preferredLocation.lon;
         acc = preferredLocation.gpsAccuracyM ?? null;
-        locationFixAt = preferredLocation.fixTimestamp
-          ? new Date(preferredLocation.fixTimestamp).toISOString()
-          : undefined;
-        locationMethod = preferredLocation.captureMethod ?? 'session_track';
-        if (acc != null && acc > 50) setNoGpsWarning(true);
+        capturedAt = Date.now();
+        locationFixAt = fixTimeIso(preferredLocation.fixTimestamp);
+        locationMethod = preferredLocation.captureMethod;
+        const status = captureLocationStatus(preferredLocation, capturedAt);
+        if (status.warning) setLocationNotice(status.label);
       } else {
         try {
           const fix = await captureGPS();
           lat = fix.lat;
           lon = fix.lon;
           acc = fix.accuracyM;
-          locationFixAt = new Date(fix.fixTimestamp).toISOString();
+          capturedAt = Date.now();
+          locationFixAt = fixTimeIso(fix.fixTimestamp);
           locationMethod = 'live_gps';
-          if (acc != null && acc > 50) setNoGpsWarning(true);
+          const status = captureLocationStatus({ gpsAccuracyM: acc, fixTimestamp: fix.fixTimestamp });
+          if (status.warning) setLocationNotice(status.label);
         } catch {
-          setNoGpsWarning(true);
+          setLocationNotice('Saved without a location · edit to add one');
         }
       }
 
@@ -179,7 +184,7 @@ export function QuickFindFab({
         gpsAccuracyM: acc,
         locationFixAt,
         locationMethod,
-        locationFrozenAt: lat != null && lon != null ? now : undefined,
+        locationFrozenAt: fixTimeIso(capturedAt),
         osGridRef: "",
         w3w: "",
         period: "Unknown",
@@ -318,9 +323,9 @@ export function QuickFindFab({
           {lastPermName && (
             <div className="text-xs text-gray-300 truncate">→ {lastPermName}</div>
           )}
-          {noGpsWarning && (
+          {locationNotice && (
             <div className="text-xs text-amber-300 flex items-center gap-1 bg-amber-900/30 px-2 py-1 rounded-lg leading-tight">
-              ⚠️ No GPS — edit to add location
+              ⚠️ {locationNotice}
             </div>
           )}
           <label className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5">

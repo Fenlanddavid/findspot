@@ -456,6 +456,7 @@ export default function SessionPage(props: {
         lat: position.coords.latitude,
         lon: position.coords.longitude,
         accuracyM: position.coords.accuracy,
+        fixTimestamp: position.timestamp, captureMethod: 'live_gps',
         headingDegrees: position.coords.heading,
       }),
       () => undefined,
@@ -903,10 +904,10 @@ export default function SessionPage(props: {
       lat: liveLocation.lat,
       lon: liveLocation.lon,
       gpsAccuracyM: liveLocation.accuracyM,
-      fixTimestamp: trackingStatus.lastAcceptedFixAt ?? undefined,
-      captureMethod: 'session_track' as const,
+      fixTimestamp: liveLocation.fixTimestamp,
+      captureMethod: liveLocation.captureMethod,
     } : null;
-  }, [liveLocation, trackingStatus.lastAcceptedFixAt]);
+  }, [liveLocation]);
   async function saveWorkspacePoint(label: string, pointNote: string) {
     const preferred = getLatestTrackLocation();
     const location = preferred ?? await captureGPS();
@@ -1045,7 +1046,7 @@ export default function SessionPage(props: {
           onTrailDetails={() => setWorkspaceTab('record')}
           onAddNote={addWorkspaceNote}
           onSignificantFind={() => props.onSignificantFind?.({ permissionId: permission?.id ?? permissionId, sessionId, lat: liveLocation?.lat ?? lat, lon: liveLocation?.lon ?? lon, gpsAccuracyM: liveLocation?.accuracyM ?? acc })}
-          onPending={() => nav('/pending')}
+          onPending={() => nav(`/finds-box?filter=pending&session=${sessionId}`)}
           onGuide={openActiveSessionGuide}
         />
         {sessionMapSelection && <SessionMapObjectSheet selection={sessionMapSelection} records={{ finds: [...(finds ?? []), ...(fieldFinds ?? [])], signals: activeSignals, observations: activeObservations, savedPoints: activeSavedPoints, tracks: [...(tracks ?? []), ...(fieldTracks ?? [])], sessions: [...(fieldSessions ?? []), ...(session ? [session] : [])] }} activeSessionId={sessionId} onChoose={chooseMapObject} onClose={clearSessionMapSelection} onOpenFullRecord={openWorkspaceMapObject} />}
@@ -1579,6 +1580,7 @@ export default function SessionPage(props: {
           sessionId={sessionId}
           findsCount={summaryData.findsCount}
           pendingCount={finds?.filter(f => f.isPending).length ?? 0}
+          onFinishRecords={() => { setShowSummary(false); nav(`/finds-box?filter=pending&session=${sessionId}`); }}
           durationMins={summaryData.durationMins}
           totalTime={summaryData.totalTime}
           permissionId={permission?.id ?? null}

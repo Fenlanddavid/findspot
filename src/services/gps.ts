@@ -2,7 +2,7 @@ export type GPSFix = {
   lat: number;
   lon: number;
   accuracyM: number | null;
-  fixTimestamp: number;
+  fixTimestamp?: number;
 };
 
 export async function captureGPS(options?: {
@@ -59,7 +59,7 @@ export async function captureGPS(options?: {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
           accuracyM: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
-          fixTimestamp: Number.isFinite(pos.timestamp) ? pos.timestamp : Date.now(),
+          fixTimestamp: Number.isFinite(pos.timestamp) ? pos.timestamp : undefined,
         };
 
         if (!bestFix || (fix.accuracyM !== null && (bestFix.accuracyM === null || fix.accuracyM < bestFix.accuracyM))) {

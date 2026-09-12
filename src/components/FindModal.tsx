@@ -1,7 +1,9 @@
+import { fixTimeIso } from '../utils/captureLocationStatus';
 import React, { useEffect, useState, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, Find, Media, Session } from "../db";
 import { Modal } from "./Modal";
+import { useConfirmDialog } from "./ConfirmModal";
 import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
@@ -14,8 +16,6 @@ import { makeFindPhotoFilename, shareElementAsImage, downloadShareCard, shareOrD
 import PASReportModal from "./PASReportModal";
 import {
   deleteFindAndReopenSignal,
-  deleteFindPhoto,
-  replaceFindPhotoSlot,
   saveFindEdits,
   setFindFavorite,
 } from "../services/findMutations";
@@ -26,9 +26,19 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   const [draft, setDraft] = useState<Find | null>(null);
   const [busy, setBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [draftMedia, setDraftMedia] = useState<Media[] | null>(null);
+  const originalMedia = React.useRef<Media[]>([]);
+  const [editError, setEditError] = useState<string | null>(null);
+  const errorRef = React.useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (editError && errorRef.current) (errorRef.current.nextElementSibling ?? errorRef.current).scrollIntoView({ block: 'end' });
+  }, [editError]);
+  const { confirm, dialog: discardDialog } = useConfirmDialog();
+  const closingRef = React.useRef(false);
+  const workingMedia = draftMedia ?? media;
   const [isPickingLocation, setIsPickingLocation] = useState(false);
   const [isPASModalOpen, setIsPASModalOpen] = useState(false);
-  
+
   const [calibratingMedia, setCalibratingMedia] = useState<{ media: Media; url: string } | null>(null);
 
   const [session, setSession] = useState<Session | null>(null);
@@ -42,11 +52,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
   useEffect(() => {
     if (find) {
-      setDraft(find);
+      if (!isEditing) setDraft(find);
       if (find.sessionId) db.sessions.get(find.sessionId).then(s => setSession(s || null));
       getSetting("detectors", []).then(setDetectorList);
     }
-  }, [find?.id]);
+  }, [find, isEditing]);
 
   async function handleShare() {
     if (!shareCardRef.current || !draft) return;
@@ -82,18 +92,57 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
   const imageUrls = useMemo(() => {
     const urls: { id: string; url: string; filename: string; media: Media }[] = [];
-    for (const m of media ?? []) {
+    for (const m of workingMedia ?? []) {
       const url = URL.createObjectURL(m.blob);
       urls.push({ id: m.id, url, filename: m.filename, media: m });
     }
     return urls;
-  }, [media]);
+  }, [workingMedia]);
 
   useEffect(() => {
     return () => {
       for (const x of imageUrls) URL.revokeObjectURL(x.url);
     };
   }, [imageUrls]);
+
+  function beginEdit() {
+    if (!find || !media || busy) return;
+    setDraft(find);
+    originalMedia.current = media;
+    setDraftMedia([...media]);
+    setEditError(null);
+    setIsEditing(true);
+  }
+
+  function cancelEdit() {
+    if (busy) return;
+    setDraft(find ?? null);
+    setDraftMedia(null);
+    setIsEditing(false);
+    setEditError(null);
+    setConfirmingDelete(false);
+    setConfirmingRemoveId(null);
+  }
+
+  const dirty = isEditing && (JSON.stringify(draft) !== JSON.stringify(find)
+    || (draftMedia !== null && (draftMedia.length !== originalMedia.current.length
+      || draftMedia.some((item, index) => item !== originalMedia.current[index]))));
+
+  async function requestClose() {
+    if (busy || closingRef.current) return;
+    closingRef.current = true;
+    try {
+      if (dirty && !await confirm({ title: 'Discard unsaved changes?',
+        message: 'Your record and photo changes have not been saved.',
+        confirmLabel: 'Discard changes', cancelLabel: 'Keep editing', danger: true })) return;
+      props.onClose();
+    } finally { closingRef.current = false; }
+  }
+
+  function openCalibration(item: { media: Media; url: string }) {
+    if (!isEditing) beginEdit();
+    setCalibratingMedia(item);
+  }
 
   // find===undefined means still loading; find===explicitly missing means DB returned nothing
   if (find === undefined && !draft) return <Modal onClose={props.onClose} title="Loading…"><div className="py-6 text-center opacity-50 text-sm">Loading...</div></Modal>;
@@ -113,6 +162,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         lat: fix.lat,
         lon: fix.lon,
         gpsAccuracyM: fix.accuracyM,
+        locationFixAt: fixTimeIso(fix.fixTimestamp),
+        locationMethod: 'live_gps',
+        locationFrozenAt: new Date().toISOString(),
         osGridRef: grid || draft.osGridRef,
       });
     } catch (e: any) {
@@ -125,18 +177,33 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function save() {
     if (!draft) return;
     setBusy(true);
-    const now = new Date().toISOString();
-    await saveFindEdits(draft, now);
-    setBusy(false);
-    props.onClose();
+    setEditError(null);
+    if (draft.isPending && (!draft.objectType.trim() || draft.objectType === 'Pending Quick Find') && !draft.findCategory) {
+      setEditError('Add a description or category before completing this record.');
+      setBusy(false);
+      return;
+    }
+    try {
+      await saveFindEdits({ ...draft, isPending: false }, new Date().toISOString(), draftMedia ? {
+        upsert: draftMedia.filter(item => !originalMedia.current.includes(item)),
+        removeIds: originalMedia.current.filter(item => !draftMedia.some(photo => photo.id === item.id)).map(item => item.id),
+      } : undefined);
+      props.onClose();
+    } catch {
+      setEditError('Your changes were not saved. They are still here; please try again.');
+    } finally { setBusy(false); }
   }
 
   async function del() {
     if (!draft) return;
     setBusy(true);
-    await deleteFindAndReopenSignal(draft.id, draft.sourceSignalId);
-    setBusy(false);
-    props.onClose();
+    setEditError(null);
+    try {
+      await deleteFindAndReopenSignal(draft.id, draft.sourceSignalId);
+      props.onClose();
+    } catch {
+      setEditError('This find was not deleted. Please try again.');
+    } finally { setBusy(false); }
   }
 
   async function addPhotos(files: FileList | null, photoType?: Media["photoType"]) {
@@ -167,19 +234,20 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         if (photoType && photoType !== "other") break;
       }
 
-      await replaceFindPhotoSlot(draft.id, photoType, items);
+      setDraftMedia(current => [
+        ...(current ?? media ?? []).filter(item => !photoType || photoType === 'other' || item.photoType !== photoType),
+        ...items,
+      ]);
     } catch (err) {
-      console.error("addPhotos failed:", err);
+      setEditError("The photo could not be added. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
   async function removePhoto(mediaId: string) {
-    setBusy(true);
-    await deleteFindPhoto(mediaId);
+    setDraftMedia(current => (current ?? media ?? []).filter(item => item.id !== mediaId));
     setConfirmingRemoveId(null);
-    setBusy(false);
   }
 
   async function exportPhotoForPAS(item: { media: Media }, photoIndex: number) {
@@ -199,83 +267,41 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   async function toggleFavorite() {
     if (!draft) return;
     const newStatus = !draft.isFavorite;
-    setDraft({ ...draft, isFavorite: newStatus });
-    await setFindFavorite(draft.id, newStatus);
+    setBusy(true);
+    setEditError(null);
+    try {
+      await setFindFavorite(draft.id, newStatus);
+    } catch {
+      setEditError('Your favourite was not updated. Please try again.');
+    } finally { setBusy(false); }
   }
 
   return (
     <>
-      <Modal 
-        onClose={props.onClose} 
+      <Modal
+        onClose={() => void requestClose()}
         title={<>Find: <span className="font-mono text-gray-400 dark:text-gray-500 font-normal">{draft.findCode}</span></>}
         headerActions={!isEditing ? (
           <>
-            {/* Star — minimal glass circle */}
-            <button
-              onClick={toggleFavorite}
-              className="shrink-0 flex items-center justify-center rounded-full transition-all duration-[140ms] active:scale-95"
-              style={{
-                width: 34, height: 34,
-                background: draft.isFavorite ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${draft.isFavorite ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.06)'}`,
-                boxShadow: draft.isFavorite ? '0 0 10px rgba(16,185,129,0.22)' : 'none',
-              }}
-              onMouseEnter={e => { if (!draft.isFavorite) e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-              onMouseLeave={e => { if (!draft.isFavorite) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-              title={draft.isFavorite ? "Remove from Finds Box" : "Add to Finds Box"}
-            >
-              <span className={`text-sm leading-none ${draft.isFavorite ? '' : 'opacity-40'}`}>{draft.isFavorite ? '⭐' : '☆'}</span>
+            <button type="button" onClick={beginEdit} disabled={busy || !media} className="min-h-11 rounded-xl bg-emerald-700 px-4 text-sm font-bold text-white disabled:opacity-50">
+              {draft.isPending ? 'Finish record' : 'Edit record'}
             </button>
-            {/* Share — PRIMARY pill */}
-            <button
-              onClick={handleShare}
-              disabled={busy}
-              className="shrink-0 text-2xs font-semibold text-white rounded-full transition-all duration-[140ms] flex items-center gap-1.5 hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
-              style={{
-                padding: '6px 14px',
-                background: 'linear-gradient(180deg, #10b981, #059669)',
-                boxShadow: '0 4px 12px rgba(16,185,129,0.25)',
-              }}
-            >
-              {busy ? (
-                <>
-                  <svg className="animate-spin w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
-                  </svg> Sharing…
-                </>
-              ) : 'Share'}
-            </button>
-            {/* Save to Photos — secondary pill */}
-            <button
-              onClick={handleDownloadCard}
-              disabled={busy}
-              title="Save card image to photos"
-              className="shrink-0 text-2xs font-semibold text-white/80 rounded-full border border-white/15 bg-white/[0.04] transition-all duration-[140ms] flex items-center gap-1.5 px-3.5 py-1.5 hover:bg-white/[0.08] hover:-translate-y-px active:scale-[0.97] active:translate-y-0 disabled:opacity-50 disabled:translate-y-0"
-            >
-              <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 16l-4-4h2.5V4h3v8H16l-4 4z"/>
-                <path d="M4 18h16"/>
-              </svg>
-              Save
-            </button>
-            {/* PAS Report — inline text action */}
-            <button
-              onClick={() => setIsPASModalOpen(true)}
-              className="shrink-0 text-[13px] font-medium text-gray-500 dark:text-white/70 hover:text-gray-800 dark:hover:text-white transition-colors duration-[140ms] active:opacity-50"
-            >
-              PAS Report
-            </button>
-            {/* Edit — inline text action */}
-            <button
-              onClick={() => setIsEditing(true)}
-              className="shrink-0 text-[13px] font-medium text-gray-500 dark:text-white/70 hover:text-gray-800 dark:hover:text-white transition-colors duration-[140ms] active:opacity-50"
-            >
-              Edit
-            </button>
+            <button type="button" onClick={toggleFavorite} disabled={busy} aria-pressed={!!draft.isFavorite}
+              aria-label={draft.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+              className="min-h-11 min-w-11 rounded-xl border border-gray-300 text-xl text-amber-600 dark:border-gray-600 dark:text-amber-300">{draft.isFavorite ? '★' : '☆'}</button>
+            <details className="w-full rounded-xl border border-gray-300 p-2 dark:border-gray-600 sm:w-auto">
+              <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-gray-700 dark:text-gray-200">Share / export</summary>
+              <div className="grid gap-2 border-t border-gray-200 pt-2 dark:border-gray-700">
+                <button type="button" onClick={handleShare} disabled={busy} className="min-h-11 rounded-lg px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700">Share image<span className="block text-xs text-gray-600 dark:text-gray-300">A find card for messages or social media</span></button>
+                <button type="button" onClick={handleDownloadCard} disabled={busy} className="min-h-11 rounded-lg px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700">Save image<span className="block text-xs text-gray-600 dark:text-gray-300">Download a copy of the find card</span></button>
+                <button type="button" onClick={() => setIsPASModalOpen(true)} disabled={busy} className="min-h-11 rounded-lg px-3 py-2 text-left text-sm text-gray-800 hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700">PAS report<span className="block text-xs text-gray-600 dark:text-gray-300">Prepare details and photos for recording</span></button>
+              </div>
+            </details>
           </>
         ) : undefined}
       >
+        {editError && !isEditing && <p ref={errorRef} role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{editError}</p>}
+        {isEditing && <p role="status" className="mb-3 text-sm font-medium text-amber-700 dark:text-amber-300">Unsaved changes · the record and photos save together.</p>}
         <div className="no-print grid gap-6 pr-1">
           {shareError && (
             <div className="mb-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex items-center justify-between gap-3">
@@ -292,13 +318,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     <div
                       key={x.id}
                       className="relative rounded-2xl overflow-hidden aspect-square shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.22)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_30px_rgba(0,0,0,0.5)] hover:-translate-y-[2px] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.3)] dark:hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_12px_36px_rgba(0,0,0,0.6)] transition-all duration-[160ms] cursor-pointer group"
-                      onClick={() => setCalibratingMedia({ media: x.media, url: x.url })}
+                      role="group" tabIndex={0} aria-label="Set photo scale" onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openCalibration({ media: x.media, url: x.url }); } }} onClick={() => openCalibration({ media: x.media, url: x.url })}
                     >
                       <ScaledImage media={x.media} imgClassName="object-cover" className="w-full h-full" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-[160ms]" />
                       {x.media.photoType && (
                         <div className="absolute bottom-0 inset-x-0 z-10 flex justify-end p-2">
-                          <span className="px-3 py-[3px] rounded-full text-[10px] font-semibold bg-black/50 backdrop-blur-[6px] text-white shadow">
+                          <span className="px-3 py-[3px] rounded-full text-xs font-semibold bg-black/50 backdrop-blur-[6px] text-white shadow">
                             {x.media.photoType === 'photo1' ? 'Photo 1' :
                              x.media.photoType === 'photo2' ? 'Photo 2' :
                              x.media.photoType === 'photo3' ? 'Photo 3' :
@@ -326,7 +352,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                         </svg>
                       </button>
                       <div className="absolute inset-0 flex items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-[160ms]">
-                        <span className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md">
+                        <span className="bg-white/90 dark:bg-gray-900/90 backdrop-blur-sm text-xs font-bold px-3 py-1.5 rounded-full shadow-md">
                           {x.media.pxPerMm ? 'Rescale' : 'Set Scale'}
                         </span>
                       </div>
@@ -334,7 +360,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6 opacity-30 italic text-sm bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                <div className="text-center py-6 text-gray-600 dark:text-gray-300 text-sm bg-gray-50 dark:bg-gray-900/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
                   No photos attached.
                 </div>
               )}
@@ -343,7 +369,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.04] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.08)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
                 {/* Accent line */}
                 <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
-                <span className="text-2xs font-semibold uppercase tracking-[1px] text-emerald-500/60 dark:text-emerald-400/60 block mb-4">Find Details</span>
+                <span className="text-sm font-semibold uppercase tracking-[1px] text-emerald-700 dark:text-emerald-300 block mb-4">Find Details</span>
 
                 {/* PRIMARY — headline identification */}
                 <div className="mb-5">
@@ -351,13 +377,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     <p className="break-words text-[22px] font-semibold text-gray-900 dark:text-gray-50 leading-[1.1] m-0">{draft.objectType}</p>
                   )}
                   {draft.period && (
-                    <p className="text-base font-medium text-gray-500/75 dark:text-gray-400/75 m-0 mt-1.5">{draft.period}</p>
+                    <p className="text-base font-medium text-gray-600 dark:text-gray-300 m-0 mt-1.5">{draft.period}</p>
                   )}
                   {draft.dateRange && (
-                    <p className="text-[13px] font-mono text-gray-400/60 dark:text-gray-500/60 m-0 mt-1">{draft.dateRange}</p>
+                    <p className="text-[13px] font-mono text-gray-600 dark:text-gray-300 m-0 mt-1">{draft.dateRange}</p>
                   )}
                   {draft.foundAt && (
-                    <p className="text-2xs font-mono text-gray-400/50 dark:text-gray-500/50 m-0 mt-2">
+                    <p className="text-sm font-mono text-gray-600 dark:text-gray-300 m-0 mt-2">
                       Found {new Date(draft.foundAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · {new Date(draft.foundAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   )}
@@ -365,7 +391,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
                 {/* SECONDARY — key scan fields */}
                 {(draft.material || draft.completeness || draft.detector || draft.decoration) && (
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-[14px] mb-5">
+                  <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-x-6 gap-y-[14px] mb-5">
                     <DetailItem label="Material" value={draft.material} />
                     <DetailItem label="Completeness" value={draft.completeness === 'Unassessed' ? 'Not assessed' : draft.completeness} />
                     <DetailItem label="Detector" value={draft.detector} />
@@ -377,7 +403,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 {(draft.coinType || draft.coinDenomination || draft.coinSpink || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
                   <>
                     <div className="border-t border-gray-100 dark:border-white/[0.05] my-4" />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
+                    <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
                       {draft.coinType && <DetailItem label="Coin Type" value={draft.coinType} />}
                       {draft.coinDenomination && <DetailItem label="Denomination" value={draft.coinDenomination} />}
                       {draft.coinSpink && <DetailItem label="Spink No." value={draft.coinSpink} />}
@@ -399,7 +425,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               {draft.notes && (
                 <div className="bg-gradient-to-b from-white to-gray-50/30 dark:from-white/[0.03] dark:to-transparent border border-gray-100 dark:border-white/[0.06] rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)]">
                   <div className="h-px w-full mb-4 bg-gradient-to-r from-transparent via-gray-300/40 dark:via-white/[0.06] to-transparent" />
-                  <span className="text-2xs font-semibold uppercase tracking-[1px] text-gray-400/60 dark:text-gray-500/80 block mb-2">Notes</span>
+                  <span className="text-sm font-semibold uppercase tracking-[1px] text-gray-600 dark:text-gray-300 block mb-2">Notes</span>
                   <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap m-0 font-medium leading-relaxed">{draft.notes}</p>
                 </div>
               )}
@@ -408,11 +434,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               <div className="bg-gradient-to-b from-emerald-50/40 to-transparent dark:from-emerald-900/[0.12] dark:to-transparent border border-emerald-100 dark:border-emerald-900/30 rounded-2xl px-5 pt-4 pb-5 shadow-[0_10px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_40px_rgba(0,0,0,0.25)] grid grid-cols-2 gap-[14px]">
                 <div className="col-span-2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent mb-1" />
                 <div className="col-span-2 flex justify-between items-center">
-                  <span className="text-2xs font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
+                  <span className="text-sm font-semibold uppercase tracking-[1px] text-emerald-600/60 dark:text-emerald-400/60">Findspot Location</span>
                   {draft.lat != null && draft.lon != null && (
                     <button
                       onClick={() => window.open(`https://www.google.com/maps?q=${draft.lat},${draft.lon}`, "_blank")}
-                      className="text-[10px] font-bold text-gray-400 hover:text-emerald-600 transition-all duration-[140ms] hover:-translate-y-px flex items-center gap-1"
+                      className="text-xs font-bold text-gray-400 hover:text-emerald-600 transition-all duration-[140ms] hover:-translate-y-px flex items-center gap-1"
                     >
                       Maps ↗
                     </button>
@@ -429,7 +455,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
             </div>
           ) : (
-            <>
+            <fieldset disabled={busy} className="contents">
               <div>
                 <span className="text-sm font-bold opacity-75 block mb-1.5">Find Category</span>
                 <div className="flex flex-wrap gap-2">
@@ -437,7 +463,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                     <button
                       key={cat}
                       type="button"
-                      onClick={() => setDraft({ ...draft, findCategory: draft.findCategory === cat ? undefined : cat })}
+                      aria-pressed={draft.findCategory === cat} onClick={() => setDraft({ ...draft, findCategory: draft.findCategory === cat ? undefined : cat })}
                       className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-all ${
                         draft.findCategory === cat
                           ? "bg-emerald-500 border-emerald-500 text-white"
@@ -473,9 +499,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   <div className="grid grid-cols-1 gap-4 p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-xl border border-emerald-100 dark:border-emerald-900/20 animate-in slide-in-from-left-2">
                       <label className="grid gap-1">
                           <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Coin Classification</span>
-                          <select 
+                          <select
                               className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                              value={draft.coinType || ""} 
+                              value={draft.coinType || ""}
                               onChange={(e) => setDraft({ ...draft, coinType: e.target.value })}
                           >
                               <option value="">(Select)</option>
@@ -487,11 +513,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                       </label>
                       <label className="grid gap-1">
                           <span className="text-sm font-bold opacity-75 text-emerald-600 dark:text-emerald-400">Denomination</span>
-                          <input 
+                          <input
                               list="modal-denominations"
-                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" 
-                              value={draft.coinDenomination || ""} 
-                              onChange={(e) => setDraft({ ...draft, coinDenomination: e.target.value })} 
+                              className="w-full bg-white dark:bg-gray-800 border-2 border-emerald-100 dark:border-emerald-900 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                              value={draft.coinDenomination || ""}
+                              onChange={(e) => setDraft({ ...draft, coinDenomination: e.target.value })}
                               placeholder="e.g., Stater, Penny, Shilling"
                           />
                           <datalist id="modal-denominations">
@@ -605,10 +631,10 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               {!(draft.findCategory === "Coin" || draft.findCategory === "Token / Jetton" || draft.coinType || (!draft.findCategory && draft.objectType.toLowerCase().includes("coin"))) && (
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Date Range / Circa</span>
-                  <input 
-                    className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all" 
-                    value={draft.dateRange || ""} 
-                    onChange={(e) => setDraft({ ...draft, dateRange: e.target.value })} 
+                  <input
+                    className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={draft.dateRange || ""}
+                    onChange={(e) => setDraft({ ...draft, dateRange: e.target.value })}
                     placeholder="e.g., c. 1200-1400"
                   />
                 </label>
@@ -626,9 +652,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 </label>
                 <label className="grid gap-1">
                   <span className="text-sm font-bold opacity-75">Completeness</span>
-                  <select 
+                  <select
                     className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                    value={draft.completeness} 
+                    value={draft.completeness}
                     onChange={(e) => setDraft({ ...draft, completeness: e.target.value as any })}
                   >
                     {["Unassessed", "Complete", "Incomplete", "Fragment"].map(c => <option key={c} value={c}>{c === "Unassessed" ? "Not assessed" : c}</option>)}
@@ -657,13 +683,13 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
               </label>
 
               <div className="bg-emerald-50/30 dark:bg-emerald-900/10 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 grid gap-4">
-                <span className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Signal Information</span>
-                
+                <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Signal Information</span>
+
                 <label className="grid gap-1">
-                  <span className="text-[10px] font-bold opacity-50 uppercase">Detector</span>
-                  <select 
+                  <span className="text-xs font-bold opacity-50 uppercase">Detector</span>
+                  <select
                     className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs"
-                    value={draft.detector || ""} 
+                    value={draft.detector || ""}
                     onChange={(e) => setDraft({ ...draft, detector: e.target.value })}
                   >
                     {detectorList.length === 0 ? (
@@ -679,11 +705,11 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
                 <div className="grid grid-cols-2 gap-3">
                   <label className="grid gap-0.5">
-                    <span className="text-[10px] font-bold opacity-50 uppercase">Target ID</span>
+                    <span className="text-xs font-bold opacity-50 uppercase">Target ID</span>
                     <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" value={draft.targetId ?? ""} onChange={(e) => setDraft({ ...draft, targetId: e.target.value ? parseInt(e.target.value) : undefined })} />
                   </label>
                   <label className="grid gap-0.5">
-                    <span className="text-[10px] font-bold opacity-50 uppercase">Depth (cm)</span>
+                    <span className="text-xs font-bold opacity-50 uppercase">Depth (cm)</span>
                     <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs" value={draft.depthCm ?? ""} onChange={(e) => setDraft({ ...draft, depthCm: e.target.value ? parseFloat(e.target.value) : undefined })} />
                   </label>
                 </div>
@@ -691,25 +717,25 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
               <label className="grid gap-1">
                 <span className="text-sm font-bold opacity-75">Notes</span>
-                <textarea 
+                <textarea
                   className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                  value={draft.notes} 
-                  onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={3} 
+                  value={draft.notes}
+                  onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={3}
                 />
               </label>
 
               <div className="bg-gray-50/50 dark:bg-gray-900/30 p-4 rounded-xl border border-gray-200 dark:border-gray-700 grid gap-3">
                 <div className="flex justify-between items-center flex-wrap gap-2">
-                    <span className="text-xs font-black uppercase tracking-widest text-gray-400">Findspot Location</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-gray-400">Findspot Location</span>
                     <div className="flex gap-2">
-                        <button 
-                            type="button" 
-                            onClick={() => setIsPickingLocation(true)} 
-                            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center gap-1 hover:bg-emerald-600 hover:text-white"
+                        <button
+                            type="button"
+                            onClick={() => setIsPickingLocation(true)}
+                            className="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1 hover:bg-emerald-600 hover:text-white"
                         >
                             🗺️ Pick on Map
                         </button>
-                        <button type="button" onClick={doGPS} disabled={busy} className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[10px] font-bold shadow-sm transition-all flex items-center gap-1">
+                        <button type="button" onClick={doGPS} disabled={busy} className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1">
                             📍 {draft.lat ? "Update" : "Capture"}
                         </button>
                     </div>
@@ -720,12 +746,12 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
 
                 <div className="grid grid-cols-2 gap-3">
                     <label className="grid gap-0.5">
-                        <span className="text-[10px] font-bold opacity-50 uppercase">Latitude</span>
-                        <input 
-                            type="number" 
+                        <span className="text-xs font-bold opacity-50 uppercase">Latitude</span>
+                        <input
+                            type="number"
                             step="0.000001"
-                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" 
-                            value={draft.lat ?? ""} 
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono"
+                            value={draft.lat ?? ""}
                             onChange={(e) => {
                                 const val = e.target.value ? parseFloat(e.target.value) : null;
                                 const newDraft = { ...draft, lat: val };
@@ -734,16 +760,16 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                                     if (grid) newDraft.osGridRef = grid;
                                 }
                                 setDraft(newDraft);
-                            }} 
+                            }}
                         />
                     </label>
                     <label className="grid gap-0.5">
-                        <span className="text-[10px] font-bold opacity-50 uppercase">Longitude</span>
-                        <input 
-                            type="number" 
+                        <span className="text-xs font-bold opacity-50 uppercase">Longitude</span>
+                        <input
+                            type="number"
                             step="0.000001"
-                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" 
-                            value={draft.lon ?? ""} 
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono"
+                            value={draft.lon ?? ""}
                             onChange={(e) => {
                                 const val = e.target.value ? parseFloat(e.target.value) : null;
                                 const newDraft = { ...draft, lon: val };
@@ -752,18 +778,18 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                                     if (grid) newDraft.osGridRef = grid;
                                 }
                                 setDraft(newDraft);
-                            }} 
+                            }}
                         />
                     </label>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                     <label className="grid gap-0.5">
-                        <span className="text-[10px] font-bold opacity-50 uppercase">OS Grid Ref</span>
+                        <span className="text-xs font-bold opacity-50 uppercase">OS Grid Ref</span>
                         <input className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" value={draft.osGridRef || ""} onChange={(e) => setDraft({ ...draft, osGridRef: e.target.value })} />
                     </label>
                     <label className="grid gap-0.5">
-                        <span className="text-[10px] font-bold opacity-50 uppercase">What3Words</span>
+                        <span className="text-xs font-bold opacity-50 uppercase">What3Words</span>
                         <input className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs" value={draft.w3w || ""} onChange={(e) => setDraft({ ...draft, w3w: e.target.value })} placeholder="///word.word.word" />
                     </label>
                 </div>
@@ -774,12 +800,12 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   <div className="grid gap-0.5">
                     <h4 className="m-0 font-bold text-sm">Photos</h4>
                     {imageUrls.length > 0 && (
-                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold animate-pulse">
                         Tip: Tap photo to set scale
                       </p>
                     )}
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                       <label className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 px-3 py-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-amber-100 transition-colors shadow-sm text-center flex items-center justify-center gap-1">
                       📸 Photo 1
@@ -798,8 +824,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                       <input type="file" accept="image/*" capture="environment" onChange={(e) => addPhotos(e.target.files, "photo4")} className="hidden" />
                       </label>
                   </div>
-                  
-                  <label className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg text-[10px] font-bold cursor-pointer hover:bg-gray-200 transition-colors shadow-sm text-center">
+
+                  <label className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer hover:bg-gray-200 transition-colors shadow-sm text-center">
                     📁 Upload Files
                     <input type="file" accept="image/*" multiple onChange={(e) => addPhotos(e.target.files)} className="hidden" />
                   </label>
@@ -808,17 +834,17 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 {imageUrls.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {imageUrls.map((x) => (
-                      <div key={x.id} className="relative group border-2 border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden aspect-square shadow-sm cursor-pointer" onClick={() => setCalibratingMedia({ media: x.media, url: x.url })}>
-                        <ScaledImage 
-                          media={x.media} 
-                          imgClassName="object-cover" 
-                          className="w-full h-full" 
+                      <div key={x.id} className="relative group border-2 border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden aspect-square shadow-sm cursor-pointer" role="group" tabIndex={0} aria-label="Set photo scale" onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openCalibration({ media: x.media, url: x.url }); } }} onClick={() => openCalibration({ media: x.media, url: x.url })}>
+                        <ScaledImage
+                          media={x.media}
+                          imgClassName="object-cover"
+                          className="w-full h-full"
                         />
 
                         {confirmingRemoveId === x.id ? (
                           <div className="absolute top-1 right-1 flex gap-1 z-20" onClick={(e) => e.stopPropagation()}>
-                            <button onClick={() => removePhoto(x.id)} disabled={busy} className="bg-red-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold shadow-lg">Del</button>
-                            <button onClick={() => setConfirmingRemoveId(null)} className="bg-gray-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold shadow-lg">No</button>
+                            <button onClick={() => removePhoto(x.id)} disabled={busy} className="bg-red-600 text-white px-1.5 py-0.5 rounded text-xs font-bold shadow-lg">Del</button>
+                            <button onClick={() => setConfirmingRemoveId(null)} className="bg-gray-600 text-white px-1.5 py-0.5 rounded text-xs font-bold shadow-lg">No</button>
                           </div>
                         ) : (
                           <button
@@ -832,22 +858,22 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                             </svg>
                           </button>
                         )}
-                        <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-[9px] truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
+                        <div className="bg-white/90 dark:bg-gray-900/90 p-1 text-xs truncate absolute bottom-0 inset-x-0 font-mono text-center z-10 flex justify-between items-center px-1">
                           <span className="truncate flex-1">{x.filename}</span>
                           {x.media.photoType && (
-                                                      <span className={`px-1 rounded uppercase text-[7px] font-black ${x.media.photoType?.startsWith('photo') ? 'bg-emerald-100 text-emerald-800' : x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                        {x.media.photoType === 'photo1' ? 'Photo 1' : 
-                                                         x.media.photoType === 'photo2' ? 'Photo 2' : 
-                                                         x.media.photoType === 'photo3' ? 'Photo 3' : 
-                                                         x.media.photoType === 'photo4' ? 'Photo 4' : 
+                                                      <span className={`px-1 rounded uppercase text-xs font-bold ${x.media.photoType?.startsWith('photo') ? 'bg-emerald-100 text-emerald-800' : x.media.photoType === 'in-situ' ? 'bg-amber-100 text-amber-800' : x.media.photoType === 'cleaned' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                        {x.media.photoType === 'photo1' ? 'Photo 1' :
+                                                         x.media.photoType === 'photo2' ? 'Photo 2' :
+                                                         x.media.photoType === 'photo3' ? 'Photo 3' :
+                                                         x.media.photoType === 'photo4' ? 'Photo 4' :
                                                          x.media.photoType === 'in-situ' ? 'In Situ' :
                                                          x.media.photoType === 'cleaned' ? 'Cleaned' :
                                                          x.media.photoType}
                                                       </span>                          )}
                         </div>
-                        
+
                         <div className={`absolute inset-0 bg-emerald-600/20 transition-opacity flex items-center justify-center z-10 ${x.media.pxPerMm ? 'opacity-0 group-hover:opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100'}`}>
-                            <span className={`bg-white dark:bg-gray-800 text-[10px] font-bold px-2 py-1 rounded-full shadow-sm ${!x.media.pxPerMm ? 'ring-2 ring-emerald-500 animate-bounce' : ''}`}>
+                            <span className={`bg-white dark:bg-gray-800 text-xs font-bold px-2 py-1 rounded-full shadow-sm ${!x.media.pxPerMm ? 'ring-2 ring-emerald-500 animate-bounce' : ''}`}>
                               {x.media.pxPerMm ? 'Rescale' : 'Set Scale'}
                             </span>
                         </div>
@@ -857,44 +883,47 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 )}
               </div>
 
-              <div className="flex gap-4 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700 justify-between items-center">
+              {editError && <p ref={errorRef} role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{editError}</p>}
+              <div className="flex flex-wrap gap-4 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700 justify-between items-center">
                 {!confirmingDelete ? (
-                  <button onClick={() => setConfirmingDelete(true)} disabled={busy} className="text-red-600 hover:text-red-800 text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <button onClick={() => setConfirmingDelete(true)} disabled={busy} className="min-h-11 text-red-600 hover:text-red-800 text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                     Delete Find
                   </button>
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-red-600 dark:text-red-400 font-bold">Delete this find?</span>
-                    <button onClick={del} disabled={busy} className="bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold">Yes</button>
+                    <button onClick={del} disabled={busy} className="min-h-11 bg-red-600 text-white px-3 py-1 rounded-lg text-xs font-bold">Yes</button>
                     <button onClick={() => setConfirmingDelete(false)} className="text-gray-500 dark:text-gray-400 px-3 py-1 rounded-lg text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">Cancel</button>
                   </div>
                 )}
 
-                <div className="flex gap-3">
-                  <button onClick={() => setIsEditing(false)} disabled={busy} className="px-4 py-2 rounded-xl text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors font-bold text-sm">Cancel</button>
-                  <button onClick={save} disabled={busy} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl shadow-md font-bold transition-all disabled:opacity-50 text-sm">Save Changes</button>
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={cancelEdit} disabled={busy} className="min-h-11 px-4 py-2 rounded-xl text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 transition-colors font-bold text-sm">Cancel</button>
+                  <button onClick={save} disabled={busy} className="min-h-11 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-xl shadow-md font-bold transition-all disabled:opacity-50 text-sm">{draft.isPending ? 'Save completed record' : 'Save Changes'}</button>
                 </div>
               </div>
-            </>
+            </fieldset>
           )}
         </div>
       </Modal>
 
+      {discardDialog}
       {calibratingMedia && (
-        <ScaleCalibrationModal 
-          media={calibratingMedia.media} 
-          url={calibratingMedia.url} 
-          onClose={() => setCalibratingMedia(null)} 
+        <ScaleCalibrationModal
+          media={calibratingMedia.media}
+          url={calibratingMedia.url}
+          onClose={() => setCalibratingMedia(null)}
+          onApply={pxPerMm => setDraftMedia(current => (current ?? media ?? []).map(item => item.id === calibratingMedia.media.id ? { ...item, pxPerMm, scalePresent: true } : item))}
         />
       )}
 
       {isPickingLocation && draft && (
-          <LocationPickerModal 
+          <LocationPickerModal
               initialLat={draft.lat}
               initialLon={draft.lon}
               onClose={() => setIsPickingLocation(false)}
               onSelect={(pickedLat, pickedLon) => {
-                  const newDraft = { ...draft, lat: pickedLat, lon: pickedLon, gpsAccuracyM: null };
+                  const newDraft: Find = { ...draft, lat: pickedLat, lon: pickedLon, gpsAccuracyM: null, locationFixAt: undefined, locationMethod: 'map_selected', locationFrozenAt: new Date().toISOString() };
                   const grid = toOSGridRef(pickedLat, pickedLon);
                   if (grid) newDraft.osGridRef = grid;
                   setDraft(newDraft);
@@ -915,7 +944,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
       </div>
 
       {draft && media && (
-          <PASReportModal 
+          <PASReportModal
             isOpen={isPASModalOpen}
             onClose={() => setIsPASModalOpen(false)}
             find={draft}
@@ -930,7 +959,7 @@ function DetailItem({ label, value, mono = false }: { label: string; value: stri
   if (value === null || value === undefined || value === "") return null;
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.6px] text-gray-400/50 dark:text-gray-500/80">{label}</span>
+      <span className="text-xs font-semibold uppercase tracking-[0.6px] text-gray-600 dark:text-gray-300">{label}</span>
       <span className={`text-[15px] font-medium text-gray-800 dark:text-gray-200 leading-snug ${mono ? 'font-mono' : ''}`}>{value}</span>
     </div>
   );

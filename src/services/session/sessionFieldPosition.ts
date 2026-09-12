@@ -6,6 +6,8 @@ export type FieldLocation = {
   lon: number;
   accuracyM?: number | null;
   headingDegrees?: number | null;
+  fixTimestamp?: number;
+  captureMethod?: 'session_track' | 'live_gps';
 };
 
 export type BoundaryPositionStatus = {

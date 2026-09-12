@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import {
@@ -451,15 +452,6 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-
-  function triggerDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
 
   async function handleExport() {
     setExporting(true);

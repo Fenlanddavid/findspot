@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import React, { useEffect, useRef, useState } from "react";
 import { Modal } from "./Modal";
 import { db, Find, Media } from "../db";
@@ -218,14 +219,7 @@ const PASReportModal: React.FC<PASReportModalProps> = ({ isOpen, onClose, find, 
     try {
       const blob = await getPDFBlob();
       if (blob) {
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `PAS-Report-${find.findCode}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        triggerDownload(blob, `PAS-Report-${find.findCode}.pdf`);
       }
     } catch (e) {
       console.error("PDF generation failed", e);

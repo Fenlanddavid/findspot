@@ -59,3 +59,40 @@ h2 { margin: 0 0 6px 0; }
     display: none !important;
   }
 }
+
+/* Honour the device setting across older and newer screens. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer components {
+  .ui-primary { @apply min-h-11 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50; }
+  .ui-secondary { @apply min-h-11 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800; }
+  .ui-danger { @apply min-h-11 rounded-xl border border-red-300 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:text-red-300; }
+  .ui-heading { @apply text-lg font-semibold leading-snug text-gray-900 dark:text-gray-100; }
+  .ui-meta { @apply text-xs leading-relaxed text-gray-600 dark:text-gray-300; }
+  .ui-message { @apply rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200; }
+  .ui-error { @apply rounded-xl border border-red-300 bg-red-50 p-3 text-sm leading-relaxed text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200; }
+  .ui-chip { @apply inline-flex min-h-11 items-center gap-2 rounded-xl border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200; }
+  .ui-input { @apply min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-base text-gray-900 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100; }
+  .ui-primary:focus-visible, .ui-secondary:focus-visible, .ui-danger:focus-visible, .ui-chip:focus-visible, .ui-input:focus-visible { @apply outline-none ring-2 ring-blue-500 ring-offset-2; }
+}
+
+.record-save-bar {
+  bottom: max(var(--record-nav, 4.5rem), var(--record-keyboard, 0px));
+}
+@media (min-width: 640px) {
+  .record-save-bar { bottom: var(--record-keyboard, 0px); }
+}
+:where(button, a, summary, input, select, textarea):focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+}
+.record-form {
+  padding-bottom: calc(var(--record-save-height, 10rem) + var(--record-nav, 4.5rem) + 1rem);
+}

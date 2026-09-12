@@ -1,3 +1,4 @@
+import { triggerDownload } from '../utils/download';
 import html2canvas from 'html2canvas';
 
 const CARD_WIDTH = 1080;
@@ -41,7 +42,7 @@ export async function shareElementAsImage(
   if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
     await navigator.share({ files: [file], title, text });
   } else {
-    triggerDownload(blob, filename);
+    triggerDownload(blob, `${filename}.png`);
   }
 }
 
@@ -51,20 +52,7 @@ export async function shareElementAsImage(
  */
 export async function downloadShareCard(element: HTMLElement, filename: string, options: CaptureOptions = {}) {
   const blob = await captureCard(element, options);
-  triggerDownload(blob, filename);
-}
-
-function triggerDownload(blob: Blob, filename: string) {
-  triggerDownloadFile(blob, `${filename}.png`);
-}
-
-function triggerDownloadFile(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  triggerDownload(blob, `${filename}.png`);
 }
 
 export function extensionForBlob(blob: Blob): string {
@@ -111,7 +99,7 @@ export async function shareOrDownloadBlob(
     return;
   }
 
-  triggerDownloadFile(blob, resolvedFilename);
+  triggerDownload(blob, resolvedFilename);
 }
 
 export async function shareOrDownloadBlobs(
@@ -128,6 +116,6 @@ export async function shareOrDownloadBlobs(
   }
 
   for (const { blob, filename } of files) {
-    triggerDownloadFile(blob, ensureFilenameExtension(filename, blob));
+    triggerDownload(blob, ensureFilenameExtension(filename, blob));
   }
 }

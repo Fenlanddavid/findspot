@@ -1,3 +1,4 @@
+import { triggerDownload } from '../../utils/download';
 import React, { useEffect, useLayoutEffect, useCallback } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -953,13 +954,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         };
 
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const url  = URL.createObjectURL(blob);
-        const a    = Object.assign(document.createElement('a'), {
-            href: url, download: `fieldguide-lab-${tileKey}-${Date.now()}.json`,
-        });
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+        triggerDownload(blob, `fieldguide-lab-${tileKey}-${Date.now()}.json`);
     }, [sourceAvailability, historicRoutes, pasFinds, placeSignals, monumentPoints, displayTargets, traceTargets, devAnnotations]);
 
     // ─── Derived convenience aliases ──────────────────────────────────────────

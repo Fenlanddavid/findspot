@@ -70,6 +70,16 @@ export async function markExternalBackupSaved(snapshotAt: string, kind: BackupKi
   return snapshotAt;
 }
 
+const FORMULA_PREFIX = /^[=+\-@\t\r\n]/;
+
+function csvCell(value: unknown): string {
+  const text = String(value ?? '');
+  // Inspect the original prefix before flattening newlines (including leading CR).
+  const literal = FORMULA_PREFIX.test(text) ? `'${text}` : text;
+  const singleLine = literal.replace(/\r?\n|\r/g, ' ');
+  return `"${singleLine.replace(/"/g, '""')}"`;
+}
+
 export async function exportToCSV(): Promise<string> {
   const permissions = await db.permissions.toArray();
   const sessions = await db.sessions.toArray();
@@ -96,10 +106,6 @@ export async function exportToCSV(): Promise<string> {
     const l = locMap.get(s.permissionId);
     const sess = s.sessionId ? sessMap.get(s.sessionId) : null;
 
-    // Sanitize notes by removing newlines and escaping quotes
-    const sNotes = (s.notes || "").replace(/\r?\n|\r/g, " ");
-    const lNotes = (l?.notes || "").replace(/\r?\n|\r/g, " ");
-
     return [
       s.findCode, s.objectType, s.coinType ?? "", s.coinDenomination ?? "", s.period, s.material, s.completeness === 'Unassessed' ? 'Not assessed' : s.completeness,
       s.weightG ?? "", s.widthMm ?? "", s.decoration ?? "",
@@ -109,11 +115,11 @@ export async function exportToCSV(): Promise<string> {
       s.locationFixAt ?? "", s.locationMethod ?? "unknown", s.locationFrozenAt ?? "", s.osGridRef ?? "", s.w3w ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
       sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
-      l?.collector ?? "", insuranceProvider, ncmdNumber, ncmdExpiry, sNotes, lNotes
-    ].map(val => `"${String(val).replace(/"/g, '""')}"`);
+      l?.collector ?? "", insuranceProvider, ncmdNumber, ncmdExpiry, s.notes, l?.notes
+    ].map(csvCell);
   });
 
-  return "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+  return "\uFEFF" + [headers.map(csvCell).join(","), ...rows.map(r => r.join(","))].join("\n");
 }
 
 /**

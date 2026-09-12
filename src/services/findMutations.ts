@@ -60,15 +60,27 @@ export async function resolveFindPermission(input: {
   });
 }
 
+type PhotoChanges = { upsert: Media[]; removeIds: string[] };
+
+async function commitRecord(find: Omit<Find, 'createdAt'>, options: { existing: boolean; createdAt: string; photos?: PhotoChanges }) {
+  await db.transaction('rw', [db.finds, db.media], async () => {
+    if (options.existing) {
+      if (!await db.finds.get(find.id)) throw new Error('This find no longer exists. Your draft has not been saved.');
+      await db.finds.update(find.id, find);
+    } else await db.finds.add({ ...find, createdAt: options.createdAt });
+    if (options.photos) {
+      if (options.photos.upsert.some(photo => photo.findId !== find.id)) throw new Error('Photo belongs to another find.');
+      await db.media.where('findId').equals(find.id).and(photo => options.photos!.removeIds.includes(photo.id)).delete();
+      await db.media.bulkPut(options.photos.upsert);
+    }
+  });
+}
+
 export async function saveCompletedFind(
   find: Omit<Find, 'createdAt'>,
-  options: { existing: boolean; createdAt: string; sourceSignalId?: string | null },
+  options: { existing: boolean; createdAt: string; sourceSignalId?: string | null; photos?: PhotoChanges },
 ): Promise<void> {
-  if (options.existing) {
-    await db.finds.update(find.id, find);
-  } else {
-    await db.finds.add({ ...find, createdAt: options.createdAt });
-  }
+  await commitRecord(find, options);
   if (options.sourceSignalId) {
     await db.undugSignals.update(options.sourceSignalId, {
       status: 'dug-find',
@@ -83,10 +95,9 @@ export async function saveCompletedFind(
 
 export async function savePendingFind(
   find: Omit<Find, 'createdAt'>,
-  options: { existing: boolean; createdAt: string },
+  options: { existing: boolean; createdAt: string; photos?: PhotoChanges },
 ): Promise<void> {
-  if (options.existing) await db.finds.update(find.id, find);
-  else await db.finds.add({ ...find, createdAt: options.createdAt });
+  await commitRecord(find, options);
   await refreshPredictionEvidence(find.permissionId);
 }
 
@@ -98,9 +109,22 @@ export async function addFindPhotos(media: Media[]): Promise<void> {
   await db.media.bulkAdd(media);
 }
 
-export async function saveFindEdits(find: Find, updatedAt: string): Promise<void> {
-  const previous = await db.finds.get(find.id);
-  await db.finds.update(find.id, { ...find, updatedAt });
+export async function saveFindEdits(
+  find: Find,
+  updatedAt: string,
+  photos?: { upsert: Media[]; removeIds: string[] },
+): Promise<void> {
+  const previous = await db.transaction('rw', [db.finds, db.media], async () => {
+    const existing = await db.finds.get(find.id);
+    if (!existing) throw new Error('This find no longer exists. Your changes have not been saved.');
+    await db.finds.update(find.id, { ...find, updatedAt });
+    if (photos) {
+      if (photos.upsert.some(photo => photo.findId !== find.id)) throw new Error('Photo belongs to another find.');
+      await db.media.where('findId').equals(find.id).and(photo => photos.removeIds.includes(photo.id)).delete();
+      await db.media.bulkPut(photos.upsert);
+    }
+    return existing;
+  });
   await refreshPredictionEvidence(previous?.permissionId, find.permissionId);
 }
 
