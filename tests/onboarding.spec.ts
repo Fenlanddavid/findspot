@@ -37,11 +37,11 @@ test('first scan opens directly without profile setup and onboarding stays dismi
   await page.goto('./');
   await page.getByRole('button', { name: 'Scan land now' }).click();
   await expect(page).toHaveURL(/\/fieldguide/);
-  await expect(page.getByRole('dialog', { name: 'Understand where people used the landscape' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Record finds, track permissions, stay legal' })).toHaveCount(0);
   expect(await durableSetting(page, 'recorderName')).toBeUndefined();
   await expect.poll(() => durableSetting(page, 'fs_onboarding_v2_done')).toBe(true);
   await page.reload();
-  await expect(page.getByRole('dialog', { name: 'Understand where people used the landscape' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Record finds, track permissions, stay legal' })).toHaveCount(0);
 });
 
 test('first recording opens directly without a permission profile or scan', async ({ page }) => {
@@ -55,7 +55,7 @@ test('first recording opens directly without a permission profile or scan', asyn
 test("fresh installs see onboarding despite the generated default permission", async ({ page }) => {
   await page.goto("./");
 
-  const dialog = page.getByRole("dialog", { name: "Understand where people used the landscape" });
+  const dialog = page.getByRole("dialog", { name: "Record finds, track permissions, stay legal" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeFocused();
 
@@ -82,13 +82,9 @@ test("legacy false-completion flags are recovered and completion persists", asyn
   await page.goto("./");
 
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("button", { name: "Get Started" }).click();
-  await page.getByRole("button", { name: "More options" }).click();
-  await page.getByRole("button", { name: "Set up your profile" }).click();
-  await page.getByRole("button", { name: "Open Settings" }).click();
-  await page.getByRole("button", { name: "Let's go" }).click();
+  await page.getByRole("button", { name: "Skip Quick Start" }).click();
 
-  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect.poll(() => durableSetting(page, "fs_onboarding_v2_done")).toBe(true);
   await page.reload();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -97,7 +93,7 @@ test("legacy false-completion flags are recovered and completion persists", asyn
 test("onboarding behaves as a keyboard modal", async ({ page }) => {
   await page.goto("./");
 
-  const dialog = page.getByRole("dialog", { name: "Understand where people used the landscape" });
+  const dialog = page.getByRole("dialog", { name: "Record finds, track permissions, stay legal" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeFocused();
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
@@ -141,11 +137,10 @@ test("Settings replays the guide and shows current install instructions", async 
   await showAgain.click();
 
   await expect(page).toHaveURL(/\/findspot\/$/);
-  await page.getByRole("button", { name: "Get Started" }).click();
-  await page.getByRole("button", { name: "More options" }).click();
-  await page.getByRole("button", { name: "Install the app" }).click();
-  const dialog = page.getByRole("dialog", { name: "Install FindSpot" });
-  await expect(dialog).toContainText("Safari or Chrome");
-  await expect(dialog).toContainText("Open as Web App");
-  await expect(dialog).not.toContainText("Chrome on iOS won't work");
+  const dialog = page.getByRole("dialog", { name: "Record finds, track permissions, stay legal" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Scan land now" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Record a find now" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip Quick Start" }).click();
+  await expect(dialog).toHaveCount(0);
 });
