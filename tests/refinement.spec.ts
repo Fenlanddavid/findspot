@@ -88,6 +88,7 @@ test('Finds includes pending records, preserves filters across map/gallery and c
   await expect(page.getByRole('button', { name: 'Open Coin FS-001', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Pending Quick Find PENDING-1', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Favourites', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Favourites', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('searchbox', { name: 'Search finds' }).fill('Coin');
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   await expect(page.getByText('1 of 1 records have a location.', { exact: false })).toBeVisible();
