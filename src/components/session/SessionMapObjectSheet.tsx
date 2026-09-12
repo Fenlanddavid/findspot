@@ -3,6 +3,7 @@ import type { Find, SavedPoint, Session, SurfaceObservation, Track, UndugSignal 
 import { splitTrackPointsAtGaps } from '../../shared/trackSegments';
 import type { SessionMapObjectRef, SessionMapSelection } from '../../hooks/useSessionMapSelection';
 import { distanceMeters } from '../../utils/geo';
+import { formatDate, formatDateTime } from '../../utils/formatDate';
 
 export type SessionMapObjectRecords = {
   finds: readonly Find[];
@@ -23,9 +24,7 @@ function dateLabel(value: string | number | null | undefined, withTime = false):
   if (value == null || value === '') return 'Unknown';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'Unknown';
-  return date.toLocaleString('en-GB', withTime
-    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'short', year: 'numeric' });
+  return withTime ? formatDateTime(date) : formatDate(date);
 }
 
 function accuracyLabel(value: number | null | undefined): string {

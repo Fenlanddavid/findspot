@@ -8,10 +8,12 @@ import { v4 as uuid } from "uuid";
 import { fileToBlob } from "../services/photos";
 import { captureGPS, toOSGridRef } from "../services/gps";
 import { ScaleCalibrationModal } from "./ScaleCalibrationModal";
+import { formatAccuracy } from '../utils/formatAccuracy';
 import { ScaledImage } from "./ScaledImage";
 import { getSetting } from "../services/data";
 import { LocationPickerModal } from "./LocationPickerModal";
 import { ShareCard } from "./ShareCard";
+import { formatDate, formatTime } from "../utils/formatDate";
 import { makeFindPhotoFilename, shareElementAsImage, downloadShareCard, shareOrDownloadBlob } from "../services/share";
 import PASReportModal from "./PASReportModal";
 import {
@@ -384,7 +386,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                   )}
                   {draft.foundAt && (
                     <p className="text-sm font-mono text-gray-600 dark:text-gray-300 m-0 mt-2">
-                      Found {new Date(draft.foundAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} · {new Date(draft.foundAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      Found {formatDate(draft.foundAt)} · {formatTime(draft.foundAt)}
                     </p>
                   )}
                 </div>
@@ -448,7 +450,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 <DetailItem label="What3Words" value={draft.w3w} />
                 {draft.lat != null && draft.lon != null && (
                   <div className="col-span-2">
-                    <DetailItem label="Coordinates" value={`${draft.lat.toFixed(6)}, ${draft.lon.toFixed(6)} ${draft.gpsAccuracyM ? `(±${Math.round(draft.gpsAccuracyM)}m)` : ""}`} mono />
+                    <DetailItem label="Coordinates" value={`${draft.lat.toFixed(6)}, ${draft.lon.toFixed(6)} ${draft.gpsAccuracyM ? `(${formatAccuracy(draft.gpsAccuracyM)})` : ""}`} mono />
                   </div>
                 )}
               </div>

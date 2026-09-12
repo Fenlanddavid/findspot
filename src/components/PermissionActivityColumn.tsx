@@ -6,6 +6,7 @@ import { ScaledImage } from "./ScaledImage";
 import { UndugSignalLogSection } from "./UndugSignalLog";
 import { UndugSignalMapSheet } from "./UndugSignalMapSheet";
 import { linkFindToSession } from "../services/findMutations";
+import { formatDate, formatTime } from "../utils/formatDate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ function SessionsPanel({ isEdit, permissionId, sessions, nav }: {
                                                     </div>
                                                 )}
                                                 <div className="font-black text-xs text-gray-900 dark:text-gray-100 group-hover:text-emerald-600 transition-colors">
-                                                    {new Date(s.date).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                    {formatDate(s.date)}
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <span className={`text-3xs font-bold truncate ${s.fieldName ? 'text-emerald-600' : 'text-gray-400 italic'}`}>
@@ -175,7 +176,7 @@ export function PermissionActivityColumn({
                                         {f.notes || "No notes..."}
                                     </div>
                                     <div className="text-[9px] opacity-60 font-mono mt-0.5">
-                                        {new Date(f.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {f.findCode}
+                                        {formatTime(f.createdAt)} • {f.findCode}
                                     </div>
                                 </div>
                                 <div className="text-amber-400 group-hover:text-amber-600 transition-colors">
@@ -219,7 +220,7 @@ export function PermissionActivityColumn({
                                                 {f.objectType}
                                             </div>
                                             <div className="text-[9px] opacity-60 font-mono mt-0.5">
-                                                {new Date(f.createdAt).toLocaleDateString()} • {f.findCode}
+                                                {formatDate(f.createdAt)} • {f.findCode}
                                             </div>
                                         </div>
                                         <div className="text-sky-400 group-hover:text-sky-600 transition-colors">
@@ -256,7 +257,7 @@ export function PermissionActivityColumn({
                                                                 onClick={async () => {
                                                                     if (await confirmAction({
                                                                         title: "Link Find to Visit?",
-                                                                        message: `Link this find to the session on ${new Date(s.date).toLocaleDateString()}?`,
+                                                                        message: `Link this find to the session on ${formatDate(s.date)}?`,
                                                                         confirmLabel: "Link",
                                                                     })) {
                                                                         await linkFindToSession(
@@ -269,7 +270,7 @@ export function PermissionActivityColumn({
                                                                 className="w-full text-left p-2.5 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors border-b border-gray-50 dark:border-gray-700 last:border-0 group/item"
                                                             >
                                                                 <div className="text-[10px] font-black text-gray-800 dark:text-gray-100 group-hover/item:text-emerald-600 transition-colors leading-tight">
-                                                                    {new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                                                                    {formatDate(s.date)}
                                                                 </div>
                                                                 <div className="text-[8px] opacity-60 truncate font-bold mt-0.5">
                                                                     {s.fieldName || "General Location"}

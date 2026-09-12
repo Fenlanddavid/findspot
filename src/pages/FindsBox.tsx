@@ -10,6 +10,7 @@ import SignificantFindCard from "../components/significant/SignificantFindCard";
 import SignificantFindDetailSheet from "../components/significant/SignificantFindDetailSheet";
 import { UndugSignalDetailSheet } from "../components/UndugSignalLog";
 import { UndugSignalMapSheet } from "../components/UndugSignalMapSheet";
+import { formatDate } from "../utils/formatDate";
 
 type FindsFilter = "all" | "top" | "pending";
 
@@ -37,7 +38,7 @@ function formatFindDate(find: Find) {
   const raw = getFindDate(find);
   if (!raw) return "Undated";
   try {
-    return new Date(raw).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    return formatDate(raw);
   } catch {
     return "Undated";
   }
@@ -45,7 +46,7 @@ function formatFindDate(find: Find) {
 
 function formatSignalDate(epochMs: number) {
   try {
-    return new Date(epochMs).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    return formatDate(epochMs);
   } catch {
     return "Undated";
   }
@@ -348,7 +349,7 @@ export default function FindsBox(props: { projectId: string }) {
   const noMatches = !isLoading && hasAnyFinds && (filteredFinds?.length ?? 0) === 0;
   const emptyMain = !isLoading && !hasAnyFinds;
   const hasFilters = !!searchQuery || activeFilter !== "all" || !!filterPeriod || !!filterMaterial || !!filterType || !!filterSession || !!dateFrom || !!dateTo || !!filterPermission;
-  const visitName = visit ? `${permissionMap.get(visit.permissionId)?.name || 'Visit'} · ${new Date(visit.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Visit no longer available';
+  const visitName = visit ? `${permissionMap.get(visit.permissionId)?.name || 'Visit'} · ${formatDate(visit.date)}` : 'Visit no longer available';
   const chips = [
     ['q', searchQuery], ['filter', activeFilter === 'top' ? 'Favourites' : activeFilter === 'pending' ? 'Finish later' : ''],
     ['permission', filterPermission ? permissionMap.get(filterPermission)?.name || 'Unknown permission' : ''],

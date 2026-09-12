@@ -1,4 +1,5 @@
 import { triggerDownload } from '../utils/download';
+import { formatDateTime } from '../utils/formatDate';
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import {
@@ -603,8 +604,7 @@ export default function Settings() {
 
   function formatBackupDate(value?: string | null) {
     if (!value) return "Never";
-    const date = new Date(value);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    return formatDateTime(value);
   }
 
   const restoreCanConfirm = restoreConfirmText === RESTORE_CONFIRMATION;

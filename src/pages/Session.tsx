@@ -13,6 +13,7 @@ import PermissionReportModal from "../components/PermissionReportModal";
 import { startTracking, stopTracking, isTrackingActiveForSession, isTrackCurrentlyRecording } from "../services/tracking";
 import { FieldNotesModal } from "../components/FieldNotesModal";
 import { ExportClubDayModal } from "../components/ClubDayModals";
+import { formatDateLong } from "../utils/formatDate";
 import { TrackingOverlay } from "../components/TrackingOverlay";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { useConfirmDialog } from "../components/ConfirmModal";
@@ -1125,7 +1126,7 @@ export default function SessionPage(props: {
                           <div className="min-w-0 flex-1">
                             <p className="text-emerald-600 font-black text-xs uppercase tracking-widest mb-1 truncate">{permission?.name || "Unknown Location"}</p>
                             <div className="flex flex-wrap items-center gap-3">
-                              <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{new Date(date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
+                              <h3 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 break-words">{formatDateLong(date)}</h3>
                               {isFinished && (
                                 <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-2xs font-black px-2 py-0.5 rounded uppercase tracking-widest border border-gray-200 dark:border-gray-600 whitespace-nowrap">Finished</span>
                               )}

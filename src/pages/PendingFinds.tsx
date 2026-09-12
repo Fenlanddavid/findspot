@@ -6,6 +6,7 @@ import {
   deletePendingFind as deletePendingFindRecord,
   markPendingFindComplete,
 } from "../services/findMutations";
+import { formatDate, formatTime } from "../utils/formatDate";
 
 export default function PendingFinds(props: { projectId: string }) {
   const navigate = useNavigate();
@@ -97,10 +98,10 @@ export default function PendingFinds(props: { projectId: string }) {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-[9px] font-mono text-gray-400">
-                    {new Date(f.createdAt).toLocaleDateString()}
+                    {formatDate(f.createdAt)}
                   </div>
                   <div className="text-[9px] font-mono text-gray-400">
-                    {new Date(f.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    {formatTime(f.createdAt)}
                   </div>
                   {f.lat != null && f.lon != null ? (
                     <div className="text-[9px] text-emerald-500 font-bold mt-0.5">📍 GPS saved</div>

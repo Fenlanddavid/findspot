@@ -4,6 +4,7 @@ import type { EnrichedPermission } from "../services/permissions";
 import { rallyPersona } from "../utils/rallyPersona";
 import { RallyPersonaChip } from "./RallyPersonaChip";
 import { StaticMapPreview } from "./StaticMapPreview";
+import { formatDate } from "../utils/formatDate";
 
 type PermissionCardProps = {
   permission: EnrichedPermission;
@@ -20,9 +21,9 @@ export function PermissionCard({ permission, onOpen, onAddFind, onOpenFieldGuide
   const persona = isRally ? rallyPersona(permission) : "not_rally";
   const previewBoundary = permission.boundary || permission.fields?.[0]?.boundary;
   const dateLabel = isRally && permission.validFrom
-    ? new Date(permission.validFrom).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    ? formatDate(permission.validFrom)
     : permission.lastSessionDate
-      ? `Last visit ${new Date(permission.lastSessionDate).toLocaleDateString("en-GB")}`
+      ? `Last visit ${formatDate(permission.lastSessionDate)}`
       : "No visits recorded";
 
   return (

@@ -12,6 +12,7 @@ import {
   type SurfacePeriod,
   type SurfaceVisibility,
 } from '../../db';
+import { formatDate } from '../../utils/formatDate';
 import {
   deleteSurfaceObservationPermanently,
   editSurfaceObservationContext,
@@ -241,8 +242,8 @@ export function SurfaceObservationDetailModal({
       ['Period impression', observation.periodImpression === 'unknown' ? 'Not recorded' : `${observation.datingConfidence === 'confident' ? '' : 'Possible '}${SURFACE_PERIOD_LABELS[observation.periodImpression]} — your impression`],
       ['Identification confidence', confidenceLabel(observation.materialConfidence)],
     ] as const : []),
-    ['Recorded', new Date(observation.observedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })],
-    ['Visit', observation.originSessionId ? (observation.originSessionDate ? new Date(observation.originSessionDate).toLocaleDateString('en-GB') : 'Saved visit') : 'Outside a saved visit'],
+    ['Recorded', formatDate(observation.observedAt)],
+    ['Visit', observation.originSessionId ? (observation.originSessionDate ? formatDate(observation.originSessionDate) : 'Saved visit') : 'Outside a saved visit'],
     ['Field context', field?.name ?? (observation.fieldId ? 'Linked field' : 'Not assigned')],
     ['Section context', section?.label ?? (observation.sectionId ? 'Linked section' : 'Not assigned')],
   ] as const, [field?.name, isIronPatch, observation, section?.label]);
@@ -274,7 +275,7 @@ export function SurfaceObservationDetailModal({
             {!isIronPatch && <div className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
               <p className="text-3xs font-black uppercase tracking-widest text-gray-400">Assessment history</p>
               <p className="mt-2 text-xs font-black">Original assessment</p><p className="text-xs text-gray-600 dark:text-gray-300">{assessmentLine(original)}</p>
-              {observation.reassessments.map((item, index) => <div key={`${item.reassessedAt}-${index}`} className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700"><p className="text-xs font-black">Reassessed {new Date(item.reassessedAt).toLocaleDateString('en-GB')}</p><p className="text-xs text-gray-600 dark:text-gray-300">{assessmentLine(item.current)}</p></div>)}
+              {observation.reassessments.map((item, index) => <div key={`${item.reassessedAt}-${index}`} className="mt-2 border-t border-gray-100 pt-2 dark:border-gray-700"><p className="text-xs font-black">Reassessed {formatDate(item.reassessedAt)}</p><p className="text-xs text-gray-600 dark:text-gray-300">{assessmentLine(item.current)}</p></div>)}
               {observation.reassessments.length === 0 && <p className="mt-2 text-xs text-gray-400">No later reassessments.</p>}
             </div>}
             <PhotoGallery observationId={observation.id} media={photos} />

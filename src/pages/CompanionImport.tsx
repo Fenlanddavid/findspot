@@ -10,6 +10,7 @@ import {
   type CompanionImportResult,
 } from '../services/companionImport';
 import { takePendingCompanionShare } from '../services/companionShare';
+import { formatDateTime } from '../utils/formatDate';
 import {
   companionRecordingHref,
   COMPANION_DOWNLOAD_URL,
@@ -33,7 +34,7 @@ function formatDuration(milliseconds: number | null): string {
 
 function sessionLabel(session: Session, permissionName: string | undefined): string {
   const status = session.isFinished ? 'finished' : 'active';
-  return `${permissionName ?? 'Permission'} · ${new Date(session.date).toLocaleString()} · ${status}`;
+  return `${permissionName ?? 'Permission'} · ${formatDateTime(session.date)} · ${status}`;
 }
 
 export default function CompanionImport({ projectId }: Props) {
@@ -325,7 +326,7 @@ export default function CompanionImport({ projectId }: Props) {
       {preview && !result && (
         <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <div><span className="block text-[9px] font-black uppercase text-gray-400">Started</span>{preview.startedAt.toLocaleString()}</div>
+            <div><span className="block text-[9px] font-black uppercase text-gray-400">Started</span>{formatDateTime(preview.startedAt)}</div>
             <div><span className="block text-[9px] font-black uppercase text-gray-400">Duration</span>{formatDuration(preview.durationMs)}</div>
             <div><span className="block text-[9px] font-black uppercase text-gray-400">Segments</span>{preview.segmentCount}</div>
             <div><span className="block text-[9px] font-black uppercase text-gray-400">Points</span>{preview.pointCount.toLocaleString()}</div>

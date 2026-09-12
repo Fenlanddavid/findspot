@@ -7,6 +7,7 @@ import html2canvas from "html2canvas";
 import { db, Find, Permission, Session, Track } from "../db";
 import { Modal } from "./Modal";
 import { calculateCoverage } from "../services/coverage";
+import { formatDateLong } from '../utils/formatDate';
 import {
   toFarmerLabel,
   toFarmerDetail,
@@ -489,9 +490,7 @@ export default function FieldReportModal({ sessionId, onClose }: Props) {
   const generatedAt = generatedAtRef.current;
   const reportReference = makeReportReference(isGroupReport ? "RALLYVISIT" : "VISIT", session.id, generatedAt);
   const conductedByLabel = isGroupReport ? "Club/rally organiser" : (detectoristName || permission.collector || "Detectorist");
-  const sessionDate = new Date(session.date).toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
+  const sessionDate = formatDateLong(session.date);
   const hasMap = !!(tracks.length > 0 || finds.some(f => f.lat != null && f.lon != null));
   const notableFinds = getNotableFindLabels(finds);
   const gpsFindCount = finds.filter(f => f.lat != null && f.lon != null).length;

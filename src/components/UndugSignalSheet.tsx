@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db';
 import type { UndugSignalDirection, UndugSignalStability, UndugSignalConditions } from '../db';
 import { recordUndugSignal } from '../services/investigationMutations';
+import { formatAccuracy } from '../utils/formatAccuracy';
 
 type Props = {
   sessionId?: string | null;
@@ -150,7 +151,7 @@ export function UndugSignalSheet({ sessionId, permissionId, onSaved, onClose }: 
             </div>
             {fix && (
               <span className="shrink-0 rounded-full bg-white/80 dark:bg-gray-950/70 border border-emerald-100 dark:border-emerald-900 px-2 py-0.5 text-2xs font-black text-emerald-700 dark:text-emerald-300">
-                ±{fix.accuracy < 100 ? Math.round(fix.accuracy) : '>100'}m
+                {formatAccuracy(fix.accuracy)}
               </span>
             )}
           </div>

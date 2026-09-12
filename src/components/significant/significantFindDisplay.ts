@@ -1,10 +1,11 @@
 import type { SignificantFind } from "../../db";
+import { formatDate } from "../../utils/formatDate";
 
 export function formatSignificantDate(iso: string) {
   try {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return "Unknown date";
-    return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    return formatDate(date);
   } catch {
     return "Unknown date";
   }

@@ -12,6 +12,7 @@ import {
 import { CACHE_POLICIES } from '../shared/cachePolicy';
 import { distanceKilometers } from '../utils/geo';
 import { safeExternalHttpUrl } from '../utils/safeExternalUrl';
+import { formatDate as fmtDate } from '../utils/formatDate';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -214,12 +215,7 @@ function getQualityLabel(event: DetectingEvent): { label: string; style: string 
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return fmtDate(dateStr);
 }
 
 function verificationStyle(s: VerificationStatus): string {

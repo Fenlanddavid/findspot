@@ -13,6 +13,7 @@ import {
   createSignificantFindRecord,
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
+import { formatDate } from "../../../utils/formatDate";
 import { reportNonFatal } from "../../../services/diagLog";
 
 type Props = {
@@ -133,7 +134,7 @@ export default function ScatterCompleteScreen({ workflowState, updateState, onCl
   async function copyScatterSummary() {
     const lines = [
       `SCATTER FIND SUMMARY`,
-      `Date: ${new Date().toLocaleDateString("en-GB")}`,
+      `Date: ${formatDate(new Date())}`,
       `Finds recorded: ${count}`,
       areaDesc ? `Spread: ${areaDesc}` : "",
       "",

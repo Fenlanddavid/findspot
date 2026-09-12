@@ -4,6 +4,8 @@ import type { BoundaryPositionStatus } from '../../services/session/sessionField
 import type { SessionActivityItem } from '../../services/session/sessionActivity';
 import type { ScheduledMonumentMapCoverage } from '../../services/session/sessionScheduledMonuments';
 import { ScheduledMonumentCoverageLine } from './ScheduledMonumentCoverageLine';
+import { formatAccuracy } from '../../utils/formatAccuracy';
+import { formatTime } from '../../utils/formatDate';
 
 export type ActiveWorkspaceTab = 'map' | 'record' | 'session';
 export type ActiveWorkspaceDestination = ActiveWorkspaceTab | 'guide';
@@ -26,7 +28,7 @@ function trackingPresentation(props: {
   const wakeWarning = !props.trackingStatus.wakeLockSupported || !props.trackingStatus.wakeLockHeld;
   return {
     label: 'Trail recording',
-    secondary: [accuracy != null ? `Accuracy ±${Math.round(accuracy)} m` : 'Accuracy unknown', 'Fix live', ...(wakeWarning ? ['Screen lock unprotected'] : [])],
+    secondary: [accuracy != null ? `Accuracy ${formatAccuracy(accuracy)}` : 'Accuracy unknown', 'Fix live', ...(wakeWarning ? ['Screen lock unprotected'] : [])],
     tone: wakeWarning ? 'text-amber-300' : 'text-teal-200', dot: 'animate-pulse bg-teal-400',
   };
 }
@@ -368,7 +370,7 @@ export function ActiveSessionWorkspace(props: {
             <div className="rounded-2xl border border-white/10 bg-gray-900 p-5">
               <p className="text-2xs font-black uppercase tracking-[0.2em] text-teal-300">This visit</p>
               <h2 className="mt-1 text-xl font-black">{props.permissionName}</h2>
-              <p className="mt-1 text-sm text-gray-400">Started {new Date(props.startedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</p>
+              <p className="mt-1 text-sm text-gray-400">Started {formatTime(props.startedAt)}</p>
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   { label: 'Elapsed', value: props.durationText },
@@ -382,7 +384,7 @@ export function ActiveSessionWorkspace(props: {
                   {props.findActivity.length > 0 ? props.findActivity.map(item => (
                     <button type="button" key={item.id} onClick={() => props.onActivity(item)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 bg-gray-950 px-3 text-left">
                       <span className="min-w-0"><span className="block truncate text-xs font-black text-gray-100">{item.detail}</span><span className="mt-0.5 block text-2xs text-gray-400">{item.title}</span></span>
-                      <span className="shrink-0 text-3xs font-bold text-gray-500">{new Date(item.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span className="shrink-0 text-3xs font-bold text-gray-500">{formatTime(item.timestamp)}</span>
                     </button>
                   )) : <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-gray-500">No finds recorded in this visit.</p>}
                 </div>
@@ -392,7 +394,7 @@ export function ActiveSessionWorkspace(props: {
             <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">
               <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-black">Recent activity</p><p className="mt-0.5 text-2xs text-gray-400">Open a record to check or add detail.</p></div>{!props.hasStartPoint && <button type="button" onClick={props.onMarkStartPoint} className="min-h-11 rounded-xl border border-violet-400/30 bg-violet-400/10 px-3 text-2xs font-black text-violet-200">Mark start</button>}</div>
               <div className="mt-3 grid gap-2">
-                {props.recentActivity.length > 0 ? props.recentActivity.map(item => <button type="button" key={`${item.kind}:${item.id}`} onClick={() => props.onActivity(item)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 bg-gray-950 px-3 text-left"><span className="min-w-0"><span className="block truncate text-xs font-black text-gray-100">{item.title}</span><span className="mt-0.5 block truncate text-2xs text-gray-400">{item.detail}</span></span><span className="shrink-0 text-3xs font-bold text-gray-500">{new Date(item.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span></button>) : <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-gray-500">Your finds, signals and marked locations will appear here.</p>}
+                {props.recentActivity.length > 0 ? props.recentActivity.map(item => <button type="button" key={`${item.kind}:${item.id}`} onClick={() => props.onActivity(item)} className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-white/10 bg-gray-950 px-3 text-left"><span className="min-w-0"><span className="block truncate text-xs font-black text-gray-100">{item.title}</span><span className="mt-0.5 block truncate text-2xs text-gray-400">{item.detail}</span></span><span className="shrink-0 text-3xs font-bold text-gray-500">{formatTime(item.timestamp)}</span></button>) : <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs font-bold text-gray-500">Your finds, signals and marked locations will appear here.</p>}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-gray-900 p-4">

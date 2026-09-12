@@ -6,6 +6,7 @@ import {
   FINDSPOT_COPYRIGHT_NOTICE,
   REPORT_PROTECTION_NOTICE,
 } from "../utils/legalCopy";
+import { formatDate, formatDateLong } from "../utils/formatDate";
 
 export const REPORT = {
   paper: "#f8f6f0",
@@ -55,11 +56,7 @@ export function formatReportDate(value: string | Date | null | undefined, style:
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: style === "short" ? "short" : "long",
-    year: "numeric",
-  });
+  return style === "short" ? formatDate(date) : formatDateLong(date);
 }
 
 export function formatSessionDateRange(sessions: Session[]): string | null {

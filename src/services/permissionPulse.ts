@@ -3,6 +3,7 @@
 
 import { db } from "../db";
 import { qualifiesForClock } from "./treasureClock";
+import { formatDate } from "../utils/formatDate";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -274,7 +275,7 @@ export async function derivePermissionPulse(
         permissionId,
         severity: "delta",
         templateId: "last_visit",
-        slots: { gapDays, date: new Date(lastSession.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), state: lastSession.isFinished ? '' : ' · still open' },
+        slots: { gapDays, date: formatDate(lastSession.date), state: lastSession.isFinished ? '' : ' · still open' },
         link: { kind: "route", to: `/session/${lastSession.id}` },
       });
     }

@@ -8,6 +8,7 @@ import {
   type ClubDayPack,
 } from "../services/clubDayValidation";
 import { Logo } from "../components/Logo";
+import { formatDate, formatDateLong } from "../utils/formatDate";
 
 export default function JoinClubDay() {
   const [params] = useSearchParams();
@@ -92,10 +93,10 @@ export default function JoinClubDay() {
   }
 
   const formattedDate = date
-    ? new Date(date).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    ? formatDateLong(date)
     : "";
   const compactDate = date
-    ? new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+    ? formatDate(date)
     : "";
 
   if (joined || alreadyJoined || updatedExisting) {

@@ -1,4 +1,5 @@
 import { db, type FindSpotDB } from '../../db';
+import { formatDate } from '../../utils/formatDate';
 
 export const CONTINUITY_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -35,7 +36,7 @@ export async function resolveContinuityForPermission(
     sourceType: 'undug-signal',
     sourceId: source.id,
     title: 'You left a signal open here',
-    explanation: `Recorded on ${new Date(source.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}.`,
+    explanation: `Recorded on ${formatDate(source.createdAt)}.`,
     action: {
       href: `/finds-box?tab=signals&signal=${encodeURIComponent(source.id)}`,
       label: 'View signal',

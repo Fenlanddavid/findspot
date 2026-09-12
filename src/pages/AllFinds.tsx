@@ -8,6 +8,7 @@ import { FindModal } from "../components/FindModal";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { saveFindMapStyle } from "../services/mapPreferenceMutations";
+import { formatDate, formatTime } from "../utils/formatDate";
 
 const DEFAULT_CENTER: [number, number] = [-2.0, 54.5];
 const DEFAULT_ZOOM = 5;
@@ -342,7 +343,7 @@ export default function AllFinds(props: { projectId: string }) {
                             <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-emerald-600 transition-colors line-clamp-1 uppercase tracking-tight">{s.objectType || "Unidentified"}</h3>
                             <div className="flex flex-wrap gap-2 pt-3 mt-auto">
                                 <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase border bg-emerald-50 border-emerald-100 text-emerald-700">{s.period}</span>
-                                <span className="ml-auto text-[9px] opacity-40 font-black uppercase tracking-widest">{new Date(s.foundAt ?? s.createdAt).toLocaleDateString()} {new Date(s.foundAt ?? s.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                <span className="ml-auto text-[9px] opacity-40 font-black uppercase tracking-widest">{formatDate(s.foundAt ?? s.createdAt)} {formatTime(s.foundAt ?? s.createdAt)}</span>
                             </div>
                         </div>
                     </div>

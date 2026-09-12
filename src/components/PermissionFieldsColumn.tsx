@@ -11,6 +11,7 @@ import {
   CoverageResult,
 } from "../services/coverage";
 import { useReportedCoverageGeometries } from "../hooks/useReportedCoverageGeometries";
+import { formatDate, formatDateLong, formatDateTime } from '../utils/formatDate';
 import {
   BASEMAP_SOURCES, BASEMAP_LAYERS, BASEMAP_MODES, applyBasemap,
   type BasemapMode,
@@ -1057,12 +1058,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-gray-500 dark:text-gray-400">
                         {validFrom && (
                           <span>
-                            {new Date(validFrom).toLocaleDateString("en-GB", {
-                              weekday: "long",
-                              day: "numeric",
-                              month: "long",
-                              year: "numeric",
-                            })}
+                            {formatDateLong(validFrom)}
                           </span>
                         )}
                         {validFrom && <span aria-hidden="true">·</span>}
@@ -1155,7 +1151,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         </div>
                         {submittedAt && (
                           <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
-                            Export prepared on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Delivery to the organiser is not confirmed. Your finds are still stored on this device.
+                            Export prepared on {formatDate(submittedAt)}. Delivery to the organiser is not confirmed. Your finds are still stored on this device.
                           </div>
                         )}
                         {significantFindInstructions && (
@@ -1192,7 +1188,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {submittedMembers.map(m => (
                           <div key={m.id} className="flex items-center justify-between px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
                             <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">✓ {m.recorderName || "Unnamed detectorist"}</span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-500">{new Date(m.importedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-500">{formatDateTime(m.importedAt)}</span>
                           </div>
                         ))}
                       </div>
@@ -1308,7 +1304,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                                 {validFrom && (
                                     <div className="text-right">
                                         <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 text-emerald-600 dark:text-emerald-400">Valid From</h4>
-                                        <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString()}</p>
+                                        <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{formatDate(validFrom)}</p>
                                     </div>
                                 )}
                             </div>
@@ -1317,7 +1313,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                         {isRally && validFrom && (
                         <div>
                             <h4 className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1 text-emerald-600 dark:text-emerald-400">Event Date</h4>
-                            <p className="font-bold text-gray-700 dark:text-gray-300">{new Date(validFrom).toLocaleDateString()}</p>
+                            <p className="font-bold text-gray-700 dark:text-gray-300">{formatDate(validFrom)}</p>
                         </div>
                         )}
                     </div>
@@ -1357,7 +1353,7 @@ export function PermissionFieldsColumn(props: FieldsColumnProps) {
                             {(ncmdNumber || ncmdExpiry) && (
                                 <div className="mt-1 text-[10px] font-bold text-emerald-600 flex flex-wrap gap-x-3">
                                     {ncmdNumber && <span>{insuranceProvider || 'Insurance'}: {ncmdNumber}</span>}
-                                    {ncmdExpiry && <span>Exp: {new Date(ncmdExpiry).toLocaleDateString()}</span>}
+                                    {ncmdExpiry && <span>Exp: {formatDate(ncmdExpiry)}</span>}
                                 </div>
                             )}
                         </div>

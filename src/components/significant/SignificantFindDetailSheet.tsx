@@ -7,6 +7,7 @@ import { db, Find, Media, SignificantFind } from "../../db";
 import { fileToBlob } from "../../services/photos";
 import { ScaledImage } from "../ScaledImage";
 import { safeExternalHttpUrl } from "../../utils/safeExternalUrl";
+import { formatAccuracy } from "../../utils/formatAccuracy";
 import {
   formatSignificantDate,
   formatSignificantLocation,
@@ -872,7 +873,7 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
               <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Recorded</p>
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{formatSignificantDate(sf.createdAt)}</p>
-                {sf.gpsAccuracyM != null && <p className="text-xs text-gray-500 mt-0.5">+/-{sf.gpsAccuracyM.toFixed(1)}m</p>}
+                {sf.gpsAccuracyM != null && <p className="text-xs text-gray-500 mt-0.5">{formatAccuracy(sf.gpsAccuracyM)}</p>}
               </div>
             </div>
 

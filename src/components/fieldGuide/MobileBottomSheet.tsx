@@ -11,6 +11,7 @@ import { HOTSPOT_TITLES, HISTORIC_LAYER_GROUPS } from './FieldGuideContext';
 import { ScanControlPanel } from './ScanControlPanel';
 import { SavedPointsPanel } from './SavedPointsPanel';
 import { HotspotTray } from './HotspotTray';
+import { formatDate } from '../../utils/formatDate';
 import { HistoricLayerManager } from './HistoricLayerManager';
 import { GeologyContextCard } from './GeologyContextCard';
 import { SMUnavailableBanner } from './SMUnavailableBanner';
@@ -402,7 +403,7 @@ export function MobileBottomSheet() {
                     };
                     const chipClass = PERIOD_CHIP[selectedUserFind.period] ?? PERIOD_CHIP['Unknown'];
                     const foundDate = selectedUserFind.foundAt ?? selectedUserFind.createdAt;
-                    const dateLabel = foundDate ? new Date(foundDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+                    const dateLabel = foundDate ? formatDate(foundDate) : null;
                     return (
                         <div className="space-y-3">
                             <div className="flex items-start gap-3">

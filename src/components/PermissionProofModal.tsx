@@ -1,6 +1,7 @@
 import React from "react";
 import { Permission, Media } from "../db";
 import Modal from "./Modal";
+import { formatDate, formatDateLong } from "../utils/formatDate";
 
 interface Props {
   permission: Permission;
@@ -15,13 +16,9 @@ export default function PermissionProofModal({ permission, agreementFile, insura
   const insuranceExpired = ncmdExpiry && new Date(ncmdExpiry) < new Date();
   
   // Format dates for display
-  const formatDate = (dateStr?: string) => {
+  const fmtDate = (dateStr?: string) => {
     if (!dateStr) return "N/A";
-    return new Date(dateStr).toLocaleDateString(undefined, { 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
-    });
+    return formatDateLong(dateStr);
   };
 
   return (
@@ -42,7 +39,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
             {permission.permissionGranted ? "Active Permission" : "No Active Permission"}
           </h2>
           <p className="text-white/80 text-xs font-bold uppercase tracking-widest mt-1">
-            Status Valid as of {new Date().toLocaleDateString()}
+            Status Valid as of {formatDate(new Date())}
           </p>
         </div>
 
@@ -70,7 +67,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
                   <div>
                     <div className="text-[10px] font-bold text-gray-400 uppercase">Valid From</div>
                     <div className="font-black text-gray-800 dark:text-white">
-                      {formatDate(permission.validFrom)}
+                      {fmtDate(permission.validFrom)}
                     </div>
                   </div>
                   <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-tighter border border-emerald-200 dark:border-emerald-800">Marked Active</span>
@@ -106,7 +103,7 @@ export default function PermissionProofModal({ permission, agreementFile, insura
                   <div className="text-right">
                     <div className="text-[10px] font-bold text-teal-600 uppercase mb-0.5">Expiry</div>
                     <div className={`text-sm font-bold ${insuranceExpired ? "text-red-500" : "dark:text-gray-300"}`}>
-                      {formatDate(ncmdExpiry)}
+                      {fmtDate(ncmdExpiry)}
                     </div>
                   </div>
                 </div>

@@ -13,6 +13,7 @@ import { Modal } from "../components/Modal";
 import { useConfirmDialog } from "../components/ConfirmModal";
 import { UndugSignalSheet } from "../components/UndugSignalSheet";
 import { LockIcon, SearchIcon } from "../components/AppIcons";
+import { formatDate, formatTime } from "../utils/formatDate";
 import { ephemeralSession, useDurableSetting } from '../services/clientStorage';
 import { getBackupReminderState } from '../services/backupReminder';
 import { setPermissionPinned } from '../services/permissionMutations';
@@ -412,7 +413,7 @@ export default function Home(props: {
                 {returnContext?.permission.name ?? 'Active session'}
               </p>
               <p className="mt-0.5 text-xs text-gray-300">
-                Started {new Date(sessionStartedAt(activeSession)).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                Started {formatTime(sessionStartedAt(activeSession))}
               </p>
             </div>
             <button
@@ -454,7 +455,7 @@ export default function Home(props: {
               {continuityItem
                 ? `${continuityItem.title} · ${continuityItem.explanation}`
                 : returnContext.lastVisitAt
-                  ? `Last visit ${new Date(returnContext.lastVisitAt).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}`
+                  ? `Last visit ${formatDate(returnContext.lastVisitAt)}`
                   : 'Open permission'}
             </span>
           </span>
@@ -757,7 +758,7 @@ export default function Home(props: {
                         <span className="rounded border border-gray-200 bg-gray-50 px-1 font-bold uppercase dark:border-gray-700 dark:bg-gray-900">{s.period}</span>
                         {s.material !== "Other" && <span className="truncate capitalize">{s.material}</span>}
                       </div>
-                      <span className="shrink-0 opacity-70">{new Date(s.createdAt).toLocaleDateString()}</span>
+                      <span className="shrink-0 opacity-70">{formatDate(s.createdAt)}</span>
                     </div>
                   </div>
                 );
@@ -781,7 +782,7 @@ export default function Home(props: {
                         <span className="bg-gray-50 dark:bg-gray-900 px-1 rounded border border-gray-200 dark:border-gray-700 uppercase font-bold">{s.period}</span>
                         {s.material !== "Other" && <span className="capitalize">{s.material}</span>}
                       </div>
-                      <span className="opacity-60">{new Date(s.createdAt).toLocaleDateString()}</span>
+                      <span className="opacity-60">{formatDate(s.createdAt)}</span>
                     </div>
                   </div>
                 </div>

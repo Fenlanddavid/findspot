@@ -1,12 +1,14 @@
 import { WorkflowState } from "../types/significantFind";
 import { Find } from "../db";
+import { formatAccuracy } from "./formatAccuracy";
+import { formatDateLong } from "./formatDate";
 
 type FLOEntry = { name: string; email: string } | null;
 
 function formatDate(iso?: string) {
-  if (!iso) return new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  if (!iso) return formatDateLong(new Date());
   try {
-    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+    return formatDateLong(iso);
   } catch {
     return iso;
   }
@@ -38,7 +40,7 @@ export function buildSecureFindEmail(
     "FIND DETAILS",
     `Date: ${date}`,
     `Location: ${loc}`,
-    state.gpsAccuracyM != null ? `GPS accuracy: ±${state.gpsAccuracyM.toFixed(1)}m` : "",
+    state.gpsAccuracyM != null ? `GPS accuracy: ${formatAccuracy(state.gpsAccuracyM)}` : "",
     `Finder: ${collectorName || "[your name]"}`,
     state.findDescription ? `Type: ${state.findDescription}` : "",
     "",
@@ -110,7 +112,7 @@ export function buildScatterEmail(
     "SCATTER DETAILS",
     `Date: ${date}`,
     `Centre point: ${loc}`,
-    state.gpsAccuracyM != null ? `GPS accuracy: ±${state.gpsAccuracyM.toFixed(1)}m` : "",
+    state.gpsAccuracyM != null ? `GPS accuracy: ${formatAccuracy(state.gpsAccuracyM)}` : "",
     `Finds recorded: ${scatterFinds.length}`,
     areaDesc ? `Spread: ${areaDesc}` : "",
     `Finder: ${collectorName || "[your name]"}`,
@@ -160,7 +162,7 @@ export function buildNotableFindEmail(
     "FIND DETAILS",
     `Date: ${date}`,
     `Location: ${loc}`,
-    state.gpsAccuracyM != null ? `GPS accuracy: ±${state.gpsAccuracyM.toFixed(1)}m` : "",
+    state.gpsAccuracyM != null ? `GPS accuracy: ${formatAccuracy(state.gpsAccuracyM)}` : "",
     `Finder: ${collectorName || "[your name]"}`,
     find?.objectType ? `Object type: ${find.objectType}` : "",
     find?.period ? `Period: ${find.period}` : "",

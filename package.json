@@ -1,7 +1,7 @@
 {
   "name": "findspot",
   "private": true,
-  "version": "5.0.17",
+  "version": "5.0.18",
   "type": "module",
   "engines": {
     "node": ">=22.22.0"
@@ -15,13 +15,14 @@
     "check:downloads": "node scripts/checkDownloads.mjs",
     "check:dom-safety": "node scripts/checkDomSafety.mjs",
     "check:network-origins": "node scripts/checkNetworkOrigins.mjs",
+    "check:dates": "node scripts/checkDateLocale.mjs",
     "check:release": "node scripts/checkReleaseNotes.mjs",
     "release:prepare": "node scripts/prepareRelease.mjs",
     "typefloor": "node scripts/checkTypeFloor.mjs",
     "typecheck": "tsc -b --pretty false",
     "typecheck:worker": "tsc -p workers/findspot-static/tsconfig.json --pretty false && tsc -p workers/geocode-proxy/tsconfig.json --pretty false",
     "check:worker-types": "wrangler types workers/findspot-static/worker-configuration.d.ts --check --config workers/findspot-static/wrangler.toml --include-runtime=false && wrangler types workers/geocode-proxy/worker-configuration.d.ts --check --config workers/geocode-proxy/wrangler.toml --include-runtime=false",
-    "test": "npm run typecheck && npm run typefloor && npm run check:casing && npm run check:any && npm run check:hooks && npm run check:dump && npm run check:dom-safety && npm run check:downloads && npm run check:network-origins && npm run test:unit",
+    "test": "npm run typecheck && npm run typefloor && npm run check:casing && npm run check:any && npm run check:hooks && npm run check:dump && npm run check:dom-safety && npm run check:downloads && npm run check:dates && npm run check:network-origins && npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:security": "npm run check:dom-safety && npm run check:downloads && npm run check:network-origins && vitest run tests/security/unit",

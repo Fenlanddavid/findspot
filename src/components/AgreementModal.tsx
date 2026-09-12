@@ -8,6 +8,7 @@ import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { getSetting } from "../services/data";
 import { attachPermissionAgreement } from "../services/permissionMutations";
+import { formatDate } from "../utils/formatDate";
 import {
   REPORT,
   ReportFooter,
@@ -451,7 +452,7 @@ export function AgreementModal(props: {
               <ReportSummaryRows
                 title="Agreement Details"
                 rows={isClubRallyAgreement ? [
-                  { label: "Agreement date", value: formatReportDate(generatedAt, "long") || generatedAt.toLocaleDateString() },
+                  { label: "Agreement date", value: formatReportDate(generatedAt, "long") || formatDate(generatedAt) },
                   { label: "Landowner / occupier", value: clubRallyDetails.landownerName || "____________________" },
                   { label: "Organiser", value: clubRallyDetails.organiserName || "____________________" },
                   { label: "Event date", value: formatClubRallyEventDate(clubRallyDetails.eventDate) },
@@ -459,7 +460,7 @@ export function AgreementModal(props: {
                   { label: "Permitted areas", value: clubRallyDetails.permittedAreas || "To be agreed" },
                   { label: "Attendee limit", value: clubRallyDetails.attendeeLimit || "To be agreed" },
                 ] : [
-                  { label: "Agreement date", value: formatReportDate(generatedAt, "long") || generatedAt.toLocaleDateString() },
+                  { label: "Agreement date", value: formatReportDate(generatedAt, "long") || formatDate(generatedAt) },
                   { label: "Landowner", value: `${props.permission.landownerName || "____________________"}${props.permission.landownerAddress ? `, ${props.permission.landownerAddress}` : ""}` },
                   { label: "Detectorist", value: `${detectoristName || "____________________"}${detectoristEmail ? ` (${detectoristEmail})` : ""}` },
                   { label: "Land / permission", value: props.permission.name },

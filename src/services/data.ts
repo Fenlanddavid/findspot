@@ -8,6 +8,7 @@ import {
   type Session,
   type SignificantFind,
 } from "../db";
+import { formatDateTime } from "../utils/formatDate";
 import { v4 as uuid } from "uuid";
 import { blobToBase64, base64ToBlob } from "./backup/mediaEncoding";
 import { MAX_BACKUP_RECORDS } from "./backup/schema";
@@ -114,7 +115,7 @@ export async function exportToCSV(): Promise<string> {
       s.lat ?? sess?.lat ?? l?.lat ?? "", s.lon ?? sess?.lon ?? l?.lon ?? "", s.gpsAccuracyM ?? sess?.gpsAccuracyM ?? l?.gpsAccuracyM ?? "",
       s.locationFixAt ?? "", s.locationMethod ?? "unknown", s.locationFrozenAt ?? "", s.osGridRef ?? "", s.w3w ?? "",
       l?.landType ?? "", sess?.landUse ?? "", sess?.cropType ?? "", sess?.isStubble ? "Yes" : "No",
-      sess?.date ? new Date(sess.date).toLocaleString() : (l?.createdAt ? new Date(l.createdAt).toLocaleString() : ""),
+      sess?.date ? formatDateTime(sess.date) : (l?.createdAt ? formatDateTime(l.createdAt) : ""),
       l?.collector ?? "", insuranceProvider, ncmdNumber, ncmdExpiry, s.notes, l?.notes
     ].map(csvCell);
   });

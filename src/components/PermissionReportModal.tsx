@@ -9,6 +9,7 @@ import { Modal } from "./Modal";
 import { toFarmerLabel, toFarmerDetail, summariseFinds } from "../services/fieldReport";
 import { getSetting } from "../services/data";
 import { reportNonFatal } from "../services/diagLog";
+import { formatDate } from "../utils/formatDate";
 import {
   REPORT,
   ReportFooter,
@@ -451,7 +452,7 @@ export default function PermissionReportModal({ permissionId, fieldId, onClose }
   ];
 
   const sessionDateMap = new Map(
-    sessions.map(s => [s.id, new Date(s.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })])
+    sessions.map(s => [s.id, formatDate(s.date)])
   );
   const hasMultipleSessions = sessions.length > 1;
 

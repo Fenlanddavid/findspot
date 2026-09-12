@@ -23,7 +23,7 @@ const LEGACY_FLAG = 'fs_onboarding_done';
 const FORCED_THIS_LOAD = !!ephemeralLocal.get('fs_onboarding_force');
 if (FORCED_THIS_LOAD) ephemeralLocal.remove('fs_onboarding_force');
 
-type Step = 'welcome' | 'choose' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'clubday' | 'done';
+type Step = 'welcome' | 'install' | 'finds' | 'fieldguide' | 'permissions' | 'settings' | 'clubday' | 'done';
 
 export default function OnboardingFlow() {
     // Stay hidden until the async data guard confirms this is genuinely a new
@@ -32,7 +32,7 @@ export default function OnboardingFlow() {
     const [step, setStep]                     = useState<Step>('welcome');
     const [pendingDestination, setPending]    = useState('/');
     const [demoExpanded, setDemoExpanded]     = useState(false);
-    const [showMoreChoices, setShowMoreChoices] = useState(false);
+
     const dialogRef                           = useRef<HTMLDivElement>(null);
     const nav = useNavigate();
 
@@ -214,9 +214,9 @@ export default function OnboardingFlow() {
                                     <circle cx="256" cy="256" r="48" fill="#10b981" />
                                 </svg>
                             </div>
-                            <h1 id="onboarding-title" className="text-2xl font-black text-white tracking-tight mb-3">Understand where people used the landscape</h1>
+                            <h1 id="onboarding-title" className="text-2xl font-black text-white tracking-tight mb-3">Record finds, track permissions, stay legal</h1>
                             <p className="text-sm text-white/70 leading-relaxed">
-                                Not just maps. Scan the land, record finds, and create reports from the same field record.
+                                Scan your land, log every find, and generate reports — all from one field record.
                             </p>
                         </div>
 
@@ -247,114 +247,7 @@ export default function OnboardingFlow() {
                             <button onClick={() => startTask('/fieldguide')} className="min-h-12 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Scan land now</button>
                             <button onClick={() => startTask('/find')} className="min-h-12 rounded-xl border border-white/30 px-4 py-3 text-sm font-bold text-white">Record a find now</button>
                         </div>
-                        {actionFooter('Get Started', () => setStep('choose'))}
-                    </>
-                )}
-
-                {/* ── Step 2: Choose path ──────────────────────────────────── */}
-                {step === 'choose' && (
-                    <>
-                        {dots(1)}
-                        <div className="text-center mb-5 sm:mb-7">
-                            <h2 id="onboarding-title" className="text-xl font-black text-white tracking-tight mb-2">What brought you here?</h2>
-                            <p className="text-sm text-white/60">Pick a starting point — you can do everything else later.</p>
-                        </div>
-
-                        <div className="space-y-2">
-                            {showMoreChoices && <button
-                                onClick={() => setStep('install')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl">📲</span>
-                                    <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Install the app</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Add FindSpot to your home screen</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>}
-
-                            <button
-                                onClick={() => startTask('/find')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">📍</span>
-                                    <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Record finds</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Log finds with GPS</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={() => startTask('/fieldguide')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">🗺️</span>
-                                    <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Scan land</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Understand an area before detecting</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>
-
-                            <button
-                                onClick={() => setStep('permissions')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-4 py-3 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-2xl">📋</span>
-                                    <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Permissions</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Save access and land details</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>
-
-                            {showMoreChoices && <button
-                                onClick={() => setStep('settings')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl">⚙️</span>
-                                    <div>
-                                        <p className="text-sm font-black text-white group-hover:text-emerald-300 transition-colors">Set up your profile</p>
-                                        <p className="text-xs text-white/60 mt-0.5">Recommended — other features depend on this</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>}
-
-                            {showMoreChoices && <button
-                                onClick={() => setStep('clubday')}
-                                className="w-full text-left bg-white/5 hover:bg-emerald-500/15 border border-white/8 hover:border-emerald-500/40 rounded-2xl px-5 py-4 transition-all duration-150 group"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className="text-2xl">🏕️</span>
-                                    <div>
-                                        <p className="text-[13px] font-black text-white group-hover:text-emerald-300 transition-colors">Club / rally dig</p>
-                                        <p className="text-2xs text-white/40 mt-0.5">Attending or organising a club event</p>
-                                    </div>
-                                    <svg className="ml-auto opacity-30 group-hover:opacity-70 transition-opacity" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-                                </div>
-                            </button>}
-                            <button
-                                type="button"
-                                onClick={() => setShowMoreChoices(value => !value)}
-                                aria-expanded={showMoreChoices}
-                                className="min-h-11 w-full rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-xs font-black text-white/70 transition-colors hover:border-emerald-500/40 hover:text-emerald-300"
-                            >
-                                {showMoreChoices ? 'Fewer options' : 'More options'}
-                            </button>
-                        </div>
-
-                        {actionFooter(null, null, 'welcome')}
+                        {actionFooter(null, null, undefined, true)}
                     </>
                 )}
 
@@ -387,7 +280,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        {actionFooter("Got it — what's next?", () => setStep('choose'), 'choose')}
+                        {actionFooter("Got it — what's next?", () => setStep('welcome'), 'welcome')}
                     </>
                 )}
 
@@ -466,7 +359,7 @@ export default function OnboardingFlow() {
                             </p>
                         </div>
 
-                        {actionFooter('Create my first permission', () => go('/permission'), 'choose')}
+                        {actionFooter('Create my first permission', () => go('/permission'), 'welcome')}
                     </>
                 )}
 
@@ -535,7 +428,7 @@ export default function OnboardingFlow() {
                             <p className="text-[10px] text-white/25 leading-relaxed">{FIELDGUIDE_SHORT_NOTICE}</p>
                         </div>
 
-                        {actionFooter('Try your first scan', () => go('/fieldguide'), 'choose')}
+                        {actionFooter('Try your first scan', () => go('/fieldguide'), 'welcome')}
                     </>
                 )}
 
@@ -580,7 +473,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        {actionFooter('Open Settings', () => go('/settings'), 'choose')}
+                        {actionFooter('Open Settings', () => go('/settings'), 'welcome')}
                     </>
                 )}
 
@@ -630,7 +523,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        {actionFooter('Create my first permission', () => go('/permission'), 'choose')}
+                        {actionFooter('Create my first permission', () => go('/permission'), 'welcome')}
                     </>
                 )}
 
@@ -688,7 +581,7 @@ export default function OnboardingFlow() {
                             </div>
                         </div>
 
-                        {actionFooter('Got it — take me to the app', () => go('/'), 'choose')}
+                        {actionFooter('Got it — take me to the app', () => go('/'), 'welcome')}
                     </>
                 )}
 

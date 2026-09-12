@@ -12,6 +12,7 @@ import { captureGPS, toOSGridRef } from "../services/gps";
 import { getSetting, setSetting, getOrCreateRecorderId } from "../services/data";
 import { ScaledImage } from "../components/ScaledImage";
 import { CoachTip, CoachTips } from "../components/CoachTips";
+import { formatDate, formatTime } from "../utils/formatDate";
 import type { WorkflowState } from "../types/significantFind";
 import { ephemeralLocal, useDurableSetting } from '../services/clientStorage';
 import {
@@ -905,7 +906,7 @@ export default function FindPage(props: {
 
       {form.lat != null && form.lon != null && (
         <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-          Source {form.locationMethod?.replaceAll('_', ' ') ?? 'unknown'} · Accuracy {form.acc == null ? 'unknown' : `±${Math.round(form.acc)} m`} · Fix {form.locationFixAt ? new Date(form.locationFixAt).toLocaleTimeString() : 'time unknown'}
+          Source {form.locationMethod?.replaceAll('_', ' ') ?? 'unknown'} · Accuracy {form.acc == null ? 'unknown' : `±${Math.round(form.acc)} m`} · Fix {form.locationFixAt ? formatTime(form.locationFixAt) : 'time unknown'}
         </p>
       )}
 
@@ -962,7 +963,7 @@ export default function FindPage(props: {
           )}
           <button
             onClick={() => navigate("/finds-box")}
-            className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 px-4 py-2 rounded-xl font-bold shadow-sm transition-all text-sm"
+            className="text-sm text-emerald-700 dark:text-emerald-400 hover:underline"
           >
             Open All Finds
           </button>
@@ -1031,7 +1032,7 @@ export default function FindPage(props: {
           {session && (
             <span className="text-sm text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
               <span className="font-black text-blue-400 dark:text-blue-500 text-[10px] uppercase tracking-widest">Session</span>
-              {new Date(session.date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              {formatDate(session.date)}
               {session.isFinished && <span className="text-[10px] text-blue-400">· closed</span>}
             </span>
           )}
@@ -1210,7 +1211,7 @@ export default function FindPage(props: {
                   <option value="">(No specific session)</option>
 	                  {sessionOptions.map(s => (
 	                    <option key={s.id} value={s.id}>
-	                      {new Date(s.date).toLocaleDateString()} {s.cropType ? `(${s.cropType})` : ""}
+	                      {formatDate(s.date)} {s.cropType ? `(${s.cropType})` : ""}
 	                    </option>
                   ))}
                 </select>

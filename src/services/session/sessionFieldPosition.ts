@@ -1,5 +1,6 @@
 import type { GeoJSONPolygon } from '../../db';
 import { distanceMeters } from '../../utils/geo';
+import { formatAccuracy } from '../../utils/formatAccuracy';
 
 export type FieldLocation = {
   lat: number;
@@ -96,7 +97,7 @@ export function evaluateBoundaryPosition(boundary: GeoJSONPolygon | undefined, p
   const insideOuter = pointInRing(point, outerRing);
   const insideHole = boundary.coordinates.slice(1).some(ring => pointInRing(point, ring));
   const inside = insideOuter && !insideHole;
-  const accuracyText = accuracyM != null ? ` · GPS ±${Math.round(accuracyM)}m` : '';
+  const accuracyText = accuracyM != null ? ` · GPS ${formatAccuracy(accuracyM)}` : '';
   const uncertainty = Math.max(12, accuracyM ?? 0);
 
   if (!inside && distanceM <= uncertainty) {

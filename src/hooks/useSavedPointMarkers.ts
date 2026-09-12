@@ -5,6 +5,7 @@ import { reportNonFatal } from '../services/diagLog';
 import { removeSavedPoint } from '../services/fieldGuideMutations';
 import type { FieldGuideMapCallbacks } from '../services/fieldguide/mapInteractions';
 import { deletePack } from '../services/offlinePack';
+import { formatDate } from '../utils/formatDate';
 
 type Options = {
     mapRef: RefObject<maplibregl.Map | null>;
@@ -44,10 +45,7 @@ export function useSavedPointMarkers({
                         ? 'Yesterday'
                         : days < 7
                             ? `${days} days ago`
-                            : new Date(savedPoint.createdAt).toLocaleDateString('en-GB', {
-                                day: 'numeric',
-                                month: 'short',
-                            });
+                            : formatDate(savedPoint.createdAt);
 
                 const popupElement = document.createElement('div');
                 popupElement.style.cssText = 'background:#0f172a;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 12px;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.4);';

@@ -13,6 +13,7 @@ import {
 } from '../../services/surfaceScatter';
 import { ObservedByYouBlock, RecordSurfaceFindButton } from './ObservedByYouBlock';
 import { SurfaceObservationDetailModal } from './SurfaceObservationDetails';
+import { formatDate } from '../../utils/formatDate';
 import { SurfaceObservationsMap } from './SurfaceObservationsMap';
 
 /**
@@ -118,9 +119,9 @@ export function PermissionSurfaceObservations({ permission }: { permission: Perm
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {(Object.entries(summary.materialCounts) as Array<[SurfaceMaterial, number]>).map(([material, count]) => <div key={material} className="rounded-lg bg-gray-50 px-2.5 py-2 text-xs dark:bg-gray-900/60"><span className="font-bold">{SURFACE_MATERIAL_LABELS[material]}</span><span className="float-right font-black">{count}</span></div>)}
           </div>
-          {(summary.firstObserved || summary.mostRecentlyObserved) && <p className="mt-2 text-3xs font-bold text-gray-400">First recorded {summary.firstObserved ? new Date(summary.firstObserved).toLocaleDateString('en-GB') : '—'} · Most recent {summary.mostRecentlyObserved ? new Date(summary.mostRecentlyObserved).toLocaleDateString('en-GB') : '—'}</p>}
+          {(summary.firstObserved || summary.mostRecentlyObserved) && <p className="mt-2 text-3xs font-bold text-gray-400">First recorded {summary.firstObserved ? formatDate(summary.firstObserved) : '—'} · Most recent {summary.mostRecentlyObserved ? formatDate(summary.mostRecentlyObserved) : '—'}</p>}
           {retiredObservations.length > 0 && <button type="button" onClick={() => setShowRetired(value => !value)} className="mt-2 text-3xs font-black text-amber-700 dark:text-amber-300">{showRetired ? 'Hide' : 'View'} {retiredObservations.length} retired observations</button>}
-          {showRetired && <div className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200 px-3 dark:divide-gray-700 dark:border-gray-700">{retiredObservations.map(observation => <button type="button" key={observation.id} onClick={() => setDetailId(observation.id)} className="block w-full py-2 text-left text-xs"><span className="font-black">{SURFACE_MATERIAL_LABELS[observation.material]}</span><span className="ml-2 text-gray-400">Retired {observation.retiredAt ? new Date(observation.retiredAt).toLocaleDateString('en-GB') : ''}</span></button>)}</div>}
+          {showRetired && <div className="mt-2 divide-y divide-gray-100 rounded-xl border border-gray-200 px-3 dark:divide-gray-700 dark:border-gray-700">{retiredObservations.map(observation => <button type="button" key={observation.id} onClick={() => setDetailId(observation.id)} className="block w-full py-2 text-left text-xs"><span className="font-black">{SURFACE_MATERIAL_LABELS[observation.material]}</span><span className="ml-2 text-gray-400">Retired {observation.retiredAt ? formatDate(observation.retiredAt) : ''}</span></button>)}</div>}
           {showMap && <div className="mt-3">
             <div className="mb-2 grid grid-cols-2 gap-2">
               <label className="grid gap-1 text-3xs font-black text-gray-500">Material<select value={materialFilter} onChange={event => { setMaterialFilter(event.target.value as SurfaceMaterial | 'all'); setMapSelectedId(null); }} className="min-h-10 rounded-lg border border-gray-300 bg-white px-2 text-xs dark:border-gray-600 dark:bg-gray-900"><option value="all">All materials</option>{(Object.keys(SURFACE_MATERIAL_LABELS) as SurfaceMaterial[]).map(material => <option key={material} value={material}>{SURFACE_MATERIAL_LABELS[material]}</option>)}</select></label>

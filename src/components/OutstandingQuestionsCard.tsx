@@ -13,6 +13,7 @@ import {
   investigationPriority,
 } from "../outstandingQuestions/investigationState";
 import { interpretationCopyFor } from "../outstandingQuestions/interpretationCopy";
+import { formatDate } from "../utils/formatDate";
 import {
   buildInvestigationTimeline,
   type InvestigationTimelineEvent,
@@ -24,7 +25,6 @@ import {
 import { terminalSupersedingQuestionId } from "../outstandingQuestions/transitionHistory";
 import { getPermissionScanTarget } from "../outstandingQuestions/permissionScanTarget";
 import { ChevronDownIcon } from "./AppIcons";
-import { PermissionPulseCard } from "./PermissionPulseCard";
 import { PermissionSurfaceObservations } from "./surfaceScatter/PermissionSurfaceObservations";
 import { saveQuestionInvestigationNote, setQuestionDismissed } from "../services/investigationMutations";
 
@@ -58,9 +58,7 @@ function ProtectionBanner({ protection }: { protection: Permission['protectionSt
 
   // `clear` is a legacy persisted token. It is deliberately rendered with the
   // same non-asserting copy as current `none_recorded` rows.
-  const evaluatedLabel = new Date(protection!.evaluatedAt).toLocaleDateString("en-GB", {
-    day: "numeric", month: "short", year: "numeric",
-  });
+  const evaluatedLabel = formatDate(protection!.evaluatedAt);
   return (
     <p className="mx-4 mt-3 text-2xs text-gray-400 dark:text-gray-500 sm:mx-5">
       Cached scheduled-monument records were checked on {evaluatedLabel}; none were recorded in the scanned area. This is not a detecting permission check.
@@ -293,7 +291,7 @@ function InvestigationTimeline({ events }: { events: InvestigationTimelineEvent[
             <div className="flex items-start gap-2">
               <div className="min-w-0 flex-1"><TimelineEventBody event={event} /></div>
               <time className="shrink-0 text-2xs text-gray-400">
-                {new Date(event.at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                {formatDate(event.at)}
               </time>
             </div>
           </li>
@@ -591,7 +589,7 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
   };
 
   const evaluatedLabel = permission.questionsEvaluatedAt
-    ? new Date(permission.questionsEvaluatedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    ? formatDate(permission.questionsEvaluatedAt)
     : null;
 
   return (
@@ -618,8 +616,6 @@ export function OutstandingQuestionsCard({ permissionId }: { permissionId: strin
       </button>
 
       {permission.boundary && <ProtectionBanner protection={permission.protectionStatus} />}
-
-      <PermissionPulseCard permissionId={permissionId} embedded onOpenInvestigations={() => setExpanded(true)} />
 
       {expanded && <>
 

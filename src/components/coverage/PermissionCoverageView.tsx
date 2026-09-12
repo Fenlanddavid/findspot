@@ -8,6 +8,7 @@ import {
   summarizeSectionEvidence,
 } from './SectionCoverageMap';
 import { CoverageSetupError } from './CoverageSetupError';
+import { formatDate } from '../../utils/formatDate';
 import { SessionCoverageReview } from './SessionCoverageReview';
 import { useSessionCoverageNow } from './useSessionCoverageNow';
 import {
@@ -19,11 +20,7 @@ const EMPTY_SESSIONS: never[] = [];
 
 function formatObservedDate(timestamp: number | null): string {
   if (timestamp === null || !Number.isFinite(timestamp)) return 'Not marked searched';
-  return new Date(timestamp).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  return formatDate(timestamp);
 }
 
 export function PermissionCoverageView(props: {

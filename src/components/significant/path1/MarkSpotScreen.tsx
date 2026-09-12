@@ -9,6 +9,7 @@ import {
   saveSignificantFindProgress,
 } from "../../../services/significantFindMutations";
 import { reportNonFatal } from "../../../services/diagLog";
+import { formatAccuracy } from "../../../utils/formatAccuracy";
 
 type Props = {
   workflowState: WorkflowState;
@@ -129,12 +130,12 @@ export default function MarkSpotScreen({ workflowState, updateState, onNext }: P
     accuracy == null
       ? null
       : accuracy <= 5
-      ? { text: `±${Math.round(accuracy)}m — excellent`, cls: "text-emerald-600 dark:text-emerald-400" }
+      ? { text: `${formatAccuracy(accuracy)} — excellent`, cls: "text-emerald-600 dark:text-emerald-400" }
       : accuracy <= 15
-      ? { text: `±${Math.round(accuracy)}m — good`, cls: "text-emerald-500 dark:text-emerald-400" }
+      ? { text: `${formatAccuracy(accuracy)} — good`, cls: "text-emerald-500 dark:text-emerald-400" }
       : accuracy <= 40
-      ? { text: `±${Math.round(accuracy)}m — fair`, cls: "text-amber-500 dark:text-amber-400" }
-      : { text: `±${Math.round(accuracy)}m — weak — move to open ground`, cls: "text-red-500 dark:text-red-400" };
+      ? { text: `${formatAccuracy(accuracy)} — fair`, cls: "text-amber-500 dark:text-amber-400" }
+      : { text: `${formatAccuracy(accuracy)} — weak — move to open ground`, cls: "text-red-500 dark:text-red-400" };
 
   return (
     <div className="flex flex-col gap-6">

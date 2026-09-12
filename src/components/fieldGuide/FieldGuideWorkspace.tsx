@@ -11,6 +11,7 @@ import { useTerrainScan, ScanContext } from '../../hooks/useTerrainScan';
 import { useHistoricScan } from '../../hooks/useHistoricScan';
 import { useTilePrewarm } from '../../hooks/useTilePrewarm';
 import type { WorkflowState } from '../../types/significantFind';
+import { formatDate } from '../../utils/formatDate';
 import {
     FieldGuideContext,
     HOTSPOT_TITLES,
@@ -1208,7 +1209,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
                 };
                 const chipClass = PERIOD_CHIP[selectedUserFind.period] ?? PERIOD_CHIP['Unknown'];
                 const foundDate = selectedUserFind.foundAt ?? selectedUserFind.createdAt;
-                const dateLabel = foundDate ? new Date(foundDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null;
+                const dateLabel = foundDate ? formatDate(foundDate) : null;
                 return (
                 <div className="hidden">
                     <div className="absolute inset-0 z-[199]" onClick={() => setSelectedUserFind(null)} />

@@ -8,6 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { UndugSignal, UndugSignalDirection, UndugSignalStability, UndugSignalConditions, UndugSignalDugNothingCause } from '../db';
 import { dismissUndugSignal, editUndugSignal, resolveUndugSignalAsNothing } from '../services/investigationMutations';
+import { formatDate } from '../utils/formatDate';
 import { distanceMeters } from '../utils/geo';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ function relativeTime(epochMs: number): string {
   if (diffH < 24) return `${diffH}h ago`;
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d ago`;
-  return new Date(epochMs).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return formatDate(epochMs);
 }
 
 function chipSummary(s: UndugSignal): string {

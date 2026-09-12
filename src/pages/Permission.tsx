@@ -13,6 +13,7 @@ import { FindModal } from "../components/FindModal";
 import { ScaledImage } from "../components/ScaledImage";
 import { StaticMapPreview } from "../components/StaticMapPreview";
 import { RallyDayReviewPanel } from "../components/RallyDayReviewPanel";
+import { formatDate, formatDateLong } from "../utils/formatDate";
 import PermissionReportModal from "../components/PermissionReportModal";
 import { AgreementModal } from "../components/AgreementModal";
 import { LocationPickerModal } from "../components/LocationPickerModal";
@@ -23,6 +24,7 @@ import PermissionProofModal from "../components/PermissionProofModal";
 import { PermissionActivityColumn } from "../components/PermissionActivityColumn";
 import { PermissionFieldsColumn } from "../components/PermissionFieldsColumn";
 import { OutstandingQuestionsCard } from "../components/OutstandingQuestionsCard";
+import { PermissionPulseCard } from "../components/PermissionPulseCard";
 import { ScanAccuracyCard } from "../components/ScanAccuracyCard";
 import { RallyPersonaChip } from "../components/RallyPersonaChip";
 import { rallyPersona } from "../utils/rallyPersona";
@@ -940,7 +942,7 @@ export default function PermissionPage(props: {
                                 <h3 className="text-2xl font-black text-teal-950 dark:text-teal-50 break-words">{name || "Club / Rally Event"}</h3>
                                 {validFrom && (
                                     <p className="text-xs font-bold text-teal-700/70 dark:text-teal-300/70 mt-1">
-                                        {new Date(validFrom).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                                        {formatDateLong(validFrom)}
                                     </p>
                                 )}
                             </div>
@@ -1039,7 +1041,7 @@ export default function PermissionPage(props: {
 
                         {submittedAt && (
                             <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-bold">
-                                Export prepared on {new Date(submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} · delivery not confirmed
+                                Export prepared on {formatDate(submittedAt)} · delivery not confirmed
                             </div>
                         )}
 
@@ -1068,7 +1070,7 @@ export default function PermissionPage(props: {
                                                 <div className="text-sm font-black text-gray-800 dark:text-gray-100 truncate">{find.objectType || find.findCategory || "Unknown find"}</div>
                                                 <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">{find.notes || find.findCode}</div>
                                             </div>
-                                            <div className="text-[10px] font-bold text-gray-400 shrink-0">{new Date(find.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>
+                                            <div className="text-[10px] font-bold text-gray-400 shrink-0">{formatDate(find.createdAt)}</div>
                                         </button>
                                     ))}
                                 </div>
@@ -1117,7 +1119,7 @@ export default function PermissionPage(props: {
                                 <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 break-words">{name || "Unnamed Rally"}</h3>
                                 {validFrom && (
                                     <p className="text-sm text-amber-800/70 dark:text-amber-200/70 mt-0.5">
-                                        {new Date(validFrom).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "long", year: "numeric" })}
+                                        {formatDateLong(validFrom)}
                                         {landownerName ? ` · ${landownerName}` : ""}
                                     </p>
                                 )}
@@ -1272,11 +1274,6 @@ export default function PermissionPage(props: {
 
             {(!isClubDayMember || isEditing) && (!isRally || isEditing || !isEdit || persona === 'personal' || persona === 'kept_record') && (
             <React.Fragment>
-            {isEdit && id && !isEditing && (
-              <div id="outstanding-questions-section" className="lg:col-span-3 scroll-mt-4">
-                <OutstandingQuestionsCard permissionId={id} />
-              </div>
-            )}
             <PermissionFieldsColumn
                 permissionId={id}
                 isEdit={isEdit}
@@ -1354,6 +1351,22 @@ export default function PermissionPage(props: {
                 onUploadAgreement={uploadExistingAgreement}
                 onShowExportClubDay={() => setShowExportClubDay(true)}
             />
+
+            {isEdit && id && !isEditing && (
+              <PermissionPulseCard permissionId={id} embedded onOpenInvestigations={() => {
+                const el = document.getElementById('outstanding-questions-section');
+                if (el) {
+                  const btn = el.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
+                  if (btn) btn.click();
+                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }} />
+            )}
+            {isEdit && id && !isEditing && (
+              <div id="outstanding-questions-section" className="lg:col-span-3 scroll-mt-4">
+                <OutstandingQuestionsCard permissionId={id} />
+              </div>
+            )}
 
             <PermissionActivityColumn
                 isEdit={isEdit}

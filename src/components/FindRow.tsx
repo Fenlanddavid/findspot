@@ -1,6 +1,7 @@
 import React from "react";
 import { Find, Media } from "../db";
 import { ScaledImage } from "./ScaledImage";
+import { formatTime } from "../utils/formatDate";
 
 const PERIOD_COLORS: Record<string, string> = {
   "Prehistoric": "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
@@ -28,7 +29,7 @@ export function FindRow(props: {
     const raw = s.foundAt ?? s.createdAt;
     if (!raw) return null;
     try {
-      return new Date(raw).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return formatTime(raw);
     } catch {
       return null;
     }

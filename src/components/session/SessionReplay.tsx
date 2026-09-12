@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db';
 import { sessionStartedAt } from '../../services/session/activeSessionContext';
 import { buildSessionReplay, type SessionReplayData, type SessionReplayMarkerKind } from '../../services/session/sessionReplay';
+import { formatTime } from '../../utils/formatDate';
 
 const REPLAY_DURATION_MS = 30_000;
 const MARKER_COLOURS: Record<SessionReplayMarkerKind, string> = {
@@ -13,7 +14,7 @@ const MARKER_COLOURS: Record<SessionReplayMarkerKind, string> = {
 };
 
 function formatReplayTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return formatTime(timestamp);
 }
 
 function projection(data: SessionReplayData) {

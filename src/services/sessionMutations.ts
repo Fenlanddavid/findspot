@@ -2,6 +2,7 @@ import { db } from '../db';
 import type { FindSpotDB, Session, Track } from '../db';
 import { applyCompanionTrackTrim, regenerateCompanionTracks } from './companionImport';
 import { resolveHotspotPredictionOutcomes } from './hotspotPredictionService';
+import { formatTime } from '../utils/formatDate';
 
 export async function setSessionGroundConditions(
   sessionId: string,
@@ -113,7 +114,7 @@ export async function appendSessionNote(sessionId: string, note: string, recorde
   return db.transaction('rw', db.sessions, async () => {
     const session = await db.sessions.get(sessionId);
     if (!session) throw new Error('Session not found.');
-    const time = recordedAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const time = formatTime(recordedAt);
     const entry = `[${time}] ${clean}`;
     const notes = session.notes.trim() ? `${session.notes.trim()}\n${entry}` : entry;
     await db.sessions.update(sessionId, { notes, updatedAt: recordedAt.toISOString() });
