@@ -24,6 +24,7 @@ test('permission, period and dates combine; individual chips and sort survive in
   await expect(page.getByRole('button', { name: 'Open Copper buckle FS-002' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Lead token FS-003' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Remove Medieval filter' }).click();
+  await expect(page.getByRole('button', { name: 'Open Coin FS-001' })).toBeVisible();
   await page.getByLabel('Sort finds').selectOption('oldest');
   const items = page.getByRole('button', { name: /^Open (Coin|Copper buckle)/ });
   await expect(items.first()).toHaveAccessibleName('Open Coin FS-001');
