@@ -1,3 +1,4 @@
+import { collectionDeletionImpact } from '../services/collections';
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { usePermissionForm } from "../hooks/usePermissionForm";
 import type { Permission, Find, Media, GeoJSONPolygon } from "../db";
@@ -389,6 +390,7 @@ export default function PermissionPage(props: {
     const sessionIds = sessions.map(s => s.id);
     const finds = await pagePersistence.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
+    const affectedCollections = await collectionDeletionImpact(findIds);
     const significantFinds = await pagePersistence.significantFinds.where("permissionId").equals(id).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
     const fieldsToDelete = await pagePersistence.fields.where("permissionId").equals(id).toArray();
@@ -406,7 +408,8 @@ export default function PermissionPage(props: {
       `- ${formatDeleteCount(significantFinds.length, "significant find")}\n` +
       `- ${formatDeleteCount(fieldsToDelete.length, "field")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
-      `- ${formatDeleteCount(trackCount, "GPS track")}`,
+      `- ${formatDeleteCount(trackCount, "GPS track")}` +
+      (affectedCollections.length ? `\n\nThese collections will lose items: ${affectedCollections.join(", ")}.` : ""),
       confirmLabel: "Delete",
       danger: true,
     }))) return;
@@ -430,6 +433,7 @@ export default function PermissionPage(props: {
     const sessionIds = sessions.map(s => s.id);
     const finds = await pagePersistence.finds.where("permissionId").equals(id).toArray();
     const findIds = finds.map(f => f.id);
+    const affectedCollections = await collectionDeletionImpact(findIds);
     const significantFinds = await pagePersistence.significantFinds.where("permissionId").equals(id).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
     const fieldsToDelete = await pagePersistence.fields.where("permissionId").equals(id).toArray();
@@ -448,7 +452,8 @@ export default function PermissionPage(props: {
       `- ${formatDeleteCount(fieldsToDelete.length, "field card")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
       `- ${formatDeleteCount(trackCount, "GPS track")}\n\n` +
-      "Use Keep Rally Record first if you want to keep them.",
+      "Use Keep Rally Record first if you want to keep them." +
+      (affectedCollections.length ? `\n\nThese collections will lose items: ${affectedCollections.join(", ")}.` : ""),
       confirmLabel: "Remove",
       danger: true,
     }))) return;

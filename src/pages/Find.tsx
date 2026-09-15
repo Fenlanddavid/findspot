@@ -1,3 +1,6 @@
+import { DetectorContextFields } from '../components/DetectorContextFields';
+import type { DetectorContext } from '../services/collectionModels';
+import { parseTargetId } from '../services/detectorReferenceValidation';
 import { useRecordNavigationGuard } from '../hooks/useRecordNavigationGuard';
 import { useRecordingViewport } from '../hooks/useRecordingViewport';
 import { fixTimeIso } from '../utils/captureLocationStatus';
@@ -105,6 +108,7 @@ type FormState = {
   completeness: Find["completeness"];
   findContext: string;
   detector: string;
+  detectorContext: DetectorContext;
   targetId: string;
   depthCm: string;
   dateRange: string;
@@ -152,6 +156,7 @@ function makeInitialForm(initialLat?: number | null, initialLon?: number | null)
     completeness: "Unassessed",
     findContext: "",
     detector: "",
+    detectorContext: {},
     targetId: "",
     depthCm: "",
     dateRange: "",
@@ -317,12 +322,11 @@ export default function FindPage(props: {
   useEffect(() => {
     getSetting("detectors", []).then(setDetectors);
     getSetting("defaultDetector", "").then(d => {
-      if (d) setForm(prev => ({ ...prev, detector: d as string }));
+      if (d && !props.quickId) setForm(prev => ({ ...prev, detector: d as string }));
     });
     getSetting("lastPeriod", "Roman").then(p => setForm(prev => ({ ...prev, period: p as Find["period"] })));
     getSetting("lastMaterial", "Copper alloy").then(m => setForm(prev => ({ ...prev, material: m as Find["material"] })));
-    getSetting("lastDepthCm", "").then(d => { if (d) setForm(prev => ({ ...prev, depthCm: d as string })); });
-  }, []);
+  }, [props.quickId]);
 
   // #14 — restore draft on mount (silent, no prompt)
   useEffect(() => {
@@ -381,6 +385,10 @@ export default function FindPage(props: {
             locationFrozenAt: f.locationFrozenAt,
             osGridRef: grid,
             notes: f.notes,
+            detector: f.detector ?? "",
+            detectorContext: f.detectorContext ?? {},
+            targetId: f.targetId == null ? "" : String(f.targetId),
+            depthCm: f.depthCm == null ? "" : String(f.depthCm),
             foundDate: src
               ? `${src.getFullYear()}-${String(src.getMonth()+1).padStart(2,"0")}-${String(src.getDate()).padStart(2,"0")}`
               : todayDate(),
@@ -503,6 +511,7 @@ export default function FindPage(props: {
     setError(null);
     setSaving(true);
     try {
+      const targetId = parseTargetId(form.targetId);
       const trimmedName = locationName.trim() || "No Location";
       const id = savedId || props.quickId || retryId.current;
       const isEditMode = !!(savedId || props.quickId);
@@ -545,7 +554,8 @@ export default function FindPage(props: {
         heightMm: toFloat(form.heightMm),
         depthMm: toFloat(form.depthMm),
         detector: form.detector || undefined,
-        targetId: form.targetId ? parseInt(form.targetId) : undefined,
+        detectorContext: form.detectorContext,
+        targetId,
         depthCm: toFloat(form.depthCm) ?? undefined,
         decoration: form.decoration.trim(),
         completeness: form.completeness,
@@ -570,7 +580,6 @@ export default function FindPage(props: {
       setSetting("lastPeriod", form.period);
       setSetting("lastMaterial", form.material);
       if (form.detector) setSetting("defaultDetector", form.detector);
-      if (form.depthCm) setSetting("lastDepthCm", form.depthCm);
 
       if (navigator.vibrate) navigator.vibrate([50, 30, 50]);
 
@@ -612,6 +621,7 @@ export default function FindPage(props: {
     setError(null);
     setSaving(true);
     try {
+      const targetId = parseTargetId(form.targetId);
       const trimmedName = locationName.trim() || "No Location";
       // Retries use the same identity; the transaction keeps failed writes atomic.
       const id = props.quickId || retryId.current;
@@ -654,7 +664,8 @@ export default function FindPage(props: {
         heightMm: null,
         depthMm: null,
         detector: form.detector || undefined,
-        targetId: undefined,
+        detectorContext: form.detectorContext,
+        targetId,
         depthCm: toFloat(form.depthCm) ?? undefined,
         decoration: "",
         completeness: form.completeness,
@@ -1456,6 +1467,7 @@ export default function FindPage(props: {
 
               {/* Detector & Signal */}
               <CollapsibleSection title="Detector & Signal" open={openSections.detector} onToggle={() => toggleSection("detector")}>
+                <DetectorContextFields value={form.detectorContext ?? {}} onChange={detectorContext => update({ detectorContext })} />
                 <label className="block">
                   <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Detector Used</div>
                   <select value={form.detector} onChange={(e) => update({ detector: e.target.value })}
@@ -1473,7 +1485,7 @@ export default function FindPage(props: {
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block">
                     <div className="mb-1 text-[10px] font-bold uppercase opacity-60">Target ID</div>
-                    <input type="number" value={form.targetId} onChange={(e) => update({ targetId: e.target.value })} placeholder="e.g. 13"
+                    <input type="text" inputMode="text" value={form.targetId} onChange={(e) => update({ targetId: e.target.value })} placeholder="e.g. 13"
                       className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2 text-sm font-mono focus:ring-1 focus:ring-emerald-500 outline-none" />
                   </label>
                   <label className="block">

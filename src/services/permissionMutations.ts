@@ -1,3 +1,4 @@
+import { removeFindOrganisation } from './collections';
 import { db } from '../db';
 import type { Field, Media, Permission } from '../db';
 import { deleteQuestionsWithNotes } from '../outstandingQuestions/questionNotes';
@@ -61,12 +62,14 @@ export async function deletePermissionCascade(
       db.sessionCoverage,
       db.hotspotPredictions,
       db.hotspotPredictionEvidence,
-      db.surfaceObservations,
+      db.surfaceObservations, db.collections, db.collectionItems, db.detectorReferenceAssignments,
     ],
     async () => {
       if (findIds.length) await db.media.where('findId').anyOf(findIds).delete();
       if (significantFindIds.length) await db.media.where('findId').anyOf(significantFindIds).delete();
       await db.media.where('permissionId').equals(permissionId).delete();
+      const currentFindIds = await db.finds.where('permissionId').equals(permissionId).primaryKeys();
+      await removeFindOrganisation(currentFindIds);
       await db.finds.where('permissionId').equals(permissionId).delete();
       await db.significantFinds.where('permissionId').equals(permissionId).delete();
       if (sessionIds.length) await db.tracks.where('sessionId').anyOf(sessionIds).delete();

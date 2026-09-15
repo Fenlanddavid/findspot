@@ -1,3 +1,4 @@
+import { collectionDeletionImpact } from '../../services/collections';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import * as maplibregl from "maplibre-gl";
@@ -783,9 +784,10 @@ export default function SignificantFindDetailSheet({ sfId, onClose }: { sfId: st
   }
 
   async function doDelete() {
+    const affectedCollections = await collectionDeletionImpact([...(sf?.scatterFindIds ?? []), ...(sf?.linkedFindId ? [sf.linkedFindId] : [])]);
     if (!(await confirmAction({
       title: "Delete Record?",
-      message: "This will permanently delete this significant find record and all its photos. This cannot be undone.",
+      message: "This will permanently delete this significant find record and all its photos. This cannot be undone." + (affectedCollections.length ? `\n\nThese collections will lose items: ${affectedCollections.join(", ")}.` : ""),
       confirmLabel: "Delete",
       danger: true,
     }))) return;

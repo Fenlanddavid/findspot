@@ -5,6 +5,7 @@ dist/
 .env.local
 dev-dist/
 test-results/
+test-results-production/
 playwright-report/
 docs/ip/
 tsconfig.tsbuildinfo

@@ -58,6 +58,18 @@ afterEach(async () => {
 });
 
 describe('FindSpot IndexedDB forward migrations', () => {
+  it('adds organisation tables at v50 without rewriting v49 detector readings or depths', async () => {
+    const name = 'findspot-migration-v49-collections';
+    const finds = [0, -9, '12x'].map((targetId, index) => ({ id: `find-${index}`, projectId: 'p', permissionId: 'permission', detector: 'Original detector spelling', targetId, depthMm: 2, depthCm: 15 }));
+    await createFixtureDb(name, 49, { projects: [{ id: 'p' }], permissions: [{ id: 'permission', projectId: 'p' }], finds });
+    const current = await openCurrent(name);
+    expect(await current.finds.toArray()).toEqual(finds);
+    expect(await current.collections.count()).toBe(0);
+    expect(await current.collectionItems.count()).toBe(0);
+    expect(await current.detectorReferenceGroups.count()).toBe(0);
+    expect(await current.detectorReferenceAssignments.count()).toBe(0);
+    current.close();
+  });
   it('exports one ordered schema history through the current version', () => {
     expect(FINDSPOT_VERSION_SPECS.map(spec => spec.version)).toEqual(
       Array.from({ length: FINDSPOT_CURRENT_VERSION }, (_, index) => index + 1),

@@ -1,3 +1,5 @@
+import { AddToCollection } from '../components/AddToCollection';
+import { CollectionFindPicker } from '../components/CollectionFindPicker';
 import { FindsMap } from '../components/FindsMap';
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
@@ -81,6 +83,8 @@ function signalSummary(signal: UndugSignal) {
 
 export default function FindsBox(props: { projectId: string }) {
   const navigate = useNavigate();
+  const [collectionPicker, setCollectionPicker] = useState(false);
+  const [collectionSelection, setCollectionSelection] = useState<string[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [openFindId, setOpenFindId] = useState<string | null>(null);
   const [openSfId, setOpenSfId] = useState<string | null>(null);
@@ -568,7 +572,11 @@ export default function FindsBox(props: { projectId: string }) {
         </section>
       )}
 
+      {collectionPicker && <CollectionFindPicker projectId={props.projectId} selected={[]} onClose={() => setCollectionPicker(false)} onApply={setCollectionSelection} />}
+      {!!collectionSelection.length && <AddToCollection projectId={props.projectId} findIds={collectionSelection} onClose={() => setCollectionSelection([])} />}
+      {mainTab === 'finds' && <section aria-label="Explore your finds" className="mt-4 grid grid-cols-2 gap-3"><button className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-emerald-800 dark:bg-emerald-950/40" onClick={() => navigate('/finds-box/collections')}><span className="block font-semibold text-emerald-900 dark:text-emerald-200">Collections <span aria-hidden="true">↗</span></span><span className="mt-1 block text-xs leading-relaxed text-gray-600 dark:text-gray-300">Your own small museum</span></button><button className="rounded-xl border border-gray-200 bg-white p-3 text-left focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-gray-700 dark:bg-gray-800" onClick={() => navigate('/finds-box/detector-reference')}><span className="block font-semibold">Detector reference <span aria-hidden="true">↗</span></span><span className="mt-1 block text-xs leading-relaxed text-gray-600 dark:text-gray-300">Revisit your recorded readings</span></button></section>}
       {mainTab === 'finds' && <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button className="ui-secondary" onClick={() => setCollectionPicker(true)}>Select finds</button>
         <div className="flex gap-2" aria-label="Finds view">
           <button type="button" aria-pressed={!mapView} onClick={() => setView('gallery')} className={`min-h-11 rounded-xl border px-4 text-sm ${!mapView ? 'bg-emerald-700 text-white' : 'border-gray-300 dark:border-gray-700'}`}>Gallery</button>
           <button type="button" aria-pressed={mapView} onClick={() => setView('map')} className={`min-h-11 rounded-xl border px-4 text-sm ${mapView ? 'bg-emerald-700 text-white' : 'border-gray-300 dark:border-gray-700'}`}>Map</button>

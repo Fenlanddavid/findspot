@@ -4,7 +4,7 @@
  * are normalized during import.
  */
 export const DEFAULT_LEGACY_BACKUP_FORMAT_VERSION = 1 as const;
-export const CURRENT_BACKUP_FORMAT_VERSION = 11 as const;
+export const CURRENT_BACKUP_FORMAT_VERSION = 12 as const;
 
 export type BackupContainer = 'json' | 'json-or-zip';
 
@@ -85,11 +85,12 @@ export const BACKUP_FORMAT_DEFINITIONS = [
     description: 'Adds unassessed completeness and optional find-location provenance without inferring legacy values.',
   },
   {
-    version: CURRENT_BACKUP_FORMAT_VERSION,
-    lifecycle: 'current',
+    version: 11,
+    lifecycle: 'legacy',
     container: 'json-or-zip',
     description: 'Adds the prediction evidence ledger so later finds and explicit negative reports retain their relationships.',
   },
+  { version: CURRENT_BACKUP_FORMAT_VERSION, lifecycle: 'current', container: 'json-or-zip', description: 'Adds collections, detector groups, per-find assignments and optional historical detector context.' },
 ] as const satisfies readonly BackupFormatDefinition[];
 
 export const SUPPORTED_BACKUP_FORMAT_VERSIONS = BACKUP_FORMAT_DEFINITIONS.map(

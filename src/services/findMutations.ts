@@ -1,5 +1,8 @@
+import { detectorContextSchema, type DetectorContext } from './collectionModels';
+import { removeFindOrganisation } from './collections';
+import { assertTargetIdMutation } from './detectorReferenceValidation';
 import { db } from '../db';
-import type { Find, Media } from '../db';
+import type { Find, Media, FindSpotDB } from '../db';
 import { reportNonFatal } from './diagLog';
 import { refreshHotspotPredictionOutcomes } from './hotspotPredictionService';
 
@@ -12,8 +15,9 @@ async function refreshPredictionEvidence(...permissionIds: Array<string | null |
 }
 
 export async function discardFindDraft(findId: string): Promise<void> {
-  await db.transaction('rw', [db.finds, db.media], async () => {
+  await db.transaction('rw', [db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
     await db.media.where('findId').equals(findId).delete();
+    await removeFindOrganisation([findId]);
     await db.finds.delete(findId);
   });
 }
@@ -63,9 +67,12 @@ export async function resolveFindPermission(input: {
 type PhotoChanges = { upsert: Media[]; removeIds: string[] };
 
 async function commitRecord(find: Omit<Find, 'createdAt'>, options: { existing: boolean; createdAt: string; photos?: PhotoChanges }) {
-  await db.transaction('rw', [db.finds, db.media], async () => {
+  await db.transaction('rw', [db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
+    const previous = options.existing ? await db.finds.get(find.id) : undefined;
+    if (find.detectorContext !== undefined) detectorContextSchema.parse(find.detectorContext);
+    assertTargetIdMutation(find.targetId, previous?.targetId);
     if (options.existing) {
-      if (!await db.finds.get(find.id)) throw new Error('This find no longer exists. Your draft has not been saved.');
+      if (!previous) throw new Error('This find no longer exists. Your draft has not been saved.');
       await db.finds.update(find.id, find);
     } else await db.finds.add({ ...find, createdAt: options.createdAt });
     if (options.photos) {
@@ -102,6 +109,7 @@ export async function savePendingFind(
 }
 
 export async function createPhotoDraftFind(find: Find): Promise<void> {
+  assertTargetIdMutation(find.targetId);
   await db.finds.add(find);
 }
 
@@ -114,9 +122,11 @@ export async function saveFindEdits(
   updatedAt: string,
   photos?: { upsert: Media[]; removeIds: string[] },
 ): Promise<void> {
-  const previous = await db.transaction('rw', [db.finds, db.media], async () => {
+  const previous = await db.transaction('rw', [db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
     const existing = await db.finds.get(find.id);
     if (!existing) throw new Error('This find no longer exists. Your changes have not been saved.');
+    if (find.detectorContext !== undefined) detectorContextSchema.parse(find.detectorContext);
+    assertTargetIdMutation(find.targetId, existing.targetId);
     await db.finds.update(find.id, { ...find, updatedAt });
     if (photos) {
       if (photos.upsert.some(photo => photo.findId !== find.id)) throw new Error('Photo belongs to another find.');
@@ -130,8 +140,9 @@ export async function saveFindEdits(
 
 export async function deleteFindAndReopenSignal(findId: string, sourceSignalId?: string): Promise<void> {
   const previous = await db.finds.get(findId);
-  await db.transaction('rw', [db.finds, db.media, db.undugSignals], async () => {
+  await db.transaction('rw', [db.finds, db.media, db.undugSignals, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
     await db.media.where('findId').equals(findId).delete();
+    await removeFindOrganisation([findId]);
     await db.finds.delete(findId);
     if (sourceSignalId) {
       await db.undugSignals.where('id').equals(sourceSignalId).modify(signal => {
@@ -175,14 +186,16 @@ export async function markPendingFindComplete(findId: string): Promise<void> {
 
 export async function deletePendingFind(findId: string): Promise<void> {
   const previous = await db.finds.get(findId);
-  await db.transaction('rw', [db.finds, db.media], async () => {
+  await db.transaction('rw', [db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
     await db.media.where('findId').equals(findId).delete();
+    await removeFindOrganisation([findId]);
     await db.finds.delete(findId);
   });
   await refreshPredictionEvidence(previous?.permissionId);
 }
 
 export async function createQuickFind(find: Find): Promise<void> {
+  assertTargetIdMutation(find.targetId);
   await db.finds.add(find);
   await refreshPredictionEvidence(find.permissionId);
 }
@@ -193,7 +206,8 @@ export async function attachQuickFindPhoto(media: Media): Promise<void> {
 
 /** Commit a quick find and its already-prepared attachment as one unit. */
 export async function saveQuickFind(find: Find, media?: Media): Promise<void> {
-  await db.transaction('rw', [db.finds, db.media], async () => {
+  await db.transaction('rw', [db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
+    assertTargetIdMutation(find.targetId);
     await db.finds.add(find);
     if (media) await db.media.add(media);
   });
@@ -212,4 +226,28 @@ export async function linkFindToSession(
 
 export async function calibrateFindPhoto(mediaId: string, pxPerMm: number): Promise<void> {
   await db.media.update(mediaId, { pxPerMm, scalePresent: true });
+}
+
+export type DetectorBulkChange = { detector?: string; groupId?: string | null; context?: DetectorContext };
+/** Expected records are the preview: concurrent changes require a fresh confirmation. */
+export async function applyDetectorBulkChange(projectId: string, expected: Array<{ id: string; signature: string }>, change: DetectorBulkChange, database: FindSpotDB = db) {
+  if (!expected.length) throw new Error('Select records first.');
+  if (change.detector !== undefined && (!change.detector.trim() || change.detector.length > 200)) throw new Error('Enter a detector name of up to 200 characters.');
+  if (change.context) detectorContextSchema.parse(change.context);
+  await database.transaction('rw', [database.finds, database.detectorReferenceGroups, database.detectorReferenceAssignments], async () => {
+    if (change.groupId && (await database.detectorReferenceGroups.get(change.groupId))?.projectId !== projectId) throw new Error('Choose a group from this project.');
+    for (const row of expected) {
+      const find = await database.finds.get(row.id);
+      if (!find || find.projectId !== projectId || JSON.stringify(find) !== row.signature) throw new Error('A selected record changed. Review the preview again.');
+      if (change.groupId !== undefined) {
+        await database.detectorReferenceAssignments.where('findId').equals(find.id).delete();
+        if (change.groupId) await database.detectorReferenceAssignments.add({ id: crypto.randomUUID(), projectId, findId: find.id, groupId: change.groupId, createdAt: new Date().toISOString() });
+      }
+      await database.finds.update(find.id, {
+        ...(change.detector !== undefined ? { detector: change.detector } : {}),
+        ...(change.context ? { detectorContext: { ...find.detectorContext, ...change.context } } : {}),
+        updatedAt: new Date(Math.max(Date.now(), (Date.parse(find.updatedAt) || 0) + 1)).toISOString(),
+      });
+    }
+  });
 }

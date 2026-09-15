@@ -1,3 +1,4 @@
+import { collectionDeletionImpact } from '../services/collections';
 import React, { useEffect, useLayoutEffect, useState, useMemo, useRef } from "react";
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Permission, Session, Find, Media, SurfaceExtent } from "../db";
@@ -542,6 +543,7 @@ export default function SessionPage(props: {
     if (!isEdit) return;
     const sessionFinds = await pagePersistence.finds.where("sessionId").equals(sessionId).toArray();
     const findIds = sessionFinds.map(f => f.id);
+    const affectedCollections = await collectionDeletionImpact(findIds);
     const significantFinds = await pagePersistence.significantFinds.where("sessionId").equals(sessionId).toArray();
     const significantFindIds = significantFinds.map(f => f.id);
     const findMediaCount = findIds.length ? await pagePersistence.media.where("findId").anyOf(findIds).count() : 0;
@@ -555,7 +557,8 @@ export default function SessionPage(props: {
       `- ${formatDeleteCount(sessionFinds.length, "find")}\n` +
       `- ${formatDeleteCount(significantFinds.length, "significant find")}\n` +
       `- ${formatDeleteCount(mediaCount, "photo/document", "photos/documents")}\n` +
-      `- ${formatDeleteCount(trackCount, "GPS track")}`,
+      `- ${formatDeleteCount(trackCount, "GPS track")}` +
+      (affectedCollections.length ? `\n\nThese collections will lose items: ${affectedCollections.join(", ")}.` : ""),
       confirmLabel: "Delete",
       danger: true,
     }))) return;

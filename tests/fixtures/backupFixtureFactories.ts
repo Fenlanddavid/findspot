@@ -14,6 +14,11 @@ const ISO = '2026-07-23T12:00:00.000Z';
  * parity test below makes a new table fail until its deliberate fixture exists.
  */
 export const BACKUP_FIXTURE_FACTORIES = {
+  collections: () => ({ id: 'collection-1', projectId: 'project-1', title: 'Everyday objects', introduction: 'My objects', templateId: 'museum', coverItemId: 'item-1', createdAt: ISO, updatedAt: ISO }),
+  collectionItems: () => ({ id: 'item-1', collectionId: 'collection-1', findId: 'find-1', position: 0, selectedMediaIds: [], selectedFactFields: ['period'], caption: 'A personal caption', createdAt: ISO, updatedAt: ISO }),
+  detectorReferenceGroups: () => ({ id: 'group-1', projectId: 'project-1', displayName: 'My detector', createdAt: ISO, updatedAt: ISO }),
+  detectorReferenceAliases: () => ({ id: 'alias-1', projectId: 'project-1', groupId: 'group-1', sourceDetectorName: 'My Detector', normalizedName: 'my detector', createdAt: ISO }),
+  detectorReferenceAssignments: () => ({ id: 'assignment-1', projectId: 'project-1', groupId: 'group-1', findId: 'find-1', createdAt: ISO }),
   projects: () => ({
     id: 'project-1', name: 'Fen Edge Survey', region: 'England', createdAt: ISO,
   }),

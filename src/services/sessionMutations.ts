@@ -1,3 +1,4 @@
+import { removeFindOrganisation } from './collections';
 import { db } from '../db';
 import type { FindSpotDB, Session, Track } from '../db';
 import { applyCompanionTrackTrim, regenerateCompanionTracks } from './companionImport';
@@ -31,10 +32,12 @@ export async function deleteSessionCascade(sessionId: string, database: FindSpot
 
   await database.transaction('rw', [
     database.sessions, database.finds, database.significantFinds, database.media, database.tracks, database.sessionCoverage,
-    database.companionImports, database.companionRecordings, database.surfaceObservations,
+    database.companionImports, database.companionRecordings, database.surfaceObservations, database.collections, database.collectionItems, database.detectorReferenceAssignments,
   ], async () => {
     if (findIds.length) await database.media.where('findId').anyOf(findIds).delete();
     if (significantFindIds.length) await database.media.where('findId').anyOf(significantFindIds).delete();
+    const currentFindIds = await database.finds.where('sessionId').equals(sessionId).primaryKeys();
+    await removeFindOrganisation(currentFindIds, database);
     await database.finds.where('sessionId').equals(sessionId).delete();
     await database.significantFinds.where('sessionId').equals(sessionId).delete();
     await database.tracks.where('sessionId').equals(sessionId).delete();

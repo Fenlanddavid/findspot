@@ -842,7 +842,7 @@ export default function Settings() {
       {/* Media size info + full backup */}
       <div className="mt-3 mb-6 flex items-center justify-between gap-3 flex-wrap">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          <span className="font-bold">Records only, without photos</span> uses JSON. Full backups use ZIP and temporarily need additional device storage while preparing photos.
+          <span className="font-bold">Records only, without photos</span> uses JSON and preserves collection text, ordering and detector groups. Collection photographs are excluded and will appear as unavailable after restoring this file. Full backups use ZIP and temporarily need additional device storage while preparing photos.
           {mediaPhotoCount !== null && mediaPhotoCount > 0 && mediaSizeBytes !== null && (
             <> {mediaPhotoCount} photo{mediaPhotoCount !== 1 ? 's' : ''} on device
               ({Math.round(mediaSizeBytes / (1024 * 1024))} MB raw).</>
@@ -900,6 +900,7 @@ export default function Settings() {
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
             Detector Profiles
           </h2>
+          <Link className="ui-secondary inline-flex mb-4" to="/finds-box/detector-reference">Explore my detector readings</Link>
           
           <div className="space-y-4">
             <div>

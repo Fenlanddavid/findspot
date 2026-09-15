@@ -1,3 +1,4 @@
+import type { DetectorContext, FindCollection, CollectionItem, DetectorReferenceGroup, DetectorReferenceAlias, DetectorReferenceAssignment } from './services/collectionModels';
 import Dexie, { Table, type Transaction } from "dexie";
 import { v4 as uuid } from "uuid";
 import type { OutstandingQuestion, QuestionNote } from "./outstandingQuestions/types";
@@ -339,6 +340,7 @@ export type Find = {
   findContext: string;
 
   detector?: string;
+  detectorContext?: DetectorContext;
   targetId?: number;
   depthCm?: number;
   ruler?: string;
@@ -774,7 +776,7 @@ export type FindSpotVersionSpec = {
  * callbacks rather than maintaining a hand-copied native IndexedDB schema.
  */
 export const FINDSPOT_VERSION_SPECS: FindSpotVersionSpec[] = [];
-export const FINDSPOT_CURRENT_VERSION = 49;
+export const FINDSPOT_CURRENT_VERSION = 50;
 
 function declareFindSpotVersion(versionNumber: number) {
   return {
@@ -831,6 +833,12 @@ export class FindSpotDB extends Dexie {
   outstandingQuestions!: Table<OutstandingQuestion, string>;
   questionNotes!: Table<QuestionNote, string>;
   geocodeCache!: Table<GeocodeCacheRecord, string>;
+
+  collections!: Table<FindCollection, string>;
+  collectionItems!: Table<CollectionItem, string>;
+  detectorReferenceGroups!: Table<DetectorReferenceGroup, string>;
+  detectorReferenceAliases!: Table<DetectorReferenceAlias, string>;
+  detectorReferenceAssignments!: Table<DetectorReferenceAssignment, string>;
 
   constructor(name = "findspot_uk") {
     super(name);
@@ -1204,6 +1212,16 @@ export class FindSpotDB extends Dexie {
     // current tracks, reports, explicit notes and finds without fabricating history.
     declareFindSpotVersion(49).stores({
       hotspotPredictionEvidence: 'id, predictionId, kind, sourceRecordId, observedAt',
+    });
+
+    // v50: local collections and explicit detector organisation; source records remain intact.
+    declareFindSpotVersion(50).stores({
+      finds: 'id, projectId, permissionId, fieldId, sessionId, findCode, objectType, isFavorite, isPending, targetId, detector, ruler, dateRange, foundAt, scatterId, createdAt, [projectId+id]',
+      collections: 'id, projectId, updatedAt',
+      collectionItems: 'id, collectionId, findId, &[collectionId+findId]',
+      detectorReferenceGroups: 'id, projectId',
+      detectorReferenceAliases: 'id, projectId, groupId, &[projectId+normalizedName]',
+      detectorReferenceAssignments: 'id, projectId, groupId, &findId',
     });
 
     // Production and migration fixtures both replay this exact registry.

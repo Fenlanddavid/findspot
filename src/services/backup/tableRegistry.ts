@@ -13,6 +13,12 @@ export type BackupTableRegistration = {
  * without an explicit backup decision.
  */
 export const BACKUP_TABLE_REGISTRY = {
+  collections: { classification: 'backup', storageRole: 'user-data', reason: 'User-authored collections and detector organisation.' },
+  collectionItems: { classification: 'backup', storageRole: 'user-data', reason: 'User-authored collections and detector organisation.' },
+  detectorReferenceGroups: { classification: 'backup', storageRole: 'user-data', reason: 'User-authored collections and detector organisation.' },
+  detectorReferenceAliases: { classification: 'backup', storageRole: 'user-data', reason: 'User-authored collections and detector organisation.' },
+  detectorReferenceAssignments: { classification: 'backup', storageRole: 'user-data', reason: 'User-authored collections and detector organisation.' },
+
   projects: {
     classification: 'backup',
     storageRole: 'user-data',

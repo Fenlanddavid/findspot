@@ -1,3 +1,4 @@
+import { detectorContextSchema } from './collectionModels';
 import { z } from 'zod';
 import type { Find, Session, SignificantFind } from '../db';
 
@@ -87,7 +88,8 @@ const findSchema = z.object({
   locationMethod: z.enum(['live_gps', 'session_track', 'map_selected', 'imported', 'other']).optional(),
   findContext: bounded(),
   detector: bounded(500).optional(),
-  targetId: finite.optional(),
+  detectorContext: detectorContextSchema.optional(),
+  targetId: finite.int().safe().optional(),
   depthCm: finite.optional(),
   ruler: bounded(500).optional(),
   mint: bounded(500).optional(),

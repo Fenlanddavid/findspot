@@ -8,6 +8,12 @@ import { db } from '../db';
  * to new persistence surfaces when the database schema grows.
  */
 export const pagePersistence = {
+  collections: db.collections,
+  collectionItems: db.collectionItems,
+  detectorReferenceGroups: db.detectorReferenceGroups,
+  detectorReferenceAliases: db.detectorReferenceAliases,
+  detectorReferenceAssignments: db.detectorReferenceAssignments,
+
   projects: db.projects,
   permissions: db.permissions,
   fields: db.fields,

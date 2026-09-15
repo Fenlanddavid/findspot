@@ -1,3 +1,4 @@
+import { removeFindOrganisation } from './collections';
 import { db } from '../db';
 import type { Find, Media, SignificantFind } from '../db';
 
@@ -73,10 +74,11 @@ export async function deleteSignificantFindAggregate(significantFindId: string):
     ...(record?.linkedFindId ? [record.linkedFindId] : []),
   ];
 
-  await db.transaction('rw', [db.significantFinds, db.finds, db.media], async () => {
+  await db.transaction('rw', [db.significantFinds, db.finds, db.media, db.collections, db.collectionItems, db.detectorReferenceAssignments], async () => {
     await db.media.where('findId').equals(significantFindId).delete();
     if (linkedFindIds.length) {
       await db.media.where('findId').anyOf(linkedFindIds).delete();
+      await removeFindOrganisation(linkedFindIds);
       await db.finds.bulkDelete(linkedFindIds);
     }
     await db.significantFinds.delete(significantFindId);

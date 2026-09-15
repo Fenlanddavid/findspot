@@ -45,6 +45,8 @@ export { Logo } from "./components/Logo";
 const PermissionPage = React.lazy(() => import("./pages/Permission"));
 const FindPage = React.lazy(() => import("./pages/Find"));
 const SessionPage = React.lazy(() => import("./pages/Session"));
+const DetectorReference = React.lazy(() => import("./pages/DetectorReference"));
+const Collections = React.lazy(() => import("./pages/Collections"));
 const FindsBox = React.lazy(() => import("./pages/FindsBox"));
 const AllPermissions = React.lazy(() => import("./pages/AllPermissions"));
 const FieldGuide = React.lazy(() => import("./pages/FieldGuide"));
@@ -446,6 +448,8 @@ function Shell() {
             <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/land-access" element={<LandAccess />} />
             <Route path="/finds" element={<Navigate replace to={`/finds-box${location.search}`} />} />
+            <Route path="/finds-box/detector-reference" element={<DetectorReference key={projectId} projectId={projectId} />} />
+            <Route path="/finds-box/collections" element={<Collections key={projectId} projectId={projectId} />} />
             <Route path="/finds-box" element={<FindsBox projectId={projectId} />} />
             <Route path="/pending" element={<Navigate replace to={`/finds-box?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(location.search)), filter: "pending" })}`} />} />
             <Route path="/fieldguide" element={<FieldGuide projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("auto", context); }} />} />

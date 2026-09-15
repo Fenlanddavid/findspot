@@ -1,3 +1,4 @@
+import { validateCollectionTables } from './collections';
 import type { NormalizedBackupInput } from '../backup/normalization';
 import { SURFACE_PERIOD_VALUES } from '../../shared/surfacePeriodVocabulary';
 import {
@@ -670,6 +671,7 @@ export function validatePersistedBackupTables(
   });
 
   return {
+    ...validateCollectionTables(backup),
     version: input.version,
     projects: backup.projects as ValidatedBackupData['projects'],
     permissions: backup.permissions as ValidatedBackupData['permissions'],

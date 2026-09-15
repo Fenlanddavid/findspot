@@ -1,3 +1,9 @@
+import { useNavigate } from 'react-router';
+import { AddToCollection } from './AddToCollection';
+import { DetectorContextFields } from './DetectorContextFields';
+import { collectionDeletionImpact } from '../services/collections';
+import { isUsableTargetId } from '../services/detectorReferenceValidation';
+import { parseTargetId } from '../services/detectorReferenceValidation';
 import { fixTimeIso } from '../utils/captureLocationStatus';
 import React, { useEffect, useState, useMemo } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -23,9 +29,14 @@ import {
 } from "../services/findMutations";
 
 export function FindModal(props: { findId: string; onClose: () => void }) {
+  const navigate = useNavigate();
+  const [addCollection, setAddCollection] = useState(false);
+  const collectionImpact = useLiveQuery(() => collectionDeletionImpact([props.findId]), [props.findId]);
   const find = useLiveQuery(async () => db.finds.get(props.findId), [props.findId]);
   const media = useLiveQuery(async () => db.media.where("findId").equals(props.findId).toArray(), [props.findId]);
   const [draft, setDraft] = useState<Find | null>(null);
+  const [targetIdText, setTargetIdText] = useState('');
+  const [targetIdTouched, setTargetIdTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [draftMedia, setDraftMedia] = useState<Media[] | null>(null);
@@ -110,6 +121,8 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
   function beginEdit() {
     if (!find || !media || busy) return;
     setDraft(find);
+    setTargetIdText(find.targetId == null ? '' : String(find.targetId));
+    setTargetIdTouched(false);
     originalMedia.current = media;
     setDraftMedia([...media]);
     setEditError(null);
@@ -126,7 +139,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
     setConfirmingRemoveId(null);
   }
 
-  const dirty = isEditing && (JSON.stringify(draft) !== JSON.stringify(find)
+  const dirty = isEditing && (targetIdTouched || JSON.stringify(draft) !== JSON.stringify(find)
     || (draftMedia !== null && (draftMedia.length !== originalMedia.current.length
       || draftMedia.some((item, index) => item !== originalMedia.current[index]))));
 
@@ -185,8 +198,16 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
       setBusy(false);
       return;
     }
+    let targetId = draft.targetId;
     try {
-      await saveFindEdits({ ...draft, isPending: false }, new Date().toISOString(), draftMedia ? {
+      if (targetIdTouched) targetId = parseTargetId(targetIdText);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'Enter a whole-number target ID.');
+      setBusy(false);
+      return;
+    }
+    try {
+      await saveFindEdits({ ...draft, targetId, isPending: false }, new Date().toISOString(), draftMedia ? {
         upsert: draftMedia.filter(item => !originalMedia.current.includes(item)),
         removeIds: originalMedia.current.filter(item => !draftMedia.some(photo => photo.id === item.id)).map(item => item.id),
       } : undefined);
@@ -303,6 +324,9 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
         ) : undefined}
       >
         {editError && !isEditing && <p ref={errorRef} role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{editError}</p>}
+        {!isEditing && draft && <div className="mb-4 flex flex-wrap gap-2"><button className="ui-secondary" onClick={() => setAddCollection(true)}>Add to collection</button>{isUsableTargetId(draft.targetId) && <button className="ui-secondary" onClick={() => { props.onClose(); navigate(`/finds-box/detector-reference?find=${encodeURIComponent(draft.id)}&target=${draft.targetId}`); }}>See similar recorded readings</button>}</div>}
+        {addCollection && draft && <AddToCollection projectId={draft.projectId} findIds={[draft.id]} onClose={() => setAddCollection(false)} />}
+        {confirmingDelete && !!collectionImpact?.length && <p className="mb-3 rounded-xl bg-amber-100 p-3 text-amber-900">These collections will lose this find: {collectionImpact.join(', ')}.</p>}
         {isEditing && <p role="status" className="mb-3 text-sm font-medium text-amber-700 dark:text-amber-300">Unsaved changes · the record and photos save together.</p>}
         <div className="no-print grid gap-6 pr-1">
           {shareError && (
@@ -402,7 +426,7 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 )}
 
                 {/* TERTIARY — supplementary fields */}
-                {(draft.coinType || draft.coinDenomination || draft.coinSpink || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId) && (
+                {(draft.coinType || draft.coinDenomination || draft.coinSpink || draft.ruler || draft.mint || draft.pasId || draft.weightG || draft.widthMm || draft.heightMm || draft.depthMm || draft.depthCm || draft.targetId != null) && (
                   <>
                     <div className="border-t border-gray-100 dark:border-white/[0.05] my-4" />
                     <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-[14px]">
@@ -708,13 +732,14 @@ export function FindModal(props: { findId: string; onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3">
                   <label className="grid gap-0.5">
                     <span className="text-xs font-bold opacity-50 uppercase">Target ID</span>
-                    <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" value={draft.targetId ?? ""} onChange={(e) => setDraft({ ...draft, targetId: e.target.value ? parseInt(e.target.value) : undefined })} />
+                    <input type="text" inputMode="text" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs font-mono" value={targetIdText} onChange={(e) => { setTargetIdText(e.target.value); setTargetIdTouched(true); }} />
                   </label>
                   <label className="grid gap-0.5">
                     <span className="text-xs font-bold opacity-50 uppercase">Depth (cm)</span>
                     <input type="number" className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 text-xs" value={draft.depthCm ?? ""} onChange={(e) => setDraft({ ...draft, depthCm: e.target.value ? parseFloat(e.target.value) : undefined })} />
                   </label>
                 </div>
+                <DetectorContextFields value={draft.detectorContext ?? {}} onChange={detectorContext => setDraft({ ...draft, detectorContext })} />
               </div>
 
               <label className="grid gap-1">

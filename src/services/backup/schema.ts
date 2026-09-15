@@ -1,3 +1,4 @@
+import type { FindCollection, CollectionItem, DetectorReferenceGroup, DetectorReferenceAlias, DetectorReferenceAssignment } from '../collectionModels';
 import type {
   Field,
   CompanionImportLedger,
@@ -40,6 +41,12 @@ export type ValidatedBackupMedia = Omit<Media, 'blob'> & (
 );
 
 export type ValidatedBackupTables = {
+  collections: FindCollection[];
+  collectionItems: CollectionItem[];
+  detectorReferenceGroups: DetectorReferenceGroup[];
+  detectorReferenceAliases: DetectorReferenceAlias[];
+  detectorReferenceAssignments: DetectorReferenceAssignment[];
+
   projects: Project[];
   permissions: Permission[];
   fields: Field[];

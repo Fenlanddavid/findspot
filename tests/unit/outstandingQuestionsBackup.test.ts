@@ -40,7 +40,8 @@ const { tables, db } = vi.hoisted(() => {
     outstandingQuestions: table(), questionNotes: table(),
     permissionSections: table(), sessionCoverage: table(),
     companionRecordings: table(), companionImports: table(),
-    surfaceObservations: table(),
+    surfaceObservations: table(), collections: table(), collectionItems: table(),
+    detectorReferenceGroups: table(), detectorReferenceAliases: table(), detectorReferenceAssignments: table(),
   };
   return {
     tables,

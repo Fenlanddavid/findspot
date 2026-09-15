@@ -71,7 +71,7 @@ export async function auditDatabaseIntegrity(
     database.sessionCoverage,
     database.companionRecordings,
     database.companionImports,
-    database.surfaceObservations,
+    database.surfaceObservations, database.collections, database.collectionItems, database.detectorReferenceGroups, database.detectorReferenceAliases, database.detectorReferenceAssignments,
   ];
 
   const rows = await database.transaction('r', tables, async () => {
@@ -80,7 +80,7 @@ export async function auditDatabaseIntegrity(
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
-      surfaceObservations,
+      surfaceObservations, collections, collectionItems, detectorReferenceGroups, detectorReferenceAliases, detectorReferenceAssignments,
     ] = await Promise.all([
       database.projects.toArray(),
       database.permissions.toArray(),
@@ -101,14 +101,14 @@ export async function auditDatabaseIntegrity(
       database.sessionCoverage.toArray(),
       database.companionRecordings.toArray(),
       database.companionImports.toArray(),
-      database.surfaceObservations.toArray(),
+      database.surfaceObservations.toArray(), database.collections.toArray(), database.collectionItems.toArray(), database.detectorReferenceGroups.toArray(), database.detectorReferenceAliases.toArray(), database.detectorReferenceAssignments.toArray(),
     ]);
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
       hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
-      surfaceObservations,
+      surfaceObservations, collections, collectionItems, detectorReferenceGroups, detectorReferenceAliases, detectorReferenceAssignments,
     };
   });
 
@@ -237,6 +237,29 @@ export async function auditDatabaseIntegrity(
     if (track.sourceRecordingUuid && !companionRecordingsById.has(track.sourceRecordingUuid)) {
       orphanedRecords += 1;
     }
+  }
+
+  const collectionById = new Map(rows.collections.map(row => [row.id, row]));
+  const itemById = new Map(rows.collectionItems.map(row => [row.id, row]));
+  const groupById = new Map(rows.detectorReferenceGroups.map(row => [row.id, row]));
+  const findById = new Map(rows.finds.map(row => [row.id, row]));
+  const photoById = new Map(rows.media.map(row => [row.id, row]));
+  for (const collection of rows.collections) {
+    if (!projectIds.has(collection.projectId)) orphanedRecords += 1;
+    if (collection.coverItemId && itemById.get(collection.coverItemId)?.collectionId !== collection.id) orphanedRecords += 1;
+  }
+  for (const item of rows.collectionItems) {
+    const collection = collectionById.get(item.collectionId);
+    if (!collection || findById.get(item.findId)?.projectId !== collection.projectId) orphanedRecords += 1;
+    for (const id of item.selectedMediaIds) {
+      const photo = photoById.get(id);
+      if (!photo || photo.findId !== item.findId || photo.type !== 'photo' || photo.projectId !== collection?.projectId) orphanedRecords += 1;
+    }
+  }
+  for (const group of rows.detectorReferenceGroups) if (!projectIds.has(group.projectId)) orphanedRecords += 1;
+  for (const alias of rows.detectorReferenceAliases) if (groupById.get(alias.groupId)?.projectId !== alias.projectId) orphanedRecords += 1;
+  for (const assignment of rows.detectorReferenceAssignments) {
+    if (groupById.get(assignment.groupId)?.projectId !== assignment.projectId || findById.get(assignment.findId)?.projectId !== assignment.projectId) orphanedRecords += 1;
   }
 
   const retiredRules = rows.outstandingQuestions.filter(question =>

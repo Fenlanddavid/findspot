@@ -1,0 +1,74 @@
+import { readDetectorReferenceRecords } from '../services/detectorReferenceRecords';
+import { formatDate } from '../utils/formatDate';
+import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { pagePersistence } from '../services/pagePersistence';
+import { detectorResolver, queryDetectorReference, targetIdBins, type DetectorReferenceFilters } from '../services/detectorReferenceQuery';
+import { isUsableTargetId, parseTargetId, parseTargetRange } from '../services/detectorReferenceValidation';
+import { FindPhoto } from '../components/FindPhoto';
+import { FindModal } from '../components/FindModal';
+import { DetectorGroupEditor } from '../components/DetectorGroupEditor';
+import { DetectorBulkEditor } from '../components/DetectorBulkEditor';
+
+export default function DetectorReference({ projectId }: { projectId: string }) {
+  const navigate = useNavigate(); const [params, setParams] = useSearchParams();
+  const [exact, setExact] = useState(params.get('target') ?? ''); const [upper, setUpper] = useState(''); const [rangeMode, setRangeMode] = useState(false); const [filterOpen, setFilterOpen] = useState(false);
+  const [bulkFinds, setBulkFinds] = useState<import('../db').Find[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [filters, setFilters] = useState<Partial<DetectorReferenceFilters>>({}); const [limit, setLimit] = useState(40); const [selected, setSelected] = useState<string[]>([]); const [openFind, setOpenFind] = useState<string>(); const [editGroup, setEditGroup] = useState<string>(); const [bulk, setBulk] = useState(false);
+  const records = useLiveQuery(async () => {
+    const [finds, groups, aliases, assignments, permissions] = await Promise.all([
+      readDetectorReferenceRecords(projectId, pagePersistence), pagePersistence.detectorReferenceGroups.where('projectId').equals(projectId).toArray(), pagePersistence.detectorReferenceAliases.where('projectId').equals(projectId).toArray(), pagePersistence.detectorReferenceAssignments.where('projectId').equals(projectId).toArray(), pagePersistence.permissions.where('projectId').equals(projectId).toArray(),
+    ]); return { finds, groups, aliases, assignments, permissions };
+  }, [projectId]);
+  const resolve = useMemo(() => detectorResolver(projectId, records ?? { groups: [], aliases: [], assignments: [] }), [projectId, records]);
+  const options = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const group of records?.groups ?? []) values.set(`group:${group.id}`, group.displayName);
+    for (const find of records?.finds ?? []) { const key = resolve(find); if (key.startsWith('name:')) values.set(key, find.detector!.trim()); }
+    return [...values].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [records, resolve]);
+  const sourceFind = records?.finds.find(find => find.id === params.get('find'));
+  const group = params.get('group') ?? (sourceFind ? (resolve(sourceFind) === 'unknown' ? '' : resolve(sourceFind)) : options[0]?.[0] ?? '');
+  let error = ''; let range: [number, number] | undefined;
+  try { if (rangeMode) range = parseTargetRange(exact, upper); else { const value = parseTargetId(exact); if (value !== undefined) range = [value, value]; } } catch (cause) { error = cause instanceof Error ? cause.message : 'Invalid reading.'; }
+  if (filters.from && filters.to && filters.from > filters.to) error = 'Recovery start date must not exceed end date.';
+  const results = !error && records ? queryDetectorReference(records.finds, { ...filters, range, projectId, group }, records) : [];
+  const bins = targetIdBins(results);
+  const selectedRecords = (records?.finds ?? []).filter(find => selected.includes(find.id));
+  const usable = results.filter(find => isUsableTargetId(find.targetId)).length;
+  function updateFilter(patch: Partial<DetectorReferenceFilters>) { setFilters({ ...filters, ...patch }); setLimit(40); }
+  return <main className="mx-auto max-w-4xl space-y-4 px-4 pt-2 pb-28">
+    <Link to="/finds-box" className="inline-flex min-h-11 items-center text-sm font-medium text-emerald-700 dark:text-emerald-300">← FindsBox</Link><header className="space-y-2"><p className="text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Your personal reference</p><h1 className="font-serif text-3xl leading-tight sm:text-4xl">My detector, my finds</h1><p className="max-w-xl text-gray-600 dark:text-gray-300">What have readings like this turned out to be for me before?</p></header>
+    <section aria-label="Look up recorded readings" className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5">
+    <label className="block">Detector<select className="ui-input w-full" value={group} onChange={e => { setParams({ group: e.target.value }); setLimit(40); }}><option value="">Choose a detector</option>{options.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+    <p className="text-sm text-gray-600 dark:text-gray-300">{usable} {usable === 1 ? 'record' : 'records'} with usable target IDs in these results</p>
+
+    {filters.missingOnly && <p className="rounded-xl bg-amber-50 p-3 text-amber-900">Reviewing records missing a detector identity or usable target ID across this project. Clear reading filters to see all incomplete records.</p>}
+    <div className="flex flex-wrap items-end gap-3"><label className="min-w-0 flex-1">{rangeMode ? 'Lower target ID' : 'Exact target ID'}<input className="ui-input block" type="text" value={exact} placeholder="Any recorded ID" onChange={e => { setExact(e.target.value); setLimit(40); }} /></label><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={rangeMode} onChange={e => setRangeMode(e.target.checked)} />Range</label>{rangeMode && <label className="min-w-0 flex-1">Upper target ID<input className="ui-input block" type="text" value={upper} onChange={e => { setUpper(e.target.value); setLimit(40); }} /></label>}</div>
+    <button className="ui-secondary" aria-label="Filter recorded finds" aria-expanded={filterOpen} onClick={() => setFilterOpen(!filterOpen)}>{filterOpen ? 'Hide filters' : 'Filters'}</button>
+    <button className="ml-3 min-h-11 text-sm text-emerald-700 underline dark:text-emerald-300" onClick={() => { updateFilter({ missingOnly: !filters.missingOnly }); setExact(''); setRangeMode(false); }}>{filters.missingOnly ? 'Return to detector reference' : 'Review missing information'}</button>
+    </section>
+    {filterOpen && <section className="grid gap-3 rounded-xl border p-3 sm:grid-cols-2">{([
+      ['material', 'Material', records?.finds.map(find => find.material)], ['category', 'Category', records?.finds.map(find => find.findCategory)], ['coil', 'Coil', records?.finds.map(find => find.detectorContext?.coilLabel)], ['programme', 'Programme', records?.finds.map(find => find.detectorContext?.programmeLabel)], ['ground', 'Ground condition', records?.finds.map(find => find.detectorContext?.groundCondition)],
+    ] as const).map(([key, label, values]) => <label key={key}>{label}<select className="ui-input w-full" value={filters[key] ?? ''} onChange={e => updateFilter({ [key]: e.target.value })}><option value="">All</option><option value="__unknown">Unknown / not recorded</option>{[...new Set(values)].filter((value): value is string => !!value && value.toLowerCase() !== 'unknown').sort().map(value => <option key={value}>{value}</option>)}</select></label>)}
+      <label>Permission<select className="ui-input w-full" value={filters.permission ?? ''} onChange={e => updateFilter({ permission: e.target.value })}><option value="">All</option><option value="__unknown">Unknown</option>{records?.permissions.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+      <label>Recovered from<input className="ui-input w-full" type="date" disabled={filters.unknownDate} value={filters.from ?? ''} onChange={e => updateFilter({ from: e.target.value })} /></label><label>Recovered to<input className="ui-input w-full" type="date" disabled={filters.unknownDate} value={filters.to ?? ''} onChange={e => updateFilter({ to: e.target.value })} /></label><label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={!!filters.unknownDate} onChange={e => updateFilter({ unknownDate: e.target.checked })} />Recovery date unknown</label>
+      <button className="ui-secondary" onClick={() => { setFilters({}); setExact(''); setUpper(''); setRangeMode(false); }}>Clear filters</button>
+    </section>}
+    {loadError && <p role="alert">{loadError}</p>}
+    {error && <p role="alert" className="text-red-700">{error}</p>}
+    <p role="status" className="pt-2 font-semibold">{results.length} recorded {results.length === 1 ? 'find' : 'finds'}{range ? range[0] === range[1] ? ` with exact target ID ${range[0]}` : ` between ${range[0]} and ${range[1]} (inclusive)` : ''}{filters.missingOnly ? ' matching missing-information filters' : ''}</p>
+    {!results.length && !error && <div className="rounded-xl border p-4"><p>Your reference builds from finds with a detector and target ID. You can add these details to existing records whenever you like.</p><div className="mt-3 flex gap-3"><button className="ui-secondary" onClick={() => { setFilters({ missingOnly: true }); setExact(''); setRangeMode(false); }}>Review existing finds</button><Link className="ui-secondary" to="/settings?tab=detectors">Open detector settings</Link></div></div>}
+    {!!selectedRecords.length && <div className="flex flex-wrap gap-3 rounded-xl border p-3"><p>{selectedRecords.length} selected across filters</p><button className="ui-primary" disabled={selectedRecords.length > 50} onClick={() => navigate('/finds-box/collections', { state: { findIds: selectedRecords.map(find => find.id) } })}>Create collection</button><button className="ui-secondary" onClick={async () => { try { const rows = await pagePersistence.finds.bulkGet(selectedRecords.map(find => find.id)); setBulkFinds(rows.filter((find): find is import('../db').Find => !!find && find.projectId === projectId)); setBulk(true); } catch { setLoadError('Could not load selected records. Try again.'); } }}>Update detector details</button><button className="ui-secondary" onClick={() => setSelected([])}>Clear selection</button></div>}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{results.slice(Math.max(0, limit - 40), limit).map(find => <article key={find.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"><button className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500" onClick={() => setOpenFind(find.id)}><FindPhoto projectId={projectId} findId={find.id} className="aspect-[4/3]" /><div className="space-y-2 p-3"><h2 className="break-words font-semibold leading-snug">{find.objectType || 'Unidentified find'}</h2><p className="inline-block max-w-full break-words rounded-md bg-emerald-50 px-2 py-1 font-mono text-sm font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">Target ID: {isUsableTargetId(find.targetId) ? find.targetId : 'Needs review'}</p><p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">{find.material || 'Unknown material'} · {find.findCategory || 'Unknown category'}</p><p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">{find.foundAt && Number.isFinite(Date.parse(find.foundAt)) ? formatDate(find.foundAt) : 'Recovery date unknown'}</p>{find.detectorContext && <p className="text-xs">{[find.detectorContext.coilLabel, find.detectorContext.programmeLabel, find.detectorContext.groundCondition].filter(Boolean).join(' · ') || 'Context not recorded'}</p>}</div></button><label className="flex min-h-11 items-center gap-2 border-t border-gray-100 px-3 text-sm dark:border-gray-700"><input type="checkbox" checked={selected.includes(find.id)} onChange={e => setSelected(e.target.checked ? [...selected, find.id] : selected.filter(id => id !== find.id))} />Select find</label></article>)}</div>
+    <div className="flex gap-3">{limit > 40 && <button className="ui-secondary" onClick={() => setLimit(limit - 40)}>Previous finds</button>}{results.length > limit && <button className="ui-secondary" onClick={() => setLimit(limit + 40)}>Next finds</button>}</div>
+    <p className="border-l-2 border-emerald-500 pl-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">These are finds you chose to recover and record. They do not represent every signal or predict what remains underground.</p>
+    {!!bins.length && <details className="rounded-xl border p-4"><summary className="min-h-11 cursor-pointer">Explore recorded target-ID counts</summary><p className="text-sm">Target ID / inclusive range → number of recorded finds. Select a row to use those exact bounds.</p><ul className="mt-3 space-y-2">{bins.map(bin => <li key={bin.min}><button className="flex min-h-11 w-full items-center gap-3 text-left" onClick={() => { setExact(String(bin.min)); setUpper(String(bin.max)); setRangeMode(bin.min !== bin.max); setLimit(40); }}><span className="w-28 shrink-0 break-all text-sm">{bin.min === bin.max ? bin.min : `${bin.min}–${bin.max}`}</span><span aria-hidden="true" className="min-w-0 flex-1"><span className="block h-5 rounded bg-emerald-600" style={{ width: `${bin.count / Math.max(...bins.map(value => value.count)) * 100}%` }} /></span><span className="w-14 shrink-0 text-sm">{bin.count} {bin.count === 1 ? 'find' : 'finds'}</span></button></li>)}</ul></details>}
+    <details className="rounded-xl border border-gray-200 p-4 dark:border-gray-700"><summary className="min-h-11 cursor-pointer text-sm font-medium">Manage detector names and scales</summary><div className="flex flex-wrap gap-3"><button className="ui-secondary" onClick={() => setEditGroup('new')}>Group detector names</button>{group.startsWith('group:') && <button className="ui-secondary" onClick={() => setEditGroup(group.slice(6))}>Edit this group</button>}<Link className="ui-secondary" to="/settings?tab=detectors">Detector settings</Link></div></details>
+    {openFind && <FindModal findId={openFind} onClose={() => setOpenFind(undefined)} />}
+    {editGroup && records && <DetectorGroupEditor projectId={projectId} group={records.groups.find(row => row.id === editGroup)} names={[...new Set(records.finds.map(find => find.detector?.trim()).filter((value): value is string => !!value))]} aliases={records.aliases} onClose={() => setEditGroup(undefined)} />}
+    {bulk && records && <DetectorBulkEditor projectId={projectId} finds={bulkFinds} groups={records.groups} onClose={() => { setBulk(false); setSelected([]); }} />}
+  </main>;
+}

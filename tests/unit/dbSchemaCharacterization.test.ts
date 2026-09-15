@@ -19,8 +19,13 @@ describe('current FindSpot persistence schema', () => {
 
     expect(database.tables.map(table => table.name).sort()).toMatchInlineSnapshot(`
       [
+        "collectionItems",
+        "collections",
         "companionImports",
         "companionRecordings",
+        "detectorReferenceAliases",
+        "detectorReferenceAssignments",
+        "detectorReferenceGroups",
         "diagnosticLog",
         "fieldGuideCache",
         "fields",

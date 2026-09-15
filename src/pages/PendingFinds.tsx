@@ -1,3 +1,4 @@
+import { collectionDeletionImpact } from '../services/collections';
 import React, { useState } from "react";
 import { useNavigate } from "react-router";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -11,6 +12,7 @@ import { formatDate, formatTime } from "../utils/formatDate";
 export default function PendingFinds(props: { projectId: string }) {
   const navigate = useNavigate();
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const affectedCollections = useLiveQuery(() => collectionDeletionImpact(confirmingDeleteId ? [confirmingDeleteId] : []), [confirmingDeleteId]);
   const [savingId, setSavingId] = useState<string | null>(null);
 
   const pendingFinds = useLiveQuery(
@@ -126,7 +128,8 @@ export default function PendingFinds(props: { projectId: string }) {
                   {savingId === f.id ? "Saving…" : "Mark Complete"}
                 </button>
                 {confirmingDeleteId === f.id ? (
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {!!affectedCollections?.length && <p className="w-full text-sm">These collections will lose this find: {affectedCollections.join(", ")}.</p>}
                     <button
                       onClick={() => deletePendingFind(f.id)}
                       className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-2xs font-black uppercase tracking-widest transition-all"

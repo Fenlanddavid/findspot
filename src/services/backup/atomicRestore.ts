@@ -84,6 +84,11 @@ export async function applyValidatedBackup(
     if (backup.surfaceObservations.length) {
       await database.surfaceObservations.bulkPut(backup.surfaceObservations);
     }
+    if (backup.collections.length) await database.collections.bulkPut(backup.collections);
+    if (backup.collectionItems.length) await database.collectionItems.bulkPut(backup.collectionItems);
+    if (backup.detectorReferenceGroups.length) await database.detectorReferenceGroups.bulkPut(backup.detectorReferenceGroups);
+    if (backup.detectorReferenceAliases.length) await database.detectorReferenceAliases.bulkPut(backup.detectorReferenceAliases);
+    if (backup.detectorReferenceAssignments.length) await database.detectorReferenceAssignments.bulkPut(backup.detectorReferenceAssignments);
     await database.settings.put({ key: LAST_RESTORE_REPORT_SETTING_KEY, value: report });
   });
 }
