@@ -2,7 +2,7 @@
 
 ## Resume here
 
-Updated: 2026-09-15. Primary physical-device target: Samsung Galaxy S25 (user checks via localhost). Status: M1–M7 implemented and verified locally; physical-device verification and release are pending. Neither feature is released.
+Updated: 2026-09-16. Primary physical-device target: Samsung Galaxy S25 (user checks via localhost). Status: M1–M7 implemented and verified locally; v5.0.19 was pushed, but GitHub Actions failed before deployment. CI fixes are prepared locally (see the 2026-09-16 checkpoint below). Physical-device verification remains unrecorded. Neither feature is released.
 
 User authorized implementation of both supplied development briefs, with the review amendments below, across sessions. Continue without asking to reconfirm scope. Do not deploy or claim completion without the checks and device evidence below. No delegation was requested.
 
@@ -104,3 +104,11 @@ Short update: “Collections and detector reference, with private PDF and image 
 Architecture snapshot refreshed at `/tmp/findspot-collections-architecture.txt` after this checkpoint. Version bump, release guard and deployment remain pending the device gate.
 
 Final checkpoint: build and static checks passed; 1,310 unit tests passed (one existing skip); the final failed-save browser check is being completed; four production checks have passing evidence before that message-only fix. The production preview is running on port 4175 (session 71935). Resume with the physical S25 check and release preparation; do not repeat completed automated checks unless code changes or a reported issue warrants it.
+
+### 2026-09-16 — GitHub Actions failure repair
+
+- Inspected run `35028782487` for commit `d148db5`. Browser and production Companion handoff jobs passed; the unit job failed because package-lock.json still recorded 5.0.18 while package.json recorded 5.0.19. Android setup failed before Gradle because its default SDK package list included the unavailable `tools` package. Site build and deployment were skipped.
+- Synced both root lockfile version fields to 5.0.19 and explicitly requested `platform-tools` in the Android setup action.
+- Fetched the missing v5.0.16–v5.0.18 tags and uncovered the next release-check blocker: UPDATE_NOTES was unchanged since v5.0.18. Updated the banner text to the agreed Collections/Detector Reference release wording.
+- Verification: full `npm test` passed all static checks and all 158 unit-test files (1,310 tests passed, one existing skip). After the banner update, `npm run check:release` passed against v5.0.18, and `git diff --check` passed. The initial sandbox run stopped at the date-check subprocess; the successful run used approved execution outside the sandbox. Log: `/tmp/findspot-ci-fix-tests.log`.
+- The user explicitly requested committing and pushing these fixes to main, which triggers the deployment workflow. GitHub verification and deployment remain pending at this checkpoint. Android setup still needs verification on a fresh GitHub runner; no local Java/Android SDK is available. No new physical-device evidence was received.
