@@ -390,6 +390,15 @@ performed during this verification session. The unrelated transcript in
 `scripts/README-datasets.md` was preserved, including its existing trailing blank
 line reported by `git diff --check`.
 
+## Release preparation — 21 September 2026
+
+The first push (`3feb6f2`) retained package version 5.0.19, so CI correctly rejected
+it because tag `v5.0.19` already exists at `38fdff8`. Prepared 5.0.20 with the
+repository release script, synchronizing package.json, both lockfile version
+fields, the update-banner wording and `docs/releases/5.0.20.json`. The release
+guard and TypeScript check pass against the fetched v5.0.19 tag. Deployment remains subject to CI;
+this preparation does not establish physical-device verification.
+
 ## Source anchors for the review
 
 - `src/engines/hotspot/hotspotEngine.ts`: explanation truncation, score caps,
