@@ -1,5 +1,5 @@
 import { triggerDownload } from '../../utils/download';
-import React, { useEffect, useLayoutEffect, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -541,6 +541,10 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         update();
     };
 
+    // Regional context is captured as available at presentation time. Later context
+    // cannot change the recorded score or confidence under this engine version.
+    const geologyEvidenceRef = useRef<string[]>(['geology_unavailable']);
+
     // ─── Historic phase (shared by auto-trigger and standalone) ──────────────
 
     const runHistoricPhase = useCallback(async (
@@ -557,6 +561,14 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         });
 
         if (!result) return false;
+
+        result.enhancedHotspots = result.enhancedHotspots.map(hotspot => ({
+            ...hotspot,
+            evidenceCapture: hotspot.evidenceCapture ? {
+                ...hotspot.evidenceCapture,
+                context: [...new Set([...hotspot.evidenceCapture.context, ...geologyEvidenceRef.current])],
+            } : undefined,
+        }));
 
         // If fresh NHLE/AIM data was fetched (standalone mode), push to map and update refs
         // so the ALIE worker receives the actual feature data (not empty arrays).
@@ -596,12 +608,14 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
 
     const runGeologyContextPhase = useCallback(async (center: { lat: number; lng: number }) => {
         if (geologyEnabledRef.current !== true) {
+            geologyEvidenceRef.current = ['geology_disabled'];
             if (geologyEnabledRef.current === false) {
                 addLog('Geology context disabled in settings.', 'system');
             }
             return;
         }
         const requestSeq = ++geologyRequestSeqRef.current;
+        geologyEvidenceRef.current = ['geology_pending'];
         setGeologyContextLoading(true);
         setGeologyContext(null);
         try {
@@ -615,9 +629,13 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
                 },
             );
             if (geologyRequestSeqRef.current === requestSeq) {
+                geologyEvidenceRef.current = ctx
+                    ? ['geology_available', `geology_class_${ctx.landscapeClass}`]
+                    : ['geology_unavailable'];
                 setGeologyContext(ctx);
             }
         } catch (error) {
+            if (geologyRequestSeqRef.current === requestSeq) geologyEvidenceRef.current = ['geology_unavailable'];
             reportNonFatal('field-guide', 'Geology context load failed', error);
         } finally {
             if (geologyRequestSeqRef.current === requestSeq) {
@@ -626,10 +644,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         }
     }, [addLog]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ─── Apply the geology modifier to hotspots (Phase 2) ────────────────────
-    // Fires when geology context becomes available AND historic enhancement is done.
-    // Guards against re-application using the tileKey of the last applied context.
-    // GEOLOGY_RULE: applyGeologyModifier enforces the primary-signal gate internally.
+    // Compatibility application path. The current engine keeps geology contextual;
+    // applyGeologyModifier cannot change scores, bands or ordering.
 
     useEffect(() => {
         if (!geologyContext) {

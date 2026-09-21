@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { db, type HotspotPrediction, type Session, type Track } from '../../src/db';
+import { summarizeFrozenPredictionEvidence } from '../../src/services/predictionCalibration';
 import {
     aggregateAndSweepHotspotPredictions,
     predictionTrackCoverage,
@@ -195,12 +196,12 @@ describe('hotspot prediction outcomes', () => {
         const swept = await aggregateAndSweepHotspotPredictions(NOW, 1_000);
         expect(swept).toBe(3);
         expect(await db.hotspotPredictions.count()).toBe(0);
-        expect(await db.hotspotPredictionAggregates.get('engine-v1:Strong Signal')).toMatchObject({
+        expect(summarizeFrozenPredictionEvidence(await db.hotspotPredictionAggregates.toArray()).cohorts[0].counts).toMatchObject({
             surfacedCount: 3,
             searchedCount: 1,
             hitCount: 0,
-            trackedSearchedCount: 0,
-            trackedHitCount: 0,
+            trackedVisitCount: 1,
+            trackedFindCount: 1,
             reportedSearchedCount: 1,
             reportedHitCount: 0,
         });
@@ -212,7 +213,7 @@ describe('hotspot prediction outcomes', () => {
             prediction({ id: 'legacy', surfacedAt: 1, outcome: 'visited_tracked', legacyOutcome: 'searched_no_find', resolutionEvidence: 'tracked' }),
         ]);
         expect(await aggregateAndSweepHotspotPredictions(NOW, 1_000)).toBe(2);
-        expect(await db.hotspotPredictionAggregates.get('engine-v1:Strong Signal')).toMatchObject({
+        expect(summarizeFrozenPredictionEvidence(await db.hotspotPredictionAggregates.toArray()).cohorts[0].counts).toMatchObject({
             surfacedCount: 1,
             searchedCount: 1,
             hitCount: 0,

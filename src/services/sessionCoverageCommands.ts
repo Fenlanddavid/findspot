@@ -40,7 +40,7 @@ export async function prepareSessionSearchedAreas(
     if (session) {
       try {
         await refreshHotspotPredictionOutcomes(session.permissionId);
-        await aggregateAndSweepHotspotPredictions();
+        await aggregateAndSweepHotspotPredictions(undefined, undefined, session.permissionId);
       } catch (error) {
         reportNonFatal(
           'session-coverage',
@@ -72,7 +72,7 @@ export async function saveSessionSearchedAreas(input: {
   );
   try {
     await refreshHotspotPredictionOutcomes(session.permissionId);
-    await aggregateAndSweepHotspotPredictions();
+    await aggregateAndSweepHotspotPredictions(undefined, undefined, session.permissionId);
     return { observations, predictionRefresh: 'completed' };
   } catch (error) {
     reportNonFatal(

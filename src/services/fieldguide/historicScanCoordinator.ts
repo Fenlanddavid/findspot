@@ -1,3 +1,4 @@
+import { v4 as uuid } from 'uuid';
 // ─── Historic scan coordinator ────────────────────────────────────────────────
 // Fetches heritage context (location, etymology, OSM sites, NHLE, AIM, routes)
 // and enriches terrain clusters into enhanced hotspots.
@@ -350,7 +351,7 @@ export async function runHistoricScanPipeline(
                     terrainHotspots, pasFinds, monumentPoints, placeSignals, opts.targetPeriod, aimFeatures,
                 );
 
-                // PAS density modifier — supporting evidence only, never creates hotspots
+                // PAS density is regional context only; it never changes score or band
                 const mapCenter = map.getCenter();
                 pasCellResult = await getPASDensityNear(mapCenter.lat, mapCenter.lng);
                 const pasCell = pasCellResult;
@@ -359,9 +360,16 @@ export async function runHistoricScanPipeline(
                     const topPeriods = pasPeriodLabels(pasCell).slice(0, 3).join(', ');
                     onLog(`> PAS density: ${pasCell.c} public records in cell (res 6). ${pasCell.c > 0 ? `Top periods: ${topPeriods}` : 'No records in this cell.'}`, 'historic');
                 } else {
-                    onLog('> PAS density: index unavailable (will apply no modifier).', 'historic', 'warn');
+                    onLog('> PAS density: index unavailable.', 'historic', 'warn');
                 }
 
+                enhancedHotspots = enhancedHotspots.map(hotspot => ({
+                    ...hotspot,
+                    evidenceCapture: hotspot.evidenceCapture ? {
+                        ...hotspot.evidenceCapture,
+                        context: [...hotspot.evidenceCapture.context, pasCellResult === null ? 'pas_unavailable' : 'pas_available'],
+                    } : undefined,
+                }));
                 const sourceCount = pasFinds.length + placeSignals.length + monumentPoints.length;
                 onLog(`> Historic scan complete — ${sourceCount} source${sourceCount !== 1 ? 's' : ''} integrated.`, 'historic');
             } else {
@@ -384,6 +392,7 @@ export async function runHistoricScanPipeline(
                 pas_density:      pasCellResult !== null,
             };
             return {
+                scanId: uuid(), surfacedAt: Date.now(),
                 pasFinds, placeSignals, monumentPoints, heritageCount,
                 enhancedHotspots, routes,
                 nhleData: nhleRaw ?? null,  // non-null only if freshly fetched

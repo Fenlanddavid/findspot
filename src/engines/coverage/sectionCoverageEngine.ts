@@ -469,7 +469,6 @@ export function resolvePredictionDecisions(input: {
     const reportedSessions = new Set(reported.map(observation => observation.sessionId));
     const trackedCoverage = input.trackedCoverageByPrediction.get(prediction.id) ?? 0;
     const hasTracked = trackedCoverage >= PREDICTION_TRACK_COVERAGE_THRESHOLD;
-    const hasReported = reportedSessions.size > 0;
     const matchedFinds = input.finds.filter(find => findMatchesPrediction(find, prediction));
     // Reports from later sessions remain eligible: permission + post-surface
     // time + spatial overlap define the durable relationship.
@@ -479,6 +478,20 @@ export function resolvePredictionDecisions(input: {
       return (report.anchor[0] >= west && report.anchor[0] <= east && report.anchor[1] >= south && report.anchor[1] <= north)
         || getDistance(report.anchor, prediction.center) <= 150;
     });
+    const reportedAreas = reported.flatMap(observation => {
+      const section = sectionById.get(observation.sectionId);
+      const geometry = section
+        ? sectionGeometryAtVersion(section, observation.sectionGeometryVersion)
+        : null;
+      return geometry ? [geometry.areaM2] : [];
+    });
+    const requires = reportedAreas.length > 0
+      && reportedAreas.every(areaM2 => areaM2 <= REPORTED_IMMEDIATE_MAX_AREA_M2)
+      ? 1
+      : REPORTED_LARGE_SECTION_CONFIRMATIONS;
+    // Apply the same search-report threshold whether or not a find exists.
+    // Explicit negative reports establish a reported search even after a later find.
+    const hasReported = explicitNegativeReports.length > 0 || reportedSessions.size >= requires;
     const common = {
       reportedConfirmationCount: reportedSessions.size,
       reportedObservationIds: reported.map(observation => observation.id),
@@ -520,18 +533,7 @@ export function resolvePredictionDecisions(input: {
       continue;
     }
 
-    const reportedAreas = reported.flatMap(observation => {
-      const section = sectionById.get(observation.sectionId);
-      const geometry = section
-        ? sectionGeometryAtVersion(section, observation.sectionGeometryVersion)
-        : null;
-      return geometry ? [geometry.areaM2] : [];
-    });
-    const requires = reportedAreas.length > 0
-      && reportedAreas.every(areaM2 => areaM2 <= REPORTED_IMMEDIATE_MAX_AREA_M2)
-      ? 1
-      : REPORTED_LARGE_SECTION_CONFIRMATIONS;
-    if (reportedSessions.size >= requires) {
+    if (hasReported) {
       decisions.push({
         predictionId: prediction.id,
         outcome: 'search_reported',

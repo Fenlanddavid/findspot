@@ -14,11 +14,11 @@ const LANDSCAPE_LABELS: Record<GeologyLandscapeClass, { label: string; detail: s
     },
     river_gravel_terrace: {
         label: 'River Terrace Gravel',
-        detail: 'Well-drained gravel terrace above the floodplain. Favoured for settlement. Route and crossing context carries strong weight.',
+        detail: 'Well-drained gravel terrace above the floodplain. Favoured for settlement. Consider it alongside local terrain and crossing evidence.',
     },
     chalk_downland: {
         label: 'Chalk Downland',
-        detail: 'Free-draining chalk. Dry valley ends, ridge tips and spring lines are the key signals. Minor elevation changes carry less weight here.',
+        detail: 'Free-draining chalk. Dry valley ends, ridge tips and spring lines are the key signals. Mapped geology does not resolve individual features.',
     },
     heavy_clay: {
         label: 'Heavy Clay',
@@ -34,7 +34,7 @@ const LANDSCAPE_LABELS: Record<GeologyLandscapeClass, { label: string; detail: s
     },
     mixed_uncertain: {
         label: 'Mixed Geology',
-        detail: 'Geology data was returned but the landscape classification is uncertain for this tile. Signals interpreted without geology weighting.',
+        detail: 'Geology data was returned but the landscape classification is uncertain for this tile. Treat the regional context as uncertain.',
     },
     unknown: {
         label: 'Unknown',
@@ -111,6 +111,6 @@ export function buildGeologyDisplay(context: GeologyContext): GeologyDisplayData
         bedrockLabel:    formatRawName(context.raw.bedrockName || context.raw.bedrockLithology),
         superficialLabel: formatRawName(context.raw.superficialName || context.raw.superficialLithology),
         cautions:        buildCautions(context),
-        phaseNote:       'FieldGuide has applied mapped geology to landscape interpretation. Scoring adjustments are active for this scan area.',
+        phaseNote:       'Mapped geology provides regional context. It does not change target scores or signal bands.',
     };
 }

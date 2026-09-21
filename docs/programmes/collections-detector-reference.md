@@ -47,6 +47,15 @@ Physical-device testing remains required; desktop/emulated browser evidence must
 
 ## Session log
 
+### 2026-09-21 — FieldGuide evidence verification checkpoint
+
+Resumed the separate FieldGuide evidence programme after a rate-limit interruption.
+All application static checks and the production build passed; the full unit suite
+passed 1,323 tests with one existing skip, and all 32 evidence-card/regression
+browser checks passed. See `fieldguide-engine-evidence.md` for scope and logs.
+This does not complete the physical Galaxy S25 or release gates for Collections
+and Detector Reference. No deployment was performed.
+
 ### 2026-09-15 — session 1
 
 - Inspected database (schema 49), backup format 11 and explicit registry/restore pipelines, Find/FindModal editing, sharing and FindsBox.

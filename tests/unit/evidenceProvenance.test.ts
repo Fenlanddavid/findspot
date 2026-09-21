@@ -220,6 +220,19 @@ describe('evidence provenance identity', () => {
     };
     const original = buildTerrainHotspots([base])[0];
     const repeated = buildTerrainHotspots([duplicate])[0];
+    const rich = buildTerrainHotspots([{
+      ...base, contextLabel: 'Enclosed Settlement / Farmstead', withinScanMergeCount: 3,
+      minX: 0, maxX: 30,
+    }])[0];
+    expect(rich.evidenceCapture!.tags.length).toBeGreaterThan(rich.explanation.length);
+    expect(rich.evidenceCapture!.tags).toContain('repeated_detection');
+    expect(rich.evidenceCapture!.suppression).toContain('scan_edge');
+    for (const dimension of ['anomaly', 'context', 'convergence', 'behaviour', 'penalty'] as const) {
+      const rawTotal = Object.entries(rich.evidenceCapture!.scoring)
+        .filter(([key]) => key.startsWith(`${dimension}.`))
+        .reduce((sum, [, value]) => sum + value, 0);
+      expect(rawTotal).toBeCloseTo(rich.metrics[dimension]);
+    }
     expect(original).toBeDefined();
     expect(repeated).toBeDefined();
     expect(repeated.score).toBe(original.score);

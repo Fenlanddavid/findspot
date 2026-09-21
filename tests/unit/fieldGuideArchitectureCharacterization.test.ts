@@ -93,7 +93,7 @@ describe('FieldGuide architecture characterization', () => {
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
       'pages/FieldGuideController.tsx': 15,
-      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_315,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_331,
       'components/session/ActiveSessionGuideWorkspace.tsx': 44,
       'hooks/useFieldGuideMap.ts': 322,
       'hooks/useTerrainScan.ts': 77,
@@ -106,12 +106,12 @@ describe('FieldGuide architecture characterization', () => {
       'services/fieldguide/terrainScanCoordinator.ts': 500,
       'services/fieldguide/terrainScanSupport.ts': 154,
       'services/fieldguide/terrainMeasurementSupport.ts': 193,
-      'services/fieldguide/historicScanCoordinator.ts': 405,
+      'services/fieldguide/historicScanCoordinator.ts': 414,
       'services/fieldguide/historicScanRecords.ts': 241,
-      'services/fieldguide/historicScanSupport.ts': 119,
+      'services/fieldguide/historicScanSupport.ts': 121,
       'services/fieldguide/fieldGuidePageSupport.ts': 85,
       'services/fieldguide/scanOrchestrator.ts': 160,
-      'services/fieldguide/postScanOrchestrator.ts': 71,
+      'services/fieldguide/postScanOrchestrator.ts': 77,
     });
   });
 

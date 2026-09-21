@@ -123,8 +123,8 @@ export async function runGeologyContext(
     // ── 7. Audit ──
     audit({
         action:      'applied',
-        reason:      `Geology modifier computed: ${landscapeClass}, ${confidence} confidence. Modifier: ${scoreModifier > 0 ? '+' : ''}${scoreModifier}. Applied to hotspots when primary signals are present.`,
-        scoreEffect: scoreModifier,
+        reason:      `Geology modifier computed: ${landscapeClass}, ${confidence} confidence. Retained as context only; no scoring adjustment.`,
+        scoreEffect: 0,
     });
 
     return context;

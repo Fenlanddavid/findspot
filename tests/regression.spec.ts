@@ -1205,7 +1205,7 @@ test("buildGeologyDisplay: chalk_downland produces correct labels and no caution
   expect(display.landscapeLabel).toBe("Chalk Downland");
   expect(display.confidenceLabel).toBe("High confidence");
   expect(display.cautions).toHaveLength(0);
-  expect(display.phaseNote).toContain("Scoring adjustments are active");
+  expect(display.phaseNote).toContain("does not change target scores or signal bands");
 });
 
 test("buildGeologyDisplay: artificial ground adds caution string", () => {
@@ -1266,7 +1266,7 @@ test("classifyGeology: tidal flat → foreshore (not peat_fen)", () => {
   expect(result.confidence).toBe("high");
 });
 
-test("applyGeologyModifier: gates on primary signals and refreshes score ordering", () => {
+test("applyGeologyModifier: retains context without changing score, confidence or order", () => {
   const boosted = regressionHotspot("boosted", 54, {
     anomaly: 12,
     context: 7,
@@ -1301,14 +1301,9 @@ test("applyGeologyModifier: gates on primary signals and refreshes score orderin
 
   const result = applyGeologyModifier([suppressed, boosted], ctx);
 
-  expect(result.appliedCount).toBe(1);
-  expect(result.suppressedCount).toBe(1);
-  expect(result.hotspots[0].id).toBe("boosted");
-  expect(result.hotspots[0].number).toBe(1);
-  expect(result.hotspots[0].score).toBe(61);
-  expect(result.hotspots[0].confidence).toBe("Strong Signal");
-  expect(result.hotspots[1].id).toBe("suppressed");
-  expect(result.hotspots[1].score).toBe(58);
+  expect(result.appliedCount).toBe(0);
+  expect(result.scoreModifier).toBe(0);
+  expect(result.hotspots).toEqual([suppressed, boosted]);
 });
 
 test("fetchBgsGeology: classifies an empty GML feature collection", async ({ page }) => {

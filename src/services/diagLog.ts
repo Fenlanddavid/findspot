@@ -69,5 +69,7 @@ export function reportNonFatal(scope: string, message: string, error: unknown): 
 
 export async function exportDiagLog(): Promise<string> {
   const entries = await db.diagnosticLog.orderBy('ts').toArray();
-  return JSON.stringify(entries, null, 2);
+  const { loadPredictionEvidenceDiagnostics } = await import('./predictionCalibration');
+  const predictionEvidence = await loadPredictionEvidenceDiagnostics();
+  return JSON.stringify({ entries, predictionEvidence }, null, 2);
 }

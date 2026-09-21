@@ -353,18 +353,19 @@ describe('applyPASDensityModifiers', () => {
         expect(result[0].score).toBe(40);
     });
 
-    it('adds +4 boost for high density (>=200) with primary signal', async () => {
+    it('keeps high density as context without changing score or confidence', async () => {
         const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 220, p: ['MEDIEVAL'], t: ['COIN'] });
-        expect(result[0].score).toBe(64);
+        expect(result[0].score).toBe(60);
+        expect(result[0].confidence).toBe(hotspot.confidence);
     });
 
-    it('adds +6 boost for very high density (>=500) with period match', async () => {
+    it('keeps period-matching density as context without changing score', async () => {
         const { applyPASDensityModifiers } = await import('../../src/engines/hotspot/hotspotEngine');
         const hotspot = { score: 60, explanation: [], metrics: { anomaly: 5, context: 3, signalCount: 2, behaviour: 0.5, convergence: 0.5 }, confidence: 'Medium' as const };
         const result = applyPASDensityModifiers([hotspot as never], { c: 600, p: ['ROMAN'] }, 'Roman');
-        expect(result[0].score).toBe(66);
+        expect(result[0].score).toBe(60);
         expect(result[0].explanation).toContainEqual(expect.objectContaining({
             tag: 'pas_density',
             text: 'Numerous PAS finds recorded in this landscape, including period-matching types',

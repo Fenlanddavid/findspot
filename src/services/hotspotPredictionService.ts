@@ -1,4 +1,4 @@
-import { v4 as uuid } from 'uuid';
+import { countPrediction, PREDICTION_CAPTURE_VERSION, PREDICTION_EVIDENCE_VERSION, PREDICTION_AGGREGATE_VERSION } from '../shared/predictionEvidence';
 import { db } from '../db';
 import type {
     Find,
@@ -28,12 +28,19 @@ const GRID_SIZE = 10;
 
 export async function recordHotspotPredictions(
     hotspots: Hotspot[],
-    context: { permissionId?: string | null; sessionId?: string | null } = {},
+    context: { scanId: string; surfacedAt: number; permissionId?: string | null; sessionId?: string | null },
 ): Promise<void> {
     if (hotspots.length === 0) return;
-    const surfacedAt = Date.now();
+    const surfacedAt = context.surfacedAt;
     const rows: HotspotPrediction[] = hotspots.map(hotspot => ({
-        id: uuid(),
+        id: JSON.stringify([HOTSPOT_ENGINE_VERSION, context.scanId, hotspot.id]),
+        scanId: context.scanId,
+        hotspotId: hotspot.id,
+        score: hotspot.score,
+        captureVersion: hotspot.evidenceCapture ? PREDICTION_CAPTURE_VERSION : undefined,
+        evidenceVersion: PREDICTION_EVIDENCE_VERSION,
+        evidenceCapture: hotspot.evidenceCapture,
+        explanationTags: [...new Set(hotspot.explanation.map(item => item.tag))].sort(),
         engineVersion: HOTSPOT_ENGINE_VERSION,
         confidence: hotspot.confidence,
         classification: hotspot.classification,
@@ -45,7 +52,14 @@ export async function recordHotspotPredictions(
         geohash6: geohashEncode(hotspot.center[1], hotspot.center[0]),
         outcome: 'unvisited',
     }));
-    await db.hotspotPredictions.bulkPut(rows);
+    await db.transaction('rw', [db.hotspotPredictions, db.hotspotPredictionAggregates], async () => {
+        for (const row of rows) {
+            // Never reset outcomes or timestamps on replay, including after expiry.
+            const existing = await db.hotspotPredictions.get(row.id);
+            const frozen = await db.hotspotPredictionAggregates.get(`v2:${row.id}`);
+            if (!existing && !frozen) await db.hotspotPredictions.add(row);
+        }
+    });
 }
 
 function interpolateTrackPoints(track: Track, surfacedAt: number): Array<[number, number]> {
@@ -152,13 +166,15 @@ export async function resolveHotspotPredictionOutcomes(
                 : [];
             const arraysEqual = (left: string[] | undefined, right: string[]) =>
                 (left ?? []).length === right.length && (left ?? []).every((item, index) => item === right[index]);
-            const materiallyChanged = previous.outcome !== decision.outcome
+            const materiallyChanged = previous.evidenceVersion !== PREDICTION_EVIDENCE_VERSION
+                || previous.outcome !== decision.outcome
                 || previous.resolutionEvidence !== decision.evidence
                 || previous.reportedConfirmationCount !== decision.reportedConfirmationCount
                 || previous.searchedCoverage !== decision.searchedCoverage
                 || previous.matchedFindId !== (decision.outcome === 'find_recorded' ? decision.matchedFindId : undefined)
                 || !arraysEqual(previous.associatedFindIds, nextAssociatedFindIds);
             if (materiallyChanged) await database.hotspotPredictions.update(decision.predictionId, {
+                evidenceVersion: PREDICTION_EVIDENCE_VERSION,
                 outcome: decision.outcome,
                 resolutionEvidence: decision.evidence,
                 reportedConfirmationCount: decision.reportedConfirmationCount,
@@ -275,58 +291,45 @@ export async function refreshHotspotPredictionOutcomes(
 export async function aggregateAndSweepHotspotPredictions(
     now = Date.now(),
     ttlMs = HOTSPOT_PREDICTION_TTL_MS,
+    scopePermissionId?: string,
 ): Promise<number> {
     const cutoff = now - ttlMs;
     return db.transaction('rw', [db.hotspotPredictions, db.hotspotPredictionAggregates, db.hotspotPredictionEvidence], async () => {
-        const expired = await db.hotspotPredictions.where('surfacedAt').below(cutoff).toArray();
-        const groups = new Map<string, HotspotPrediction[]>();
+        const expired = (await db.hotspotPredictions.where('surfacedAt').below(cutoff).toArray())
+            .filter(row => !scopePermissionId || row.permissionId === scopePermissionId);
         for (const prediction of expired) {
-            // Legacy inferred outcomes remain in raw history for traceability but
-            // are not calibration observations and must not influence aggregates.
-            if (prediction.legacyOutcome) continue;
-            const id = `${prediction.engineVersion}:${prediction.confidence}`;
-            const group = groups.get(id);
-            if (group) group.push(prediction);
-            else groups.set(id, [prediction]);
-        }
-
-        for (const [id, predictions] of groups) {
-            const existing = await db.hotspotPredictionAggregates.get(id);
-            const searchedTrials = predictions.filter(row =>
-                row.outcome === 'search_reported'
-                || row.outcome === 'no_relevant_find_reported'
-                || (row.outcome === 'find_recorded' && (row.resolutionEvidence === 'reported' || row.resolutionEvidence === 'mixed'))
-            );
-            const supportedHits = predictions.filter(row =>
-                row.outcome === 'find_recorded'
-                && (row.resolutionEvidence === 'reported' || row.resolutionEvidence === 'mixed')
-            );
+            const counts = countPrediction(prediction);
+            if (!counts.surfacedCount) continue;
+            const evidence = await db.hotspotPredictionEvidence.where('predictionId').equals(prediction.id).toArray();
             const aggregate: HotspotPredictionAggregate = {
-                id,
-                engineVersion: predictions[0].engineVersion,
-                confidence: predictions[0].confidence,
-                surfacedCount: (existing?.surfacedCount ?? 0) + predictions.length,
-                searchedCount: (existing?.searchedCount ?? 0) + searchedTrials.length,
-                hitCount: (existing?.hitCount ?? 0) + supportedHits.length,
-                trackedSearchedCount: (existing?.trackedSearchedCount ?? 0)
-                    + searchedTrials.filter(row => row.resolutionEvidence === 'tracked').length,
-                trackedHitCount: (existing?.trackedHitCount ?? 0)
-                    + supportedHits.filter(row => row.resolutionEvidence === 'tracked').length,
-                reportedSearchedCount: (existing?.reportedSearchedCount ?? 0)
-                    + searchedTrials.filter(row => row.resolutionEvidence === 'reported').length,
-                reportedHitCount: (existing?.reportedHitCount ?? 0)
-                    + supportedHits.filter(row => row.resolutionEvidence === 'reported').length,
-                mixedSearchedCount: (existing?.mixedSearchedCount ?? 0)
-                    + searchedTrials.filter(row => row.resolutionEvidence === 'mixed').length,
-                mixedHitCount: (existing?.mixedHitCount ?? 0)
-                    + supportedHits.filter(row => row.resolutionEvidence === 'mixed').length,
-                findOnlyHitCount: (existing?.findOnlyHitCount ?? 0)
-                    + predictions.filter(row =>
-                        row.outcome === 'find_recorded' && (
-                            row.resolutionEvidence === 'find'
-                            || row.resolutionEvidence === undefined
-                        )
-                    ).length,
+                id: `v2:${prediction.id}`,
+                formatVersion: PREDICTION_AGGREGATE_VERSION,
+                engineVersion: prediction.engineVersion,
+                captureVersion: prediction.captureVersion,
+                evidenceVersion: prediction.evidenceVersion,
+                confidence: prediction.confidence,
+                ...counts,
+                counts,
+                snapshot: {
+                    predictionId: prediction.id,
+                    scanId: prediction.scanId,
+                    hotspotId: prediction.hotspotId,
+                    score: prediction.score,
+                    captureVersion: prediction.captureVersion,
+                    evidenceCapture: prediction.evidenceCapture,
+                    explanationTags: prediction.explanationTags,
+                    permissionId: prediction.permissionId,
+                    sessionId: prediction.sessionId,
+                    surfacedAt: prediction.surfacedAt,
+                    center: prediction.center,
+                    bounds: prediction.bounds,
+                    associatedFindIds: prediction.associatedFindIds ?? (prediction.matchedFindId ? [prediction.matchedFindId] : []),
+                    reportSessionIds: [...new Set(evidence.filter(item =>
+                        !item.retractedAt && (item.kind === 'search_report' || item.kind === 'explicit_negative')
+                    ).flatMap(item => item.sessionId ? [item.sessionId] : []))],
+                    outcome: prediction.outcome,
+                    resolutionEvidence: prediction.resolutionEvidence,
+                },
                 updatedAt: now,
             };
             await db.hotspotPredictionAggregates.put(aggregate);

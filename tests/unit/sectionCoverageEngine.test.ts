@@ -330,6 +330,21 @@ describe('coverage prediction resolution', () => {
     })).toEqual([]);
   });
 
+  it.each([false, true])('requires accepted reports for a find even with tracked=%s', tracked => {
+    const input = {
+      predictions: [prediction()],
+      finds: [{ id: 'find-1', permissionId: 'permission-1', lat: 0.5, lon: 0.5, createdAt: ISO }],
+      sections: [section(20_000)],
+      observations: [observation('reported', 'session-1'), observation('reported', 'session-2')],
+      trackedCoverageByPrediction: new Map([['prediction-1', tracked ? 0.2 : 0]]),
+    };
+    expect(resolvePredictionDecisions(input)[0]).toMatchObject({
+      outcome: 'find_recorded', evidence: tracked ? 'tracked' : 'find',
+    });
+    expect(resolvePredictionDecisions({ ...input, observations: [...input.observations, observation('reported', 'session-3')] })[0])
+      .toMatchObject({ outcome: 'find_recorded', evidence: tracked ? 'mixed' : 'reported' });
+  });
+
   it('matches an independent model for bounded arbitrary evidence sequences', () => {
     const event = fc.record({
       evidence: fc.constantFrom('reported', 'find-visited'),
@@ -355,7 +370,7 @@ describe('coverage prediction resolution', () => {
         const expectedOutcome = matchedFind
           ? 'find_recorded'
           : tracked
-            ? reportedSessions.size > 0 ? 'search_reported' : 'visited_tracked'
+            ? reportedSessions.size >= required ? 'search_reported' : 'visited_tracked'
             : reportedSessions.size >= required
               ? 'search_reported'
               : null;

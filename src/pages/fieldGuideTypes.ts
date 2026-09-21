@@ -1,3 +1,4 @@
+import type { HotspotEvidenceCapture } from '../shared/predictionEvidence';
 // ─── Shared types & constants for the Field Guide feature ───────────────────
 
 import type { HotspotExplanation } from '../engines/hotspot/hotspotExplanations';
@@ -299,6 +300,9 @@ export interface Hotspot {
     secondaryTag?:        string;
     suggestedFocus?:      string;
     explanation: HotspotExplanation[];
+    evidenceCapture?: HotspotEvidenceCapture;
+    confidenceSuppressors?: string[];
+    fieldReliability?: 'low' | 'moderate' | 'high';
     provenance?: EvidenceProvenance[];
     center: [number, number];
     bounds: [[number, number], [number, number]];

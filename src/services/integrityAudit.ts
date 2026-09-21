@@ -1,3 +1,4 @@
+import { assertFrozenPredictionEvidence, assertPredictionCapture } from './persistenceValidation/predictionEvidence';
 import { FINDSPOT_CURRENT_VERSION, db, type FindSpotDB } from '../db';
 import { diagLog } from './diagLog';
 import { RETIRED_QUESTION_RULE_IDS } from './persistenceValidation/backup';
@@ -65,6 +66,7 @@ export async function auditDatabaseIntegrity(
     database.findHotspotSignals,
     database.hotspotPredictions,
     database.hotspotPredictionEvidence,
+    database.hotspotPredictionAggregates,
     database.outstandingQuestions,
     database.questionNotes,
     database.permissionSections,
@@ -78,7 +80,7 @@ export async function auditDatabaseIntegrity(
     const [
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
-      hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
+      hotspotPredictions, hotspotPredictionEvidence, hotspotPredictionAggregates, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
       surfaceObservations, collections, collectionItems, detectorReferenceGroups, detectorReferenceAliases, detectorReferenceAssignments,
     ] = await Promise.all([
@@ -95,6 +97,7 @@ export async function auditDatabaseIntegrity(
       database.findHotspotSignals.toArray(),
       database.hotspotPredictions.toArray(),
       database.hotspotPredictionEvidence.toArray(),
+      database.hotspotPredictionAggregates.toArray(),
       database.outstandingQuestions.toArray(),
       database.questionNotes.toArray(),
       database.permissionSections.toArray(),
@@ -106,7 +109,7 @@ export async function auditDatabaseIntegrity(
     return {
       projects, permissions, fields, sessions, finds, significantFinds,
       tracks, media, savedPoints, undugSignals, findHotspotSignals,
-      hotspotPredictions, hotspotPredictionEvidence, outstandingQuestions, questionNotes,
+      hotspotPredictions, hotspotPredictionEvidence, hotspotPredictionAggregates, outstandingQuestions, questionNotes,
       permissionSections, sessionCoverage, companionRecordings, companionImports,
       surfaceObservations, collections, collectionItems, detectorReferenceGroups, detectorReferenceAliases, detectorReferenceAssignments,
     };
@@ -146,6 +149,17 @@ export async function auditDatabaseIntegrity(
   }
 
   let orphanedRecords = 0;
+  for (const prediction of rows.hotspotPredictions) {
+    try { assertPredictionCapture(prediction); } catch { orphanedRecords += 1; }
+  }
+  for (const aggregate of rows.hotspotPredictionAggregates) {
+    try { assertFrozenPredictionEvidence(aggregate); } catch { orphanedRecords += 1; }
+    const snapshot = aggregate.snapshot;
+    if (!snapshot) continue;
+    if (predictionIds.has(snapshot.predictionId)) orphanedRecords += 1;
+    if (missingOptionalId(snapshot.permissionId, permissionIds)) danglingPermissionIds += 1;
+    // Frozen find/session IDs are historical provenance, not live foreign keys.
+  }
   for (const row of rows.permissions) {
     if (!isKnownId(row.projectId, projectIds)) orphanedRecords += 1;
   }

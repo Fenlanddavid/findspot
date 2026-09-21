@@ -1,3 +1,4 @@
+import type { HotspotEvidenceCapture, PredictionCounts } from './shared/predictionEvidence';
 import type { DetectorContext, FindCollection, CollectionItem, DetectorReferenceGroup, DetectorReferenceAlias, DetectorReferenceAssignment } from './services/collectionModels';
 import Dexie, { Table, type Transaction } from "dexie";
 import { v4 as uuid } from "uuid";
@@ -525,7 +526,17 @@ export type HotspotPredictionOutcome =
   | 'searched_no_find';
 
 /** Raw surfaced hotspot needed to measure the engine's denominator honestly. */
-export type HotspotPrediction = {
+/** Immutable presentation snapshot; optional fields keep old records unknown. */
+export type PredictionSnapshot = {
+  score?: number;
+  captureVersion?: number;
+  scanId?: string;
+  hotspotId?: string;
+  evidenceCapture?: HotspotEvidenceCapture;
+  explanationTags?: string[];
+};
+
+export type HotspotPrediction = PredictionSnapshot & {
   id: string;
   engineVersion: string;
   confidence: 'Weak Signal' | 'Developing Signal' | 'Strong Signal' | 'Strongest Signal';
@@ -538,6 +549,7 @@ export type HotspotPrediction = {
   geohash6: string;
   outcome: HotspotPredictionOutcome;
   legacyOutcome?: 'hit' | 'searched_no_find';
+  evidenceVersion?: number;
   searchedCoverage?: number;
   matchedFindId?: string;
   resolvedAt?: number;
@@ -571,7 +583,7 @@ export type HotspotPredictionEvidence = {
 
 /** Long-lived evidence retained after raw prediction records expire. */
 export type HotspotPredictionAggregate = {
-  id: string; // `${engineVersion}:${confidence}`
+  id: string; // Legacy `${engineVersion}:${confidence}`; v2 `v2:${predictionId}`
   engineVersion: string;
   confidence: HotspotPrediction['confidence'];
   surfacedCount: number;
@@ -585,6 +597,23 @@ export type HotspotPredictionAggregate = {
   mixedHitCount?: number;
   findOnlyHitCount?: number;
   updatedAt: number;
+  /** v2 keeps one compact exposure per row, without raw resolution history. */
+  formatVersion?: number;
+  captureVersion?: number;
+  evidenceVersion?: number;
+  counts?: PredictionCounts;
+  snapshot?: PredictionSnapshot & {
+    predictionId: string;
+    permissionId: string | null;
+    sessionId: string | null;
+    surfacedAt: number;
+    center: [number, number];
+    bounds: [[number, number], [number, number]];
+    associatedFindIds: string[];
+    reportSessionIds: string[];
+    outcome: HotspotPredictionOutcome;
+    resolutionEvidence?: HotspotPrediction['resolutionEvidence'];
+  };
 };
 
 // ─── Saved Points ─────────────────────────────────────────────────────────────

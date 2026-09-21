@@ -880,7 +880,7 @@ export default function Settings() {
         <div className="mt-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-gray-700 dark:text-gray-200">Diagnostic Log</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">On-device error log for field troubleshooting. Never sent anywhere.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">On-device error log and prediction evidence summaries. Only shared when you export them.</p>
           </div>
           <button
             onClick={handleExportDiagLog}

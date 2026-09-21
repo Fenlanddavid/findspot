@@ -28,6 +28,8 @@ export interface HistoricScanOptions extends ScanContext {
 }
 
 export interface HistoricScanResult {
+    scanId?: string;
+    surfacedAt?: number;
     pasFinds: HistoricFind[];
     placeSignals: PlaceSignal[];
     monumentPoints: [number, number][];

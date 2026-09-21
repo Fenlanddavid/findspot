@@ -62,6 +62,7 @@ export async function deletePermissionCascade(
       db.sessionCoverage,
       db.hotspotPredictions,
       db.hotspotPredictionEvidence,
+      db.hotspotPredictionAggregates,
       db.surfaceObservations, db.collections, db.collectionItems, db.detectorReferenceAssignments,
     ],
     async () => {
@@ -82,6 +83,8 @@ export async function deletePermissionCascade(
         await db.hotspotPredictionEvidence.where('predictionId').anyOf(predictionIds).delete();
         await db.hotspotPredictions.bulkDelete(predictionIds);
       }
+
+      await db.hotspotPredictionAggregates.filter(row => row.snapshot?.permissionId === permissionId).delete();
 
       const questionIds = (
         await db.outstandingQuestions.where('permissionId').equals(permissionId).toArray()

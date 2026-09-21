@@ -1,3 +1,4 @@
+import { v4 as uuid } from 'uuid';
 import type { Find, Permission } from '../../db';
 import type { ScanContext } from '../../hooks/useTerrainScan';
 import type { RuleId } from '../../outstandingQuestions/types';
@@ -34,7 +35,12 @@ export async function persistPostScanOutcomes({
       .catch(error => {
         reportNonFatal('field-guide', 'Find hotspot signal recording failed', error);
       });
-    void recordHotspotPredictions(result.enhancedHotspots, {
+    // Identity belongs to this presented result, including retries of persistence.
+    result.scanId ??= uuid();
+    result.surfacedAt ??= Date.now();
+    await recordHotspotPredictions(result.enhancedHotspots, {
+      scanId: result.scanId,
+      surfacedAt: result.surfacedAt,
       permissionId: requestedPermissionId ?? null,
     }).catch(error => {
       reportNonFatal('field-guide', 'Hotspot prediction recording failed', error);

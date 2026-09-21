@@ -1,3 +1,4 @@
+import { assertPredictionCapture, assertFrozenPredictionEvidence } from './predictionEvidence';
 import { validateCollectionTables } from './collections';
 import type { NormalizedBackupInput } from '../backup/normalization';
 import { SURFACE_PERIOD_VALUES } from '../../shared/surfacePeriodVocabulary';
@@ -522,6 +523,7 @@ export function validatePersistedBackupTables(
           typeof id !== 'string' || !id.trim()))) throw invalid('findIds');
   });
   backup.hotspotPredictions.forEach((prediction, index) => {
+    assertPredictionCapture(prediction);
     const invalid = (field: string) => new Error(`Invalid format: hotspotPredictions[${index}] has an invalid ${field}`);
     if (typeof prediction.id !== 'string' || !prediction.id.trim()) throw invalid('id');
     if (typeof prediction.engineVersion !== 'string' || !prediction.engineVersion.trim()) throw invalid('engineVersion');
@@ -535,6 +537,7 @@ export function validatePersistedBackupTables(
     if (!Array.isArray(prediction.bounds) || prediction.bounds.length !== 2) throw invalid('bounds');
   });
   backup.hotspotPredictionAggregates.forEach((aggregate, index) => {
+    assertFrozenPredictionEvidence(aggregate);
     const invalid = (field: string) =>
       new Error(`Invalid format: hotspotPredictionAggregates[${index}] has an invalid ${field}`);
     if (typeof aggregate.id !== 'string' || !aggregate.id.trim()) throw invalid('id');
@@ -555,6 +558,12 @@ export function validatePersistedBackupTables(
     }
   });
   const predictionIds = new Set(backup.hotspotPredictions.map(row => row.id));
+  for (const aggregate of backup.hotspotPredictionAggregates) {
+    const snapshot = aggregate.snapshot as UnvalidatedRow | undefined;
+    if (snapshot && predictionIds.has(snapshot.predictionId)) {
+      throw new Error('Invalid format: prediction is both live and frozen');
+    }
+  }
   backup.hotspotPredictionEvidence.forEach((evidence, index) => {
     const invalid = (field: string) => new Error(`Invalid format: hotspotPredictionEvidence[${index}] has an invalid ${field}`);
     if (!predictionIds.has(evidence.predictionId)) throw invalid('predictionId');

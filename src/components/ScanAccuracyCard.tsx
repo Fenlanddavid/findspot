@@ -1,161 +1,59 @@
-import React, { useMemo } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../db";
-import { computeScanAccuracy } from "../services/fieldguide/scanAccuracy";
+import React from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../db';
 import { loadPredictionEvidenceCalibration } from '../services/predictionCalibration';
 
-function pct(value: number | null): string {
-  if (value === null) return "--";
-  return `${Math.round(value * 100)}%`;
-}
-
-function StatRow({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="flex items-baseline justify-between py-1.5">
-      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
-      <span className="text-sm font-bold text-gray-800 dark:text-gray-200 tabular-nums">
-        {value}
-        {sub && <span className="ml-1 text-3xs font-normal text-gray-400 dark:text-gray-500">{sub}</span>}
-      </span>
-    </div>
-  );
-}
-
-function MiniBar({ fraction, color }: { fraction: number | null; color: string }) {
-  if (fraction === null) return null;
-  const widthPct = Math.max(2, Math.round(fraction * 100));
-  return (
-    <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mt-1">
-      <div className={`h-full rounded-full ${color}`} style={{ width: `${widthPct}%` }} />
-    </div>
-  );
+function StatRow({ label, value }: { label: string; value: number | string }) {
+  return <div className="flex items-baseline justify-between gap-3 py-1.5">
+    <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+    <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-gray-800 dark:text-gray-200">{value}</span>
+  </div>;
 }
 
 export function ScanAccuracyCard({ permissionId }: { permissionId: string }) {
-  const hotspotSignals = useLiveQuery(
-    () => db.findHotspotSignals.where("permissionId").equals(permissionId).toArray(),
-    [permissionId],
-  );
-
-  const undugSignals = useLiveQuery(
-    () => db.undugSignals.where("permissionId").equals(permissionId).toArray(),
-    [permissionId],
-  );
-
-  const gpsFindIds = useLiveQuery(
-    () => db.finds.where("permissionId").equals(permissionId).toArray()
-      .then(finds => finds.filter(f => f.lat != null && f.lon != null).map(f => f.id)),
-    [permissionId],
-  );
-
-  const result = useMemo(() => {
-    if (!hotspotSignals || !undugSignals || gpsFindIds === undefined) return null;
-    return computeScanAccuracy({ hotspotSignals, undugSignals, gpsFindIds });
-  }, [hotspotSignals, undugSignals, gpsFindIds]);
-  const evidenceCalibration = useLiveQuery(
-    () => loadPredictionEvidenceCalibration(permissionId),
-    [permissionId],
-  );
-
-  // Don't render if no data at all (no hotspot signals AND no undug signals AND no finds)
-  if (!result) return null;
-  if (result.totalFindsWithGps === 0 && result.undugTotal === 0 && result.corroboratedCells === 0) return null;
-
-  const calibrationLabel = result.calibrationReliable
-    ? result.calibrationFactor > 1.02 ? "Under-predicted" : result.calibrationFactor < 0.98 ? "Over-predicted" : "Well calibrated"
-    : "Gathering data";
-
-  const calibrationColor = result.calibrationReliable
-    ? result.calibrationFactor > 1.02 ? "text-blue-500" : result.calibrationFactor < 0.98 ? "text-amber-500" : "text-emerald-500"
-    : "text-gray-400 dark:text-gray-500";
-
-  return (
-    <details className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3.5 [&::-webkit-details-marker]:hidden sm:px-6">
-        <span><span className="block text-xs font-black text-gray-800 dark:text-gray-100">Field Guide performance</span><span className="mt-0.5 block text-2xs text-gray-400">Scan accuracy and evidence</span></span>
-        <span className="flex shrink-0 items-center gap-2"><span className={`text-xs font-bold ${calibrationColor}`}>{calibrationLabel}</span><span className="text-base text-gray-400 transition-transform group-open:rotate-180">⌄</span></span>
-      </summary>
-      <div className="border-t border-gray-100 px-5 pb-5 pt-4 dark:border-gray-700 sm:px-6 sm:pb-6">
-      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-        How FieldGuide predictions compared against your actual finds on this permission.
+  const evidence = useLiveQuery(() => loadPredictionEvidenceCalibration(permissionId), [permissionId]);
+  const undug = useLiveQuery(() => db.undugSignals.where('permissionId').equals(permissionId).toArray(), [permissionId]);
+  if (!evidence || !undug) return null;
+  const dugFind = undug.filter(row => row.status === 'dug-find').length;
+  const dugNothing = undug.filter(row => row.status === 'dug-nothing').length;
+  return <details className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <summary className="min-h-14 cursor-pointer px-5 py-3.5 text-xs font-black text-gray-800 dark:text-gray-100 sm:px-6">
+      Field Guide evidence
+      <span className="mt-0.5 block font-normal text-gray-500">Predictions, reported searches and associated finds</span>
+    </summary>
+    <div className="border-t border-gray-100 px-5 pb-5 pt-4 dark:border-gray-700 sm:px-6">
+      <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+        Repeat scans and overlapping targets can share the same find. Associations include finds
+        inside target bounds or within 150 m of their centre. GPS visits alone do not confirm a search.
       </p>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
-        {/* Spatial hit rate */}
-        <div>
-          <div className="text-3xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-0.5">
-            Hotspot Accuracy
-          </div>
-          <StatRow
-            label="Finds in predicted hotspots"
-            value={result.spatialHitRate === null ? "--" : String(result.findsInHotspots)}
-            sub={`of ${result.totalFindsWithGps}`}
-          />
-          <StatRow label="Hit rate" value={pct(result.spatialHitRate)} />
-          <StatRow label="Cells corroborated" value={String(result.corroboratedCells)} />
-          <MiniBar
-            fraction={result.spatialHitRate}
-            color={result.spatialHitRate !== null && result.spatialHitRate >= 0.4 ? "bg-emerald-500" : "bg-amber-400"}
-          />
-        </div>
-
-        {/* Undug signals */}
-        {result.undugTotal > 0 && (
-          <div>
-            <div className="text-3xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-0.5">
-              Signal Discipline
-            </div>
-            <StatRow label="Signals logged" value={String(result.undugTotal)} />
-            <StatRow label="Resolved" value={String(result.undugResolved)} sub={result.undugOpen > 0 ? `${result.undugOpen} open` : undefined} />
-            <StatRow label="Conversion rate" value={pct(result.undugConversionRate)} sub="dug & found" />
-            <MiniBar
-              fraction={result.undugConversionRate}
-              color={result.undugConversionRate !== null && result.undugConversionRate >= 0.3 ? "bg-emerald-500" : "bg-amber-400"}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Calibration summary */}
-      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
-        <span className="text-3xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Engine Calibration</span>
-        <span className={`text-xs font-bold ${calibrationColor}`}>
-          {calibrationLabel}
-          {result.calibrationReliable && (
-            <span className="ml-1 font-normal text-gray-400 dark:text-gray-500">
-              ({result.calibrationFactor > 1 ? "+" : ""}{Math.round((result.calibrationFactor - 1) * 100)}%)
-            </span>
-          )}
-        </span>
-      </div>
-      {!result.calibrationReliable && (
-        <p className="text-3xs text-gray-400 dark:text-gray-500 mt-1">
-          At least {5} GPS-located finds and {2} corroborated hotspot cells needed for calibration.
-        </p>
-      )}
-      {evidenceCalibration && evidenceCalibration.rows.some(row => row.searched > 0) && (
-        <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-700/50">
-          <div className="mb-1 text-3xs font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-            Coverage evidence
-          </div>
-          {evidenceCalibration.rows.map(row => row.searched > 0 && (
-            <StatRow
-              key={row.evidence}
-              label={row.evidence === 'mixed'
-                ? 'Tracked + reported'
-                : row.evidence[0].toUpperCase() + row.evidence.slice(1)}
-              value={pct(row.hitRate)}
-              sub={`${row.hits} of ${row.searched}`}
-            />
-          ))}
-          {evidenceCalibration.findOnlyHits > 0 && (
-            <p className="mt-1 text-3xs text-gray-400 dark:text-gray-500">
-              {evidenceCalibration.findOnlyHits} additional {evidenceCalibration.findOnlyHits === 1 ? 'hit' : 'hits'} had find-only evidence.
-            </p>
-          )}
-        </div>
-      )}
-      </div>
-    </details>
-  );
+      {evidence.cohorts.length === 0 && <p className="text-xs text-gray-500">No current prediction evidence recorded for this permission.</p>}
+      {evidence.cohorts.map(cohort => <div key={cohort.key} className="mb-4 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <p className="text-xs font-bold text-gray-800 dark:text-gray-100">{cohort.confidence}</p>
+        <p className="break-words text-2xs text-gray-500">Prediction version {cohort.engineVersion}</p>
+        <StatRow label="Predictions surfaced" value={cohort.counts.surfacedCount} />
+        {cohort.limited ? <p className="text-xs text-gray-500">Earlier evidence rules; search comparisons are unavailable until evidence is reviewed.</p> : <>
+          <StatRow label="Accepted reported searches" value={cohort.counts.searchedCount} />
+          <StatRow label="With an associated find" value={`${cohort.counts.hitCount} of ${cohort.counts.searchedCount}`} />
+          {cohort.counts.searchedCount === 0 && <p className="text-xs text-gray-500">No accepted search reports yet; no search outcome rate is available.</p>}
+          {cohort.counts.reportedSearchedCount > 0 && <StatRow label="Reported only: with a find / searched" value={`${cohort.counts.reportedHitCount} / ${cohort.counts.reportedSearchedCount}`} />}
+          {cohort.counts.mixedSearchedCount > 0 && <StatRow label="Tracked + reported: with a find / searched" value={`${cohort.counts.mixedHitCount} / ${cohort.counts.mixedSearchedCount}`} />}
+          {cohort.counts.trackedVisitCount > 0 && <StatRow label="Tracked visits (including reported searches)" value={cohort.counts.trackedVisitCount} />}
+          {cohort.counts.trackedFindCount > 0 && <StatRow label="Find associations with tracking only" value={cohort.counts.trackedFindCount} />}
+          {cohort.counts.findOnlyHitCount > 0 && <StatRow label="Find associations without search evidence" value={cohort.counts.findOnlyHitCount} />}
+          {cohort.counts.explicitNoFindCount > 0 && <StatRow label="Explicit reports of no relevant find" value={cohort.counts.explicitNoFindCount} />}
+          {cohort.counts.unresolvedCount > 0 && <StatRow label="Without a resolved search outcome" value={cohort.counts.unresolvedCount} />}
+          {cohort.sharedFindCount > 0 && <p className="text-xs text-gray-500">{cohort.sharedFindCount} finds are shared by multiple predictions in this group.</p>}
+        </>}
+      </div>)}
+      <p className="text-2xs text-gray-500">Recent predictions only (up to 180 days before archiving). No find logged is not a report of no find. These counts do not establish predictive accuracy.</p>
+      {evidence.legacyExcludedCount > 0 && <p className="mt-2 text-2xs text-gray-500">{evidence.legacyExcludedCount} legacy inferred outcomes excluded.</p>}
+      {undug.length > 0 && <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <p className="text-xs font-bold text-gray-800 dark:text-gray-100">Logged signal outcomes</p>
+        <StatRow label="Dug and found / resolved dug signals" value={`${dugFind} / ${dugFind + dugNothing}`} />
+        <StatRow label="Open" value={undug.filter(row => row.status === 'open').length} />
+        <StatRow label="Dismissed" value={undug.filter(row => row.status === 'dismissed').length} />
+        <p className="text-2xs text-gray-500">Describes the signals you chose to dig; not scan accuracy.</p>
+      </div>}
+    </div>
+  </details>;
 }
