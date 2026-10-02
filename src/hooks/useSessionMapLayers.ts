@@ -9,6 +9,7 @@ import {
     type RomanStandaloneLayerStatus,
 } from '../services/fieldguide/rasterOverlaySettings';
 import { clampOpacity } from '../services/fieldguide/fieldGuidePageSupport';
+import { SCOTLAND_LIDAR_LAYER_IDS } from '../services/fieldguide/scotlandLidar';
 
 export type SessionRasterOverlay = RasterOverlayKey;
 export type SessionRasterOverlayState = Record<SessionRasterOverlay, boolean>;
@@ -36,7 +37,7 @@ export function useSessionMapLayers(
     mapReadyVersion: number,
 ): { control: SessionMapLayerControl; mapPreferenceReady: boolean } {
     const [isSatellite, setIsSatellite, mapPreferenceReady] = useInitialFieldGuideMapStyle();
-    const [overlays, setOverlays] = useState<SessionRasterOverlayState>({ lidar: false, 'lidar-wales': false, relief: false, os1880: false, os1930: false });
+    const [overlays, setOverlays] = useState<SessionRasterOverlayState>({ lidar: false, 'lidar-wales': false, 'lidar-scotland': false, relief: false, os1880: false, os1930: false });
     const [overlayOpacity, setStoredOverlayOpacity] = useDurableSetting<RasterOverlayOpacity>(
         RASTER_OVERLAY_STORAGE_KEY,
         DEFAULT_RASTER_OVERLAY_OPACITY,
@@ -50,14 +51,19 @@ export function useSessionMapLayers(
         if (!map || !mapReadyVersion) return;
         if (map.getLayer('osm')) map.setLayoutProperty('osm', 'visibility', isSatellite ? 'none' : 'visible');
         if (map.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', isSatellite ? 'visible' : 'none');
-        const layerIds: Record<SessionRasterOverlay, string> = {
+        const layerIds: Record<Exclude<SessionRasterOverlay, 'lidar-scotland'>, string> = {
             lidar: 'overlay-lidar', 'lidar-wales': 'overlay-lidar-wales', relief: 'overlay-relief', os1880: 'overlay-os1880', os1930: 'overlay-os1930',
         };
-        for (const key of Object.keys(layerIds) as SessionRasterOverlay[]) {
+        for (const key of Object.keys(layerIds) as Array<Exclude<SessionRasterOverlay, 'lidar-scotland'>>) {
             const layerId = layerIds[key];
             if (!map.getLayer(layerId)) continue;
             map.setLayoutProperty(layerId, 'visibility', overlays[key] ? 'visible' : 'none');
             map.setPaintProperty(layerId, 'raster-opacity', overlayOpacity[key] ?? DEFAULT_RASTER_OVERLAY_OPACITY[key]);
+        }
+        for (const layerId of SCOTLAND_LIDAR_LAYER_IDS) {
+            if (!map.getLayer(layerId)) continue;
+            map.setLayoutProperty(layerId, 'visibility', overlays['lidar-scotland'] ? 'visible' : 'none');
+            map.setPaintProperty(layerId, 'raster-opacity', overlayOpacity['lidar-scotland'] ?? DEFAULT_RASTER_OVERLAY_OPACITY['lidar-scotland']);
         }
         for (const layerId of ['roman-standalone-casing', 'roman-standalone']) {
             if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', romanRoads ? 'visible' : 'none');

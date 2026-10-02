@@ -12,6 +12,7 @@ import {
     ensureFieldGuideMapProtocolsRegistered,
     registerFieldGuideMapLayers,
 } from '../services/fieldguide/mapLayerRegistry';
+import { SCOTLAND_LIDAR_LAYER_IDS } from '../services/fieldguide/scotlandLidar';
 import {
     bindFieldGuideMapInteractions,
     type FieldGuideMapCallbacks,
@@ -80,7 +81,7 @@ export type UseFieldGuideMapOptions = {
     showFields: false | 'all' | string;
     historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
     userFinds: Find[];
-    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; relief: boolean; os1930: boolean; os1880: boolean };
+    historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; 'lidar-scotland': boolean; relief: boolean; os1930: boolean; os1880: boolean };
     historicLayerOpacity: OverlayOpacity;
     onRomanStandaloneStatusChange: (status: RomanStandaloneLayerStatus) => void;
     savedPoints: SavedPoint[];
@@ -239,6 +240,11 @@ export function useFieldGuideMap({
         if (map.getLayer('overlay-lidar-wales')) {
             map.setLayoutProperty('overlay-lidar-wales', 'visibility', historicLayerToggles['lidar-wales'] ? 'visible' : 'none');
             map.setPaintProperty('overlay-lidar-wales', 'raster-opacity', historicLayerOpacity['lidar-wales']);
+        }
+        for (const layerId of SCOTLAND_LIDAR_LAYER_IDS) {
+            if (!map.getLayer(layerId)) continue;
+            map.setLayoutProperty(layerId, 'visibility', historicLayerToggles['lidar-scotland'] ? 'visible' : 'none');
+            map.setPaintProperty(layerId, 'raster-opacity', historicLayerOpacity['lidar-scotland']);
         }
         if (map.getLayer('overlay-relief')) {
             map.setLayoutProperty('overlay-relief', 'visibility', historicLayerToggles.relief ? 'visible' : 'none');

@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { isDurableSettingValue } from '../../src/services/clientStorage';
+import { getDurableSetting, isDurableSettingValue } from '../../src/services/clientStorage';
+import { db } from '../../src/db';
+import { DEFAULT_RASTER_OVERLAY_OPACITY } from '../../src/services/fieldguide/rasterOverlaySettings';
 
 describe('durable client setting validation', () => {
     it('rejects same-primitive but invalid enum values', () => {
@@ -32,5 +34,17 @@ describe('durable client setting validation', () => {
             os1930: 0,
         })).toBe(true);
         expect(isDurableSettingValue('fs_fg_overlay_opacity', { lidar: 'opaque' })).toBe(false);
+    });
+
+    it('adds Scotland opacity to previously saved overlay preferences', async () => {
+        const legacy = { lidar: 0.4, 'lidar-wales': 0.8, relief: 1, os1880: 0.5, os1930: 0 };
+        await db.settings.put({ key: 'fs_fg_overlay_opacity', value: legacy });
+        try {
+            const value = await getDurableSetting('fs_fg_overlay_opacity', DEFAULT_RASTER_OVERLAY_OPACITY);
+            expect(value).toEqual({ ...legacy, 'lidar-scotland': 1 });
+            expect((await db.settings.get('fs_fg_overlay_opacity'))?.value).toEqual(value);
+        } finally {
+            await db.settings.delete('fs_fg_overlay_opacity');
+        }
     });
 });

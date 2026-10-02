@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { db } from '../db';
 import { isPendingCompanionCommand } from './companionControlState';
+import { DEFAULT_RASTER_OVERLAY_OPACITY } from './fieldguide/rasterOverlaySettings';
 
 export const FIELDGUIDE_DEFAULT_MAP_STYLE_STORAGE_KEY = 'fs_fg_default_map_style' as const;
 
@@ -110,6 +111,10 @@ function normaliseDurableSetting(
         && value.every(item => typeof item === 'string')) {
         const migratedAt = Date.now();
         return { valid: true, value: Object.fromEntries(value.map(item => [item, migratedAt])) };
+    }
+    if (key === 'fs_fg_overlay_opacity' && isDurableSettingValue(key, value)
+        && isPlainRecord(value) && typeof value['lidar-scotland'] !== 'number') {
+        return { valid: true, value: { ...DEFAULT_RASTER_OVERLAY_OPACITY, ...(value as Record<string, number>) } };
     }
     return isDurableSettingValue(key, value)
         ? { valid: true, value }

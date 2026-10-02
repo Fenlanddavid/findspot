@@ -14,6 +14,7 @@ import {
   populateRomanStandaloneRoads,
 } from '../../src/hooks/useFieldGuideHistoricLayers';
 import { applyOverlayOpacity } from '../../src/components/fieldGuide/FieldGuideWorkspace';
+import { SCOTLAND_LIDAR_LAYER_IDS } from '../../src/services/fieldguide/scotlandLidar';
 
 const VIEWPORT = { west: -0.2, south: 52.0, east: 0.1, north: 52.2 };
 
@@ -125,6 +126,10 @@ describe('standalone Roman roads map layer', () => {
 
     applyOverlayOpacity(map, 'os1880', 0.4);
     expect(setPaintProperty).toHaveBeenNthCalledWith(3, 'overlay-os1880', 'raster-opacity', 0.4);
+    applyOverlayOpacity(map, 'lidar-scotland', 0.4);
+    for (const layerId of SCOTLAND_LIDAR_LAYER_IDS) {
+      expect(setPaintProperty).toHaveBeenCalledWith(layerId, 'raster-opacity', 0.4);
+    }
   });
 
   it('reports a failed asset load and leaves an empty source', async () => {
@@ -179,6 +184,6 @@ describe('standalone Roman roads map layer', () => {
 
     expect(source.match(/export type RasterOverlayKey\s*=/g)).toHaveLength(1);
     expect(source.match(/export type OverlayOpacityKey\s*=/g)).toHaveLength(1);
-    expect(source.match(/'lidar' \| 'lidar-wales' \| 'relief' \| 'os1880' \| 'os1930'/g)).toHaveLength(1);
+    expect(source.match(/'lidar' \| 'lidar-wales' \| 'lidar-scotland' \| 'relief' \| 'os1880' \| 'os1930'/g)).toHaveLength(1);
   });
 });

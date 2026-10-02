@@ -250,7 +250,8 @@ test("active sessions use the demand-mounted four-destination workspace", async 
   const layerButton = page.getByRole('button', { name: 'Map layers' });
   await layerButton.click();
   await expect(page.getByRole('button', { name: 'Satellite' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'LiDAR', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'LiDAR England' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'LiDAR Scotland' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'OS 1895' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'OS 1900' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Roman Roads' })).toBeVisible();

@@ -8,6 +8,7 @@ import {
   bindFieldGuideMapInteractions,
   type FieldGuideMapCallbacks,
 } from '../../src/services/fieldguide/mapInteractions';
+import { SCOTLAND_LIDAR_LAYER_IDS, SCOTLAND_LIDAR_PHASES } from '../../src/services/fieldguide/scotlandLidar';
 
 const EXPECTED_SOURCE_IDS = [
   'monument-buffers',
@@ -117,7 +118,7 @@ describe('FieldGuide map layer registry', () => {
     ]);
   });
 
-  it('keeps the seven basemap and raster overlay layers in their declared order', () => {
+  it('registers each Scottish survey hillshade above the other LiDAR overlays', () => {
     const style = createFieldGuideMapStyle();
 
     expect(Object.keys(style.sources)).toEqual([
@@ -125,6 +126,7 @@ describe('FieldGuide map layer registry', () => {
       'satellite',
       'overlay-lidar',
       'overlay-lidar-wales',
+      ...SCOTLAND_LIDAR_LAYER_IDS,
       'overlay-relief',
       'overlay-os1930',
       'overlay-os1880',
@@ -134,6 +136,7 @@ describe('FieldGuide map layer registry', () => {
       'satellite',
       'overlay-lidar',
       'overlay-lidar-wales',
+      ...SCOTLAND_LIDAR_LAYER_IDS,
       'overlay-relief',
       'overlay-os1880',
       'overlay-os1930',
@@ -145,6 +148,18 @@ describe('FieldGuide map layer registry', () => {
       maxzoom: 16,
       attribution: 'Esri World Hillshade · multi-directional relief',
     });
+    for (const phase of SCOTLAND_LIDAR_PHASES) {
+      const id = `overlay-lidar-scotland-${phase.name}`;
+      expect(style.sources[id]).toMatchObject({
+        tiles: [`https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/${phase.name}/{z}/{x}/{y}.png`],
+        bounds: phase.bounds,
+        maxzoom: phase.maxzoom,
+      });
+      expect(style.layers.find(layer => layer.id === id)).toMatchObject({
+        source: id,
+        layout: { visibility: 'none' },
+      });
+    }
   });
 
   it('can initialise directly into the saved satellite basemap', () => {

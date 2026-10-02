@@ -46,6 +46,7 @@ import {
     type OverlayOpacityKey,
     type RasterOverlayKey,
 } from '../../hooks/useFieldGuidePageState';
+import { SCOTLAND_LIDAR_LAYER_IDS } from '../../services/fieldguide/scotlandLidar';
 import { useFieldGuideProjectData } from '../../hooks/useFieldGuideProjectData';
 import { useFieldGuideAutoScan, useInitialFieldGuideRouteContext } from '../../hooks/useFieldGuideRouteActions';
 import { useActiveSessionGuideCalm } from '../../hooks/useActiveSessionGuideCalm';
@@ -56,7 +57,7 @@ import {
 
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
-const RASTER_OVERLAY_LAYER_IDS: Record<RasterOverlayKey, string> = {
+const RASTER_OVERLAY_LAYER_IDS: Record<Exclude<RasterOverlayKey, 'lidar-scotland'>, string> = {
     lidar: 'overlay-lidar',
     'lidar-wales': 'overlay-lidar-wales', relief: 'overlay-relief',
     os1880: 'overlay-os1880',
@@ -78,8 +79,10 @@ export function applyOverlayOpacity(
         }
         return;
     }
-    const layerId = RASTER_OVERLAY_LAYER_IDS[key];
-    if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'raster-opacity', value);
+    const layerIds = key === 'lidar-scotland' ? SCOTLAND_LIDAR_LAYER_IDS : [RASTER_OVERLAY_LAYER_IDS[key]];
+    for (const layerId of layerIds) {
+        if (map.getLayer(layerId)) map.setPaintProperty(layerId, 'raster-opacity', value);
+    }
 }
 
 // ─── Hotspot display helpers ──────────────────────────────────────────────────
@@ -446,7 +449,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         setScanConfidence(null);
         setHistoricMode(false);
         setHistoricScanCompleted(false);
-        setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, relief: false, os1930: false, os1880: false });
+        setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, 'lidar-scotland': false, relief: false, os1930: false, os1880: false });
         setActiveOpacityLayer(null);
         setHistoricLayerVisibility(prev => ({ romanStandalone: prev.romanStandalone, routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
         setMapClickLabel(null);
@@ -1091,7 +1094,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
                             onClick={() => {
                                 if (analyzing) return;
                                 if (!historicMode) { clearScan(); setHistoricMode(true); }
-                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, relief: false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
+                                else { setIsIntelOpen(false); setIntelDetailsOpen(false); setIntelLayersOpen(false); setHistoricMode(false); setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, 'lidar-scotland': false, relief: false, os1930: false, os1880: false }); setActiveOpacityLayer(null); }
                             }}
                             disabled={analyzing}
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] font-black tracking-widest uppercase border transition-all shadow-lg whitespace-nowrap ${analyzing ? 'bg-slate-700 text-slate-400 border-slate-600 opacity-60 cursor-not-allowed' : historicMode ? 'bg-blue-500/20 text-blue-200 border-blue-400/40' : 'bg-blue-500 text-white border-blue-300/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] hover:bg-blue-400'} ${loadingPAS && historicMode ? 'animate-pulse opacity-80' : ''}`}

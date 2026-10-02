@@ -6,6 +6,7 @@ import { db } from "../db";
 import { searchLocations } from "../services/geocode";
 import { saveLocationMapPreferences } from "../services/mapPreferenceMutations";
 import type { GeoJSONPolygon } from "../db";
+import { SCOTLAND_LIDAR_PHASES, scotlandLidarAttribution } from "../services/fieldguide/scotlandLidar";
 
 export function LocationPickerModal(props: {
   initialLat?: number | null;
@@ -143,6 +144,19 @@ export function LocationPickerModal(props: {
                 "raster-fade-duration": 0
             }
           });
+
+          for (const phase of SCOTLAND_LIDAR_PHASES) {
+              const id = `lidar-scotland-${phase.name}`;
+              style.sources[id] = {
+                  type: "raster",
+                  tiles: [`https://mapseries-tilesets.s3.amazonaws.com/lidar/rgb/${phase.name}/{z}/{x}/{y}.png`],
+                  tileSize: 256,
+                  bounds: phase.bounds,
+                  maxzoom: phase.maxzoom,
+                  attribution: scotlandLidarAttribution(phase.credit),
+              };
+              style.layers.push({ id, type: "raster", source: id, paint: { "raster-fade-duration": 0 } });
+          }
       }
 
       // 2. THE SKIN (Basemap) - Transparent when LiDAR is ON

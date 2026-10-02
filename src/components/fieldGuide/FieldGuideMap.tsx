@@ -31,8 +31,9 @@ import { evidenceProvenanceLabels } from '../../types/evidenceProvenance';
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
 const OVERLAY_OPACITY_LABELS: Record<OverlayOpacityKey, string> = {
-    lidar:          'LiDAR',
+    lidar:          'LiDAR England',
     'lidar-wales':  'LiDAR Wales',
+    'lidar-scotland': 'LiDAR Scotland',
     relief:         'Multi-angle relief',
     os1880:         'OS 1895',
     os1930:         'OS 1900',
@@ -475,14 +476,14 @@ export function FieldGuideMap() {
                         onClick={() => { setShowLayerPicker(v => !v); setIsSearchOpen(false); setShowFieldsPicker(false); }}
                         aria-label="Map layers"
                         aria-expanded={showLayerPicker}
-                        className={`pointer-events-auto w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.relief || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
+                        className={`pointer-events-auto w-10 h-10 flex items-center justify-center rounded-xl border shadow-xl backdrop-blur-md transition-all active:scale-95 relative ${showLayerPicker || isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles['lidar-scotland'] || historicLayerToggles.relief || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone || showSavedPoints ? 'bg-slate-900/90 border-emerald-500/50 text-emerald-400' : 'bg-slate-900/90 border-white/10 text-slate-300'} ${helperActive && helperTipIndex === 0 ? 'ring-2 ring-emerald-300/70 ring-offset-2 ring-offset-slate-950' : ''}`}
                     >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polygon points="12 2 2 7 12 12 22 7 12 2"/>
                             <polyline points="2 17 12 22 22 17"/>
                             <polyline points="2 12 12 17 22 12"/>
                         </svg>
-                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles.relief || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone) && (
+                        {(isSatellite || historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles['lidar-scotland'] || historicLayerToggles.relief || historicLayerToggles.os1880 || historicLayerToggles.os1930 || historicLayerVisibility.romanStandalone) && (
                             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-emerald-400" />
                         )}
                     </button>
@@ -496,11 +497,15 @@ export function FieldGuideMap() {
                             <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
                             <button onClick={() => handleRasterOverlayPress('lidar')} className={rasterOverlayButtonClass('lidar', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR
+                                LiDAR England
                             </button>
                             <button onClick={() => handleRasterOverlayPress('lidar-wales')} className={rasterOverlayButtonClass('lidar-wales', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
                                 LiDAR Wales
+                            </button>
+                            <button onClick={() => handleRasterOverlayPress('lidar-scotland')} className={rasterOverlayButtonClass('lidar-scotland', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
+                                LiDAR Scotland
                             </button>
                             <button onClick={() => handleRasterOverlayPress('relief')} className={rasterOverlayButtonClass('relief', 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 18c4-6 7-2 10-8s5-2 8-6"/><path d="M3 21c5-5 8-1 11-7s5-2 7-5"/></svg>

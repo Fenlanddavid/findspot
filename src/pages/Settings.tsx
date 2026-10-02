@@ -1436,6 +1436,7 @@ export default function Settings() {
               <p>{ROMAN_ROADS_ATTRIBUTION} Not for use in fee-charging applications without prior written consent.</p>
               <p>Contains Environment Agency information © Environment Agency and database right, licensed under the Open Government Licence v3.0.</p>
               <p>Wales LiDAR data © Crown copyright, Natural Resources Wales / Welsh Government. Licensed under the Open Government Licence v3.0. Source: DataMapWales (datamap.gov.wales).</p>
+              <p>Scottish public sector LiDAR data © Crown copyright, Scottish Government, SEPA, Fugro and Scottish Water (phases 1–5 and Hebrides); Scottish Government and Fugro (phase 6). Licensed under the Open Government Licence v3.0. Multi-direction hillshade processed by Richard Pearson and supplied by the National Library of Scotland. Coverage is limited to surveyed areas.</p>
               <p>Historical map tiles reproduced with the permission of the National Library of Scotland.</p>
             </div>
           </div>
