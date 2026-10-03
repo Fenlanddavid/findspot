@@ -443,7 +443,7 @@ function Shell() {
             <Route path="/permission/:id" element={<PermissionPage projectId={projectId} onSaved={() => {}} />} />
             <Route path="/permissions" element={<AllPermissions projectId={projectId} />} />
             <Route path="/session/new" element={<SessionPage projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
-            <Route path="/session/:id" element={<SessionPage projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
+            <Route path="/session/:id" element={<SessionPage key={location.pathname} projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/find" element={<FindRouter projectId={projectId} onSignificantFind={(context) => { void openSignificantFind("manual", context); }} />} />
             <Route path="/discover" element={<Discover projectId={projectId} />} />
             <Route path="/land-access" element={<LandAccess />} />

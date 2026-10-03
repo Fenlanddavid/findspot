@@ -6,7 +6,7 @@ import {
     calculateCoverage,
     type CoverageResult,
 } from '../services/coverage';
-import { getTrackingStatus, isTrackingActiveForSession, type TrackingStatus } from '../services/tracking';
+import { getTrackingStatus, isTrackingActiveForSession, isTrackingStartingForSession, type TrackingStatus } from '../services/tracking';
 import { distanceKilometers } from '../utils/geo';
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -22,6 +22,7 @@ export function useSessionTracking(
     coverageTracks: Track[] | undefined = tracks,
 ) {
     const [isTracking, setIsTracking] = useState(isTrackingActiveForSession(sessionId));
+    const [isStartingTracking, setIsStartingTracking] = useState(isTrackingStartingForSession(sessionId));
     const [showTrackingOverlay, setShowTrackingOverlay] = useState(false);
     const [showCoverage, setShowCoverage] = useState(false);
     const [coverageResult, setCoverageResult] = useState<CoverageResult | null>(null);
@@ -31,10 +32,14 @@ export function useSessionTracking(
     useEffect(() => setIsTracking(isTrackingActiveForSession(sessionId)), [sessionId, tracks]);
     useEffect(() => {
         setTrackingStatus(getTrackingStatus());
-        if (!isTracking) return;
-        const timer = window.setInterval(() => setTrackingStatus(getTrackingStatus()), 2_000);
+        if (!isTracking && !isStartingTracking) return;
+        const timer = window.setInterval(() => {
+            setTrackingStatus(getTrackingStatus());
+            setIsStartingTracking(isTrackingStartingForSession(sessionId));
+            setIsTracking(isTrackingActiveForSession(sessionId));
+        }, 2_000);
         return () => window.clearInterval(timer);
-    }, [isTracking, sessionId]);
+    }, [isTracking, isStartingTracking, sessionId]);
     useEffect(() => {
         if (!showCoverage || !boundary) {
             setCoverageResult(null);
@@ -66,6 +71,7 @@ export function useSessionTracking(
 
     return {
         isTracking, setIsTracking,
+        isStartingTracking, setIsStartingTracking,
         showTrackingOverlay, setShowTrackingOverlay,
         showCoverage, setShowCoverage,
         coverageResult, coverageError,

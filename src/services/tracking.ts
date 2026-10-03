@@ -8,6 +8,7 @@ let currentTrackId: string | null = null;
 let currentTrackSessionId: string | null = null;
 let wakeLock: WakeLockSentinel | null = null;
 let isStarting = false;
+let cancelTrackingStart: (() => void) | null = null;
 let pointsBuffer: { lat: number; lon: number; timestamp: number; accuracy: number }[] = [];
 
 // ── Liveness state (Step 1) ─────────────────────────────────────────
@@ -129,33 +130,40 @@ export function isWakeLockSupported(): boolean {
 }
 
 async function requestWakeLock() {
-  if (!isWakeLockSupported()) return;
+  if (!isWakeLockSupported() || !currentTrackId) return;
+  const requestedTrackId = currentTrackId;
   try {
-    if (wakeLock) await wakeLock.release();
-    wakeLock = await (navigator as any).wakeLock.request('screen');
+    if (wakeLock) return;
+    const acquired = await navigator.wakeLock.request('screen');
+    if (currentTrackId !== requestedTrackId || wakeLock) {
+      void acquired.release().catch(error => reportNonFatal('tracking', 'Wake lock release failed', error));
+      return;
+    }
+    wakeLock = acquired;
     wakeLockHeld = true;
-    wakeLock!.addEventListener('release', () => {
-      wakeLock = null;
-      wakeLockHeld = false;
+    acquired.addEventListener('release', () => {
+      if (wakeLock === acquired) {
+        wakeLock = null;
+        wakeLockHeld = false;
+      }
     });
   } catch (err: any) {
-    wakeLockHeld = false;
     console.error(`Wake lock: ${err.name}, ${err.message}`);
   }
 }
 
 async function releaseWakeLock() {
-  if (wakeLock !== null) {
-    await wakeLock.release();
-    wakeLock = null;
-  }
+  const previous = wakeLock;
+  wakeLock = null;
   wakeLockHeld = false;
+  if (previous) await previous.release();
 }
 
 // ── Fix handler (Step 2) ────────────────────────────────────────────
 
 async function handleFix(pos: GeolocationPosition) {
   if (!currentTrackId) return;
+  const fixingTrackId = currentTrackId;
 
   lastFixAt = Date.now();
   watchError = null;
@@ -185,30 +193,37 @@ async function handleFix(pos: GeolocationPosition) {
 
   const updatedAt = new Date().toISOString();
   if (!trackCreated) {
+    const firstTrack = {
+      id: fixingTrackId,
+      projectId: trackProjectId!,
+      sessionId: trackSessionId,
+      name: trackName!,
+      points: [...pointsBuffer],
+      gaps: [...gaps],
+      isActive: true,
+      color: trackColor!,
+      createdAt: trackCreatedAt!,
+      updatedAt,
+    };
     await db.transaction('rw', [db.tracks, db.settings], async () => {
-      await db.tracks.add({
-        id: currentTrackId!,
-        projectId: trackProjectId!,
-        sessionId: trackSessionId,
-        name: trackName!,
-        points: pointsBuffer,
-        gaps,
-        isActive: true,
-        color: trackColor!,
-        createdAt: trackCreatedAt!,
-        updatedAt,
-      });
-      await db.settings.put({ key: ACTIVE_BROWSER_TRACK_SETTING, value: currentTrackId });
+      if (currentTrackId !== fixingTrackId) throw new Error('Trail start cancelled.');
+      await db.tracks.add(firstTrack);
+      await db.settings.put({ key: ACTIVE_BROWSER_TRACK_SETTING, value: fixingTrackId });
+      // A timeout or cancellation while IndexedDB was writing must roll back
+      // the first point, rather than revive an abandoned start.
+      if (currentTrackId !== fixingTrackId) throw new Error('Trail start cancelled.');
     });
+    if (currentTrackId !== fixingTrackId) return;
     trackCreated = true;
   } else {
-    await db.tracks.update(currentTrackId, {
+    await db.tracks.update(fixingTrackId, {
       points: pointsBuffer,
       gaps,
       updatedAt,
     });
   }
 
+  if (currentTrackId !== fixingTrackId) return;
   if (onFirstAcceptedFix) {
     onFirstAcceptedFix();
     onFirstAcceptedFix = null;
@@ -217,15 +232,25 @@ async function handleFix(pos: GeolocationPosition) {
 
 // ── Watch registration + restart (Step 2) ───────────────────────────
 
-function registerWatch(onError: (err: GeolocationPositionError) => void) {
+function registerWatch(onError: (err: Error) => void) {
+  const watchedTrackId = currentTrackId;
+  let fixes = Promise.resolve();
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
-      void handleFix(pos).catch((err) => {
-        watchError = err instanceof Error ? err.message : String(err);
-        console.error("Tracking fix error:", err);
+      // Serialise fixes so two callbacks cannot both create the first row.
+      fixes = fixes.then(async () => {
+        if (currentTrackId !== watchedTrackId) return;
+        await handleFix(pos);
+      }).catch((err) => {
+        if (currentTrackId !== watchedTrackId) return;
+        const error = new Error(`Could not save the trail: ${err instanceof Error ? err.message : String(err)}`);
+        watchError = error.message;
+        onError(error);
       });
     },
-    onError,
+    err => {
+      if (currentTrackId === watchedTrackId) onError(new Error(formatGeolocationError(err)));
+    },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 }
@@ -245,7 +270,7 @@ function restartWatchIfStale() {
   navigator.geolocation.clearWatch(watchId);
   watchId = null;
   registerWatch((err) => {
-    watchError = formatGeolocationError(err);
+    watchError = err.message;
   });
 }
 
@@ -253,7 +278,7 @@ function restartWatchIfStale() {
 
 const visibilityHandler = async () => {
   if (watchId !== null && document.visibilityState === 'visible') {
-    await requestWakeLock();
+    void requestWakeLock();
     restartWatchIfStale();
   }
 };
@@ -288,44 +313,40 @@ export async function startTracking(projectId: string, sessionId: string | null 
         trackColor = randomColor;
         trackCreatedAt = now;
 
-        await requestWakeLock();
+        // Screen wake locks are optional and must never gate location startup.
+        void requestWakeLock();
         document.addEventListener('visibilitychange', visibilityHandler);
 
         await new Promise<void>((resolve, reject) => {
             let startSettled = false;
+            const deadline = window.setTimeout(() => {
+                failStart(new Error('Trail could not start in time. Check location access and GPS, then try again.'));
+            }, 20_000);
 
-            const failStart = async (err: unknown) => {
+            const failStart = (err: unknown) => {
                 if (startSettled) {
-                    console.error("Tracking error:", err);
+                    watchError = err instanceof Error ? err.message : String(err);
                     return;
                 }
                 startSettled = true;
-                if (watchId !== null) {
-                    navigator.geolocation.clearWatch(watchId);
-                    watchId = null;
-                }
-                document.removeEventListener('visibilitychange', visibilityHandler);
-                currentTrackId = null;
-                currentTrackSessionId = null;
-                pointsBuffer = [];
-                resetLivenessState();
-                await releaseWakeLock().catch(error => {
-                  reportNonFatal('tracking', 'Wake lock release failed', error);
-                });
+                window.clearTimeout(deadline);
+                cancelTrackingStart = null;
                 reject(err);
             };
+            cancelTrackingStart = () => failStart(new DOMException('Trail start cancelled.', 'AbortError'));
 
             // Wire up first-fix resolution
             onFirstAcceptedFix = () => {
                 if (!startSettled) {
                     startSettled = true;
+                    window.clearTimeout(deadline);
+                    cancelTrackingStart = null;
                     resolve();
                 }
             };
 
-            registerWatch((err) => {
-                void failStart(new Error(formatGeolocationError(err)));
-            });
+            try { registerWatch(failStart); }
+            catch (err) { failStart(err); }
         });
 
         // Start watchdog after first fix succeeds
@@ -346,7 +367,7 @@ export async function startTracking(projectId: string, sessionId: string | null 
         currentTrackSessionId = null;
         pointsBuffer = [];
         resetLivenessState();
-        await releaseWakeLock().catch(error => {
+        void releaseWakeLock().catch(error => {
           reportNonFatal('tracking', 'Wake lock release failed', error);
         });
         throw err;
@@ -356,6 +377,7 @@ export async function startTracking(projectId: string, sessionId: string | null 
 }
 
 export async function stopTracking() {
+    cancelTrackingStart?.();
     if (watchdogId !== null) {
         clearInterval(watchdogId);
         watchdogId = null;
@@ -368,23 +390,29 @@ export async function stopTracking() {
 
     document.removeEventListener('visibilitychange', visibilityHandler);
 
-    if (currentTrackId) {
-        const trackId = currentTrackId;
-        await db.transaction('rw', [db.tracks, db.settings], async () => {
-            await db.tracks.update(trackId, {
-                isActive: false,
-                gaps,
-                updatedAt: new Date().toISOString()
-            });
-            await db.settings.delete(ACTIVE_BROWSER_TRACK_SETTING);
-        });
-        currentTrackId = null;
-    }
+    const trackId = currentTrackId;
+    const finalGaps = gaps;
+    currentTrackId = null;
     currentTrackSessionId = null;
     pointsBuffer = [];
     resetLivenessState();
+    void releaseWakeLock().catch(error => reportNonFatal('tracking', 'Wake lock release failed', error));
 
-    await releaseWakeLock();
+    if (trackId) {
+        await db.transaction('rw', [db.tracks, db.settings], async () => {
+            await db.tracks.update(trackId, {
+                isActive: false,
+                gaps: finalGaps,
+                updatedAt: new Date().toISOString()
+            });
+            const pointer = await db.settings.get(ACTIVE_BROWSER_TRACK_SETTING);
+            if (pointer?.value === trackId) await db.settings.delete(ACTIVE_BROWSER_TRACK_SETTING);
+        });
+    }
+}
+
+export function isTrackingStartingForSession(sessionId: string): boolean {
+    return isStarting && currentTrackSessionId === sessionId;
 }
 
 export function isTrackingActive(): boolean {

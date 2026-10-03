@@ -2,4 +2,4 @@
 // Keep this short and user-focused; technical detail belongs in the programme
 // record and sign-off report. Shown in the PWA update banner.
 
-export const UPDATE_NOTES = 'Explore Scottish LiDAR hillshade where survey data is available.';
+export const UPDATE_NOTES = 'Recover stuck Companion recordings and fix trails that fail to start.';

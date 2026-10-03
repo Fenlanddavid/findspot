@@ -12,11 +12,13 @@ export type ActiveWorkspaceDestination = ActiveWorkspaceTab | 'guide';
 
 function trackingPresentation(props: {
   isTracking: boolean;
+  isStartingTracking?: boolean;
   isCompanionTracking: boolean;
   hasRecordedTrail: boolean;
   trackingStatus: TrackingStatus;
 }) {
   if (props.isCompanionTracking) return { label: 'Companion recording', secondary: ['Trail recorded by Companion'], tone: 'text-teal-200', dot: 'bg-teal-400' };
+  if (props.isStartingTracking) return { label: 'Starting trail', critical: 'Waiting for GPS and saving the first point…', secondary: [], tone: 'text-amber-300', dot: 'animate-pulse bg-amber-400' };
   if (!props.isTracking && props.hasRecordedTrail) return { label: 'Session active', secondary: ['Trail paused'], tone: 'text-amber-300', dot: 'bg-amber-400' };
   if (!props.isTracking) return { label: 'Session active', secondary: ['Trail not started'], tone: 'text-gray-300', dot: 'border-2 border-gray-500' };
   const acceptedAge = props.trackingStatus.lastAcceptedFixAt ? Date.now() - props.trackingStatus.lastAcceptedFixAt : null;
@@ -40,6 +42,7 @@ export function ActiveSessionShellHeader(props: {
   findCount: number;
   pendingCount: number;
   isTracking: boolean;
+  isStartingTracking?: boolean;
   isCompanionTracking: boolean;
   hasRecordedTrail: boolean;
   trackingStatus: TrackingStatus;
@@ -145,6 +148,7 @@ export function ActiveSessionWorkspace(props: {
   isStubble: boolean;
   distanceText: string | null;
   isTracking: boolean;
+  isStartingTracking: boolean;
   isCompanionTracking: boolean;
   hasRecordedTrail: boolean;
   isAndroid: boolean;
@@ -167,6 +171,8 @@ export function ActiveSessionWorkspace(props: {
   onCompanionStop: () => void;
   onCompanionConfirmStart: () => void;
   onCompanionCancel: () => void;
+  onCompanionRecover: () => void;
+  onOpenCompanionSession: () => void;
   onImportTrail: () => void;
   onLowDistraction: () => void;
   onQuickFind: () => void;
@@ -204,10 +210,10 @@ export function ActiveSessionWorkspace(props: {
   }
   return (
     <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-gray-950 text-white">
-      <ActiveSessionShellHeader permissionName={props.permissionName} fieldName={props.fieldName} durationText={props.durationText} findCount={props.findCount} pendingCount={props.pendingCount} isTracking={props.isTracking} isCompanionTracking={props.isCompanionTracking} hasRecordedTrail={props.hasRecordedTrail} trackingStatus={props.trackingStatus} boundaryStatus={props.boundaryStatus} onPermission={props.onPermission} onFinish={props.onFinish} />
+      <ActiveSessionShellHeader permissionName={props.permissionName} fieldName={props.fieldName} durationText={props.durationText} findCount={props.findCount} pendingCount={props.pendingCount} isTracking={props.isTracking} isStartingTracking={props.isStartingTracking} isCompanionTracking={props.isCompanionTracking} hasRecordedTrail={props.hasRecordedTrail} trackingStatus={props.trackingStatus} boundaryStatus={props.boundaryStatus} onPermission={props.onPermission} onFinish={props.onFinish} />
 
       <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
-        {props.error && <div className="mx-auto mt-3 max-w-4xl px-4"><div className="rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-2 text-sm text-red-100">{props.error}</div></div>}
+        {props.error && <div className="mx-auto mt-3 max-w-4xl px-4"><div role="alert" className="rounded-xl border border-red-500/40 bg-red-950/50 px-3 py-2 text-sm text-red-100">{props.error}</div></div>}
         {props.notice && <div className="fixed left-1/2 top-24 z-[110] -translate-x-1/2 rounded-full bg-teal-500 px-4 py-2 text-xs font-black text-gray-950 shadow-xl">{props.notice}</div>}
 
         {props.workspaceTab === 'map' && (
@@ -224,7 +230,9 @@ export function ActiveSessionWorkspace(props: {
             </div>}
             <ScheduledMonumentCoverageLine state={props.scheduledMonumentCoverage} />
             <div className="absolute right-4 top-4 z-[100] grid justify-items-end gap-2">
-              {props.isTracking ? (
+              {props.isStartingTracking ? (
+                <button type="button" onClick={props.onToggleTracking} className="min-h-11 rounded-xl bg-amber-400 px-4 py-2 text-xs font-black text-gray-950 shadow-lg">Cancel trail start</button>
+              ) : props.isTracking ? (
                 <button type="button" onClick={props.onToggleTracking} className="min-h-11 rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">Stop FindSpot trail</button>
               ) : props.isCompanionTracking ? (
                 <button type="button" onClick={props.onCompanionStop} className="flex min-h-11 items-center rounded-xl bg-red-600 px-4 py-2 text-xs font-black text-white shadow-lg">{props.companionPendingAction === 'stop' ? 'Retry Companion stop' : 'Stop Companion'}</button>
@@ -272,7 +280,13 @@ export function ActiveSessionWorkspace(props: {
                 <p className="text-xs font-black">Trail recording</p>
                 <p className="mt-0.5 text-xs text-gray-400">{props.distanceText ? `${props.distanceText} recorded` : 'Optional — the session remains active without it.'}</p>
               </div>
-              {props.isTracking ? (
+              {props.isStartingTracking ? (
+                <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
+                  <p role="status" className="text-sm font-bold text-amber-200">Starting trail — waiting for GPS…</p>
+                  <p className="mt-1 text-sm text-gray-300">Keep FindSpot open. If the trail cannot start, an error will appear within 20 seconds.</p>
+                  <button type="button" onClick={props.onToggleTracking} className="mt-3 min-h-11 rounded-xl border border-white/15 px-3 text-sm font-bold">Cancel trail start</button>
+                </div>
+              ) : props.isTracking ? (
                 <div className="mt-3 rounded-xl border border-teal-400/25 bg-teal-400/10 p-3">
                   <p className="text-xs font-black text-teal-200">FindSpot trail · keep FindSpot open</p>
                   <p className="mt-1 text-2xs leading-relaxed text-teal-100/70">Screen wake lock is requested automatically. Do not manually lock the phone.</p>
@@ -293,6 +307,8 @@ export function ActiveSessionWorkspace(props: {
                       <button type="button" onClick={props.onFinish} className="flex min-h-11 items-center justify-center rounded-xl bg-red-600 px-3 text-center text-2xs font-black text-white">Stop &amp; finish</button>
                     )}
                   </div>
+                  <button type="button" onClick={props.onImportTrail} className="mt-2 min-h-11 w-full rounded-xl border border-white/15 px-3 text-sm font-bold text-gray-200">Import a Companion trail</button>
+                  <button type="button" onClick={props.onCompanionRecover} className="mt-2 min-h-11 w-full rounded-xl border border-amber-400/30 px-3 text-sm font-bold text-amber-200">Recover stuck recording</button>
                 </div>
               ) : props.companionPendingAction === 'start' ? (
                 <div className="mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3">
@@ -322,6 +338,7 @@ export function ActiveSessionWorkspace(props: {
                       </button>
                     )}
                   </div>
+                  {props.isOtherCompanionTracking && <button type="button" onClick={props.onOpenCompanionSession} className="mt-2 min-h-11 w-full rounded-xl border border-amber-400/30 px-3 text-sm font-bold text-amber-200">Open Companion visit</button>}
                   <button type="button" onClick={props.onImportTrail} className="mt-2 min-h-11 w-full rounded-xl border border-white/15 px-3 text-2xs font-black text-gray-300">Import a Companion trail</button>
                 </div>
               )}

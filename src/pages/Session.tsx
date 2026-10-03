@@ -26,6 +26,7 @@ import { area as turfArea } from "@turf/turf";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ephemeralSession, setDurableSetting, useDurableSetting } from '../services/clientStorage';
 import type { CompanionControlResult, PendingCompanionCommand } from '../services/companionControlState';
+import { resetCompanionSessionStatus } from '../services/companionRecovery';
 import { useSessionData } from '../hooks/useSessionData';
 import { useSessionTracking } from '../hooks/useSessionTracking';
 import { useSessionModalState } from '../hooks/useSessionModalState';
@@ -285,6 +286,7 @@ export default function SessionPage(props: {
   );
   const {
     isTracking, setIsTracking,
+    isStartingTracking, setIsStartingTracking,
     showTrackingOverlay, setShowTrackingOverlay,
     showCoverage, setShowCoverage,
     coverageResult, coverageError,
@@ -660,11 +662,18 @@ export default function SessionPage(props: {
   }
 
   async function toggleTracking() {
-    if (isTrackingActiveForSession(sessionId)) {
+    setError(null);
+    if (isStartingTracking || isTrackingActiveForSession(sessionId)) {
+      try {
         await stopTracking();
         setIsTracking(false);
+        setIsStartingTracking(false);
         setShowTrackingOverlay(false);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Could not stop the trail. Please try again.');
+      }
     } else {
+        setIsStartingTracking(true);
         try {
             await startTracking(props.projectId, sessionId, permission?.name ? `Hunt @ ${permission.name}` : "New Hunt");
             setIsTracking(true);
@@ -685,7 +694,10 @@ export default function SessionPage(props: {
                 setStartTime(s.startTime);
             }
         } catch (e: any) {
-            setError(e?.message ?? "Could not start tracking — check location permissions");
+            if (e?.name !== 'AbortError') setError(e?.message ?? "Could not start tracking — check location permissions");
+            setIsTracking(isTrackingActiveForSession(sessionId));
+        } finally {
+            setIsStartingTracking(false);
         }
     }
   }
@@ -814,6 +826,25 @@ export default function SessionPage(props: {
     setWorkspaceNotice(isCompanionTracking
       ? 'Stop request cancelled; Companion remains marked active'
       : 'Companion start cancelled');
+  }
+
+  async function recoverCompanionRecording() {
+    const confirmed = await confirmAction({
+      title: 'Reset Companion status?',
+      message: 'Use this if Companion says “No Companion recording is active”, or you have reinstalled it. If Companion is still recording, stop it first.\n\nThis lets you start a new trail or finish this visit. It does not stop Companion or delete your visit, finds or saved trails. Any saved Companion trail can still be imported.',
+      confirmLabel: 'Reset status',
+      cancelLabel: 'Keep status',
+    });
+    if (!confirmed) return;
+    try {
+      await resetCompanionSessionStatus(sessionId);
+      setCompanionActiveSessionId('');
+      setPendingCompanionCommand(null);
+      setError(null);
+      setWorkspaceNotice('Companion status reset. You can start a trail or finish this visit.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not reset Companion status. Please try again.');
+    }
   }
 
   async function requestFinishSession() {
@@ -1013,6 +1044,7 @@ export default function SessionPage(props: {
           isStubble={isStubble}
           distanceText={activeDistanceText}
           isTracking={isTracking}
+          isStartingTracking={isStartingTracking}
           isCompanionTracking={isCompanionTracking}
           hasRecordedTrail={!!tracks?.some(track => (track.points?.length ?? 0) > 0)}
           isAndroid={isAndroid}
@@ -1035,6 +1067,8 @@ export default function SessionPage(props: {
           onCompanionStop={() => void launchCompanionStop(false)}
           onCompanionConfirmStart={() => void confirmLegacyCompanionStart()}
           onCompanionCancel={() => void cancelPendingCompanionCommand()}
+          onCompanionRecover={() => void recoverCompanionRecording()}
+          onOpenCompanionSession={() => nav(`/session/${encodeURIComponent(companionActiveSessionId || pendingCompanionCommand?.sessionId || sessionId)}`)}
           onImportTrail={() => nav(`/companion-import?session=${sessionId}`)}
           onLowDistraction={() => setShowTrackingOverlay(true)}
           onQuickFind={() => setShowWorkspaceQuickFind(true)}
