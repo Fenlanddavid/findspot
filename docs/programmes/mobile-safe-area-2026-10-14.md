@@ -65,3 +65,20 @@ The user explicitly requested pushing v5.0.24 on 2026-10-14. Publish the tested
 safe-area patch and its release metadata to `main`; leave the two unrelated
 documentation edits untouched. CI/deployment and the user's Pixel confirmation
 remain pending at commit time.
+
+## CI correction
+
+The first v5.0.24 deployment attempt, run 38484097837, failed only the two
+existing browser viewport-policy expectations. They still expected the pre-fix
+meta string; actual iPhone/Android values correctly preserve `viewport-fit=cover`.
+The viewport-policy unit expectations had been updated, but these two browser
+assertions were missed. Update both exact expected values while retaining iOS's
+`maximum-scale=1.0` and Android's unrestricted zoom policy. Do not revert the
+safe-area implementation or weaken the assertions. CI passed 118 other browser
+tests and the unit, worker and Android jobs; deployment was skipped. Keep version
+5.0.24 because it has not yet deployed or received a release tag.
+
+After correction, all four focused Chromium browser checks passed: both viewport
+policies and both mobile theme/safe-area cases. All three viewport-policy unit
+tests, release validation and diff whitespace checks also passed. The new CI run
+must confirm deployment; physical Pixel verification remains with the user.

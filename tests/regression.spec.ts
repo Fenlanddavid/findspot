@@ -932,7 +932,7 @@ test("iPhone receives the focus-zoom viewport policy", async ({ page }) => {
 
   await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
     "content",
-    "width=device-width, initial-scale=1.0, maximum-scale=1.0",
+    "width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0",
   );
 });
 
@@ -952,7 +952,7 @@ test("Android retains the existing viewport policy", async ({ page }) => {
 
   await expect(page.locator('meta[name="viewport"]')).toHaveAttribute(
     "content",
-    "width=device-width, initial-scale=1.0",
+    "width=device-width, initial-scale=1.0, viewport-fit=cover",
   );
 });
 
