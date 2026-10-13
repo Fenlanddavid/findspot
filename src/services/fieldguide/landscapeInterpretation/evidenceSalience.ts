@@ -15,6 +15,15 @@
 // tested invariants — they can never appear in this table.
 
 import type { EvidenceItem } from '../../../types/landscapeInterpretation';
+import type { HillfortContext, HillfortResult } from '../../../types/hillforts';
+
+/** Separate factual selection: never included in weighted support/contradiction. */
+export function selectHillfortContextEvidence(context: HillfortContext): HillfortResult[] {
+    return [...context.results].sort((a, b) =>
+        Number(b.relationship === 'within_scan') - Number(a.relationship === 'within_scan')
+        || a.distanceFromCentreM - b.distanceFromCentreM || a.record.id.localeCompare(b.record.id)
+    ).slice(0, 3);
+}
 
 export const SALIENCE_MAX_BULLETS = 3;
 export const CONTRADICTION_PERCENT_OVERRIDE = 35;

@@ -1,0 +1,13 @@
+Ralston, I., Lock, G. (2024). Spreadsheets and a Document on the Atlas of Hillforts of Britain and Ireland. Archaeology Data Service. DOI: 10.5284/1118744.
+
+https://creativecommons.org/licenses/by/4.0/
+
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Atlas data 1.1 2017
+
+FindSpot: selected fields, country-prefixed Atlas IDs, deterministic JSON, supplied geographic points checked against inverse EPSG:3857. CP1252 decoding with replacement glyphs for undefined bytes. No invented boundaries, chronology or legal status. FindSpot adaptation under CC BY-SA 4.0; underlying ADS file under CC BY 4.0. Images and linked third-party material excluded.
+
+Source accuracy not recorded; decimal places do not establish survey precision.
+
+Selective 2012–2016 snapshot, edition 1.1 2017, archived 2024. Channel Islands excluded. Catalogue checksum differs from repeated downloads. Source creation dates differ between documents. Identifiers do not establish current protection. Text contains source encoding defects.

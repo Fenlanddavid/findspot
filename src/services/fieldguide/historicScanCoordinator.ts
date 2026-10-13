@@ -55,6 +55,9 @@ import {
     mergeHistoricFinds,
 } from './historicScanRecords';
 
+import { lookupHillfortContext } from '../hillfortService';
+import { hillfortScanPolygon, matchHillfortSources } from './hillfortSpatial';
+
 export async function runHistoricScanPipeline(
         opts: HistoricScanOptions,
         {
@@ -92,6 +95,13 @@ export async function runHistoricScanPipeline(
         const east  = Number(Math.min(center.lng + maxDelta, Math.max(queryBounds.east,  center.lng + lonBuffer)).toFixed(6));
         const north = Number(Math.min(center.lat + maxDelta, Math.max(queryBounds.north, center.lat + latBuffer)).toFixed(6));
         const lookupBounds = { west, south, east, north };
+        const hillfortCentre: [number, number] = opts.scanCenter
+            ? [opts.scanCenter.lng, opts.scanCenter.lat] : [center.lng, center.lat];
+        const hillfortGeometry = opts.scanGeometry ?? hillfortScanPolygon(opts.analysisBounds ?? {
+            west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth(),
+        });
+        // Same scan snapshot for map and ALIE. Failure stays within this context channel.
+        const hillfortPromise = lookupHillfortContext(hillfortGeometry, hillfortCentre, signal).catch(() => null);
         const historicCacheKey = getHistoricCacheKey({ lat: center.lat, lng: center.lng }, lookupBounds);
 
         onLog(`> LANDSCAPE CONTEXT SCAN @ ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 'historic');
@@ -391,7 +401,13 @@ export async function runHistoricScanPipeline(
                 historic_routes:  historicRoutesAvailable,
                 pas_density:      pasCellResult !== null,
             };
+            const hillfortContext = await hillfortPromise;
+            if (!isActive() || signal.aborted) return null;
+            if (hillfortContext) for (const result of hillfortContext.results) {
+                result.matches = matchHillfortSources(result, nhleData.features ?? []);
+            }
             return {
+                hillfortContext: hillfortContext ?? undefined,
                 scanId: uuid(), surfacedAt: Date.now(),
                 pasFinds, placeSignals, monumentPoints, heritageCount,
                 enhancedHotspots, routes,

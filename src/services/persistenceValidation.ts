@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hillfortContextSchema } from '../types/hillforts';
 import type {
   FieldGuideScanCache,
   GeologyContextRecord,
@@ -280,6 +281,7 @@ const evidenceItemSchema = z.object({
 }).passthrough();
 
 const landscapeInterpretationSchema = z.object({
+  hillfortContext: hillfortContextSchema.optional(),
   geohash6: z.string().min(1),
   processScores: z.array(z.object({
     processId: z.string(),

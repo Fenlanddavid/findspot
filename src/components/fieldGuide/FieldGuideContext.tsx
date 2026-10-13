@@ -1,3 +1,4 @@
+import type { HillfortContext } from '../../types/hillforts';
 import React, { createContext, useContext } from 'react';
 import type * as maplibregl from 'maplibre-gl';
 import type { RefObject } from 'react';
@@ -33,6 +34,7 @@ export const HISTORIC_LAYER_GROUPS = [
         label: 'Heritage Records',
         options: [
             { key: 'context', label: 'Recorded Heritage' },
+            { key: 'hillforts', label: 'Hillforts' },
             { key: 'monuments', label: 'Scheduled Monuments' },
             { key: 'aim', label: 'Aerial Archaeology' },
             { key: 'pasDensity', label: 'PAS Record Density' },
@@ -140,8 +142,8 @@ export interface FieldGuideContextValue {
     activeOpacityLayer: OverlayOpacityKey | null;
     setActiveOpacityLayer: React.Dispatch<React.SetStateAction<OverlayOpacityKey | null>>;
     romanStandaloneStatus: RomanStandaloneLayerStatus;
-    historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
-    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean }>>;
+    historicLayerVisibility: { hillforts: boolean; romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
+    setHistoricLayerVisibility: React.Dispatch<React.SetStateAction<{ hillforts: boolean; romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean }>>;
     showFields: false | 'all' | string;
     setShowFields: React.Dispatch<React.SetStateAction<false | 'all' | string>>;
     showFieldsPicker: boolean;
@@ -203,6 +205,9 @@ export interface FieldGuideContextValue {
     scheduledMonumentUnavailableReason: SMUnavailableReason | null;
 
     // PAS / intel state
+    hillfortContext: HillfortContext | null;
+    selectedHillfortId: string | null;
+    selectHillfort: (id: string | null) => void;
     pasFinds: HistoricFind[];
     selectedPASFind: HistoricFind | null;
     setSelectedPASFind: React.Dispatch<React.SetStateAction<HistoricFind | null>>;
@@ -240,6 +245,7 @@ export interface FieldGuideContextValue {
     activeOverlayOpacityLayer: OverlayOpacityKey | null;
     rasterOverlayButtonClass: (key: RasterOverlayKey, selectedClass: string) => string;
     handleRasterOverlayPress: (key: RasterOverlayKey) => void;
+    handleLidarPress: () => void;
     handleRomanStandalonePress: () => void;
     updateOverlayOpacity: (key: OverlayOpacityKey, value: number) => void;
 

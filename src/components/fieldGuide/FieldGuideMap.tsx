@@ -31,9 +31,9 @@ import { evidenceProvenanceLabels } from '../../types/evidenceProvenance';
 const FIELDGUIDE_HELPERS_SEEN_KEY = 'fs_fg_helpers_seen';
 
 const OVERLAY_OPACITY_LABELS: Record<OverlayOpacityKey, string> = {
-    lidar:          'LiDAR England',
-    'lidar-wales':  'LiDAR Wales',
-    'lidar-scotland': 'LiDAR Scotland',
+    lidar:          'LiDAR',
+    'lidar-wales':  'LiDAR',
+    'lidar-scotland': 'LiDAR',
     relief:         'Multi-angle relief',
     os1880:         'OS 1895',
     os1930:         'OS 1900',
@@ -129,6 +129,7 @@ export function FieldGuideMap() {
         activeOverlayOpacityLayer,
         rasterOverlayButtonClass,
         handleRasterOverlayPress,
+        handleLidarPress,
         handleRomanStandalonePress,
         updateOverlayOpacity,
         romanStandaloneStatus,
@@ -495,17 +496,9 @@ export function FieldGuideMap() {
                                 Satellite
                             </button>
                             <p className="text-[0.4375rem] font-black text-white/30 uppercase tracking-widest px-1.5 mt-2 mb-1.5">Overlays</p>
-                            <button onClick={() => handleRasterOverlayPress('lidar')} className={rasterOverlayButtonClass('lidar', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
+                            <button type="button" aria-pressed={historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles['lidar-scotland']} onClick={handleLidarPress} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[0.625rem] font-bold transition-all mb-0.5 border ${historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles['lidar-scotland'] ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'border-transparent text-white/50 hover:text-white hover:bg-white/5'}`}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR England
-                            </button>
-                            <button onClick={() => handleRasterOverlayPress('lidar-wales')} className={rasterOverlayButtonClass('lidar-wales', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR Wales
-                            </button>
-                            <button onClick={() => handleRasterOverlayPress('lidar-scotland')} className={rasterOverlayButtonClass('lidar-scotland', 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300')}>
-                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 17l9-14 9 14H3z"/></svg>
-                                LiDAR Scotland
+                                LiDAR
                             </button>
                             <button onClick={() => handleRasterOverlayPress('relief')} className={rasterOverlayButtonClass('relief', 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300')}>
                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 18c4-6 7-2 10-8s5-2 8-6"/><path d="M3 21c5-5 8-1 11-7s5-2 7-5"/></svg>

@@ -3,7 +3,9 @@ import type * as maplibregl from 'maplibre-gl';
 import { useDurableSetting, useInitialFieldGuideMapStyle } from '../services/clientStorage';
 import {
     DEFAULT_RASTER_OVERLAY_OPACITY,
+    LIDAR_KEYS,
     RASTER_OVERLAY_STORAGE_KEY,
+    lidarOverlayState,
     type RasterOverlayKey,
     type RasterOverlayOpacity,
     type RomanStandaloneLayerStatus,
@@ -19,6 +21,7 @@ export interface SessionMapLayerControl {
     toggleSatellite: () => void;
     overlays: SessionRasterOverlayState;
     toggleOverlay: (key: SessionRasterOverlay) => void;
+    toggleLidar: () => void;
     overlayOpacity: RasterOverlayOpacity;
     activeOpacityLayer: SessionRasterOverlay | null;
     setOverlayOpacity: (key: SessionRasterOverlay, opacity: number) => void;
@@ -116,9 +119,23 @@ export function useSessionMapLayers(
         setActiveOpacityLayer(key);
     };
 
+    const toggleLidar = () => {
+        const anyOn = LIDAR_KEYS.some(k => overlays[k]);
+        if (anyOn) {
+            setOverlays(current => ({ ...current, ...lidarOverlayState(false) }));
+            if (activeOpacityLayer && LIDAR_KEYS.includes(activeOpacityLayer as RasterOverlayKey)) setActiveOpacityLayer(null);
+            return;
+        }
+        setOverlays(current => ({ ...current, ...lidarOverlayState(true) }));
+        setStoredOverlayOpacity(current => ({ ...current, lidar: 1, 'lidar-wales': 1, 'lidar-scotland': 1 }));
+        setActiveOpacityLayer('lidar');
+    };
+
     const updateOverlayOpacity = (key: SessionRasterOverlay, opacity: number) => {
         const next = clampOpacity(opacity, overlayOpacity[key] ?? DEFAULT_RASTER_OVERLAY_OPACITY[key]);
-        setStoredOverlayOpacity(current => ({ ...current, [key]: next }));
+        setStoredOverlayOpacity(current => LIDAR_KEYS.includes(key)
+            ? { ...current, lidar: next, 'lidar-wales': next, 'lidar-scotland': next }
+            : { ...current, [key]: next });
     };
 
     return {
@@ -128,6 +145,7 @@ export function useSessionMapLayers(
             toggleSatellite: () => setIsSatellite(value => !value),
             overlays,
             toggleOverlay,
+            toggleLidar,
             overlayOpacity,
             activeOpacityLayer,
             setOverlayOpacity: updateOverlayOpacity,

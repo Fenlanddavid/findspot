@@ -56,10 +56,10 @@ describe('session and navigation safety ratchets', () => {
       'Your Records',
     ]);
     const keys = HISTORIC_LAYER_OPTIONS.map(option => option.key);
-    expect(keys).toHaveLength(9);
-    expect(new Set(keys).size).toBe(9);
+    expect(keys).toHaveLength(10);
+    expect(new Set(keys).size).toBe(10);
     expect(keys).toEqual([
-      'context', 'monuments', 'aim', 'pasDensity',
+      'context', 'hillforts', 'monuments', 'aim', 'pasDensity',
       'routes', 'romanStandalone', 'corridors', 'crossings',
       'userFinds',
     ]);

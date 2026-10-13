@@ -14,3 +14,10 @@ export const DEFAULT_RASTER_OVERLAY_OPACITY: RasterOverlayOpacity = {
 };
 
 export const RASTER_OVERLAY_STORAGE_KEY = 'fs_fg_overlay_opacity';
+
+export const LIDAR_KEYS: readonly RasterOverlayKey[] = ['lidar', 'lidar-wales', 'lidar-scotland'] as const;
+
+/** One user-facing overlay; each provider supplies its own geographic coverage. */
+export function lidarOverlayState(enabled: boolean) {
+  return { lidar: enabled, 'lidar-wales': enabled, 'lidar-scotland': enabled };
+}

@@ -243,3 +243,14 @@ export function generateHedgedNarrative(
         signalSubstitutions,
     };
 }
+import type { HillfortContext } from '../../../types/hillforts';
+import { hillfortStatusLabel } from '../hillfortSpatial';
+
+export function hillfortContextNarrative(context: HillfortContext): string {
+    if (!context.results.length) return hillfortStatusLabel(context);
+    const inside = context.results.filter(r => r.relationship === 'within_scan');
+    const confirmedInside = inside.filter(r => r.record.interpretationStatus?.toLowerCase() === 'confirmed');
+    const base = `${context.results.length} ${context.results.length === 1 ? 'entry provides' : 'entries provide'} documented landscape context${inside.length ? `; ${inside.length} recorded ${inside.length === 1 ? 'location lies' : 'locations lie'} within the scanned area` : ' in the surrounding area'}.`;
+    if (confirmedInside.length) return `${base} ${confirmedInside.length === 1 ? 'A confirmed hillfort is' : `${confirmedInside.length} confirmed hillforts are`} recorded within the scanned area.`;
+    return `${base} Source identification and dating may be uncertain.`;
+}

@@ -7,6 +7,7 @@
 import type { NHLEFeature, AIMFeature } from '../services/historicScanService';
 import type { HistoricRoute } from '../pages/fieldGuideTypes';
 import type { GeologyContext } from '../engines/geologyContext';
+import type { HillfortContext } from './hillforts';
 
 // ─── Controlled Signal Vocabulary ─────────────────────────────────────────────
 // The only permitted signal phrases in user-facing output. Type-enforced —
@@ -211,6 +212,8 @@ export interface ConfidenceContribution {
 }
 
 export interface LandscapeInterpretation {
+    /** Factual context only; excluded from all weighted/scoring evidence. */
+    hillfortContext?: HillfortContext;
     geohash6: string;
     processScores: PrimaryProcessScore[];
     interpretationScores: SecondaryInterpretationScore[];
@@ -255,6 +258,7 @@ export interface PersonalFindsInput {
 // ─── Worker boundary types ────────────────────────────────────────────────────
 
 export interface LandscapeInterpretationWorkerInput {
+    hillfortContext?: HillfortContext;
     geohash6: string;
     nhleFeatures: NHLEFeature[];
     aimFeatures: AIMFeature[];

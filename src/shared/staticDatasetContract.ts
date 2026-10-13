@@ -3,6 +3,13 @@ export const AIM_INDEX_SCHEMA_VERSION = 1;
 export const SM_BUNDLE_PREFIX_LENGTH = 4;
 export const AIM_BUNDLE_PREFIX_LENGTH = 4;
 export const STATIC_DATA_GENERATION = 'v2';
+export const HILLFORT_DATASET = {
+  generation: 'atlas-1.1-2017-ads2024-n1',
+  assetPath: 'data/hillforts/atlas-1.1-2017-ads2024-n1/hillforts.json',
+  sha256: '0328ad53fd1e3e8413cca6dd0a4d606fad9a04c2cda72a4648276cc608cb449b',
+  recordCount: 4147,
+  bytes: 11546253,
+} as const;
 export const SUPPORTED_STATIC_DATA_GENERATIONS = ['v1', STATIC_DATA_GENERATION] as const;
 export const ROMAN_ROADS_DATASET = {
   assetPath: 'roman-roads-gb.geojson',

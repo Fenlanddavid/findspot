@@ -1,3 +1,5 @@
+import type { HillfortContext } from '../types/hillforts';
+import { useFieldGuideHillfortLayer } from './useFieldGuideHillfortLayer';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import { Cluster, Hotspot, HistoricFind, HistoricRoute, TraceTarget } from '../pages/fieldGuideTypes';
@@ -25,7 +27,7 @@ import type {
 interface LayerState {
     historicMode: boolean;
     devMode:      boolean;
-    visibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean };
+    visibility: { hillforts?: boolean; romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean };
 }
 
 export const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: LayerState) => boolean }> = [
@@ -65,6 +67,7 @@ export const LAYER_VISIBILITY_CONFIG: Array<{ id: string; visibleWhen: (s: Layer
 ];
 
 export type UseFieldGuideMapOptions = {
+    hillfortContext?: HillfortContext | null;
     hotspots: Hotspot[];
     selectedHotspotId: string | null;
     detectedFeatures: Cluster[];
@@ -79,7 +82,7 @@ export type UseFieldGuideMapOptions = {
     mapPreferenceReady: boolean;
     historicMode: boolean;
     showFields: false | 'all' | string;
-    historicLayerVisibility: { romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
+    historicLayerVisibility: { hillforts?: boolean; romanStandalone: boolean; routes: boolean; corridors: boolean; crossings: boolean; monuments: boolean; aim: boolean; context: boolean; pasDensity: boolean; userFinds: boolean };
     userFinds: Find[];
     historicLayerToggles: { lidar: boolean; 'lidar-wales': boolean; 'lidar-scotland': boolean; relief: boolean; os1930: boolean; os1880: boolean };
     historicLayerOpacity: OverlayOpacity;
@@ -95,7 +98,7 @@ export type UseFieldGuideMapOptions = {
     callbacks: FieldGuideMapCallbacks;
 };
 export function useFieldGuideMap({
-    hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
+    hillfortContext, hotspots, selectedHotspotId, detectedFeatures, selectedTargetId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes, fieldBoundaries,
     isSatellite, mapPreferenceReady, historicMode, showFields, historicLayerVisibility, historicLayerToggles, historicLayerOpacity, onRomanStandaloneStatusChange, userFinds,
     savedPoints, showSavedPoints,
     initLat, initLng, initPinLabel, devMode, annotationMode, devAnnotations, callbacks,
@@ -111,6 +114,9 @@ export function useFieldGuideMap({
     const savedPointMarkersRef = useRef<maplibregl.Marker[]>([]);
     const initialPinMarkerRef = useRef<maplibregl.Marker | null>(null);
     const [mapReadyVersion, setMapReadyVersion] = useState(0);
+
+    const selectHillfort = useCallback((id: string) => callbacksRef.current.onHillfortClick?.(id), []);
+    useFieldGuideHillfortLayer(mapRef, mapReadyVersion, hillfortContext, historicLayerVisibility.hillforts !== false, selectHillfort, annotationMode);
 
     // Keep callbacks and annotation mode ref current on every render
     useEffect(() => { callbacksRef.current = callbacks; });

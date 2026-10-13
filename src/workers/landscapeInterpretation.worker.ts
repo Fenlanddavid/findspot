@@ -23,6 +23,8 @@ import { generateHedgedNarrative }                                     from '../
 import { computeEvidenceAssessment }                                   from '../services/fieldguide/landscapeInterpretation/evidenceModel';
 import { ALIE_ENGINE_VERSION } from '../domain/engineVersions';
 
+import { hillfortContextSchema } from '../types/hillforts';
+
 const ENGINE_VERSION = ALIE_ENGINE_VERSION;
 
 export function runLandscapeInterpretation(
@@ -211,6 +213,7 @@ export function runLandscapeInterpretation(
 
         // ── 14. Assemble result ───────────────────────────────────────────────
         const result: LandscapeInterpretation = {
+            ...(input.hillfortContext ? { hillfortContext: hillfortContextSchema.parse(input.hillfortContext) } : {}),
             geohash6,
             processScores,
             interpretationScores,

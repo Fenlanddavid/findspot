@@ -74,6 +74,8 @@ describe("silent diagnostic handler ratchet", () => {
 
     expect(inventory.catchClauses.map(handler => handler.file)).toEqual([
       "services/diagLog.ts",
+      "services/hillfortService.ts",
+      "services/hillfortService.ts",
     ]);
     expect(inventory.promiseCatches).toEqual([]);
   }, 10_000);

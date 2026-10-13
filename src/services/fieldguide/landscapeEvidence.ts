@@ -3,12 +3,14 @@
 // Genuinely absent fields are optional and left undefined — never zero-faked.
 // Consumed by the ALIE worker when present; individual fields used as fallback.
 
+import type { HillfortContext } from '../../types/hillforts';
 import type { Cluster, Hotspot, HistoricRoute } from '../../pages/fieldGuideTypes';
 import type { NHLEFeature, AIMFeature } from '../historicScanService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LandscapeEvidence {
+    hillfortContext?: HillfortContext;
     terrain: {
         relativeReliefNorm?: number;
         slopeGradient?:      number;

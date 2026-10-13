@@ -19,8 +19,10 @@ import type { LogLevel, LogSource } from '../../utils/scanLogger';
 import type { ScanContext } from './terrainScanSupport';
 import { SCAN_CONFIG } from '../../utils/scanConfig';
 import { CACHE_POLICIES } from '../../shared/cachePolicy';
+import type { HillfortContext, HillfortScanGeometry } from '../../types/hillforts';
 
 export interface HistoricScanOptions extends ScanContext {
+    scanGeometry?: HillfortScanGeometry;
     mapRef: RefObject<maplibregl.Map | null>;
     permissions: unknown[];
     fields: unknown[];
@@ -28,6 +30,7 @@ export interface HistoricScanOptions extends ScanContext {
 }
 
 export interface HistoricScanResult {
+    hillfortContext?: HillfortContext;
     scanId?: string;
     surfacedAt?: number;
     pasFinds: HistoricFind[];

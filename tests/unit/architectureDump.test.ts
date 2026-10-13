@@ -30,6 +30,7 @@ describe('architecture dump coverage', () => {
     const files = new Set(listDumpFiles());
 
     expect(files).toContain('scripts/dumpArchitecture.mjs');
+    expect(files).toContain('scripts/build_hillforts.py');
     expect(files).toContain('index.html');
     expect(files).toContain('eslint.config.js');
     expect(files).toContain('playwright.companion.config.ts');

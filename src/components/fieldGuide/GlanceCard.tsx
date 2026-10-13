@@ -1,3 +1,4 @@
+import { HillfortContextReading } from './HillfortRecords';
 // ─── FieldGuide Glance Card ───────────────────────────────────────────────────
 // Reasoning-first summary shown before the full ALIE interpretation.
 // Safe as a standalone read — the low-interface user may never expand it.
@@ -16,6 +17,7 @@ import { SMUnavailableBanner } from './SMUnavailableBanner';
 import type { SMUnavailableReason } from '../../services/historicScanService';
 
 interface Props {
+    onHillfortSelect?: (id: string) => void;
     interpretation: LandscapeInterpretation;
     /** True when the NHLE service was unreachable — cannot confirm clearance. */
     scheduledMonumentCheckFailed: boolean;
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export function GlanceCard({
+    onHillfortSelect,
     interpretation,
     scheduledMonumentCheckFailed,
     scheduledMonumentUnavailableReason,
@@ -83,6 +86,8 @@ export function GlanceCard({
                     textSize="xs"
                 />
             )}
+
+            <HillfortContextReading context={interpretation.hillfortContext} onSelect={onHillfortSelect} />
 
             {/* C2 + C3: Headline + softened signal strength */}
             <div className="space-y-1.5">

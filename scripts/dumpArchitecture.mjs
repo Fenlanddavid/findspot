@@ -41,7 +41,7 @@ const INCLUDED_ROOT_FILES = new Set([
 
 const DUMP_EXTENSIONS = new Set([
   '.cjs', '.css', '.d.ts', '.geojson', '.html', '.js', '.json', '.jsonc', '.jsx',
-  '.java', '.kts', '.md', '.mjs', '.png', '.pro', '.sh', '.snap', '.toml', '.ts',
+  '.java', '.kts', '.md', '.mjs', '.png', '.pro', '.py', '.sh', '.snap', '.toml', '.ts',
   '.tsx', '.txt', '.svg', '.xml', '.yaml', '.yml',
 ]);
 const BASE64_EXTENSIONS = new Set(['.png']);

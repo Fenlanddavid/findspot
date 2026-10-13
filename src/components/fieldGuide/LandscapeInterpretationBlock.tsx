@@ -1,3 +1,4 @@
+import { HillfortContextReading } from './HillfortRecords';
 // ─── Landscape Interpretation Block ──────────────────────────────────────────
 // Renders the ALIE v5 interpretation output inside HistoricLayerManager.
 // All text must be hedged — no statements about what was there.
@@ -206,6 +207,7 @@ function LoadingSkeleton() {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
+    onHillfortSelect?: (id: string) => void;
     interpretation: LandscapeInterpretation | null;
     loading?: boolean;
     evidence?: LandscapeEvidence;
@@ -216,6 +218,7 @@ interface Props {
 }
 
 export function LandscapeInterpretationBlock({
+    onHillfortSelect,
     interpretation,
     loading = false,
     evidence,
@@ -348,6 +351,7 @@ export function LandscapeInterpretationBlock({
                         </p>
                     )}
 
+                    <HillfortContextReading context={interpretation.hillfortContext} onSelect={onHillfortSelect} />
                     {/* Salient evidence bullets — always visible when a primary interpretation exists */}
                     {primaryInterpretationId && salient.bullets.length > 0 && (
                         <div className="space-y-1 pt-1">

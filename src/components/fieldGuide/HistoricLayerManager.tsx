@@ -5,6 +5,8 @@ import { distanceMeters } from '../../utils/geo';
 import { FieldGuideNotice } from './FieldGuideNotice';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { HISTORIC_LAYER_GROUPS } from './FieldGuideContext';
+import { hillfortContextSignature } from '../../services/fieldguide/hillfortSpatial';
+import { HillfortRecords } from './HillfortRecords';
 import { LandscapeInterpretationBlock } from './LandscapeInterpretationBlock';
 import { GlanceCard } from './GlanceCard';
 import { SMUnavailableBanner } from './SMUnavailableBanner';
@@ -124,6 +126,7 @@ export function HistoricLayerManager() {
         selectedId,
         selectedHotspotId,
         selectedMonument,
+        selectedHillfortId,
         historicMode,
         hasScanned,
         historicScanComplete,
@@ -212,6 +215,7 @@ export function HistoricLayerManager() {
 
     return (
         <div className="space-y-3">
+            {selectedHillfortId && <HillfortRecords selectedOnly={selectedHillfortId !== 'all'} />}
             <AlieSection
                 historicScanComplete={historicScanComplete || (hasScanned && !loadingPAS)}
                 loadingPAS={loadingPAS}
@@ -641,6 +645,7 @@ function AlieSection({
     scheduledMonumentCheckFailed,
     scheduledMonumentUnavailableReason,
 }: AlieSectionProps) {
+    const { hillfortContext, selectHillfort } = useFieldGuideContext();
     // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
     // Prevents a stale cache read or slow worker result from clobbering a
     // newer cell's state when the user pans quickly between geohash6 cells.
@@ -732,13 +737,19 @@ function AlieSection({
 
     // ── On scan complete: load cached result then fire worker ─────────────────
     useEffect(() => {
-        if (!historicScanComplete || loadingPAS) return;
+        const requestSeq = ++alieRequestSeqRef.current;
+        let active = true;
+        if (!historicScanComplete || loadingPAS) {
+            alieAbortRef.current?.abort();
+            setLandscapeInterpretation(null);
+            setAlieLoading(false);
+            return;
+        }
 
-        const center = mapRef.current?.getCenter();
+        const center = hillfortContext ? { lng: hillfortContext.centre[0], lat: hillfortContext.centre[1] } : mapRef.current?.getCenter();
         if (!center) return;
 
         const geohash6 = geohashEncode(center.lat, center.lng, 6);
-        const requestSeq = ++alieRequestSeqRef.current;
 
         const nhleFeatures = nhleDataRef.current?.features ?? [];
         const aimFeatures  = aimDataRef.current?.features ?? [];
@@ -792,6 +803,7 @@ function AlieSection({
 
         const inputSignature = [
             ALIE_ENGINE_VERSION,
+            hillfortContextSignature(hillfortContext),
             geologyTileKey,
             nhleFeatures.length,
             aimFeatures.length,
@@ -811,7 +823,7 @@ function AlieSection({
             // Guard: bail if the user has panned to a different cell while the
             // cache read was in flight. Same-cell re-requests still update
             // because requestSeq will match alieRequestSeqRef.current.
-            if (alieRequestSeqRef.current !== requestSeq) return;
+            if (!active || alieRequestSeqRef.current !== requestSeq) return;
             const cached = safeParseLandscapeInterpretationRecord(persisted);
             if (persisted && !cached) {
                 await discardLandscapeInterpretation(geohash6);
@@ -854,6 +866,7 @@ function AlieSection({
             nearbyFindPeriods,
             nearbyFindDensity,
         );
+        evidence.hillfortContext = hillfortContext ?? undefined;
         setLandscapeEvidence(evidence);
 
         // ── PAS interpretation input (Phase B — additive, null-neutral) ────
@@ -893,9 +906,10 @@ function AlieSection({
 
         personalFindsPromise.then(personalFinds => {
             // Guard: bail if user panned to a different cell while query ran
-            if (alieRequestSeqRef.current !== requestSeq) return;
+            if (!active || alieRequestSeqRef.current !== requestSeq) return;
 
         const input: LandscapeInterpretationWorkerInput = {
+            hillfortContext: hillfortContext ?? undefined,
             geohash6,
             nhleFeatures,
             aimFeatures,
@@ -922,7 +936,7 @@ function AlieSection({
         alieAbortRef.current = controller;
         runLandscapeInterpretationWorker(input, controller.signal).then(result => {
             // Guard: discard result if the user panned to a newer cell.
-            if (alieRequestSeqRef.current !== requestSeq) return;
+            if (!active || alieRequestSeqRef.current !== requestSeq) return;
             console.log('[ALIE] result', {
                 recordSparsity: result.recordSparsity,
                 temporalPersistence: result.temporalPersistence,
@@ -939,14 +953,14 @@ function AlieSection({
                 interpretation: result,
             }).catch((e: unknown) => diagLog.warn('alie', 'Cache write failed', e instanceof Error ? e.name : typeof e));
         }).catch((error: unknown) => {
-            if (alieRequestSeqRef.current !== requestSeq) return;
+            if (!active || alieRequestSeqRef.current !== requestSeq) return;
             if (error instanceof WorkerClientError && error.code === 'cancelled') return;
             const code = error instanceof WorkerClientError ? error.code : 'worker_error';
             const detail = error instanceof Error ? error.name : typeof error;
             diagLog.error('alie', `Worker ${code}`, detail);
         }).finally(() => {
             if (alieAbortRef.current === controller) alieAbortRef.current = null;
-            if (alieRequestSeqRef.current === requestSeq) setAlieLoading(false);
+            if (active && alieRequestSeqRef.current === requestSeq) setAlieLoading(false);
         });
 
         }).catch(error => {
@@ -955,6 +969,7 @@ function AlieSection({
 
         // Cleanup on unmount
         return () => {
+            active = false;
             alieAbortRef.current?.abort();
             alieAbortRef.current = null;
         };
@@ -962,6 +977,7 @@ function AlieSection({
         historicScanComplete,
         loadingPAS,
         geologyContext?.tileKey,
+        hillfortContext,
         historicRoutes,
         sortedHotspots,
         terrainClusters,
@@ -973,6 +989,7 @@ function AlieSection({
     if (viewMode === 'glance' && landscapeInterpretation && !alieLoading) {
         return (
             <GlanceCard
+                onHillfortSelect={selectHillfort}
                 interpretation={landscapeInterpretation}
                 scheduledMonumentCheckFailed={scheduledMonumentCheckFailed}
                 scheduledMonumentUnavailableReason={scheduledMonumentUnavailableReason}
@@ -1009,6 +1026,7 @@ function AlieSection({
                 </div>
             )}
             <LandscapeInterpretationBlock
+                onHillfortSelect={selectHillfort}
                 interpretation={landscapeInterpretation}
                 loading={alieLoading}
                 evidence={landscapeEvidence ?? undefined}

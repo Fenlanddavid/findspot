@@ -1,3 +1,4 @@
+import { HillfortPackStatus } from '../HillfortPackStatus';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useFieldGuideContext } from './FieldGuideContext';
 import { removeSavedPoint } from '../../services/fieldGuideMutations';
@@ -121,6 +122,7 @@ export function SavedPointsPanel() {
                             {sp.scanSnapshot && (
                                 <p className="text-[0.625rem] text-emerald-400/70 mt-0.5">{sp.scanSnapshot.hotspotCount} hotspot{sp.scanSnapshot.hotspotCount !== 1 ? 's' : ''} · {sp.scanSnapshot.topHotspotTitle}</p>
                             )}
+                            {status.kind === 'done' && <HillfortPackStatus meta={status.meta} />}
                             {/* Pack status line */}
                             {status.kind === 'building' && (
                                 <div className="mt-1.5 flex items-center gap-1.5">

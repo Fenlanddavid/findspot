@@ -1,4 +1,5 @@
 import { triggerDownload } from '../../utils/download';
+import type { HillfortContext } from '../../types/hillforts';
 import React, { useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -47,6 +48,7 @@ import {
     type RasterOverlayKey,
 } from '../../hooks/useFieldGuidePageState';
 import { SCOTLAND_LIDAR_LAYER_IDS } from '../../services/fieldguide/scotlandLidar';
+import { LIDAR_KEYS, lidarOverlayState } from '../../services/fieldguide/rasterOverlaySettings';
 import { useFieldGuideProjectData } from '../../hooks/useFieldGuideProjectData';
 import { useFieldGuideAutoScan, useInitialFieldGuideRouteContext } from '../../hooks/useFieldGuideRouteActions';
 import { useActiveSessionGuideCalm } from '../../hooks/useActiveSessionGuideCalm';
@@ -166,7 +168,10 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         primaryTargetId,
     } = projectData;
 
+    const [hillfortContext, setHillfortContext] = React.useState<HillfortContext | null>(null);
+    const [selectedHillfortId, setSelectedHillfortId] = React.useState<string | null>(null);
     const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument' | 'trace') => {
+        setSelectedHillfortId(null);
         if (keep !== 'target') setSelectedId(null);
         if (keep !== 'hotspot') setSelectedHotspotId(null);
         if (keep !== 'userFind') setSelectedUserFind(null);
@@ -212,6 +217,12 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
     const handleSheetTouchStart = useCallback((e: React.TouchEvent) => {
         sheetDragStartY.current = e.touches[0].clientY;
     }, []);
+
+    const selectHillfort = useCallback((id: string | null) => {
+        clearMapItemSelections();
+        setSelectedHillfortId(id);
+        if (id) persistSheetExpanded(true);
+    }, [clearMapItemSelections, persistSheetExpanded]);
 
     const handleSheetTouchEnd = useCallback((e: React.TouchEvent) => {
         if (sheetDragStartY.current === null) return;
@@ -294,6 +305,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
     // ─── Map ─────────────────────────────────────────────────────────────────
 
     const { mapContainerRef, mapRef, clearMapSources } = useFieldGuideMap({
+        hillfortContext,
         hotspots, selectedHotspotId, detectedFeatures: displayTargets, selectedTargetId: selectedId, traceTargets, selectedTraceId, primaryTargetId, pasFinds, historicRoutes,
         fieldBoundaries: [
             ...fields.filter(f => f.boundary).map(f => ({ id: f.id, name: f.name, permissionId: f.permissionId, boundary: f.boundary })),
@@ -307,6 +319,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         initLat, initLng, initPinLabel,
         devMode, annotationMode, devAnnotations,
         callbacks: {
+            onHillfortClick: selectHillfort,
             onFeatureClick:  (id)  => {
                 clearMapItemSelections('target');
                 setMobileSheetMode('targets');
@@ -353,11 +366,28 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         const nextOpacity = clampOpacity(value, historicLayerOpacity[key]);
         if (key === 'romanStandalone') {
             setRomanStandaloneOpacity(nextOpacity);
+        } else if (LIDAR_KEYS.includes(key)) {
+            setHistoricLayerOpacity(prev => ({ ...prev, lidar: nextOpacity, 'lidar-wales': nextOpacity, 'lidar-scotland': nextOpacity }));
+            for (const lidarKey of LIDAR_KEYS) applyOverlayOpacity(mapRef.current, lidarKey, nextOpacity);
         } else {
             setHistoricLayerOpacity(prev => ({ ...prev, [key]: nextOpacity }));
         }
         applyOverlayOpacity(mapRef.current, key, nextOpacity);
-    }, [historicLayerOpacity, mapRef]);
+    }, [historicLayerOpacity, mapRef, setHistoricLayerOpacity, setRomanStandaloneOpacity]);
+
+    const handleLidarPress = useCallback(() => {
+        const anyLidarOn = LIDAR_KEYS.some(k => historicLayerToggles[k]);
+        if (anyLidarOn) {
+            setHistoricLayerToggles(prev => ({ ...prev, ...lidarOverlayState(false) }));
+            if (activeOpacityLayer && LIDAR_KEYS.includes(activeOpacityLayer as RasterOverlayKey)) setActiveOpacityLayer(null);
+            setShowLayerPicker(false);
+            return;
+        }
+        setHistoricLayerToggles(prev => ({ ...prev, ...lidarOverlayState(true) }));
+        setHistoricLayerOpacity(prev => ({ ...prev, lidar: 1, 'lidar-wales': 1, 'lidar-scotland': 1 }));
+        setActiveOpacityLayer('lidar');
+        setShowLayerPicker(false);
+    }, [activeOpacityLayer, historicLayerToggles, setActiveOpacityLayer, setHistoricLayerOpacity, setHistoricLayerToggles, setShowLayerPicker]);
 
     const initialFieldFocusedRef = React.useRef(false);
     useEffect(() => {
@@ -404,7 +434,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
             const named = historicRoutes.find(r => r.name && r.name.toLowerCase() !== 'null');
             return `Historic · ${named?.name ?? 'Route area'}`;
         }
-        if (historicLayerToggles.lidar && hasScanned && sortedHotspots.length > 0) {
+        if ((historicLayerToggles.lidar || historicLayerToggles['lidar-wales'] || historicLayerToggles['lidar-scotland']) && hasScanned && sortedHotspots.length > 0) {
             return `LiDAR · ${getPotentialTier(sortedHotspots[0].score)}`;
         }
         if (hasScanned && sortedHotspots.length > 0) {
@@ -449,9 +479,10 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         setScanConfidence(null);
         setHistoricMode(false);
         setHistoricScanCompleted(false);
+        setHillfortContext(null);
         setHistoricLayerToggles({ lidar: false, 'lidar-wales': false, 'lidar-scotland': false, relief: false, os1930: false, os1880: false });
         setActiveOpacityLayer(null);
-        setHistoricLayerVisibility(prev => ({ romanStandalone: prev.romanStandalone, routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
+        setHistoricLayerVisibility(prev => ({ hillforts: prev.hillforts, romanStandalone: prev.romanStandalone, routes: true, corridors: true, crossings: true, monuments: true, aim: true, context: true, pasDensity: false, userFinds: prev.userFinds }));
         setMapClickLabel(null);
         setSelectedMonument(undefined);
         setSelectedUserFind(null);
@@ -564,6 +595,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         });
 
         if (!result) return false;
+        setHillfortContext(result.hillfortContext ?? null);
 
         result.enhancedHotspots = result.enhancedHotspots.map(hotspot => ({
             ...hotspot,
@@ -686,6 +718,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
                 clearScan();
                 dispatch({ type: 'SCAN_START' });
                 setHistoricScanCompleted(false);
+        setHillfortContext(null);
                 addLog('> SCAN: Reading terrain, targets and historic landscape context.', 'terrain');
             },
             onTerrainResult: result => {
@@ -759,6 +792,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
     const loadStandaloneHistoric = useCallback(async () => {
         if (!mapRef.current || isHistoricScanning) return;
         setHistoricScanCompleted(false);
+        setHillfortContext(null);
         // clearScan() (called before entering historicMode) resets geologyContext,
         // so re-trigger geology for the current map centre.
         const center = mapRef.current.getCenter();
@@ -1043,6 +1077,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         isSatellite, setIsSatellite, scanCount, searchQuery, setSearchQuery,
         isSearchOpen, setIsSearchOpen, isIntelOpen, setIsIntelOpen,
         intelDetailsOpen, setIntelDetailsOpen, intelLayersOpen, setIntelLayersOpen,
+        hillfortContext, selectedHillfortId, selectHillfort,
         targetPeriod, isLocating, selectedMonument, setSelectedMonument,
         historicMode, setHistoricMode, historicScanCompleted, setHistoricScanCompleted,
         historicLayerToggles, setHistoricLayerToggles, historicLayerOpacity,
@@ -1068,7 +1103,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         isTerrainScanning, isHistoricScanning, loadingPAS,
         terrainScanComplete, historicScanComplete, selectedTarget,
         activeOverlayOpacityLayer, rasterOverlayButtonClass,
-        handleRasterOverlayPress, handleRomanStandalonePress, updateOverlayOpacity,
+        handleRasterOverlayPress, handleLidarPress, handleRomanStandalonePress, updateOverlayOpacity,
         helperTips,
         persistSheetExpanded, handleSheetTouchStart, handleSheetTouchEnd,
         clearMapItemSelections, focusTarget, clearScan,

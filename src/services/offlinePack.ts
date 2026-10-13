@@ -1,3 +1,4 @@
+import { cacheHillfortDataset, hasCachedHillfortDataset, HILLFORT_CACHE, resetHillfortMemory } from './hillfortService';
 // ─── Offline Pack service (W3) ────────────────────────────────────────────────
 // Durably caches all scan-layer tiles and static designation shards for a
 // permission or saved point so a full FieldGuide scan runs with no signal.
@@ -582,7 +583,7 @@ export async function findPackCoveringBbox(
 }
 
 /** Delete a pack and all its cached tiles. */
-export async function deletePack(owner: PackOwner): Promise<void> {
+export async function deletePack(owner: PackOwner, preserveSharedContext = false): Promise<void> {
     if (typeof caches === 'undefined') return;
     const metas = await listPacks();
     const cacheKeys = await caches.keys();
@@ -597,6 +598,10 @@ export async function deletePack(owner: PackOwner): Promise<void> {
             ),
         ].map(cacheName => caches.delete(cacheName)),
     );
+    if (!preserveSharedContext && !(await listPacks()).some(meta => meta.layers.hillforts === 'cached')) {
+        await caches.delete(HILLFORT_CACHE);
+        resetHillfortMemory();
+    }
 }
 
 export type BuildProgress = {
@@ -628,7 +633,7 @@ export async function buildPack(
     const cacheName = packCacheName(owner, bbox);
 
     if (force) {
-        await deletePack(owner);
+        await deletePack(owner, true);
     } else {
         const existing = await getPackMeta(owner);
         if (existing) return existing;
@@ -770,6 +775,15 @@ export async function buildPack(
                       : aimOk > 0 ? 'partial' : 'unavailable';
     } else {
         layers['aim'] = 'unavailable';
+    }
+
+    // One validated public dataset serves every pack, including its 2 km context.
+    // Embedded source notices are offline with the records. Old packs lack this key.
+    try {
+        await cacheHillfortDataset(undefined, force);
+        layers.hillforts = await hasCachedHillfortDataset() ? 'cached' : 'unavailable';
+    } catch {
+        layers.hillforts = await hasCachedHillfortDataset() ? 'cached' : 'unavailable';
     }
 
     // 6 — Cache Roman roads in the pack as well as relying on SW precache.

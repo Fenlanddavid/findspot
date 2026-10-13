@@ -2,6 +2,7 @@ import type * as maplibregl from 'maplibre-gl';
 import type { HistoricFind } from '../../pages/fieldGuideTypes';
 
 export type FieldGuideMapCallbacks = {
+    onHillfortClick?: (id: string) => void;
     onFeatureClick: (id: string) => void;
     onHotspotClick: (id: string) => void;
     onTraceTargetClick: (id: string) => void;
@@ -79,7 +80,7 @@ export function bindFieldGuideMapInteractions(
     map.on('click', 'hotspots-fill', (event) => {
         if (isAnnotating()) return;
         const priority = map.queryRenderedFeatures(event.point, {
-            layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles'],
+            layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles', 'hillfort-points', 'hillfort-clusters'],
         });
         if (priority.length > 0) return;
         if (event.features?.[0]) callbacks().onHotspotClick(event.features[0].properties?.id);
@@ -95,7 +96,7 @@ export function bindFieldGuideMapInteractions(
             return;
         }
         const hits = map.queryRenderedFeatures(event.point, {
-            layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill'],
+            layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill', 'hillfort-points', 'hillfort-clusters'],
         });
         if (hits.length > 0) return;
         callbacks().onMonumentClick(null);

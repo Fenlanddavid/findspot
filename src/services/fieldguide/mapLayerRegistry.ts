@@ -97,6 +97,10 @@ export function registerRomanStandaloneLayers(map: maplibregl.Map): boolean {
 export function registerFieldGuideMapLayers(map: maplibregl.Map): boolean {
     if (map.getSource('targets')) return false;
 
+    map.addSource('hillforts', { type: 'geojson', data: emptyGeoJSON(), cluster: true, clusterRadius: 40, clusterMaxZoom: 13 });
+    map.addLayer({ id: 'hillfort-points', type: 'circle', source: 'hillforts', filter: ['!', ['has', 'point_count']], paint: { 'circle-color': '#8b5cf6', 'circle-radius': 7, 'circle-stroke-color': '#ede9fe', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'hillfort-clusters', type: 'circle', source: 'hillforts', filter: ['has', 'point_count'], paint: { 'circle-color': '#6d28d9', 'circle-radius': 13, 'circle-stroke-color': '#ede9fe', 'circle-stroke-width': 3 } });
+
     map.addSource('monument-buffers', { type: 'geojson', data: emptyGeoJSON() });
     map.addLayer({ id: 'monument-buffer-fill', type: 'fill', source: 'monument-buffers', paint: MONUMENT_BUFFER_FILL_PAINT });
     map.addLayer({ id: 'monument-buffer-outline', type: 'line', source: 'monument-buffers', paint: MONUMENT_BUFFER_OUTLINE_PAINT });

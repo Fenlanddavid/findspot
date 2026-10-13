@@ -2,18 +2,15 @@ import { useState } from 'react';
 import type { SessionMapLayerControl, SessionRasterOverlay } from '../../hooks/useSessionMapLayers';
 
 const OVERLAYS: Array<{ key: SessionRasterOverlay; label: string; activeClass: string }> = [
-  { key: 'lidar', label: 'LiDAR England', activeClass: 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300' },
-  { key: 'lidar-wales', label: 'LiDAR Wales', activeClass: 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300' },
-  { key: 'lidar-scotland', label: 'LiDAR Scotland', activeClass: 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300' },
   { key: 'relief', label: 'Multi-angle relief', activeClass: 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300' },
   { key: 'os1880', label: 'OS 1895', activeClass: 'border-amber-500/40 bg-amber-500/20 text-amber-300' },
   { key: 'os1930', label: 'OS 1900', activeClass: 'border-orange-500/40 bg-orange-500/20 text-orange-300' },
 ];
 
 const OPACITY_LABELS: Record<SessionRasterOverlay, string> = {
-  lidar: 'LiDAR England',
-  'lidar-wales': 'LiDAR Wales',
-  'lidar-scotland': 'LiDAR Scotland',
+  lidar: 'LiDAR',
+  'lidar-wales': 'LiDAR',
+  'lidar-scotland': 'LiDAR',
   relief: 'Multi-angle relief',
   os1880: 'OS 1895',
   os1930: 'OS 1900',
@@ -58,6 +55,7 @@ export function SessionMapLayerPicker({ control, fieldHistory, gaps }: { control
           <p className={`px-1.5 pb-1 text-3xs font-black uppercase tracking-widest text-white/35 ${fieldHistory || gaps ? 'pt-2' : ''}`}>Map style</p>
           <button type="button" aria-pressed={control.isSatellite} onClick={control.toggleSatellite} className={buttonClass(control.isSatellite, 'border-teal-500/40 bg-teal-500/20 text-teal-300')}>Satellite</button>
           <p className="px-1.5 pb-1 pt-2 text-3xs font-black uppercase tracking-widest text-white/35">Overlays</p>
+          <button type="button" aria-pressed={control.overlays.lidar || control.overlays['lidar-wales'] || control.overlays['lidar-scotland']} onClick={() => { control.toggleLidar(); setOpen(false); }} className={buttonClass(control.overlays.lidar || control.overlays['lidar-wales'] || control.overlays['lidar-scotland'], 'border-emerald-500/40 bg-emerald-500/20 text-emerald-300')}>LiDAR</button>
           {OVERLAYS.map(overlay => <button key={overlay.key} type="button" aria-pressed={control.overlays[overlay.key]} onClick={() => { control.toggleOverlay(overlay.key); setOpen(false); }} className={buttonClass(control.overlays[overlay.key], overlay.activeClass)}>{overlay.label}</button>)}
           <button type="button" aria-pressed={control.romanRoads} onClick={control.toggleRomanRoads} className={buttonClass(control.romanRoads, 'border-blue-500/40 bg-blue-500/20 text-blue-300')}>
             {control.romanRoadStatus === 'zoom-in' ? 'Roman Roads — zoom in' : control.romanRoadStatus === 'unavailable' ? 'Roman Roads — unavailable' : control.romanRoadStatus === 'loading' ? 'Roman Roads — loading' : 'Roman Roads'}

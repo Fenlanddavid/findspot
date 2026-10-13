@@ -23,14 +23,14 @@ describe('FieldGuide map architecture characterization', () => {
       readFile(INTERACTIONS, 'utf8'),
     ]);
 
-    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(328);
+    expect(hook.trimEnd().split(/\r?\n/)).toHaveLength(334);
     expect(registry.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(interactions.trimEnd().split(/\r?\n/).length).toBeLessThanOrEqual(300);
     expect(occurrences(hook, /map\.addSource\(/g)).toBe(0);
     expect(occurrences(hook, /map\.addLayer\(/g)).toBe(0);
     expect(occurrences(hook, /map\.on\(/g)).toBe(0);
-    expect(occurrences(registry, /map\.addSource\(/g)).toBe(17);
-    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(37);
+    expect(occurrences(registry, /map\.addSource\(/g)).toBe(18);
+    expect(occurrences(registry, /map\.addLayer\(/g)).toBe(39);
     expect(occurrences(interactions, /map\.on\(/g)).toBe(19);
     expect(hook).toContain('registerFieldGuideMapLayers(map)');
     expect(hook).toContain('bindFieldGuideMapInteractions(map, {');
@@ -40,10 +40,10 @@ describe('FieldGuide map architecture characterization', () => {
     const source = await readFile(INTERACTIONS, 'utf8');
 
     expect(source).toContain(
-      "layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles']",
+      "layers: ['targets-hitbox', 'trace-targets-circle', 'user-finds-hitbox', 'pas-circles', 'hillfort-points', 'hillfort-clusters']",
     );
     expect(source).toContain(
-      "layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill']",
+      "layers: ['targets-hitbox', 'trace-targets-circle', 'pas-circles', 'hotspots-fill', 'user-finds-hitbox', 'monuments-fill', 'monument-buffer-fill', 'hillfort-points', 'hillfort-clusters']",
     );
     expect(source).toContain("showLabel('Historic Trackway')");
     expect(source).toContain('showLabel(`Route Crossing: ${a} × ${b}`)');

@@ -156,6 +156,7 @@ export function useFieldGuidePageState() {
     const [romanStandaloneStatus, setRomanStandaloneStatus] =
         useState<RomanStandaloneLayerStatus>('idle');
     const [historicLayerVisibility, setHistoricLayerVisibility] = useState({
+        hillforts: true,
         romanStandalone: false,
         routes: true,
         corridors: true,

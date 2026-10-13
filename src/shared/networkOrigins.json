@@ -1,5 +1,7 @@
 [
   { "origin": "https://fenlanddavid.github.io", "class": "hosting", "purpose": "FindSpot GitHub Pages application" },
+  { "origin": "https://doi.org", "class": "namespace", "purpose": "Atlas DOI identifier in offline provenance validation; not an automatic request" },
+  { "origin": "https://creativecommons.org", "class": "namespace", "purpose": "Dataset licence identifiers in offline provenance validation; not an automatic request" },
   { "origin": "https://findspot-bgs-proxy.trials-uk.workers.dev", "class": "automatic", "purpose": "FindSpot BGS proxy" },
   { "origin": "https://findspot-geocode.trials-uk.workers.dev", "class": "automatic", "purpose": "FindSpot geocoding proxy" },
   { "origin": "https://findspot-static.trials-uk.workers.dev", "class": "automatic", "purpose": "FindSpot static R2 datasets" },

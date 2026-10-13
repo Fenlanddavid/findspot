@@ -1,3 +1,4 @@
+import { HillfortPackStatus } from '../components/HillfortPackStatus';
 import { collectionDeletionImpact } from '../services/collections';
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { usePermissionForm } from "../hooks/usePermissionForm";
@@ -1433,6 +1434,7 @@ export default function PermissionPage(props: {
                             </div>
                         )}
 
+                        {permPackStatus.kind === 'done' && <HillfortPackStatus meta={permPackStatus.meta} />}
                         {permPackStatus.kind === 'done' && (
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-2">
@@ -1443,7 +1445,7 @@ export default function PermissionPage(props: {
                                     </span>
                                 </div>
                                 <div className="flex items-center gap-2 ml-auto">
-                                    {permPackStatus.stale && (
+                                    {(permPackStatus.stale || permPackStatus.meta.layers.hillforts !== 'cached') && (
                                         <button
                                             onClick={handlePackPrepare}
                                             className="text-xs font-black text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"

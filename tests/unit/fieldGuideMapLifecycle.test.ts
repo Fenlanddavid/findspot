@@ -11,6 +11,7 @@ import {
 import { SCOTLAND_LIDAR_LAYER_IDS, SCOTLAND_LIDAR_PHASES } from '../../src/services/fieldguide/scotlandLidar';
 
 const EXPECTED_SOURCE_IDS = [
+  'hillforts',
   'monument-buffers',
   'monuments',
   'aim-monuments',
@@ -31,6 +32,8 @@ const EXPECTED_SOURCE_IDS = [
 ];
 
 const EXPECTED_LAYER_IDS = [
+  'hillfort-points',
+  'hillfort-clusters',
   'monument-buffer-fill',
   'monument-buffer-outline',
   'monuments-fill',
