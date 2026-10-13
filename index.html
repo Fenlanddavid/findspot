@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/findspot/logo.svg" />
     <link rel="apple-touch-icon" href="/findspot/apple-touch-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#10b981" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -39,7 +40,7 @@
       }(window.location));
     </script>
     <script>
-      (function(){var t=localStorage.getItem('fs_theme');if(t==='light'){document.documentElement.classList.remove('dark');}else{document.documentElement.classList.add('dark');}})();
+      (function(){var dark=localStorage.getItem('fs_theme')!=='light';document.documentElement.classList.toggle('dark',dark);document.querySelector('meta[name="color-scheme"]').setAttribute('content',dark?'dark':'light');})();
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

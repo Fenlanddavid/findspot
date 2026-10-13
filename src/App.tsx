@@ -205,6 +205,7 @@ function Shell() {
     } else {
       document.documentElement.classList.remove("dark");
     }
+    document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme === 'dark' ? 'dark' : 'light');
   }, [theme]);
 
   // Keep sfWorkflow.projectId in sync if projectId changes (edge case)
@@ -285,7 +286,7 @@ function Shell() {
     && location.pathname === "/settings";
 
   return (
-    <div className={`max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
+    <div className={`app-shell max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
       {isInAppBrowser && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl mb-4 shadow-lg flex flex-col items-center gap-3 text-center border-2 border-white animate-pulse">
             <div className="text-2xl">{isIOS ? "🍎" : "🌍"}</div>
@@ -468,7 +469,7 @@ function Shell() {
         </Link>
       </footer>}
 
-      {!isActiveSessionGuide && <nav className="sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
+      {!isActiveSessionGuide && <nav className="app-bottom-nav sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {[
             { to: "/", label: "Home", icon: HomeIcon },

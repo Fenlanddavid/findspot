@@ -40,21 +40,21 @@ describe("iOS viewport policy", () => {
 
   it("adds the focus-zoom directive while preserving the existing viewport", () => {
     const { documentRef, viewport } = viewportDocument(
-      "width=device-width, initial-scale=1.0",
+      "width=device-width, initial-scale=1.0, viewport-fit=cover",
     );
 
     expect(applyIOSFocusZoomPolicy(documentRef, IPHONE)).toBe(true);
     expect(viewport.content).toBe(
-      "width=device-width, initial-scale=1.0, maximum-scale=1.0",
+      "width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0",
     );
   });
 
   it("does not change the Android viewport", () => {
     const { documentRef, viewport } = viewportDocument(
-      "width=device-width, initial-scale=1.0",
+      "width=device-width, initial-scale=1.0, viewport-fit=cover",
     );
 
     expect(applyIOSFocusZoomPolicy(documentRef, ANDROID)).toBe(false);
-    expect(viewport.content).toBe("width=device-width, initial-scale=1.0");
+    expect(viewport.content).toBe("width=device-width, initial-scale=1.0, viewport-fit=cover");
   });
 });

@@ -2,7 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: light dark; }
+:root {
+  color-scheme: light;
+  background-color: #f9fafb;
+  --app-safe-bottom-max: env(safe-area-max-inset-bottom, env(safe-area-inset-bottom, 0px));
+}
+:root.dark { color-scheme: dark; background-color: #111827; }
+html { min-height: 100%; }
+
+.app-shell {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 640px) {
+  .app-shell {
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+/* Paint behind the gesture bar while links stay in the safe rectangle. Using
+   the maximum inset avoids resizing the bar as Chrome's bottom UI moves. */
+.app-bottom-nav {
+  padding-bottom: calc(0.4rem + var(--app-safe-bottom-max));
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) - var(--app-safe-bottom-max));
+}
 * { box-sizing: border-box; }
 a { color: inherit; }
 button { cursor: pointer; }
