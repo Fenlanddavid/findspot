@@ -92,6 +92,38 @@ async function readIndexedDbStore(page: Page, storeName: string) {
   }), storeName);
 }
 
+async function waitForFieldGuideCamera(page: Page, lat: number, lng: number) {
+  // Canvas visibility does not mean the initial flight to the route's location
+  // has finished. Read the existing map ref, as in hillfortsAndLidar.spec.ts.
+  await expect.poll(() => page.evaluate(() => {
+    type Fiber = {
+      return?: Fiber;
+      alternate?: Fiber;
+      stateNode?: { current?: Fiber };
+      memoizedProps?: { value?: { mapRef?: { current?: {
+        getCenter(): { lat: number; lng: number };
+        isMoving(): boolean;
+      } } } };
+    };
+    const container = document.querySelector('.maplibregl-map');
+    if (!container) return null;
+    const key = Object.keys(container).find(key => key.startsWith('__reactFiber$'));
+    let fiber = key ? (container as unknown as Record<string, Fiber>)[key] : undefined;
+    let root = fiber;
+    while (root?.return) root = root.return;
+    if (root?.stateNode?.current !== root && fiber?.alternate) fiber = fiber.alternate;
+    while (fiber) {
+      const map = fiber.memoizedProps?.value?.mapRef?.current;
+      if (map) {
+        const centre = map.getCenter();
+        return { lat: Number(centre.lat.toFixed(6)), lng: Number(centre.lng.toFixed(6)), moving: map.isMoving() };
+      }
+      fiber = fiber.return;
+    }
+    return null;
+  })).toEqual({ lat, lng, moving: false });
+}
+
 async function mockFieldGuideHistoricScan(
   page: Page,
   monumentGeometry: 'point' | 'polygon' = 'point',
@@ -735,6 +767,7 @@ test("completed historic mobile sheet keeps context details and layer controls",
   await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
   await page.locator(".maplibregl-canvas").waitFor({ state: "visible" });
   await expect(page.getByText("Ready to Scan")).toBeVisible();
+  await waitForFieldGuideCamera(page, 53.3811, -1.4701);
 
   // Reproduce an installed PWA upgraded from the old Itiner-e asset. The
   // current generation-scoped request must not match this stable legacy URL
@@ -811,7 +844,7 @@ test("scheduled boundary stays visible and an overlapping target remains tappabl
   await page.goto("./fieldguide?lat=53.3811&lng=-1.4701");
   const canvas = page.locator(".maplibregl-canvas");
   await canvas.waitFor({ state: "visible" });
-  await page.waitForTimeout(1_500);
+  await waitForFieldGuideCamera(page, 53.3811, -1.4701);
   await putIndexedDbRows(page, "fieldGuideCache", [{
     id: "16-32499-21231",
     createdAt: Date.now(),

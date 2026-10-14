@@ -244,3 +244,24 @@ all three release-automation tests pass. The v5.0.25 production/PWA build passes
 with 120 precached assets (`/tmp/findspot-v5.0.25-build.log`). The release patch
 passes its whitespace check. Remote `main` was confirmed at `3201951` before
 publication; CI/deployment confirmation follows the push.
+
+## v5.0.25 CI camera-race correction
+
+Run `38636152824` passed unit/static checks, worker checks and Android tests.
+Its browser run passed 124 cases with one existing skip, but the completed
+historic-sheet test expected the synthetic Roman road to intersect the scan
+while the initial map flight was still in progress. The trace showed both
+fixture routes correctly described as nearby and a scan centre around
+53.3983, -1.4781 instead of the requested 53.3811, -1.4701. Canvas visibility and
+the Ready to Scan label did not guarantee the camera had reached that position.
+
+The regression now waits for the existing map ref to report the intended
+coordinates and a stationary camera before scanning. The scheduled-boundary
+regression uses the same state-based wait in place of its fixed 1.5-second
+delay. The intersection assertion remains strict; production geometry, scores
+and wording are unchanged. v5.0.25 remains the pending release because the
+failed workflow did not deploy or tag it.
+
+Both affected browser checks passed three consecutive runs each (six passes,
+one worker, 1.7 minutes). The release guard and scoped whitespace checks also
+pass. Push this correction through the existing deployment workflow.
