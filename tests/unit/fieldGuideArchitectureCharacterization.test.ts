@@ -93,7 +93,7 @@ describe('FieldGuide architecture characterization', () => {
     expect(inventory).toEqual({
       'pages/FieldGuide.tsx': 11,
       'pages/FieldGuideController.tsx': 15,
-      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_369,
+      'components/fieldGuide/FieldGuideWorkspace.tsx': 1_383,
       'components/session/ActiveSessionGuideWorkspace.tsx': 44,
       'hooks/useFieldGuideMap.ts': 334,
       'hooks/useTerrainScan.ts': 77,
@@ -104,13 +104,13 @@ describe('FieldGuide architecture characterization', () => {
       'hooks/useActiveSessionGuideAutoScan.ts': 54,
       'hooks/useActiveSessionGuideContext.ts': 55,
       'services/fieldguide/terrainScanCoordinator.ts': 500,
-      'services/fieldguide/terrainScanSupport.ts': 154,
+      'services/fieldguide/terrainScanSupport.ts': 170,
       'services/fieldguide/terrainMeasurementSupport.ts': 193,
-      'services/fieldguide/historicScanCoordinator.ts': 430,
+      'services/fieldguide/historicScanCoordinator.ts': 438,
       'services/fieldguide/historicScanRecords.ts': 241,
-      'services/fieldguide/historicScanSupport.ts': 124,
+      'services/fieldguide/historicScanSupport.ts': 125,
       'services/fieldguide/fieldGuidePageSupport.ts': 85,
-      'services/fieldguide/scanOrchestrator.ts': 160,
+      'services/fieldguide/scanOrchestrator.ts': 166,
       'services/fieldguide/postScanOrchestrator.ts': 77,
     });
   });
@@ -144,6 +144,6 @@ describe('FieldGuide architecture characterization', () => {
     expect(workspace).not.toContain('updatePermissionIntelligenceQuestions');
     expect(orchestrator).toContain('const permissionIntelligence = requestedPermission');
     expect(orchestrator).toContain('options.runHistoricPhase(');
-    expect(orchestrator.trimEnd().split(/\r?\n/)).toHaveLength(160);
+    expect(orchestrator.trimEnd().split(/\r?\n/)).toHaveLength(166);
   });
 });

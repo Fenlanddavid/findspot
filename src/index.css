@@ -31,6 +31,29 @@ html { min-height: 100%; }
   padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
   bottom: calc(env(safe-area-inset-bottom, 0px) - var(--app-safe-bottom-max));
 }
+
+/* FieldGuide fills the space left by the real header and navigation, including
+   safe areas and enlarged text. Its map overlays stay inside that workspace. */
+.app-shell--fieldguide {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(0.75rem + var(--app-bottom-nav-height, 0px));
+}
+.app-shell--fieldguide > header,
+.app-shell--fieldguide > footer { flex-shrink: 0; }
+.app-shell--fieldguide > main,
+.fieldguide-route-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.fieldguide-workspace--focus {
+  top: env(safe-area-inset-top, 0px);
+  bottom: var(--app-bottom-nav-height, 0px);
+  left: env(safe-area-inset-left, 0px);
+  right: env(safe-area-inset-right, 0px);
+}
 * { box-sizing: border-box; }
 a { color: inherit; }
 button { cursor: pointer; }

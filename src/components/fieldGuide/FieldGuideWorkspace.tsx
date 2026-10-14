@@ -38,6 +38,7 @@ import { HOTSPOT_ENGINE_VERSION } from '../../engines/hotspot/hotspotEngine';
 import { applyGeologyModifier } from '../../engines/hotspot/hotspotEngine';
 import { geologyAuditWarning } from '../../engines/geologyContext/geologyAudit';
 import { getSetting } from '../../services/data';
+import { emptySupportingContext, type SupportingContextSummary, type ScanAssessmentSources } from '../../services/fieldguide/supportingContext';
 import { searchLocations } from '../../services/geocode';
 import { readFieldGuideScanCache } from '../../services/fieldGuideMutations';
 import { runFieldGuideScan } from '../../services/fieldguide/scanOrchestrator';
@@ -169,6 +170,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
     } = projectData;
 
     const [hillfortContext, setHillfortContext] = React.useState<HillfortContext | null>(null);
+    const [supportingContext, setSupportingContext] = React.useState<SupportingContextSummary | null>(null);
+    const assessmentSourcesRef = useRef<ScanAssessmentSources | undefined>(undefined);
     const [selectedHillfortId, setSelectedHillfortId] = React.useState<string | null>(null);
     const clearMapItemSelections = useCallback((keep?: 'target' | 'hotspot' | 'userFind' | 'pasFind' | 'monument' | 'trace') => {
         setSelectedHillfortId(null);
@@ -476,6 +479,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         setPasFinds([]);
         setPlaceSignals([]);
         setPotentialScore(null);
+        setSupportingContext(null);
+        assessmentSourcesRef.current = undefined;
         setScanConfidence(null);
         setHistoricMode(false);
         setHistoricScanCompleted(false);
@@ -594,7 +599,13 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
             targetPeriod,
         });
 
-        if (!result) return false;
+        if (!result) {
+            setSupportingContext({ ...emptySupportingContext(), title: 'Historic context could not be fully assessed', subtitle: 'The historic scan failed or did not complete. Run a fresh scan.' });
+            return false;
+        }
+        setSupportingContext(result.supportingContext ?? { ...emptySupportingContext(), title: 'Historic context could not be fully assessed', subtitle: 'Source assessment details are missing. Run a fresh scan.' });
+        // Reuse the completed scan centre, never a later map position.
+        terrainScanCenterRef.current = result.center;
         setHillfortContext(result.hillfortContext ?? null);
 
         result.enhancedHotspots = result.enhancedHotspots.map(hotspot => ({
@@ -617,7 +628,8 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         setPasFinds(result.pasFinds);
         setPlaceSignals(result.placeSignals);
         setPasDensityCell(result.pasCell ?? null);
-        calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng);
+        calculatePotentialScore(result.pasFinds, result.monumentPoints, result.placeSignals, result.center.lat, result.center.lng,
+            { monuments: result.scheduledMonuments, bounds: result.supportingContext?.bounds ?? null });
 
         dispatch({ type: 'SET_HERITAGE_COUNT', count: result.heritageCount, monumentPoints: result.monumentPoints, routes: result.routes });
 
@@ -722,6 +734,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
                 addLog('> SCAN: Reading terrain, targets and historic landscape context.', 'terrain');
             },
             onTerrainResult: result => {
+                assessmentSourcesRef.current = { availability: result.sourceAvailability, status: result.sourceStatus, completeness: result.questionTerrainAvailability, observations: result.rawClusters };
                 applyNhleToMap(result.nhleData);
                 applyAimToMap(result.aimData);
                 nhleDataRef.current   = result.nhleData;
@@ -805,6 +818,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         // a new standalone load. nhleData: null forces a fresh SM fetch (legal gate
         // must stay current).
         await runHistoricPhase({
+            assessmentSources: assessmentSourcesRef.current,
             terrainClusters,
             monumentPoints,
             routes:     historicRoutes,
@@ -1071,7 +1085,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
         analyzing, scanPhase, hotspotVersion, terrainClusters, detectedFeatures,
         hotspots, hasScanned, heritageCount, monumentPoints, historicRoutes,
         sortedHotspots, displayTargets, traceTargets, primaryTargetId,
-        sourceUsability, hotspotFindContext, targetFindContext, showConcentrationBanner,
+        sourceUsability, supportingContext, hotspotFindContext, targetFindContext, showConcentrationBanner,
         selectedId, setSelectedId, selectedHotspotId, setSelectedHotspotId,
         showSuggestion, setShowSuggestion, scanStatus, systemLog, zoomWarning,
         isSatellite, setIsSatellite, scanCount, searchQuery, setSearchQuery,
@@ -1120,7 +1134,7 @@ export function FieldGuideWorkspace({ projectId, onSignificantFind, embeddedSess
 
     return (
         <FieldGuideContext.Provider value={contextValue}>
-        <div className={focusMode && !embeddedSessionShell ? 'fixed inset-0 z-[200] flex flex-col bg-slate-950 overflow-hidden' : embeddedSessionShell ? 'flex h-full flex-col overflow-hidden bg-slate-950 relative' : 'flex flex-col h-[calc(100dvh-140px)] landscape:h-[calc(100dvh-100px)] sm:h-[calc(100dvh-220px)] bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
+        <div className={focusMode && !embeddedSessionShell ? 'fieldguide-workspace--focus fixed z-[200] flex flex-col bg-slate-950 overflow-hidden' : embeddedSessionShell ? 'flex h-full flex-col overflow-hidden bg-slate-950 relative' : 'flex flex-1 min-h-0 flex-col isolate bg-slate-950 rounded-3xl overflow-hidden border border-slate-800 shadow-2xl relative'}>
             <header className={`bg-slate-900/80 border-b border-white/5 shrink-0 z-50 backdrop-blur-md${focusMode ? ' hidden' : ''}`}>
                 {/* Bottom Row: Primary FieldGuide Actions */}
                 <div className="hidden justify-between items-center gap-3 px-3 sm:px-4 py-2 bg-black/20 relative">

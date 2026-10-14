@@ -27,6 +27,7 @@ import { reportNonFatal } from '../diagLog';
 import { CACHE_POLICIES } from '../../shared/cachePolicy';
 import {
     applyOfflinePackAvailability,
+    canReuseTerrainSourceAssessments,
     attachRepresentativeTerrainMeasurements,
     collapseByProximity,
     extractMonumentPoints,
@@ -36,7 +37,6 @@ import {
     type TerrainScanParams,
     type TerrainScanResult,
 } from './terrainScanSupport';
-
 export type {
     ScanContext,
     TerrainScanParams,
@@ -137,7 +137,7 @@ export async function runTerrainScanPipeline(
             const persisted = await db.fieldGuideCache.get(tileKey);
             const cached = safeParseFieldGuideScanCache(persisted);
             if (persisted && !cached) await discardFieldGuideScanCache(tileKey);
-            if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION) {
+            if (cached && (Date.now() - cached.createdAt) < CACHE_TTL_MS && cached.engineVersion === ENGINE_VERSION && await canReuseTerrainSourceAssessments(cached, onLog)) {
                 const ageMin = Math.round((Date.now() - cached.createdAt) / 60000);
                 onLog(`> Cache hit — tile processing skipped (scan ${ageMin}m ago).`, 'terrain');
                 onStatusChange('Checking protected archaeology...');
@@ -242,7 +242,7 @@ export async function runTerrainScanPipeline(
                     terrainClusters: contextualized, detectedFeatures: contextualized, rawClusters: rawCombined, hotspots,
                     nhleData, aimData, routes, modernWays: cachedModernWays, monumentPoints, heritageCount,
                     sourceAvailability: cachedAvailability,
-                    sourceStatus: Object.fromEntries(Object.entries(cachedAvailability).map(([key, available]) => [key, available ? 'cached' : 'unavailable'])),
+                    sourceStatus: Object.fromEntries(Object.entries(cachedAvailability).map(([key, available]) => [key, !available ? 'unavailable' : cached.sourceStatus?.[key] ?? 'partial'])),
                     sourceProvenance: rawCombined.flatMap(cluster => cluster.provenance ?? []),
                     questionTerrainAvailability,
                     fromCache: true, noSignal: false, scanStartCenter, scanStartBounds, analysisBounds,
@@ -463,7 +463,7 @@ export async function runTerrainScanPipeline(
                     const expiredCutoff = Date.now() - CACHE_TTL_MS;
                     await saveTerrainScanCache({
                         id: tileKey, createdAt: Date.now(), rawClusters: rawCombined,
-                        sourceAvailability, sourceCompleteness: questionTerrainAvailability,
+                        sourceAvailability, sourceCompleteness: questionTerrainAvailability, sourceStatus,
                         engineVersion: ENGINE_VERSION,
                         ...(modernWays.length > 0 ? { modernWays, modernWaysFetchedAt: modernWaysFetchedAt ?? (rescuedModernWays ? Date.now() : undefined) } : {}),
                     }, expiredCutoff);

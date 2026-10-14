@@ -1,3 +1,6 @@
+import { adaptSupportingContextForLandscape } from '../../services/fieldguide/landscapeInterpretation/signalAdapters';
+import { emptySupportingContext } from '../../services/fieldguide/supportingContext';
+import { SupportingContextEvidence, RecordedHeritageDetails } from './SupportingContextEvidence';
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { diagLog, reportNonFatal } from '../../services/diagLog';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
@@ -56,39 +59,6 @@ function geohashEncode(lat: number, lon: number, precision = 6): string {
     return hash;
 }
 
-function getSignalBand(value: number | null | undefined, cap = 100): string {
-    const ratio = cap > 0 ? Math.max(0, Math.min(1, (value ?? 0) / cap)) : 0;
-    if (ratio >= 0.72) return 'Strong';
-    if (ratio >= 0.42) return 'Moderate';
-    if (ratio > 0.08) return 'Trace';
-    return 'Not present';
-}
-
-function getHistoricInterpretation(breakdown: { terrain: number; historic: number; spectral: number } | null): { title: string; subtitle: string } {
-    if (!breakdown) return { title: 'No scan data yet', subtitle: 'Run a scan to read the historic landscape context for this area.' };
-    const strong = [breakdown.terrain, breakdown.historic, breakdown.spectral].filter(v => v >= 50).length;
-    if (strong === 3) return { title: 'Strong historic context across this area', subtitle: 'Signals from terrain, historic density, and spectral response all align.' };
-    if (strong === 2) return { title: 'Solid historic alignment detected', subtitle: 'Two key signals suggest meaningful past activity in this area.' };
-    if (strong === 1) return { title: 'Partial historic signal present', subtitle: 'One indicator points to potential historic activity — worth investigating.' };
-    return { title: 'Limited historic alignment', subtitle: 'Signals are weak or below threshold for a confident read.' };
-}
-
-function getSignalSummary(breakdown: { terrain: number; hydro: number; historic: number; spectral: number } | null): string[] {
-    if (!breakdown) return [];
-    const lines: string[] = [];
-    if (breakdown.terrain >= 70) lines.push('Strong terrain relief — elevated ground or natural features present.');
-    else if (breakdown.terrain >= 40) lines.push('Moderate terrain relief detected in the scan area.');
-    else lines.push('Limited terrain variation — other signals carry more weight here.');
-    if (breakdown.hydro >= 60) lines.push('Significant hydrological context — proximity to water sources.');
-    else if (breakdown.hydro >= 30) lines.push('Some hydrological proximity — minor water influence.');
-    if (breakdown.historic >= 70) lines.push('High historic density — multiple recorded finds or sites nearby.');
-    else if (breakdown.historic >= 40) lines.push('Moderate historic density — some recorded activity in the wider area.');
-    else lines.push('Low historic density from available records.');
-    if (breakdown.spectral >= 60) lines.push('Strong spectral response — possible subsurface disturbance.');
-    else if (breakdown.spectral >= 30) lines.push('Moderate spectral signal detected.');
-    return lines;
-}
-
 function HeritageGatewayLink({ lat, lng }: { lat: number; lng: number }) {
     return (
         <a
@@ -128,7 +98,6 @@ export function HistoricLayerManager() {
         selectedMonument,
         selectedHillfortId,
         historicMode,
-        hasScanned,
         historicScanComplete,
         loadingPAS,
         intelLayersOpen,
@@ -140,17 +109,14 @@ export function HistoricLayerManager() {
         handleRomanStandalonePress,
         romanStandaloneStatus,
         potentialScore,
-        scanConfidence,
         pasFinds,
         historicRoutes,
         displayTargets,
         sortedHotspots,
         terrainClusters,
-        placeSignals,
         projectFinds,
         mapRef,
-        sourceAvailability,
-        sourceUsability,
+        supportingContext,
         scanFromCache,
         scheduledMonumentCheckFailed,
         scheduledMonumentUnavailableReason,
@@ -160,7 +126,6 @@ export function HistoricLayerManager() {
         setIsIntelOpen,
         nhleDataRef,
         aimDataRef,
-        terrainScanCenterRef,
         geologyContext,
         pasDensityCell,
         landscapeIntelligenceMap,
@@ -169,55 +134,26 @@ export function HistoricLayerManager() {
     // ── ALIE state ────────────────────────────────────────────────────────────
     const [landscapeInterpretation, setLandscapeInterpretation] = useState<LandscapeInterpretation | null>(null);
     const [alieLoading, setAlieLoading] = useState(false);
-    const [heritageGatewayCenter, setHeritageGatewayCenter] = useState<{ lat: number; lng: number } | null>(null);
+    const heritageGatewayCenter = historicScanComplete ? supportingContext?.centre ?? null : null;
     const alieAbortRef = useRef<AbortController | null>(null);
-
-    useEffect(() => {
-        if (!historicScanComplete) {
-            setHeritageGatewayCenter(null);
-            return;
-        }
-
-        const scanCenter = terrainScanCenterRef.current;
-        if (scanCenter) {
-            setHeritageGatewayCenter(scanCenter);
-            return;
-        }
-
-        const center = mapRef.current?.getCenter();
-        if (center) setHeritageGatewayCenter({ lat: center.lat, lng: center.lng });
-    }, [historicScanComplete, terrainScanCenterRef, mapRef]);
 
     // Only show when in historic mode and nothing else is selected
     if (showSavedPoints || selectedUserFind || selectedPASFind || (selectedId && !selectedHotspotId) || selectedMonument !== undefined || !historicMode) {
         return null;
     }
 
-    const bd = potentialScore?.breakdown ?? null;
-    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.imagery } : null);
-    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.imagery } : null);
-    const dedupedRoutes = [...historicRoutes.reduce((map, r) => {
-        const key = `${r.type}:${r.name ?? ''}`;
-        const existing = map.get(key);
-        if (!existing || r.confidenceClass < existing.confidenceClass) map.set(key, r);
-        return map;
-    }, new Map<string, typeof historicRoutes[number]>()).values()];
-    const routeLines = [...new Set([
-        ...historicRoutes.filter(r => r.type === 'roman_road').map(r => `Roman road${r.name ? ` ${r.name}` : ''} runs through this scan area.`),
-        ...historicRoutes.filter(r => r.type !== 'roman_road').map(r => {
-            const label = r.type === 'holloway' ? 'Holloway' : 'Historic trackway';
-            return `${label}${r.name ? ` ${r.name}` : ''} detected in this scan area.`;
-        }),
-    ])].slice(0, 4);
-    const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
-    const mc = mapRef.current?.getCenter();
+    const summary = supportingContext ?? emptySupportingContext();
+    const interp = summary;
+    const dedupedRoutes = summary.historicRoutes.map(route => route.segments[0]);
+    const hasData = summary.recordedHeritage.length > 0 || summary.historicRoutes.length > 0 || summary.environment.placeNames.length > 0;
+    const mc = summary.centre;
     const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
 
     return (
         <div className="space-y-3">
             {selectedHillfortId && <HillfortRecords selectedOnly={selectedHillfortId !== 'all'} />}
             <AlieSection
-                historicScanComplete={historicScanComplete || (hasScanned && !loadingPAS)}
+                historicScanComplete={historicScanComplete}
                 loadingPAS={loadingPAS}
                 nhleDataRef={nhleDataRef}
                 aimDataRef={aimDataRef}
@@ -283,72 +219,9 @@ export function HistoricLayerManager() {
                 <h3 className="text-base font-black text-white tracking-tight leading-tight">{loadingPAS ? 'Reading historic layers' : interp.title}</h3>
                 <p className="text-xs font-bold text-white/65 leading-snug mt-1">{loadingPAS ? 'Checking records, route context and wider landscape signals.' : interp.subtitle}</p>
             </div>
-            {(routeLines.length > 0 || sigLines.length > 0) && (
-                <div className="border-t border-white/8 pt-3">
-                    <p className="text-[0.5625rem] font-black text-white/62 uppercase tracking-widest mb-2">Why this stands out</p>
-                    <div className="space-y-2">
-                        {routeLines.map((line, i) => (
-                            <div key={`r-${i}`} className="flex items-start gap-2">
-                                <div className="w-1 h-1 rounded-full bg-amber-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(251,191,36,0.7)]" />
-                                <p className="text-sm font-bold text-white/85 leading-tight">{line}</p>
-                            </div>
-                        ))}
-                        {sigLines.slice(0, 4).map((line, i) => (
-                            <div key={`s-${i}`} className="flex items-start gap-2">
-                                <div className="w-1 h-1 rounded-full bg-blue-400 mt-1.5 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.7)]" />
-                                <p className="text-sm font-bold text-white/85 leading-tight">{line}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-            {hasData && (
-                <div className="grid grid-cols-3 gap-2">
-                    <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
-                        <span className="block text-base font-black text-blue-300">{pasFinds.length}</span>
-                        <span className="text-[0.5rem] font-black text-white/65 uppercase tracking-widest">Sites</span>
-                    </div>
-                    <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
-                        <span className="block text-base font-black text-blue-300">{historicRoutes.length}</span>
-                        <span className="text-[0.5rem] font-black text-white/65 uppercase tracking-widest">Routes</span>
-                        {historicRoutes.some(r => r.type === 'roman_road') && (
-                            <span className="block text-[0.5rem] font-black text-amber-400/70 uppercase tracking-widest mt-0.5">inc. Roman</span>
-                        )}
-                    </div>
-                    <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2 text-center">
-                        <span className="block text-base font-black text-blue-300">{placeSignals.length}</span>
-                        <span className="text-[0.5rem] font-black text-white/65 uppercase tracking-widest">Names</span>
-                    </div>
-                </div>
-            )}
+            {supportingContext && <SupportingContextEvidence summary={summary} />}
             {nearbyProjectFinds.length > 0 && (
                 <p className="text-[0.625rem] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
-            )}
-            {sourceAvailability && (
-                <div className="border-t border-white/8 pt-3">
-                    <p className="text-[0.5625rem] font-black text-white/62 uppercase tracking-widest mb-2">Scan Source Coverage</p>
-                    <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                            { key: 'terrain', label: 'LiDAR' },
-                            { key: 'terrain_global', label: 'Terrain' },
-                            { key: 'slope', label: 'Slope' },
-                            { key: 'hydrology', label: 'Water' },
-                            { key: 'satellite_spring', label: 'Imagery A' },
-                            { key: 'satellite_summer', label: 'Imagery B' },
-                        ].map(({ key, label }) => {
-                            const usability = sourceUsability[key] ?? 'none';
-                            return (
-                                <div key={key} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border ${usability === 'usable' ? 'bg-emerald-500/10 border-emerald-500/25' : usability === 'loaded' ? 'bg-white/5 border-white/15' : 'bg-white/3 border-white/8'}`}>
-                                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${usability === 'usable' ? 'bg-emerald-400' : usability === 'loaded' ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                                    <span className={`text-[0.5rem] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-            {!loadingPAS && !hasData && (
-                <p className="text-center text-[0.6875rem] font-bold text-white/55 uppercase tracking-widest italic py-4">No historic context found here</p>
             )}
             {(hasData || potentialScore) && (
                 <div className="border-t border-white/8 pt-3">
@@ -401,21 +274,7 @@ export function HistoricLayerManager() {
                     {intelDetailsOpen && (
                         <div className="mt-4 space-y-4 animate-in fade-in duration-200">
                             {(() => {
-                                const romanRoadCount = historicRoutes.filter(r => r.type === 'roman_road').length;
-                                const augmentedFinds = [
-                                    ...pasFinds,
-                                    ...Array.from({ length: romanRoadCount }, (_, i) => ({
-                                        id: `route-roman-${i}`,
-                                        broadperiod: 'Roman',
-                                        objectType: 'Roman Road',
-                                        lat: 0, lon: 0,
-                                        internalId: '',
-                                        county: '',
-                                        workflow: 'PAS' as const,
-                                        isApprox: false,
-                                        osmType: 'way' as const,
-                                    })),
-                                ];
+                                const augmentedFinds = summary.recordedHeritage.flatMap(record => record.period ? [{ broadperiod: record.period }] : []);
                                 const pasLandscapePeriods = pasDensityCell && pasDensityCell.c >= 15
                                     ? pasPeriodEntries(pasDensityCell).filter(([, count]) => count > 0)
                                     : [];
@@ -461,25 +320,7 @@ export function HistoricLayerManager() {
                                     </div>
                                 </div>
                             )}
-                            {pasFinds.length > 0 && (
-                                <div className="space-y-2">
-                                    <p className="text-[0.5625rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
-                                    <div className="space-y-2">
-                                        {pasFinds.map(f => (
-                                            <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-3 rounded-xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
-                                                <div className="flex-1 min-w-0 pr-3">
-                                                    <p className="text-sm font-black text-white uppercase truncate">{f.objectType}</p>
-                                                    <p className="text-[0.625rem] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
-                                                </div>
-                                                <div className="text-right shrink-0">
-                                                    <p className="text-[0.625rem] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
-                                                    <p className="text-[0.5625rem] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <RecordedHeritageDetails summary={summary} />
                             {pasDensityCell !== null && (
                                 <div className="space-y-2">
                                     <p className="text-[0.5625rem] font-black text-blue-400/60 uppercase tracking-widest">Portable Antiquities (Landscape)</p>
@@ -524,13 +365,7 @@ export function HistoricLayerManager() {
                                     )}
                                 </div>
                             )}
-                            {sortedHotspots.some(h => h.isHighConfidenceCrossing) && (
-                                <div className="bg-blue-500/10 border border-blue-500/25 p-3 rounded-xl space-y-1">
-                                    <p className="text-[0.625rem] font-black text-blue-300 uppercase tracking-widest">Possible crossing point in scan area</p>
-                                    <p className="text-[0.6875rem] font-bold text-slate-300 leading-tight">A route and water signal overlap here. Historic crossing points concentrate activity from multiple periods — they are high-value targets.</p>
-                                </div>
-                            )}
-                            {historicRoutes.length > 0 && (
+                            {summary.historicRoutes.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[0.5625rem] font-black text-amber-400/60 uppercase tracking-widest">Movement Corridors & Roads</p>
                                     <div className="space-y-2">
@@ -551,23 +386,17 @@ export function HistoricLayerManager() {
                                                         <span className="text-[0.5625rem] font-black text-amber-400/70 uppercase tracking-widest shrink-0">{typeLabel}</span>
                                                     </div>
                                                     <p className="text-[0.625rem] font-bold text-slate-400 uppercase">{confidenceLabel} · {sourceName}</p>
-                                                    {isRoman && (
-                                                        <p className="text-[0.6875rem] font-bold text-amber-300/70 leading-tight mt-1.5">Focus detection along the road edge, not on the road surface — coin scatter concentrates in the zone of activity beside the road.</p>
-                                                    )}
                                                 </div>
                                             );
                                         })}
                                     </div>
-                                    {historicRoutes.some(r => r.type === 'roman_road') && (
-                                        <p className="text-[0.625rem] font-bold text-amber-400/60 leading-tight px-1">Roman roads are the strongest single predictor of coin scatter in England.</p>
-                                    )}
                                 </div>
                             )}
-                            {placeSignals.length > 0 && (
+                            {summary.environment.placeNames.length > 0 && (
                                 <div className="space-y-2">
                                     <p className="text-[0.5625rem] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
                                     <div className="space-y-2">
-                                        {placeSignals.map((s, i) => (
+                                        {summary.environment.placeNames.map((s, i) => (
                                             <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl">
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className="text-sm font-black text-white uppercase italic tracking-tight truncate pr-2">"{s.name}"</span>
@@ -645,7 +474,7 @@ function AlieSection({
     scheduledMonumentCheckFailed,
     scheduledMonumentUnavailableReason,
 }: AlieSectionProps) {
-    const { hillfortContext, selectHillfort } = useFieldGuideContext();
+    const { hillfortContext, selectHillfort, supportingContext } = useFieldGuideContext();
     // Sequence counter — mirrors geologyRequestSeqRef in FieldGuide.tsx.
     // Prevents a stale cache read or slow worker result from clobbering a
     // newer cell's state when the user pans quickly between geohash6 cells.
@@ -746,13 +575,15 @@ function AlieSection({
             return;
         }
 
-        const center = hillfortContext ? { lng: hillfortContext.centre[0], lat: hillfortContext.centre[1] } : mapRef.current?.getCenter();
+        const center = supportingContext?.centre;
         if (!center) return;
 
         const geohash6 = geohashEncode(center.lat, center.lng, 6);
 
-        const nhleFeatures = nhleDataRef.current?.features ?? [];
-        const aimFeatures  = aimDataRef.current?.features ?? [];
+        const snapshotEvidence = supportingContext ? adaptSupportingContextForLandscape(supportingContext) : null;
+        const nhleFeatures = snapshotEvidence?.nhleFeatures ?? nhleDataRef.current?.features ?? [];
+        const aimFeatures  = snapshotEvidence?.aimFeatures ?? aimDataRef.current?.features ?? [];
+        const routeFeatures = snapshotEvidence?.routeFeatures ?? historicRoutes;
 
         const primaryHotspot = sortedHotspots[0] ?? null;
         const hotspotMetrics = primaryHotspot?.metrics ?? null;
@@ -804,6 +635,7 @@ function AlieSection({
         const inputSignature = [
             ALIE_ENGINE_VERSION,
             hillfortContextSignature(hillfortContext),
+            JSON.stringify(snapshotEvidence?.recordedContext ?? null),
             geologyTileKey,
             nhleFeatures.length,
             aimFeatures.length,
@@ -854,7 +686,7 @@ function AlieSection({
             terrainClusters,
             primaryHotspot,
             sortedHotspots,
-            historicRoutes,
+            routeFeatures,
             nhleFeatures,
             aimFeatures,
             {
@@ -913,7 +745,8 @@ function AlieSection({
             geohash6,
             nhleFeatures,
             aimFeatures,
-            routeFeatures: historicRoutes,
+            routeFeatures,
+            recordedContext: snapshotEvidence?.recordedContext,
             geologyContext,
             hotspotMetrics,
             hotspotContext,
@@ -975,6 +808,7 @@ function AlieSection({
         };
     }, [
         historicScanComplete,
+        supportingContext,
         loadingPAS,
         geologyContext?.tileKey,
         hillfortContext,

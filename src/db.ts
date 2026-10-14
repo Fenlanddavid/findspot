@@ -646,6 +646,7 @@ export type FieldGuideScanCache = {
   rawClusters: unknown;
   sourceAvailability: Record<string, boolean>;
   sourceCompleteness?: Record<string, boolean>;
+  sourceStatus?: Record<string, import('./pages/fieldGuideTypes').LayerFetchStatus>;
   modernWays?: unknown;
   modernWaysFetchedAt?: number;
   engineVersion?: string; // scoring engine version — stale caches are discarded on mismatch

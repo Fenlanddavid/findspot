@@ -107,6 +107,8 @@ export interface AIMFeature {
         coordinates: number[] | number[][][] | number[][][][];
     };
     properties: {
+        MONUMENT_ID?: string;
+        GEOMETRY_BASIS?: 'bounding_box' | 'mapped_geometry';
         MONUMENT_TYPE?: string;
         PERIOD?: string;
         EVIDENCE_1?: string;
@@ -746,6 +748,7 @@ async function _fetchAIMFromR2(
                             coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
                         },
                         properties: {
+                            GEOMETRY_BASIS: 'bounding_box',
                             MONUMENT_TYPE: entry.monumentType,
                             PERIOD: entry.period,
                             EVIDENCE_1: entry.evidence,
@@ -972,7 +975,7 @@ export async function fetchAIMData(
         const data = await res.json() as Partial<AIMResponse>;
         return {
             ...data,
-            features: Array.isArray(data.features) ? data.features : [],
+            features: Array.isArray(data.features) ? data.features.map(feature => ({ ...feature, properties: { ...feature.properties, GEOMETRY_BASIS: 'mapped_geometry' as const } })) : [],
             available: true,
             projectCoverage: await coveragePromise,
         };

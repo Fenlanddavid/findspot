@@ -30,6 +30,7 @@ export interface HistoricScanOptions extends ScanContext {
 }
 
 export interface HistoricScanResult {
+    supportingContext?: import('./supportingContext').SupportingContextSummary;
     hillfortContext?: HillfortContext;
     scanId?: string;
     surfacedAt?: number;

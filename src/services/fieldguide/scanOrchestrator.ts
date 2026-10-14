@@ -61,6 +61,12 @@ function errorDetail(error: unknown): string {
 
 export function scanContextFromTerrain(result: TerrainScanResult): ScanContext {
     return {
+        assessmentSources: {
+            availability: result.sourceAvailability,
+            status: result.sourceStatus,
+            completeness: result.questionTerrainAvailability,
+            observations: result.rawClusters,
+        },
         terrainClusters: result.terrainClusters,
         monumentPoints: result.monumentPoints,
         routes: result.routes,

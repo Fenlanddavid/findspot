@@ -2,6 +2,9 @@
 import { useState } from 'react';
 import { HistoricFind, PlaceSignal } from '../pages/fieldGuideTypes';
 import { distanceKilometers } from '../utils/geo';
+import type { NHLEResponse } from '../services/historicScanService';
+import type { ScanBounds } from '../pages/fieldGuideTypes';
+import { contextRelationship, distanceToContextGeometryM } from '../services/fieldguide/historicContextSpatial';
 
 export interface PotentialScore {
     score: number;
@@ -28,7 +31,8 @@ export function usePotentialScore() {
         monuments: [number, number][],
         signals: PlaceSignal[],
         centerLat: number,
-        centerLng: number
+        centerLng: number,
+        scheduledContext?: { monuments: NHLEResponse; bounds: ScanBounds | null },
     ) => {
         const reasons: string[] = [];
 
@@ -41,8 +45,19 @@ export function usePotentialScore() {
         if (nearbyHydroSignals.length > 0) reasons.push("Water-edge landscape signal");
 
         // 3. Historic Proximity (OSM + NHLE)
-        const nearbyHeritage = pas.filter(f => haversineKm(centerLat, centerLng, f.lat, f.lon) < 1.5);
-        const nearbyMonuments = monuments.filter(m => haversineKm(centerLat, centerLng, m[1], m[0]) < 0.6);
+        // NHLE mirrors in pasFinds are the same monuments, not independent evidence.
+        const nearbyHeritage = pas.filter(f => !f.id.startsWith('NHLE-') && haversineKm(centerLat, centerLng, f.lat, f.lon) < 1.5);
+        const nearbyMonuments = scheduledContext
+            ? scheduledContext.monuments.features.filter(feature => {
+                try {
+                    const geometry = feature.geometry;
+                    const centre: [number, number] = [centerLng, centerLat];
+                    const relationship = scheduledContext.bounds ? contextRelationship(geometry, scheduledContext.bounds, centre, 600) : null;
+                    return ['contains_scan_centre', 'intersects_scan', 'point_within_scan'].includes(relationship ?? '')
+                        || distanceToContextGeometryM(centre, geometry) < 600;
+                } catch { return false; }
+            })
+            : monuments.filter(m => haversineKm(centerLat, centerLng, m[1], m[0]) < 0.6);
 
         let historicPoints = 0;
         if (nearbyHeritage.length >= 3) historicPoints += 45;
@@ -50,7 +65,7 @@ export function usePotentialScore() {
         if (nearbyMonuments.length > 0) historicPoints += 35;
 
         if (nearbyHeritage.length > 0) reasons.push(`${nearbyHeritage.length} historic features nearby`);
-        if (nearbyMonuments.length > 0) reasons.push("Adjacent to Scheduled Monument");
+        if (nearbyMonuments.length > 0) reasons.push('Recorded scheduled monument context (geometry or point proximity)');
 
         // 4. Etymological Signals (with RARITY WEIGHTING & DISTANCE DECAY)
         let signalPoints = 0;

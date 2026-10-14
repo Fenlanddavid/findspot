@@ -213,6 +213,7 @@ export function runLandscapeInterpretation(
 
         // ── 14. Assemble result ───────────────────────────────────────────────
         const result: LandscapeInterpretation = {
+            ...(input.recordedContext ? { recordedContext: input.recordedContext } : {}),
             ...(input.hillfortContext ? { hillfortContext: hillfortContextSchema.parse(input.hillfortContext) } : {}),
             geohash6,
             processScores,

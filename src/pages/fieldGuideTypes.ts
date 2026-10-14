@@ -175,6 +175,8 @@ export interface PlaceSignal {
 
 export interface HistoricRoute {
     id: string;
+    /** Stable parent identity when a source feature is split into segments. */
+    parentRouteId?: string;
     type: "roman_road" | "historic_trackway" | "holloway" | "green_lane" | "droveway" | "suspected_route";
     source: "osm" | "itinere" | "rrra" | "historic_map_digitised" | "lidar_interpreted" | "manual";
     name?: string;

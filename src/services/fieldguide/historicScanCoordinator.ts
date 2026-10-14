@@ -57,6 +57,7 @@ import {
 
 import { lookupHillfortContext } from '../hillfortService';
 import { hillfortScanPolygon, matchHillfortSources } from './hillfortSpatial';
+import { buildSupportingContext } from './supportingContext';
 
 export async function runHistoricScanPipeline(
         opts: HistoricScanOptions,
@@ -81,9 +82,10 @@ export async function runHistoricScanPipeline(
         prefetchRomanRoads();   // prime GeoJSON cache in parallel with NHLE/AIM/Overpass
         prefetchPASDensity();   // prime PAS density cache in parallel
 
-        const center = map.getCenter();
+        const center = opts.scanCenter ?? map.getCenter();
         const bounds = map.getBounds();
-        const queryBounds = getHistoricQueryBounds(bounds, center, zoom);
+        const scanBounds = opts.analysisBounds ?? { west: bounds.getWest(), south: bounds.getSouth(), east: bounds.getEast(), north: bounds.getNorth() };
+        const queryBounds = opts.analysisBounds ?? getHistoricQueryBounds(bounds, map.getCenter(), zoom);
 
         // Build a capped bbox for historic lookups. At high rendered zooms, use
         // a wider virtual footprint without moving the map or changing the UI.
@@ -299,7 +301,7 @@ export async function runHistoricScanPipeline(
             let romanRoadsAvailable = opts.historicRoutesAvailable && hasRomanRoads;
             const romanStart = performance.now();
             if (!hasRomanRoads) {
-                if (cachedLookup?.romanRoads?.length) {
+                if (cachedLookup?.romanRoads?.length && cachedLookup.romanRoads.every(route => route.parentRouteId || route.reference || route.name?.trim())) {
                     routes = [...routes, ...cachedLookup.romanRoads];
                     romanRoadsAvailable = true;
                 } else {
@@ -340,7 +342,7 @@ export async function runHistoricScanPipeline(
             }
 
             // ── Drift guard (uses shared utility) ────────────────────────────
-            const driftM  = getDriftMetres(opts.scanCenter, { lat: center.lat, lng: center.lng });
+            const driftM  = getDriftMetres(opts.scanCenter, map.getCenter());
             const drifted = driftM > SCAN_CONFIG.DRIFT_THRESHOLD_M;
 
             // ── Hotspot enhancement ───────────────────────────────────────────
@@ -407,13 +409,19 @@ export async function runHistoricScanPipeline(
                 result.matches = matchHillfortSources(result, nhleData.features ?? []);
             }
             return {
+                supportingContext: buildSupportingContext({
+                    centre: { lat: center.lat, lng: center.lng }, bounds: scanBounds,
+                    finds: pasFinds, nhle: nhleData, aim: aimData, routes, placeSignals,
+                    historicContextAvailable: contextData !== null, historicRoutesAvailable,
+                    assessmentSources: opts.assessmentSources,
+                }),
                 hillfortContext: hillfortContext ?? undefined,
                 scanId: uuid(), surfacedAt: Date.now(),
                 pasFinds, placeSignals, monumentPoints, heritageCount,
                 enhancedHotspots, routes,
                 nhleData: nhleRaw ?? null,  // non-null only if freshly fetched
                 scheduledMonuments: nhleData,
-                aimData:  aimRaw  ?? null,
+                aimData,
                 drifted,
                 center: { lat: center.lat, lng: center.lng },
                 pasCell: pasCellResult,

@@ -1,3 +1,5 @@
+import { emptySupportingContext } from '../../services/fieldguide/supportingContext';
+import { SupportingContextEvidence, RecordedHeritageDetails } from './SupportingContextEvidence';
 import { triggerDownload } from '../../utils/download';
 import React from 'react';
 import * as maplibregl from 'maplibre-gl';
@@ -61,31 +63,6 @@ function getProtectedTargetCopy(f: Cluster): { label: string; body: string; deta
         body: 'This area is protected as a Scheduled Monument.',
         detail: 'Metal detecting, excavation, or intrusive activity may require legal consent. Avoid disturbing the site boundary and check current protections before any fieldwork.',
     };
-}
-
-function getHistoricInterpretation(breakdown: { terrain: number; historic: number; spectral: number } | null): { title: string; subtitle: string } {
-    if (!breakdown) return { title: 'No scan data yet', subtitle: 'Run a scan to read the historic landscape context for this area.' };
-    const strong = [breakdown.terrain, breakdown.historic, breakdown.spectral].filter(v => v >= 50).length;
-    if (strong === 3) return { title: 'Strong historic context across this area', subtitle: 'Signals from terrain, historic density, and spectral response all align.' };
-    if (strong === 2) return { title: 'Solid historic alignment detected', subtitle: 'Two key signals suggest meaningful past activity in this area.' };
-    if (strong === 1) return { title: 'Partial historic signal present', subtitle: 'One indicator points to potential historic activity — worth investigating.' };
-    return { title: 'Limited historic alignment', subtitle: 'Signals are weak or below threshold for a confident read.' };
-}
-
-function getSignalSummary(breakdown: { terrain: number; hydro: number; historic: number; spectral: number } | null): string[] {
-    if (!breakdown) return [];
-    const lines: string[] = [];
-    if (breakdown.terrain >= 70) lines.push('Strong terrain relief — elevated ground or natural features present.');
-    else if (breakdown.terrain >= 40) lines.push('Moderate terrain relief detected in the scan area.');
-    else lines.push('Limited terrain variation — other signals carry more weight here.');
-    if (breakdown.hydro >= 60) lines.push('Significant hydrological context — proximity to water sources.');
-    else if (breakdown.hydro >= 30) lines.push('Some hydrological proximity — minor water influence.');
-    if (breakdown.historic >= 70) lines.push('High historic density — multiple recorded finds or sites nearby.');
-    else if (breakdown.historic >= 40) lines.push('Moderate historic density — some recorded activity in the wider area.');
-    else lines.push('Low historic density from available records.');
-    if (breakdown.spectral >= 60) lines.push('Strong spectral response — possible subsurface disturbance.');
-    else if (breakdown.spectral >= 30) lines.push('Moderate spectral signal detected.');
-    return lines;
 }
 
 export function FieldGuideMap() {
@@ -197,12 +174,10 @@ export function FieldGuideMap() {
 
         // Intel panel
         potentialScore,
-        scanConfidence,
         pasFinds,
         historicRoutes,
-        placeSignals,
         sourceAvailability,
-        sourceUsability,
+        supportingContext,
         scanFromCache,
         setIsIntelOpen,
         intelDetailsOpen,
@@ -233,11 +208,10 @@ export function FieldGuideMap() {
 
     const [searchParams] = useSearchParams();
 
-    const bd = potentialScore?.breakdown ?? null;
-    const interp = getHistoricInterpretation(bd ? { terrain: bd.terrain, historic: bd.historic, spectral: bd.imagery } : null);
-    const sigLines = getSignalSummary(bd ? { terrain: bd.terrain, hydro: bd.hydro, historic: bd.historic, spectral: bd.imagery } : null);
-    const hasData = pasFinds.length > 0 || historicRoutes.length > 0 || placeSignals.length > 0;
-    const mc = mapRef.current?.getCenter();
+    const summary = supportingContext ?? emptySupportingContext();
+    const interp = summary;
+    const hasData = summary.recordedHeritage.length > 0 || summary.historicRoutes.length > 0 || summary.environment.placeNames.length > 0;
+    const mc = summary.centre;
     const nearbyProjectFinds = mc ? projectFinds.filter(f => f.lat !== null && f.lon !== null && getDistance([f.lon!, f.lat!], [mc.lng, mc.lat]) <= 500) : [];
     const [expandedGeologyId, setExpandedGeologyId] = React.useState<string | null>(null);
     const scrollExpandedSectionIntoView = (id: string) => {
@@ -1104,74 +1078,7 @@ export function FieldGuideMap() {
                             <h3 className="text-lg font-black text-white tracking-tight leading-tight mb-1">{interp.title}</h3>
                             <p className="text-xs font-bold text-white/70 leading-snug mb-3">{interp.subtitle}</p>
                             <GeologyContextCard context={geologyContext} loading={geologyContextLoading} className="mb-3" />
-                            {sigLines.length > 0 && (
-                                <div className="border-t border-white/8 pt-3 mb-3">
-                                <p className="text-[0.5625rem] font-medium text-white/40 mb-2.5">Why this stands out</p>
-                                <div className="space-y-2">
-                                    {sigLines.map((line, i) => (
-                                        <div key={i} className="flex items-start gap-3">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1 shrink-0 shadow-[0_0_6px_rgba(96,165,250,0.7)]" />
-                                            <p className="text-sm font-bold text-white leading-tight flex-1">{line}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {nearbyProjectFinds.length > 0 && (
-                            <p className="text-[0.625rem] font-black text-emerald-400/80 uppercase tracking-widest">{nearbyProjectFinds.length} find{nearbyProjectFinds.length !== 1 ? 's' : ''} recorded nearby</p>
-                        )}
-                        {hasData && (
-                            <>
-                            <div className="flex gap-2 mt-3">
-                                {pasFinds.length > 0 && (
-                                    <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
-                                        <span className="block text-lg font-black text-blue-400">{pasFinds.length}</span>
-                                        <span className="text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest">Sites</span>
-                                    </div>
-                                )}
-                                {historicRoutes.length > 0 && (
-                                    <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
-                                        <span className="block text-lg font-black text-blue-400">{historicRoutes.length}</span>
-                                        <span className="text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest">Routes</span>
-                                    </div>
-                                )}
-                                {placeSignals.length > 0 && (
-                                    <div className="flex-1 bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-center">
-                                        <span className="block text-lg font-black text-blue-300">{placeSignals.length}</span>
-                                        <span className="text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest">Place Names</span>
-                                    </div>
-                                )}
-                            </div>
-                            <p className="text-[0.625rem] font-black text-white/60 italic mt-2 text-center tracking-wide">Zoom out to understand wider context</p>
-                            </>
-                        )}
-                        {sourceAvailability && (
-                            <div className="border-t border-white/8 pt-3">
-                                <div className="flex justify-between items-center mb-2">
-                                    <p className="text-[0.5625rem] font-black text-white/40 uppercase tracking-widest">Scan Source Coverage</p>
-                                    {scanFromCache && <span className="text-[0.5rem] font-black text-amber-500/60 uppercase tracking-widest bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Cached</span>}
-                                </div>
-                                <div className="grid grid-cols-3 gap-1.5">
-                                    {[
-                                        { key: 'terrain',          label: 'LiDAR' },
-                                        { key: 'terrain_global',   label: 'Global Terrain' },
-                                        { key: 'slope',            label: 'Slope' },
-                                        { key: 'hydrology',        label: 'Hydrology' },
-                                        { key: 'satellite_spring', label: 'Imagery A' },
-                                        { key: 'satellite_summer', label: 'Imagery B' },
-                                    ].map(({ key, label }) => {
-                                        const usability = sourceUsability[key] ?? 'none';
-                                        return (
-                                            <div key={key} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-xl border ${usability === 'usable' ? 'bg-emerald-500/10 border-emerald-500/25' : usability === 'loaded' ? 'bg-white/5 border-white/15' : 'bg-white/3 border-white/8'}`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${usability === 'usable' ? 'bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.8)]' : usability === 'loaded' ? 'bg-slate-400' : 'bg-slate-600'}`} />
-                                                <span className={`text-[0.5rem] font-black uppercase tracking-wide leading-tight ${usability === 'usable' ? 'text-emerald-300' : usability === 'loaded' ? 'text-slate-400' : 'text-slate-600'}`}>{label}</span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <p className="text-[0.5rem] text-white/20 mt-1.5 text-center italic">Green = source loaded · Dark = unavailable for this scan</p>
-                            </div>
-                        )}
+                            {supportingContext && <SupportingContextEvidence summary={summary} />}
                         {(hasData || potentialScore) && (
                             <div className="mt-4 pt-3 border-t border-white/8">
                                 <div className="flex justify-between items-center">
@@ -1212,57 +1119,13 @@ export function FieldGuideMap() {
 
                                 {intelDetailsOpen && (
                                     <div className="mt-4 space-y-4 animate-in fade-in duration-200">
-                                        {pasFinds.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-[0.5625rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Period Profile</p>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    {Object.entries(pasFinds.reduce((acc, f) => { const p = f.broadperiod || 'Unknown'; acc[p] = (acc[p] || 0) + 1; return acc; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).map(([period, count]) => (
-                                                        <div key={period} className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-2xl flex justify-between items-center">
-                                                            <span className="text-[0.625rem] font-black text-slate-300 uppercase truncate pr-2">{period}</span>
-                                                            <span className="text-base font-black text-blue-400">{count}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {nearbyProjectFinds.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-[0.5625rem] font-black text-emerald-400/60 uppercase tracking-widest">Your Recorded Finds</p>
-                                                <div className="space-y-1.5">
-                                                    {nearbyProjectFinds.map(f => (
-                                                        <div key={f.id} className="bg-emerald-500/5 border border-emerald-500/10 px-3 py-2 rounded-xl flex justify-between items-center">
-                                                            <span className="text-[0.6875rem] font-black text-white uppercase truncate pr-3">{f.objectType || 'Unknown'}</span>
-                                                            <span className="text-[0.625rem] font-bold text-emerald-400/70 uppercase shrink-0">{f.period}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {pasFinds.length > 0 && (
-                                            <div className="space-y-2">
-                                                <p className="text-[0.5625rem] font-black text-blue-400/60 uppercase tracking-widest">Historic Findings</p>
-                                                <div className="space-y-2">
-                                                    {pasFinds.map(f => (
-                                                        <div key={f.id} onClick={() => { clearMapItemSelections('pasFind'); setSelectedPASFind(f); setIsIntelOpen(false); mapRef.current?.flyTo({ center: [f.lon, f.lat], zoom: 17 }); }} className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/10 flex justify-between items-center active:bg-blue-500/20 transition-all">
-                                                            <div className="flex-1 min-w-0 pr-4">
-                                                                <p className="text-sm font-black text-white uppercase truncate">{f.objectType}</p>
-                                                                <p className="text-[0.625rem] font-bold text-blue-400 uppercase">{f.broadperiod}</p>
-                                                            </div>
-                                                            <div className="text-right shrink-0">
-                                                                <p className="text-[0.625rem] font-black text-slate-500 font-mono tracking-tighter mb-0.5">{f.id}</p>
-                                                                <p className="text-[0.5625rem] font-bold text-slate-400 uppercase italic leading-none">{f.county}</p>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {placeSignals.length > 0 && (
+                                        <RecordedHeritageDetails summary={summary} />
+                                        {summary.environment.placeNames.length > 0 && (
                                             <div className="space-y-2">
                                                 <p className="text-[0.5625rem] font-black text-emerald-500/60 uppercase tracking-widest">Etymological Signals</p>
-                                                <p className="text-[0.625rem] text-slate-500 font-bold">Place-name evidence suggests historic activity in the wider area.</p>
+                                                <p className="text-[0.625rem] text-slate-500 font-bold">Place-name signals are contextual clues, not confirmation of archaeology.</p>
                                                 <div className="space-y-2">
-                                                    {placeSignals.map((s, i) => (
+                                                    {summary.environment.placeNames.map((s, i) => (
                                                         <div key={i} className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-2xl relative overflow-hidden">
                                                             <div className="absolute top-0 right-0 px-2 py-0.5 bg-emerald-500/10 border-b border-l border-emerald-500/20 text-[0.5rem] font-black text-emerald-400 uppercase tracking-tighter">Signal Detected</div>
                                                             <div className="flex justify-between items-start mb-1">
@@ -1280,36 +1143,6 @@ export function FieldGuideMap() {
                                                             </div>
                                                         </div>
                                                     ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        {potentialScore && (
-                                            <div className="space-y-2">
-                                                <p className="text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest">Detailed Breakdown</p>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10 relative">
-                                                        {scanConfidence && (
-                                                            <span className={`absolute top-2 right-2 text-[0.4375rem] font-black px-1 rounded border ${scanConfidence === 'Corroborated Signal' ? 'text-emerald-400 border-emerald-400/30' : scanConfidence === 'Developing Signal' ? 'text-amber-400 border-amber-400/30' : 'text-white/35 border-white/20'}`}>{scanConfidence}</span>
-                                                        )}
-                                                        <span className="block text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest mb-1">Terrain Relief</span>
-                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-emerald-500" style={{ width: `${potentialScore.breakdown?.terrain || 0}%` }} /></div>
-                                                        <span className="text-base font-black text-emerald-500">{getSignalBand(potentialScore.breakdown?.terrain)}</span>
-                                                    </div>
-                                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest mb-1">Hydro Context</span>
-                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-blue-500" style={{ width: `${potentialScore.breakdown?.hydro || 0}%` }} /></div>
-                                                        <span className="text-base font-black text-blue-500">{getSignalBand(potentialScore.breakdown?.hydro)}</span>
-                                                    </div>
-                                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest mb-1">Historic Density</span>
-                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-amber-500" style={{ width: `${potentialScore.breakdown?.historic || 0}%` }} /></div>
-                                                        <span className="text-base font-black text-amber-500">{getSignalBand(potentialScore.breakdown?.historic)}</span>
-                                                    </div>
-                                                    <div className="bg-white/5 p-4 rounded-3xl border border-white/10">
-                                                        <span className="block text-[0.5625rem] font-black text-slate-500 uppercase tracking-widest mb-1">Spectral Signals</span>
-                                                        <div className="h-1 bg-slate-800 rounded-full overflow-hidden my-1.5"><div className="h-full bg-purple-500" style={{ width: `${potentialScore.breakdown?.placeNames || 0}%` }} /></div>
-                                                        <span className="text-base font-black text-purple-500">{getSignalBand(potentialScore.breakdown?.placeNames)}</span>
-                                                    </div>
                                                 </div>
                                             </div>
                                         )}

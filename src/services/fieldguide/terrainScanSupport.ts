@@ -13,6 +13,8 @@ import type { LogLevel, LogSource } from '../../utils/scanLogger';
 import { getDistance } from '../../utils/fieldGuideAnalysis';
 import { mergeEvidenceProvenance } from '../../types/evidenceProvenance';
 import type { TerrainMeasurement } from '../../engines/terrain/elevationAnalysis';
+import type { ValidatedFieldGuideScanCache } from '../persistenceValidation';
+import { discardFieldGuideScanCache } from '../fieldGuideMutations';
 
 export {
     attachRepresentativeTerrainMeasurements,
@@ -20,6 +22,7 @@ export {
 } from './terrainMeasurementSupport';
 
 export interface ScanContext {
+    assessmentSources?: import('./supportingContext').ScanAssessmentSources;
     terrainClusters: Cluster[];
     monumentPoints: [number, number][];
     routes: HistoricRoute[];
@@ -72,6 +75,19 @@ export interface TerrainScanCoordinatorOptions {
 
 export function seconds(start: number): string {
     return ((performance.now() - start) / 1000).toFixed(1);
+}
+
+/** Preserve usable offline evidence, but do not repeatedly reuse unknown assessment states online. */
+export async function canReuseTerrainSourceAssessments(
+    cached: ValidatedFieldGuideScanCache,
+    onLog: TerrainScanCoordinatorOptions['onLog'],
+): Promise<boolean> {
+    const known = Object.keys(cached.sourceAvailability).every(key =>
+        cached.sourceStatus?.[key] !== undefined && cached.sourceCompleteness?.[key] !== undefined);
+    if (known || (typeof navigator !== 'undefined' && navigator.onLine === false)) return true;
+    onLog('> Cached source assessment details are incomplete — a fresh terrain assessment is required and will run now.', 'terrain', 'warn');
+    await discardFieldGuideScanCache(cached.id);
+    return false;
 }
 
 export function padBoundsByMetres(

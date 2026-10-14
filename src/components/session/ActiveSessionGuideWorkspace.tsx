@@ -35,7 +35,7 @@ export function ActiveSessionGuideWorkspace(props: {
           onFinish={() => navigate(`/session/${sessionId}?finish=1`)}
         />
       )}
-      <main className={embeddedInSession ? 'min-h-0 flex-1 overflow-hidden pb-[calc(4rem+env(safe-area-inset-bottom))]' : ''}>
+      <main className={embeddedInSession ? 'min-h-0 flex-1 overflow-hidden pb-[calc(4rem+env(safe-area-inset-bottom))]' : 'fieldguide-route-main'}>
         <FieldGuideWorkspace key="field-guide-workspace" {...props} embeddedSessionShell={embeddedInSession} />
       </main>
       {embeddedInSession && <ActiveSessionShellNav active="guide" onSelect={selectDestination} />}

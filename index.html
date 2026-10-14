@@ -6,7 +6,7 @@
     <link rel="apple-touch-icon" href="/findspot/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#10b981" />
+    <meta name="theme-color" content="#111827" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>FindSpot UK</title>
@@ -40,7 +40,7 @@
       }(window.location));
     </script>
     <script>
-      (function(){var dark=localStorage.getItem('fs_theme')!=='light';document.documentElement.classList.toggle('dark',dark);document.querySelector('meta[name="color-scheme"]').setAttribute('content',dark?'dark':'light');})();
+      (function(){var dark=localStorage.getItem('fs_theme')!=='light';document.documentElement.classList.toggle('dark',dark);document.querySelector('meta[name="color-scheme"]').setAttribute('content',dark?'dark':'light');document.querySelector('meta[name="theme-color"]').setAttribute('content',dark?'#111827':'#f9fafb');})();
     </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

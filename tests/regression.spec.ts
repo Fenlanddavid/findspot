@@ -771,6 +771,11 @@ test("completed historic mobile sheet keeps context details and layer controls",
 
   await expect(page.getByText("Landscape Review", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText("Supporting Context", { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Recorded archaeological context present', exact: true })).toBeVisible();
+  await expect(page.getByText(/Mapped Roman-road alignment .* intersects this scan area/)).toBeVisible();
+  await expect(page.getByText('Limited historic alignment', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Low historic density from available records.', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Imagery A: /)).toBeVisible();
 
   const layersButton = page.getByRole("button", { name: "Layers", exact: true });
   await expect(layersButton).toBeVisible();
@@ -812,6 +817,8 @@ test("scheduled boundary stays visible and an overlapping target remains tappabl
     createdAt: Date.now(),
     engineVersion: HOTSPOT_ENGINE_VERSION,
     sourceAvailability: { terrain: true },
+    sourceStatus: { terrain: 'ok' },
+    sourceCompleteness: { terrain: true },
     modernWays: [],
     modernWaysFetchedAt: Date.now(),
     rawClusters: [{

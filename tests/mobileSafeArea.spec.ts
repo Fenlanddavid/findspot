@@ -34,6 +34,7 @@ for (const theme of ['dark', 'light'] as const) {
         await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
         await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /viewport-fit=cover/);
         await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute('content', theme);
+        await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', theme === 'dark' ? '#111827' : '#f9fafb');
         await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe(theme);
         expect(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe(theme === 'dark' ? 'rgb(17, 24, 39)' : 'rgb(249, 250, 251)');
         expect(await page.locator('.app-shell').evaluate(element => parseFloat(getComputedStyle(element).paddingTop))).toBe(28);
@@ -58,5 +59,74 @@ for (const theme of ['dark', 'light'] as const) {
         expect(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 1)?.closest('nav[aria-label="Primary"]'))).toBe(true);
         await nav.getByRole('link', { name: 'Permissions', exact: true }).click();
         await expect(page).toHaveURL(/\/permissions$/);
+        await page.reload();
+        await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute('content', theme);
+        await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', theme === 'dark' ? '#111827' : '#f9fafb');
     });
 }
+
+for (const scenario of [
+    { name: 'Pixel edge-to-edge', width: 412, height: 918, top: 66, bottom: 37, left: 0, textScale: 1 },
+    { name: 'enlarged text', width: 390, height: 844, top: 28, bottom: 24, left: 0, textScale: 1.25 },
+    { name: 'landscape', width: 610, height: 412, top: 0, bottom: 24, left: 36, textScale: 1 },
+    { name: 'without safe-area insets', width: 390, height: 844, top: 0, bottom: 0, left: 0, textScale: 1 },
+]) {
+    test(`FieldGuide keeps navigation tappable when collapsed, expanded and full screen: ${scenario.name}`, async ({ page, context }) => {
+        await page.setViewportSize({ width: scenario.width, height: scenario.height });
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Emulation.setSafeAreaInsetsOverride', {
+            insets: { top: scenario.top, topMax: scenario.top, bottom: scenario.bottom, bottomMax: scenario.bottom, left: scenario.left, leftMax: scenario.left, right: 0, rightMax: 0 },
+        });
+        await page.addInitScript(scale => {
+            localStorage.setItem('fs_fg_sheet', '0');
+            document.addEventListener('DOMContentLoaded', () => {
+                document.documentElement.style.fontSize = `${16 * scale}px`;
+            });
+        }, scenario.textScale);
+        await page.goto('./fieldguide');
+        const sheet = page.getByTestId('fieldguide-mobile-sheet');
+        await expect(sheet).toBeVisible();
+        const nav = page.getByRole('navigation', { name: 'Primary' });
+        const checkNavigation = async () => {
+            await expect.poll(async () => {
+                const panel = (await sheet.boundingBox())!;
+                const navigation = (await nav.boundingBox())!;
+                return panel.y + panel.height <= navigation.y;
+            }).toBe(true);
+            for (const name of ['Home', 'Field Guide', 'Permissions', 'Discover', 'Finds']) {
+                await nav.getByRole('link', { name, exact: true }).click({ trial: true });
+            }
+            expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        };
+        await checkNavigation();
+        await page.getByRole('button', { name: 'Expand landscape panel' }).click();
+        await checkNavigation();
+        await page.getByText('Scan controls', { exact: true }).click();
+        await page.getByRole('button', { name: 'Open full screen map' }).click();
+        await checkNavigation();
+        await nav.getByRole('link', { name: 'Home', exact: true }).tap();
+        await expect(page).toHaveURL(/\/findspot\/?$/);
+        await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+    });
+}
+
+test('FieldGuide recalculates available space when the mobile navigation hides and returns', async ({ page }) => {
+    await page.goto('./fieldguide');
+    await expect(page.getByTestId('fieldguide-mobile-sheet')).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.getByRole('navigation', { name: 'Primary' })).toBeHidden();
+    await expect.poll(async () => {
+        const map = (await page.locator('.maplibregl-canvas').boundingBox())!;
+        const footer = (await page.locator('.app-shell > footer').boundingBox())!;
+        return map.height > 0 && map.y + map.height <= footer.y;
+    }).toBe(true);
+    await page.setViewportSize({ width: 412, height: 918 });
+    const nav = page.getByRole('navigation', { name: 'Primary' });
+    await expect(nav).toBeVisible();
+    await expect.poll(async () => {
+        const panel = (await page.getByTestId('fieldguide-mobile-sheet').boundingBox())!;
+        return panel.y + panel.height <= (await nav.boundingBox())!.y;
+    }).toBe(true);
+    await nav.getByRole('link', { name: 'Home', exact: true }).tap();
+    await expect(page).toHaveURL(/\/findspot\/?$/);
+});

@@ -82,11 +82,15 @@ describe('Roman road context fetch', () => {
   it('characterizes output shape, scoring and MultiLineString splitting', async () => {
     const { fetchRomanRoads } = await import('../../src/services/romanRoadService');
     const routes = await fetchRomanRoads(-0.005, 51.995, 0.005, 52.005);
+    const split = routes.filter(route => route.name === 'Split road');
+    expect(split).toHaveLength(2);
+    expect(split[0].parentRouteId).toBeTruthy();
+    expect(split[1].parentRouteId).toBe(split[0].parentRouteId);
 
     expect(mocks.cachedFetchAny).toHaveBeenCalledWith(
       'https://example.test/roman-roads-gb.geojson?generation=rrra-digital-britannia-v1.0-2026-07-26',
     );
-    expect(routes.map(({ id: _id, ...route }) => route)).toEqual([
+    expect(routes.map(({ id: _id, parentRouteId: _parentId, ...route }) => route)).toEqual([
       {
         type: 'roman_road',
         source: 'rrra',

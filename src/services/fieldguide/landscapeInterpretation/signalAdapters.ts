@@ -5,6 +5,22 @@
 import type { NHLEFeature, AIMFeature } from '../../../services/historicScanService';
 import type { HistoricRoute } from '../../../pages/fieldGuideTypes';
 import type { ArchaeologicalPeriod, PASInterpretationInput, PersonalFindsInput, PeriodSignalAggregate } from '../../../types/landscapeInterpretation';
+import type { SupportingContextSummary } from '../supportingContext';
+
+/** Preserve OSM/NHLE/AIM context and spatial uncertainty without inventing process scores. */
+export function adaptSupportingContextForLandscape(summary: SupportingContextSummary) {
+    return {
+        nhleFeatures: summary.recordedHeritage.filter(r => r.source === 'nhle').map(r => r.feature as NHLEFeature),
+        aimFeatures: summary.recordedHeritage.filter(r => r.source === 'aim').map(r => r.feature as AIMFeature),
+        // The existing adapter counts routes, not source segments. Keep one
+        // representative per identity; recordedContext retains every segment.
+        routeFeatures: summary.historicRoutes.map(route => route.segments[0]),
+        recordedContext: {
+            recordedHeritage: summary.recordedHeritage, historicRoutes: summary.historicRoutes,
+            coverage: summary.coverage, centre: summary.centre, bounds: summary.bounds,
+        },
+    };
+}
 
 // ─── Adapted signals output ───────────────────────────────────────────────────
 

@@ -97,6 +97,7 @@ export interface FieldGuideContextValue {
     historicRoutes: HistoricRoute[];
 
     // Derived / computed
+    supportingContext: import('../../services/fieldguide/supportingContext').SupportingContextSummary | null;
     sortedHotspots: Hotspot[];
     displayTargets: Cluster[];
     traceTargets: TraceTarget[];

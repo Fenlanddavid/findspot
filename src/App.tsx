@@ -64,6 +64,18 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 function Shell() {
+  const measureBottomNav = useCallback((element: HTMLElement | null) => {
+    if (!element) return;
+    const root = document.documentElement;
+    const update = () => root.style.setProperty('--app-bottom-nav-height', `${element.getBoundingClientRect().height}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--app-bottom-nav-height');
+    };
+  }, []);
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW();
   const [projectId, setProjectId] = useState<string | null>(null);
   const backupReminder = useLiveQuery(() => getBackupReminderState(), [], null);
@@ -206,6 +218,9 @@ function Shell() {
       document.documentElement.classList.remove("dark");
     }
     document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme === 'dark' ? 'dark' : 'light');
+    // Chrome uses this colour to choose system-bar icon contrast, including
+    // when installed apps draw underneath transparent system bars.
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#111827' : '#f9fafb');
   }, [theme]);
 
   // Keep sfWorkflow.projectId in sync if projectId changes (edge case)
@@ -286,7 +301,7 @@ function Shell() {
     && location.pathname === "/settings";
 
   return (
-    <div className={`app-shell max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
+    <div className={`app-shell max-w-6xl mx-auto p-3 sm:p-4 font-sans text-gray-900 dark:text-gray-100 ${isFieldGuideRoute ? "app-shell--fieldguide h-[100dvh] overflow-hidden" : "pb-28 min-h-screen overflow-x-hidden"}`}>
       {isInAppBrowser && (
         <div className="bg-emerald-600 text-white p-4 rounded-xl mb-4 shadow-lg flex flex-col items-center gap-3 text-center border-2 border-white animate-pulse">
             <div className="text-2xl">{isIOS ? "🍎" : "🌍"}</div>
@@ -469,7 +484,7 @@ function Shell() {
         </Link>
       </footer>}
 
-      {!isActiveSessionGuide && <nav className="app-bottom-nav sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
+      {!isActiveSessionGuide && <nav ref={measureBottomNav} className="app-bottom-nav sm:hidden fixed inset-x-0 bottom-0 z-50 border-t border-gray-200 bg-white/95 px-2 pt-1.5 shadow-[0_-8px_24px_rgba(15,23,42,0.12)] backdrop-blur dark:border-gray-800 dark:bg-gray-950/95" aria-label="Primary">
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {[
             { to: "/", label: "Home", icon: HomeIcon },

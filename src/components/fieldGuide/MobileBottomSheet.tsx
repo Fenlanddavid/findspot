@@ -265,7 +265,7 @@ export function MobileBottomSheet() {
         <>
         <div
             data-testid="fieldguide-mobile-sheet"
-            className={`absolute bottom-3 left-3 right-3 z-[91] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden overscroll-contain transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[65dvh]' : 'max-h-[min(19rem,60dvh)]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
+            className={`absolute bottom-3 left-3 right-3 z-[91] flex flex-col bg-black/95 border border-white/12 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden overscroll-contain transition-[max-height] duration-300 ease-out ${sheetExpanded ? 'max-h-[min(65dvh,calc(100%-1.5rem))]' : 'max-h-[min(19rem,60dvh,calc(100%-1.5rem))]'} ${helperActive && helperTipIndex === 1 ? 'ring-2 ring-blue-300/45' : ''}`}
         >
             {/* Handle + Status + Actions — always visible */}
             <div

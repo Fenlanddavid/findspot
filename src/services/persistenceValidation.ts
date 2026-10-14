@@ -185,6 +185,7 @@ const fieldGuideScanCacheSchema = z.object({
   rawClusters: z.array(clusterSchema),
   sourceAvailability: z.record(z.string(), z.boolean()),
   sourceCompleteness: z.record(z.string(), z.boolean()).optional(),
+  sourceStatus: z.record(z.string(), z.enum(['ok', 'cached', 'unavailable', 'partial', 'processing_failed'])).optional(),
   modernWays: z.array(modernWaySchema).optional(),
   modernWaysFetchedAt: finite.optional(),
   engineVersion: z.string().optional(),

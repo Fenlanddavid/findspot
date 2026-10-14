@@ -212,6 +212,8 @@ export interface ConfidenceContribution {
 }
 
 export interface LandscapeInterpretation {
+    /** Factual source context; never converted into weighted process evidence. */
+    recordedContext?: RecordedLandscapeContext;
     /** Factual context only; excluded from all weighted/scoring evidence. */
     hillfortContext?: HillfortContext;
     geohash6: string;
@@ -257,7 +259,11 @@ export interface PersonalFindsInput {
 
 // ─── Worker boundary types ────────────────────────────────────────────────────
 
+export type RecordedLandscapeContext = Pick<import('../services/fieldguide/supportingContext').SupportingContextSummary,
+    'recordedHeritage' | 'historicRoutes' | 'coverage' | 'centre' | 'bounds'>;
+
 export interface LandscapeInterpretationWorkerInput {
+    recordedContext?: RecordedLandscapeContext;
     hillfortContext?: HillfortContext;
     geohash6: string;
     nhleFeatures: NHLEFeature[];

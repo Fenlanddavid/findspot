@@ -167,6 +167,7 @@ export async function fetchRomanRoads(
             const lats = geomCoords.map(c => c[1]);
             routes.push({
                 id:              routeId(feat, source, name, ring, rings.length),
+                parentRouteId:   feat.id ?? contentRouteId(source, name, allCoords),
                 type:            'roman_road',
                 source,
                 name:            name ?? undefined,
