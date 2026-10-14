@@ -227,3 +227,20 @@ session Guide shell. TypeScript, hooks-baseline and scoped whitespace checks
 pass. The production/PWA build passes with 120 precached assets; logs are
 `/tmp/findspot-panel-navigation-build.log` and `/tmp/findspot-panel-hooks.log`.
 The changes have not been published.
+
+## v5.0.25 release authorization
+
+The user requested a version bump, release notes and push after committing all
+changes as `bbda068`. Prepare v5.0.25 with the update message “Fix FieldGuide
+historic context, panel navigation and phone theme colours.” This includes the
+completed-scan evidence summary correction and the tested app layout/contrast
+changes. The native white-strip workaround still depends on Chrome's installed
+app feature setting; this release cannot enable that flag for other users.
+The phone's temporary layout preview is separate from deployment verification.
+Use the existing CI-gated Pages workflow and let it tag a successful deployment.
+
+Release preparation, the version/notes guard against v5.0.24, TypeScript and
+all three release-automation tests pass. The v5.0.25 production/PWA build passes
+with 120 precached assets (`/tmp/findspot-v5.0.25-build.log`). The release patch
+passes its whitespace check. Remote `main` was confirmed at `3201951` before
+publication; CI/deployment confirmation follows the push.
